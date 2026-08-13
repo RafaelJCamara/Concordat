@@ -1,0 +1,50 @@
+# Concordat's dependencies for local work: a database and a broker.
+#
+# The registry itself is NOT here on purpose. You run it with `dotnet run`, so a change to
+# the API is a restart rather than an image rebuild — which is the loop you actually want
+# while writing code against the SDK. See docs/QUICKSTART.md.
+services:
+  postgres:
+    # Pinned rather than floating, matching the version the test suite runs against. A
+    # database that changes underneath you produces failures nobody can reproduce.
+    image: postgres:17-alpine
+    container_name: concordat-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: concordat
+    ports:
+      # Deliberately not 5432. A developer machine very often already has a Postgres on the
+      # default port — this one did — and "port is already allocated" is a discouraging first
+      # thing to meet in a quickstart. The container still listens on 5432 internally.
+      - "55432:5432"
+    healthcheck:
+      # The migrator and the API both fail unhelpfully against a database that is listening
+      # but not yet ready, so readiness is checked rather than assumed.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d concordat"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - concordat-postgres:/var/lib/postgresql/data
+
+  rabbitmq:
+    # The management image, so http://localhost:15672 shows you what the middleware did —
+    # including anything routed to concordat.quarantine, which is the thing you will most
+    # want to look at when a message does not arrive.
+    image: rabbitmq:4.1-management
+    container_name: concordat-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
+volumes:
+  concordat-postgres:

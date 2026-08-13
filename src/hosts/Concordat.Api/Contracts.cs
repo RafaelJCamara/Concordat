@@ -67,10 +67,8 @@ public sealed record PolicyResponse(string? Mode, string? Surface)
     /// <returns>The wire form.</returns>
     public static PolicyResponse From(CompatibilityPolicy? policy) =>
         policy is { } p
-            ? new PolicyResponse(WireCase(p.Mode.ToString()), WireCase(p.Surface.ToString()))
+            ? new PolicyResponse(WireTokens.For(p.Mode), WireTokens.For(p.Surface))
             : new PolicyResponse(null, null);
-
-    private static string WireCase(string value) => value.ToUpperInvariant();
 }
 
 /// <summary>One registered version.</summary>
@@ -103,20 +101,12 @@ public sealed record VersionResponse(
             version.Ordinal,
             version.SchemaId.Value,
             version.SemanticVersion?.ToString(),
-            StatusToken(version.Status),
+            WireTokens.For(version.Status),
             version.Changelog,
             version.RegisteredAt,
             version.RegisteredBy.Value,
             version.Deprecated);
     }
-
-    private static string StatusToken(VersionStatus status) => status switch
-    {
-        VersionStatus.Active => "ACTIVE",
-        VersionStatus.AwaitingApproval => "AWAITING_APPROVAL",
-        VersionStatus.Rejected => "REJECTED",
-        _ => throw new ArgumentOutOfRangeException(nameof(status), status, null),
-    };
 }
 
 /// <summary>A subject and its versions.</summary>
@@ -149,8 +139,8 @@ public sealed record SubjectResponse(
             subject.Name.Value,
             WireTokens.For(subject.Format),
             subject.Owner.Value,
-            subject.Lifecycle.ToString().ToUpperInvariant(),
-            subject.ContentModel.ToString().ToUpperInvariant(),
+            WireTokens.For(subject.Lifecycle),
+            WireTokens.For(subject.ContentModel),
             PolicyResponse.From(subject.CompatibilityPolicy),
             subject.Latest?.Ordinal,
             [.. subject.Versions.Select(VersionResponse.From)]);
@@ -182,19 +172,12 @@ public sealed record BreakingChangeResponse(
         return new BreakingChangeResponse(
             change.Path,
             change.Kind,
-            change.Direction.ToString().ToUpperInvariant(),
-            SurfaceToken(change.Surface),
+            change.Direction is CompatibilityDirection.Backward ? "BACKWARD" : "FORWARD",
+            WireTokens.For(change.Surface),
             change.Message,
             change.ConflictsWithVersion);
     }
 
-    private static string SurfaceToken(CompatibilitySurface surface) => surface switch
-    {
-        CompatibilitySurface.Wire => "WIRE",
-        CompatibilitySurface.WireJson => "WIRE_JSON",
-        CompatibilitySurface.Source => "SOURCE",
-        _ => throw new ArgumentOutOfRangeException(nameof(surface), surface, null),
-    };
 }
 
 /// <summary>The result of a dry-run compatibility check.</summary>

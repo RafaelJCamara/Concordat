@@ -261,11 +261,7 @@ public static class SubjectEndpoints
             value.SubjectName,
             value.Ordinal,
             value.SchemaId,
-            value.Status.ToString().ToUpperInvariant() switch
-            {
-                "AWAITINGAPPROVAL" => "AWAITING_APPROVAL",
-                var other => other,
-            },
+            WireTokens.For(value.Status),
             value.Created,
             [.. value.Report.AllDivergences.Select(BreakingChangeResponse.From)],
             [.. value.Portability.Select(PortabilityResponse.From)]);

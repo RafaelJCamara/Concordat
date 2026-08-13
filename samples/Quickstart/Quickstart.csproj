@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Outside the solution on purpose, like samples/ContractDrift: the solution build must not
+    depend on a sample. See docs/QUICKSTART.md for how to run it.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- A sample is read more than it is linted; the repo's doc-comment rules would only add noise here. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\clients\Concordat.Client\Concordat.Client.csproj" />
+    <ProjectReference Include="..\..\src\clients\Concordat.RabbitMq\Concordat.RabbitMq.csproj" />
+    <ProjectReference Include="..\..\src\formats\Concordat.Formats.Json\Concordat.Formats.Json.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Version comes from Directory.Packages.props: central package management is repo-wide. -->
+    <PackageReference Include="RabbitMQ.Client" />
+  </ItemGroup>
+
+</Project>
