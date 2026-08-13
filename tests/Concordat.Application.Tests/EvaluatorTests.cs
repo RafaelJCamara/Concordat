@@ -48,6 +48,9 @@ public class EvaluatorTests
 
         public ISchemaReferenceExtractor ReferenceExtractor(SchemaFormat format) =>
             new JsonSchemaReferenceExtractor();
+
+        public ISchemaPortabilityChecker? PortabilityChecker(SchemaFormat format) =>
+            new JsonSchemaPortabilityChecker();
     }
 
     private static IReadOnlyList<PriorSchema> OnePrior() =>

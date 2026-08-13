@@ -24,7 +24,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BootstrapResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -57,8 +74,35 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       },
@@ -79,7 +123,17 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SubjectResponse"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -110,7 +164,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       },
@@ -150,7 +221,34 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       },
@@ -180,7 +278,34 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -211,7 +336,27 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VersionResponse"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       },
@@ -250,8 +395,45 @@
           "required": true
         },
         "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterVersionResponse"
+                }
+              }
+            }
+          },
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterVersionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -291,7 +473,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -342,7 +541,34 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -393,7 +619,34 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -435,7 +688,34 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompatibilityResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -487,7 +767,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiffResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -518,7 +815,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       },
@@ -558,7 +872,34 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -582,7 +923,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchemaResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -605,7 +963,27 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SchemaUsage"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -629,7 +1007,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BundledSchemaResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -653,7 +1048,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookupSchemaResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -661,6 +1073,149 @@
   },
   "components": {
     "schemas": {
+      "BootstrapResponse": {
+        "required": [
+          "subjects",
+          "schemas"
+        ],
+        "type": "object",
+        "properties": {
+          "subjects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BootstrapSubjectResponse"
+            },
+            "description": "Every non-retired subject in the environment."
+          },
+          "schemas": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SchemaResponse"
+            },
+            "description": "Every schema those subjects need, keyed by id, including ones reached only by reference."
+          }
+        },
+        "description": "The bootstrap payload: everything a client needs to warm its cache."
+      },
+      "BootstrapSubjectResponse": {
+        "required": [
+          "name",
+          "format",
+          "latestOrdinal",
+          "latestSchemaId",
+          "latestSemver"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The subject name."
+          },
+          "format": {
+            "type": "string",
+            "description": "The schema language."
+          },
+          "latestOrdinal": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The gated latest pointer, or `null`.",
+            "format": "int32"
+          },
+          "latestSchemaId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The schema the pointer resolves to."
+          },
+          "latestSemver": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Its optional label."
+          }
+        },
+        "description": "One subject's current state in a bootstrap payload."
+      },
+      "BreakingChangeResponse": {
+        "required": [
+          "path",
+          "kind",
+          "direction",
+          "surface",
+          "message",
+          "conflictsWithVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "A JSON Pointer into the schema document."
+          },
+          "kind": {
+            "type": "string",
+            "description": "A stable token, for example `required_field_added`."
+          },
+          "direction": {
+            "type": "string",
+            "description": "`BACKWARD` or `FORWARD`."
+          },
+          "surface": {
+            "type": "string",
+            "description": "`WIRE`, `WIRE_JSON` or `SOURCE`."
+          },
+          "message": {
+            "type": "string",
+            "description": "An actionable explanation."
+          },
+          "conflictsWithVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The prior version compared against.",
+            "format": "int32"
+          }
+        },
+        "description": "One way a proposal diverges from a prior version."
+      },
+      "BundledSchemaResponse": {
+        "required": [
+          "schemaId",
+          "format",
+          "bundled",
+          "inlined"
+        ],
+        "type": "object",
+        "properties": {
+          "schemaId": {
+            "type": "string",
+            "description": "The id of the root schema."
+          },
+          "format": {
+            "type": "string",
+            "description": "The schema language."
+          },
+          "bundled": {
+            "type": "string",
+            "description": "The document, with every reference inlined into `$defs`."
+          },
+          "inlined": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The references that were inlined."
+          }
+        },
+        "description": "A self-contained schema."
+      },
       "CheckCompatibilityRequest": {
         "required": [
           "schema"
@@ -673,6 +1228,53 @@
           }
         },
         "description": "Request to check a schema without registering it."
+      },
+      "CompatibilityResponse": {
+        "required": [
+          "compatible",
+          "schemaId",
+          "policy",
+          "breakingChanges",
+          "allDivergences",
+          "suggestedSemver"
+        ],
+        "type": "object",
+        "properties": {
+          "compatible": {
+            "type": "boolean",
+            "description": "Whether the proposal satisfies the policy."
+          },
+          "schemaId": {
+            "type": "string",
+            "description": "The id the proposal would receive."
+          },
+          "policy": {
+            "description": "The policy it was evaluated under.",
+            "$ref": "#/components/schemas/PolicyResponse"
+          },
+          "breakingChanges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BreakingChangeResponse"
+            },
+            "description": "Divergences that violate the policy."
+          },
+          "allDivergences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BreakingChangeResponse"
+            },
+            "description": "Every divergence, including tolerated ones — this is what explains why a change was allowed."
+          },
+          "suggestedSemver": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The label this change warrants."
+          }
+        },
+        "description": "The result of a dry-run compatibility check."
       },
       "CreateSubjectRequest": {
         "required": [
@@ -729,6 +1331,62 @@
         },
         "description": "Request to decide a pending version."
       },
+      "DiffResponse": {
+        "required": [
+          "from",
+          "to",
+          "fromSchemaId",
+          "toSchemaId",
+          "identical",
+          "policy",
+          "divergences"
+        ],
+        "type": "object",
+        "properties": {
+          "from": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The earlier ordinal.",
+            "format": "int32"
+          },
+          "to": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The later ordinal.",
+            "format": "int32"
+          },
+          "fromSchemaId": {
+            "type": "string",
+            "description": "The earlier schema id."
+          },
+          "toSchemaId": {
+            "type": "string",
+            "description": "The later schema id."
+          },
+          "identical": {
+            "type": "boolean",
+            "description": "Whether both ordinals point at the same content."
+          },
+          "policy": {
+            "description": "The policy the comparison was evaluated under.",
+            "$ref": "#/components/schemas/PolicyResponse"
+          },
+          "divergences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BreakingChangeResponse"
+            },
+            "description": "Every difference, whether or not the policy tolerates it."
+          }
+        },
+        "description": "The difference between two versions."
+      },
       "LookupSchemaRequest": {
         "required": [
           "format",
@@ -746,6 +1404,147 @@
           }
         },
         "description": "Request to look a schema up by its content."
+      },
+      "LookupSchemaResponse": {
+        "required": [
+          "schemaId",
+          "known",
+          "canonical"
+        ],
+        "type": "object",
+        "properties": {
+          "schemaId": {
+            "type": "string",
+            "description": "The id this document would receive."
+          },
+          "known": {
+            "type": "boolean",
+            "description": "Whether the caller can already reach a stored schema with this id."
+          },
+          "canonical": {
+            "type": "string",
+            "description": "The canonical text the id was computed from."
+          }
+        },
+        "description": "The answer to a schema lookup."
+      },
+      "PolicyResponse": {
+        "required": [
+          "mode",
+          "surface"
+        ],
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The who-breaks axis, or `null` when inheriting."
+          },
+          "surface": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The what-breaks axis."
+          }
+        },
+        "description": "A compatibility policy on the wire."
+      },
+      "PortabilityResponse": {
+        "required": [
+          "path",
+          "kind",
+          "severity",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "A JSON Pointer into the schema document."
+          },
+          "kind": {
+            "type": "string",
+            "description": "A token from `PortabilityKinds`."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Always `WARNING` here; an error refuses the registration."
+          },
+          "message": {
+            "type": "string",
+            "description": "What will differ, and what it costs."
+          }
+        },
+        "description": "One way a schema may not behave identically in every SDK (M6.1)."
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ReferenceResponse": {
+        "required": [
+          "name",
+          "subject",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The `$ref` text as it appears in the document."
+          },
+          "subject": {
+            "type": "string",
+            "description": "The referenced subject."
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The referenced version ordinal.",
+            "format": "int32"
+          }
+        },
+        "description": "One outgoing reference."
       },
       "RegisterVersionRequest": {
         "required": [
@@ -779,6 +1578,114 @@
         },
         "description": "Request to register a version."
       },
+      "RegisterVersionResponse": {
+        "required": [
+          "subject",
+          "ordinal",
+          "schemaId",
+          "status",
+          "created",
+          "divergences",
+          "portability"
+        ],
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "The subject name."
+          },
+          "ordinal": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The allocated ordinal.",
+            "format": "int32"
+          },
+          "schemaId": {
+            "type": "string",
+            "description": "The content-addressed id."
+          },
+          "status": {
+            "type": "string",
+            "description": "Whether it is active or awaiting approval."
+          },
+          "created": {
+            "type": "boolean",
+            "description": "`false` when the schema was already at the tip and no ordinal was allocated."
+          },
+          "divergences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BreakingChangeResponse"
+            },
+            "description": "Findings, including ones the policy tolerated."
+          },
+          "portability": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortabilityResponse"
+            },
+            "description": "Where the schema relies on behaviour that differs between SDKs (M6.1). Warnings only, and\r\nnever a reason the registration failed — but the moment the author is most able to act."
+          }
+        },
+        "description": "The outcome of registering a version."
+      },
+      "SchemaResponse": {
+        "required": [
+          "schemaId",
+          "format",
+          "schema",
+          "references"
+        ],
+        "type": "object",
+        "properties": {
+          "schemaId": {
+            "type": "string",
+            "description": "The content-addressed id."
+          },
+          "format": {
+            "type": "string",
+            "description": "The schema language."
+          },
+          "schema": {
+            "type": "string",
+            "description": "The canonical text."
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReferenceResponse"
+            },
+            "description": "Outgoing references, derived from the document."
+          }
+        },
+        "description": "A stored schema."
+      },
+      "SchemaUsage": {
+        "required": [
+          "subject",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "The subject name."
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The version ordinal.",
+            "format": "int32"
+          }
+        },
+        "description": "One place a schema is in use."
+      },
       "SetCompatibilityPolicyRequest": {
         "required": [
           "mode",
@@ -803,6 +1710,63 @@
         },
         "description": "Request to change a subject's compatibility policy."
       },
+      "SubjectResponse": {
+        "required": [
+          "name",
+          "format",
+          "owner",
+          "lifecycle",
+          "contentModel",
+          "compatibilityPolicy",
+          "latest",
+          "versions"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The subject name."
+          },
+          "format": {
+            "type": "string",
+            "description": "The schema language."
+          },
+          "owner": {
+            "type": "string",
+            "description": "Who owns the contract."
+          },
+          "lifecycle": {
+            "type": "string",
+            "description": "`ACTIVE`, `DEPRECATED` or `RETIRED`."
+          },
+          "contentModel": {
+            "type": "string",
+            "description": "`OPEN` or `CLOSED`."
+          },
+          "compatibilityPolicy": {
+            "description": "The explicit policy, or nulls when inheriting.",
+            "$ref": "#/components/schemas/PolicyResponse"
+          },
+          "latest": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The gated latest pointer, or `null` when none is active.",
+            "format": "int32"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VersionResponse"
+            },
+            "description": "Every version, in ordinal order."
+          }
+        },
+        "description": "A subject and its versions."
+      },
       "UpdateSubjectRequest": {
         "type": "object",
         "properties": {
@@ -820,6 +1784,66 @@
           }
         },
         "description": "Request to change a subject's owner or deprecate it."
+      },
+      "VersionResponse": {
+        "required": [
+          "ordinal",
+          "schemaId",
+          "semanticVersion",
+          "status",
+          "changelog",
+          "registeredAt",
+          "registeredBy",
+          "deprecated"
+        ],
+        "type": "object",
+        "properties": {
+          "ordinal": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The canonical identity within the subject.",
+            "format": "int32"
+          },
+          "schemaId": {
+            "type": "string",
+            "description": "The content-addressed schema id."
+          },
+          "semanticVersion": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The optional verified label."
+          },
+          "status": {
+            "type": "string",
+            "description": "`ACTIVE`, `AWAITING_APPROVAL` or `REJECTED`."
+          },
+          "changelog": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The note recorded at registration."
+          },
+          "registeredAt": {
+            "type": "string",
+            "description": "When it was registered, UTC.",
+            "format": "date-time"
+          },
+          "registeredBy": {
+            "type": "string",
+            "description": "Who registered it."
+          },
+          "deprecated": {
+            "type": "boolean",
+            "description": "Whether the version is marked deprecated."
+          }
+        },
+        "description": "One registered version."
       }
     }
   },

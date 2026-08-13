@@ -29,13 +29,19 @@ public sealed record RegisterVersionCommand(
 /// <see langword="false"/> when the schema was already at the tip and no ordinal was allocated.
 /// </param>
 /// <param name="Report">The engine's findings, including ones the policy tolerated.</param>
+/// <param name="Portability">
+/// Where the registered schema relies on behaviour that differs between SDKs (M6.1). Never a
+/// reason the registration failed — those refuse before this record exists — but the moment the
+/// author is most likely to act on it.
+/// </param>
 public sealed record RegisterVersionResult(
     string SubjectName,
     int Ordinal,
     string SchemaId,
     VersionStatus Status,
     bool Created,
-    CompatibilityReport Report);
+    CompatibilityReport Report,
+    IReadOnlyList<PortabilityFinding> Portability);
 
 /// <summary>Handles <see cref="RegisterVersionCommand"/>.</summary>
 public sealed class RegisterVersionHandler(
@@ -122,7 +128,8 @@ public sealed class RegisterVersionHandler(
             version.SchemaId.Value,
             version.Status,
             registered.Value.Created,
-            evaluated.Value.Report));
+            evaluated.Value.Report,
+            evaluated.Value.Portability));
     }
 
     private async Task<IReadOnlyList<PriorSchema>> LoadPriorsAsync(

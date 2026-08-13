@@ -10,15 +10,56 @@ to revise, just a queue that stops advancing.
 
 ## M6.1 Protocol freeze and interop prerequisites
 
-**🔴 Heavy · do this before the first SDK**
+**🔴 Heavy · do this before the first SDK · in progress**
 
 Do this before the first SDK, not during it.
 
+- [x] **Pin JSON Schema draft 2020-12** as the only supported dialect — refused with
+      `schema_dialect_unsupported`, the one error-severity portability finding
+- [x] Define the **interoperable keyword subset**; warn at registration when a schema strays
+      outside it — `ISchemaPortabilityChecker` + `JsonSchemaPortabilityChecker`, 25 tests.
+      Settles what was [DECISIONS-PENDING #9](../DECISIONS-PENDING.md#settled)
+- [x] **Audit the API for CLR-shaped leakage** — done, and it found something worse than
+      leakage. See below
 - [ ] Publish the five normative artifacts as a coherent set (OpenAPI, envelope spec, canonicalisation rules, `concordatCode` catalogue, conformance corpus)
-- [ ] **Pin JSON Schema draft 2020-12** as the only supported dialect
-- [ ] Define the **interoperable keyword subset**; warn at registration when a schema strays outside it
 - [ ] Expand the payload-validation corpus — five independent validators (`ajv`, `jsonschema`, `santhosh-tekuri`, `networknt`, .NET) disagree at the edges, and this is the only thing that turns that into a CI failure rather than a support ticket
-- [ ] Audit the API for CLR-shaped leakage: no assembly-qualified names, no `System.*` type strings
+- [ ] Surface portability findings in `concordat lint` — the offline path, and the one a
+      pre-commit hook can afford
+
+### The OpenAPI document described no responses at all
+
+The CLR-leakage audit found no assembly-qualified names and no `System.*` strings. It found
+this instead, which is worse: **`docs/api/openapi.v1.json` contained seven schemas, all of them
+requests.** Not one response shape, and no `ProblemDetails`. Every handler returns `IResult`,
+which is opaque to the generator, and no endpoint carried `.Produces<T>()`.
+
+ADR-019's acceptance test is *"a team writes a complete Go client from those five documents
+without reading a line of C#, and hits no surprises."* That was not achievable. You could learn
+what to send and nothing about what comes back — including which `concordatCode` values an
+endpoint can return, which is the thing clients are supposed to branch on.
+
+It had been invisible because the drift gate compares the generated document against the
+committed one, and both were equally empty. **A gate that verifies an artifact is unchanged
+cannot notice that the artifact was never complete.**
+
+All 19 endpoints now declare their response types and status codes. The document went from
+**7 schemas to 23**. The 200-vs-201 split on registration is spelled out, because they are both
+success and mean different things — 200 is the idempotent re-registration of the tip, where no
+ordinal was allocated, and a client treating them alike double-counts versions.
+
+### Portability is warnings, with one exception
+
+The schemas this flags are legal and usually intentional, so refusing them would be the
+Confluent mistake in the other direction. Three findings:
+
+| Kind | Severity | Why it exists |
+|---|---|---|
+| `dialect_unsupported` | **Error** | Keywords changed meaning between drafts; Concordat would be applying rules the author never wrote against |
+| `keyword_not_compared` | Warning | The keyword validates but the compatibility engine cannot see it, so a change confined to it reads as compatible |
+| `regex_not_portable` | Warning | Go's RE2 has no lookaround or backreferences **at all**, so a Go consumer fails to build the validator rather than disagreeing with it |
+
+The regex one is the sharpest: it is not "behaves differently in Go", it is "the payload check
+is lost entirely on that SDK", and no corpus can fix it because the schema never compiles there.
 
 ## M6.2 TypeScript / JavaScript
 

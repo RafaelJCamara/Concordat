@@ -26,6 +26,11 @@ builder.Services.AddSingleton<ICompatibilityChecker, JsonSchemaCompatibilityChec
 builder.Services.AddSingleton<ISchemaReferenceExtractor, JsonSchemaReferenceExtractor>();
 builder.Services.AddSingleton<ISchemaBundler, JsonSchemaBundler>();
 
+// JSON Schema is the only format with a portability checker, and deliberately so: it is the
+// one with no compatibility specification and five independent validators interpreting the
+// same text (M6.1, ADR-021).
+builder.Services.AddSingleton<ISchemaPortabilityChecker, JsonSchemaPortabilityChecker>();
+
 // Avro and Protobuf are complete surfaces as of M5. Their reference extractors refuse
 // cross-subject references rather than resolving them (ADR-023): neither format has anywhere
 // to pin a version, so following a reference would bind to whatever the target currently holds.

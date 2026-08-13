@@ -18,8 +18,13 @@ namespace Concordat.Application;
 public sealed class SchemaFormatRegistry(
     IEnumerable<ISchemaCanonicalizer> canonicalizers,
     IEnumerable<ICompatibilityChecker> checkers,
-    IEnumerable<ISchemaReferenceExtractor> extractors) : ISchemaFormatRegistry
+    IEnumerable<ISchemaReferenceExtractor> extractors,
+    IEnumerable<ISchemaPortabilityChecker> portability) : ISchemaFormatRegistry
 {
+    /// <inheritdoc />
+    public ISchemaPortabilityChecker? PortabilityChecker(SchemaFormat format) =>
+        portability.FirstOrDefault(p => p.Format == format);
+
     /// <inheritdoc />
     public ISchemaCanonicalizer Canonicalizer(SchemaFormat format) =>
         canonicalizers.FirstOrDefault(c => c.Format == format)

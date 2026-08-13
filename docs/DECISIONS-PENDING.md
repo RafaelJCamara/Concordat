@@ -176,16 +176,6 @@ M1.1 rejects `2.0.0-rc.1` with a dedicated code. A team whose pipeline emits pre
 **cannot label a version at all** until this lands. Known gap, not a bug — but if your own
 pipeline does that, it moves up.
 
-### 9. JSON Schema keyword coverage — before v1 ships
-
-M1.3 compares a practical subset. **Not compared:** `oneOf`/`anyOf`/`allOf`/`not`, `$ref`
-targets, `patternProperties`, `dependentRequired`, `if`/`then`/`else`, tuple-form `prefixItems`.
-A change confined to those is currently reported as **compatible**.
-
-That is a real hole for anyone using composition keywords, which is common in mature schemas.
-Decide whether v1 ships with it, closes it, or rejects schemas using unsupported keywords
-outright rather than silently under-reporting.
-
 ### 10. Generic message types are unsupported — before v1 ships
 
 M2.3 **refuses** a generic type name rather than inventing a spelling for it, because any
@@ -392,6 +382,9 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | Removing a field without `reserved` is reported at `Wire` even though nothing breaks that day | M5.3 | Low. The hazard is a later version reusing the number; flagging it at removal is the only moment it is cheap to fix |
 | Protobuf `google/protobuf/*` imports are **allowed** while every other import is refused | [ADR-023](adr/023-no-cross-subject-references-avro-protobuf.md) | Low. They resolve from the runtime, not a registry, so they cannot drift — and refusing them would rule out most real Protobuf, since `google.protobuf.Timestamp` is close to universal |
 | `ISchemaBundler` for Avro and Protobuf is the identity function | M5.2, M5.3 | Low, and true by construction while ADR-023 holds: a registered schema has no references, so the bundle is the document. It stops being the identity the moment references are supported |
+| Only JSON Schema gets an `ISchemaPortabilityChecker`; the registry returns `null` for the others rather than throwing | [M6.1](plan/M6-sdks.md) | Low, and deliberate. Avro and Protobuf are specified formats with reference implementations; JSON Schema is the one with no compatibility spec and five libraries reading the same text. "No checker" is a statement about the format, not a gap — which is why this is the one registry lookup that does not fail loudly |
+| A property literally named `if`/`oneOf`/etc. produces a spurious portability warning | M6.1 | Low. Telling a keyword from a property name means tracking schema position through every applicator; one warning on an unusual property name is far cheaper than missing a real `if` where the tracking got it wrong. Pinned by a test so it is a known trade rather than a bug |
+| Regex portability warns on lookaround and backreferences specifically | M6.1 | Low. Go's RE2 cannot compile them **at all**, so a Go consumer loses the payload check entirely rather than disagreeing about it — the sharpest real divergence in ADR-021's validator set |
 
 ---
 
@@ -399,6 +392,8 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 
 | Decision | Outcome | Recorded in |
 |---|---|---|
+| JSON Schema keyword coverage (was #9) | **Warn, do not refuse and do not stay silent.** `JsonSchemaPortabilityChecker` reports every keyword the compatibility engine does not compare, with a message saying what it costs — "a change confined to it is reported as compatible even when it is not". Findings ride on the registration response and on `concordat lint` | [M6.1](plan/M6-sdks.md) — this is the option M6.1 already prescribed ("warn at registration when a schema strays outside it"), so implementing it settles the question rather than reopening it. Refusing composition keywords would rule out most mature schemas; staying silent is the under-reporting the decision existed to stop |
+| JSON Schema dialect | **draft 2020-12 only, and other dialects are refused** with `schema_dialect_unsupported` | M6.1 — keywords changed meaning between drafts (`items` most visibly), so validating a draft-07 document under 2020-12 rules would apply rules its author never wrote against. The one error-severity portability finding; everything else warns |
 | Avro and Protobuf cross-subject references (was #16) | **Refused for v1.** Registration fails with `schema_references_unsupported` naming the type or import. Self-contained schemas — the common shape for both formats — register normally, as do same-document self-references and Protobuf `google/protobuf/*` imports, which the runtime resolves rather than a registry | [ADR-023](adr/023-no-cross-subject-references-avro-protobuf.md) — neither format has anywhere to pin a version, so resolving would bind to whatever the target holds now, which is the silent-behaviour-change ADR-017 exists to prevent. If references return, the out-of-band manifest is the favourite: it is the only mechanism that works identically for both formats |
 | Project name | **Concordat**, after rejecting Signet, Hutch, Syngraph, Stipula, Warrenty, Indenture | [ADR-022](adr/022-project-name-concordat.md) |
 | CLI binary name | **`concordat` only**, with a shell alias documented for anyone who wants one. No `cdt` | [M3](plan/M3-cli.md) — an alias is *additive*: shipping it later breaks nobody, removing it later breaks every script. That asymmetry says wait. `kubectl`, `terraform`, `docker` and `git` all ship one name and let users abbreviate. If it is ever added, `cdt` needs the same ecosystem-collision check that killed Signet and Hutch |

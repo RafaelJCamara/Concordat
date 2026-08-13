@@ -49,6 +49,17 @@ public static class ConcordatCodes
     /// </remarks>
     public const string SchemaReferencesUnsupported = "schema_references_unsupported";
 
+    /// <summary>
+    /// The schema declares a JSON Schema dialect Concordat does not implement (M6.1).
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="SchemaMalformed"/>: the document is well-formed, and the
+    /// registry is declining to interpret it under rules it was not written against. Keywords
+    /// changed meaning between drafts — <c>items</c> most visibly — so guessing is worse than
+    /// refusing.
+    /// </remarks>
+    public const string SchemaDialectUnsupported = "schema_dialect_unsupported";
+
     /// <summary>A semantic version label was not <c>MAJOR.MINOR.PATCH</c>.</summary>
     public const string SemverInvalid = "semver_invalid";
 

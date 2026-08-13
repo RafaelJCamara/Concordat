@@ -25,10 +25,14 @@ public static class SchemaEndpoints
                 "is no tenant column to filter on. Access is authorised by reachability: a " +
                 "caller may read a schema only if some subject in their tenant references it. " +
                 "An unreachable id returns 404, identical to one that does not exist — a " +
-                "distinct 403 would confirm another tenant's schema exists.");
+                "distinct 403 would confirm another tenant's schema exists.")
+            .Produces<SchemaResponse>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
 
         group.MapGet("/{id}/subjects", GetUsages)
-            .WithSummary("List the subjects and versions using a schema");
+            .WithSummary("List the subjects and versions using a schema")
+            .Produces<IReadOnlyList<SchemaUsage>>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
 
         group.MapGet("/{id}/bundled", GetBundled)
             .WithSummary("Get a schema as one self-contained document")
@@ -37,13 +41,17 @@ public static class SchemaEndpoints
                 "refs as local pointers, so the result validates without further fetches. " +
                 "Bundling happens here rather than at registration: doing it at registration " +
                 "would make canonicalisation depend on registry state, and no SDK could then " +
-                "reproduce a schema id offline.");
+                "reproduce a schema id offline.")
+            .Produces<BundledSchemaResponse>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
 
         group.MapPost("/lookup", Lookup)
             .WithSummary("Find the id a schema document would receive")
             .WithDescription(
                 "Canonicalises the document and returns its content-addressed id, plus " +
-                "whether it is already known. Never writes.");
+                "whether it is already known. Never writes.")
+            .Produces<LookupSchemaResponse>()
+            .ProducesProblem(StatusCodes.Status400BadRequest);
 
         return app;
     }

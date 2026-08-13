@@ -24,16 +24,31 @@ public interface ISchemaFormatRegistry
     /// <returns>The extractor.</returns>
     /// <exception cref="NotSupportedException">The format has no implementation yet.</exception>
     ISchemaReferenceExtractor ReferenceExtractor(SchemaFormat format);
+
+    /// <summary>Gets the portability checker for a format, if it has one.</summary>
+    /// <param name="format">The format.</param>
+    /// <returns>
+    /// The checker, or <see langword="null"/> when the format has none. Unlike the other
+    /// members this does not throw: a format with no checker has no cross-implementation
+    /// divergence modelled, which is a statement about the format rather than a gap. JSON
+    /// Schema is the one with five independent validators interpreting the same text.
+    /// </returns>
+    ISchemaPortabilityChecker? PortabilityChecker(SchemaFormat format);
 }
 
 /// <summary>A canonicalised proposal, ready to register or to check.</summary>
 /// <param name="Schema">The schema, with its content-addressed id and derived references.</param>
 /// <param name="Report">The engine's verdict and findings.</param>
 /// <param name="Verdict">The verdict in the form the aggregate accepts.</param>
+/// <param name="Portability">
+/// Where this schema relies on behaviour that differs between SDKs (M6.1). Warnings only —
+/// an error-severity finding refuses the proposal before one of these is built.
+/// </param>
 public sealed record EvaluatedProposal(
     Schema Schema,
     CompatibilityReport Report,
-    CompatibilityVerdict Verdict);
+    CompatibilityVerdict Verdict,
+    IReadOnlyList<PortabilityFinding> Portability);
 
 /// <summary>
 /// Canonicalises a proposed schema, derives its identity and references, and asks the engine
@@ -88,6 +103,20 @@ public sealed class CompatibilityEvaluator(ISchemaFormatRegistry formats) : ICom
             return Result<EvaluatedProposal>.Failure(canonical.Error!);
         }
 
+        // Portability runs before anything is derived from the document. An unsupported dialect
+        // means the rules this schema was written against are not the rules that would be
+        // applied to it, so computing an id and a verdict from it would be confidently wrong.
+        var portability = formats.PortabilityChecker(format)?.Check(canonical.Value) ?? [];
+
+        var dialect = portability.FirstOrDefault(
+            f => f.Severity is PortabilitySeverity.Error);
+
+        if (dialect is not null)
+        {
+            return Result<EvaluatedProposal>.Failure(
+                ConcordatCodes.SchemaDialectUnsupported, dialect.Message);
+        }
+
         // Edges come from the document, never from the caller (M1.4).
         var references = formats.ReferenceExtractor(format).Extract(canonical.Value);
         if (references.IsFailure)
@@ -110,6 +139,7 @@ public sealed class CompatibilityEvaluator(ISchemaFormatRegistry formats) : ICom
             ? CompatibilityVerdict.Compatible(policy)
             : CompatibilityVerdict.Breaking(policy);
 
-        return Result<EvaluatedProposal>.Success(new EvaluatedProposal(schema.Value, report, verdict));
+        return Result<EvaluatedProposal>.Success(
+            new EvaluatedProposal(schema.Value, report, verdict, portability));
     }
 }

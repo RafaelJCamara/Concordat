@@ -24,7 +24,9 @@ public static class BootstrapEndpoint
                 "consumption down with it. One request instead of N is the mitigation. " +
                 "Referenced schemas are included transitively, so the payload is " +
                 "self-sufficient and a client never has to follow a reference it did not plan " +
-                "for. Retired subjects are excluded.");
+                "for. Retired subjects are excluded.")
+            .Produces<BootstrapResponse>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
 
         return app;
     }

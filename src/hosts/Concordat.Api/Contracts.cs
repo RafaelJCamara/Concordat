@@ -311,10 +311,41 @@ public sealed record BootstrapSubjectResponse(
 /// <see langword="false"/> when the schema was already at the tip and no ordinal was allocated.
 /// </param>
 /// <param name="Divergences">Findings, including ones the policy tolerated.</param>
+/// <param name="Portability">
+/// Where the schema relies on behaviour that differs between SDKs (M6.1). Warnings only, and
+/// never a reason the registration failed — but the moment the author is most able to act.
+/// </param>
 public sealed record RegisterVersionResponse(
     string Subject,
     int Ordinal,
     string SchemaId,
     string Status,
     bool Created,
-    IReadOnlyList<BreakingChangeResponse> Divergences);
+    IReadOnlyList<BreakingChangeResponse> Divergences,
+    IReadOnlyList<PortabilityResponse> Portability);
+
+/// <summary>One way a schema may not behave identically in every SDK (M6.1).</summary>
+/// <param name="Path">A JSON Pointer into the schema document.</param>
+/// <param name="Kind">A token from <c>PortabilityKinds</c>.</param>
+/// <param name="Severity">Always <c>WARNING</c> here; an error refuses the registration.</param>
+/// <param name="Message">What will differ, and what it costs.</param>
+public sealed record PortabilityResponse(
+    string Path,
+    string Kind,
+    string Severity,
+    string Message)
+{
+    /// <summary>Projects a finding.</summary>
+    /// <param name="finding">The finding.</param>
+    /// <returns>The wire form.</returns>
+    public static PortabilityResponse From(PortabilityFinding finding)
+    {
+        ArgumentNullException.ThrowIfNull(finding);
+
+        return new PortabilityResponse(
+            finding.Path,
+            finding.Kind,
+            finding.Severity.ToString().ToUpperInvariant(),
+            finding.Message);
+    }
+}
