@@ -18,6 +18,7 @@ public class CorpusTests
     private static readonly JsonSchemaCanonicalizer Canonicalizer = new();
     private static readonly JsonSchemaCompatibilityChecker Checker = new();
     private static readonly JsonSchemaReferenceExtractor Extractor = new();
+    private static readonly NJsonSchemaPayloadValidator Validator = new();
 
     public static IEnumerable<object[]> Canonicalisation() =>
         Corpus.Load<CanonicalisationFixture>("canonicalisation");
@@ -114,22 +115,33 @@ public class CorpusTests
 
     [Theory]
     [MemberData(nameof(PayloadValidation))]
-    public void PayloadFixturesAreWellFormed(string file, PayloadValidationFixture fixture)
+    public void PayloadValidationMatchesTheCorpus(string file, PayloadValidationFixture fixture)
     {
-        // Concordat has no payload validator of its own - validation is client-side and uses a
-        // different third-party library per language. Until M2 wires the first one, this checks
-        // only that the fixtures are usable: the schema canonicalises and every document is
-        // parseable JSON. Weak, but it keeps the corpus honest rather than letting it rot.
+        // Executed from M2, against the real validator behind IPayloadValidator. This is the
+        // category where SDKs diverge without anyone writing a bug: five independent
+        // implementations of a specification with genuine edge-case disagreement.
         var schema = Canonicalizer.Canonicalize(fixture.Schema);
         Assert.True(schema.IsSuccess, $"{file}: schema did not canonicalise. {fixture.Why}");
 
         Assert.NotEmpty(fixture.MustAccept);
         Assert.NotEmpty(fixture.MustReject);
 
-        foreach (var document in fixture.MustAccept.Concat(fixture.MustReject))
+        foreach (var document in fixture.MustAccept)
         {
-            var parsed = System.Text.Json.JsonDocument.Parse(document);
-            parsed.Dispose();
+            var result = Validator.Validate(schema.Value, document);
+            Assert.True(
+                result.IsValid,
+                $"{file}: must ACCEPT {document} but got " +
+                $"{string.Join("; ", result.Errors.Select(e => $"{e.Kind} at {e.Path}"))}. {fixture.Why}");
+        }
+
+        foreach (var document in fixture.MustReject)
+        {
+            var result = Validator.Validate(schema.Value, document);
+            Assert.False(
+                result.IsValid,
+                $"{file}: must REJECT {document} but it was accepted. {fixture.Why}");
+            Assert.NotEmpty(result.Errors);
         }
     }
 

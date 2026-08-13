@@ -9,4 +9,8 @@
     <InternalsVisibleTo Include="Concordat.Formats.Json.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="NJsonSchema" />
+  </ItemGroup>
+
 </Project>

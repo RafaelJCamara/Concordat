@@ -37,6 +37,44 @@ Scope is RabbitMQ.Client only (ADR-020). Service-bus adapters are [Appendix A](.
 - [ ] RabbitMQ.Client resolver — `properties.type`, as-is
 - [ ] Canonical-form validation `^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$`
 
+## M2.0 Payload validation
+
+**Done 2026-08-13 · ADR-009, ADR-019**
+
+- [x] `IPayloadValidator` port in `Formats.Abstractions`
+- [x] `NJsonSchemaPayloadValidator` — **NJsonSchema, MIT**
+- [x] The M1.7 payload-validation corpus now **executes** against it
+
+### The licence survey mattered
+
+`JsonSchema.Net` is the better-known choice and its source is MIT, but its published NuGet
+binary ships an **Open Source Maintenance Fee** agreement charging revenue-generating users
+above US$10,000 annual revenue. That obligation would propagate to Concordat's own users —
+the MassTransit-v9 and MediatR pattern a third time, and precisely what ADR-009 exists to
+catch. `Newtonsoft.Json.Schema` is commercially licensed outright. NJsonSchema is MIT with a
+clean `.nuspec`.
+
+The port exists so that decision stays reversible, and so a host can substitute a validator
+its own compliance process has already cleared.
+
+### The corpus earned its keep on the first run
+
+`integer-vs-number` failed immediately: **NJsonSchema rejects `1.0` for `type: integer`**,
+implementing draft-04 semantics. From draft-06 onward — including 2020-12, the dialect
+ADR-021 pins — `integer` "matches any number with a zero fractional part", so `1.0` is valid
+and `1.5` is not.
+
+The fixture was **not** relaxed to match the library. The corpus is normative; an
+implementation that disagrees is what bends. `CorrectToDraft202012` drops the offending error
+only when the value at that path really has a zero fractional part, and a test proves the
+correction does not overreach — a document with one whole and one fractional integer property
+still fails, on the fractional one only.
+
+Concretely: without this, a JavaScript producer emitting `1.0` for a whole number would be
+quarantined by the .NET consumer and accepted by every other SDK. That is the exact
+cross-language divergence ADR-019 predicts, found four milestones before any second SDK
+exists.
+
 ## M2.4 Middleware
 
 - [ ] Publish: decorator over `IChannel.BasicPublishAsync`; a throw blocks the publish
