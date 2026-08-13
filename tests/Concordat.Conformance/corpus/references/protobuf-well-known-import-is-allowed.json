@@ -1,0 +1,7 @@
+{
+  "name": "protobuf-google-protobuf-imports-are-allowed",
+  "why": "The well-known types ship with every Protobuf runtime and are resolved by the compiler, not by a registry, so they cannot drift and are not cross-subject references at all. Refusing them would rule out most real Protobuf, since google.protobuf.Timestamp is close to universal. An SDK that refuses these is stricter than the registry and would reject schemas it accepts.",
+  "format": "protobuf",
+  "canonicalBody": "syntax = \"proto3\";\npackage acme;\nimport \"google/protobuf/timestamp.proto\";\nmessage Order {\n  google.protobuf.Timestamp at = 1;\n}\n",
+  "references": []
+}

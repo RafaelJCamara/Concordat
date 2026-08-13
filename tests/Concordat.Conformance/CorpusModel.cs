@@ -323,3 +323,28 @@ public sealed record PayloadValidationFixture : FixtureBase
     /// <summary>Documents every conforming validator must reject.</summary>
     public IReadOnlyList<string> MustReject { get; init; } = [];
 }
+
+/// <summary>
+/// A reference-extraction case.
+/// </summary>
+/// <remarks>
+/// Added in M5. ADR-023 refuses cross-subject references for Avro and Protobuf, and that
+/// refusal is protocol rather than a .NET choice: an SDK that resolves what this one rejects
+/// would accept schemas the registry will not, and the disagreement would surface as a failed
+/// registration nobody could explain. Pinned here so every implementation refuses the same
+/// documents.
+/// </remarks>
+public sealed record ReferenceFixture : FixtureBase
+{
+    /// <summary>The schema language.</summary>
+    public string Format { get; init; } = "json";
+
+    /// <summary>The already-canonical body.</summary>
+    public string CanonicalBody { get; init; } = "";
+
+    /// <summary>The edges the extractor must derive, when it must succeed.</summary>
+    public IReadOnlyList<FixtureReference> References { get; init; } = [];
+
+    /// <summary>The expected <c>concordatCode</c>, when the document must be refused.</summary>
+    public string? Error { get; init; }
+}

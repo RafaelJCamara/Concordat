@@ -1,0 +1,36 @@
+{
+  "name": "protobuf-int32-to-int64-passes-wire-and-fails-source",
+  "why": "DESIGN section 12's corpus requirement. Both are varints so the encoded bytes are unchanged and a WIRE policy passes. It sits at WIRE_JSON rather than SOURCE because proto3 JSON renders 64-bit integers as quoted strings and 32-bit ones as bare numbers, which still satisfies 'passes WIRE, fails SOURCE'.",
+  "format": "protobuf",
+  "contentModel": "open",
+  "policy": {
+    "mode": "FULL",
+    "surface": "WIRE"
+  },
+  "previous": [
+    {
+      "ordinal": 1,
+      "schema": "syntax = \"proto3\";\npackage acme;\nmessage Order { int32 n = 1; }\n"
+    }
+  ],
+  "proposed": "syntax = \"proto3\";\npackage acme;\nmessage Order { int64 n = 1; }\n",
+  "expected": {
+    "compatible": true,
+    "suggestedBump": "MINOR",
+    "breakingChanges": [],
+    "allDivergences": [
+      {
+        "path": ".acme.Order/1",
+        "kind": "type_promoted",
+        "direction": "BACKWARD",
+        "surface": "WIRE_JSON"
+      },
+      {
+        "path": ".acme.Order/1",
+        "kind": "type_promoted",
+        "direction": "FORWARD",
+        "surface": "WIRE_JSON"
+      }
+    ]
+  }
+}

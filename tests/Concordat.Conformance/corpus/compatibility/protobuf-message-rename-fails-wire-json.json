@@ -1,0 +1,29 @@
+{
+  "name": "protobuf-message-rename-fails-wire-json",
+  "why": "The pair to the fixture above. The bytes are unaffected, but proto3 JSON, 'Any' type URLs and generated code all name the message, so a WIRE_JSON policy must block it. Two fixtures, one edit, opposite verdicts.",
+  "format": "protobuf",
+  "contentModel": "open",
+  "policy": {
+    "mode": "BACKWARD",
+    "surface": "WIRE_JSON"
+  },
+  "previous": [
+    {
+      "ordinal": 1,
+      "schema": "syntax = \"proto3\";\npackage acme;\nmessage Order { string id = 1; }\n"
+    }
+  ],
+  "proposed": "syntax = \"proto3\";\npackage acme;\nmessage Purchase { string id = 1; }\n",
+  "expected": {
+    "compatible": false,
+    "suggestedBump": "MAJOR",
+    "breakingChanges": [
+      {
+        "path": ".acme.Order",
+        "kind": "name_changed",
+        "direction": "BACKWARD",
+        "surface": "WIRE_JSON"
+      }
+    ]
+  }
+}

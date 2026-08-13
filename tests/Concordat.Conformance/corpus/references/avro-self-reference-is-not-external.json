@@ -1,0 +1,7 @@
+{
+  "name": "avro-a-record-referencing-itself-is-not-an-external-reference",
+  "why": "The linked-list case. It resolves inside the document, so ADR-023 must not catch it - otherwise every recursive Avro schema becomes unregisterable, which would be a far larger loss than the one the ADR accepts.",
+  "format": "avro",
+  "canonicalBody": "{\"name\":\"acme.Node\",\"type\":\"record\",\"fields\":[{\"name\":\"value\",\"type\":\"long\"},{\"name\":\"next\",\"type\":[\"null\",\"acme.Node\"]}]}",
+  "references": []
+}

@@ -1,0 +1,7 @@
+{
+  "name": "protobuf-reserved-ranges-are-merged-and-sorted",
+  "why": "'reserved 3, 2;' and 'reserved 2 to 3;' reserve exactly the same numbers. Leaving them distinct would give one schema two ids, which is the near-duplicate accumulation canonicalisation exists to prevent.",
+  "format": "protobuf",
+  "input": "syntax = \"proto3\";\nmessage M {\n  reserved 3, 2;\n  string a = 1;\n}\n",
+  "canonical": "syntax = \"proto3\";\nmessage M {\n  reserved 2 to 3;\n  string a = 1;\n}\n"
+}

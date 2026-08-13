@@ -1,0 +1,29 @@
+{
+  "name": "avro-adding-a-field-without-a-default-breaks-the-wire",
+  "why": "The pair to the fixture above: the same edit, opposite verdict, decided only by the presence of a default. Avro binary is positional, so the reader has nothing to read the new field from and decoding fails outright - a Wire break, not a validation one.",
+  "format": "avro",
+  "contentModel": "open",
+  "policy": {
+    "mode": "BACKWARD",
+    "surface": "WIRE_JSON"
+  },
+  "previous": [
+    {
+      "ordinal": 1,
+      "schema": "{\"type\":\"record\",\"name\":\"acme.User\",\"fields\":[{\"name\":\"id\",\"type\":\"string\"}]}"
+    }
+  ],
+  "proposed": "{\"type\":\"record\",\"name\":\"acme.User\",\"fields\":[{\"name\":\"id\",\"type\":\"string\"},{\"name\":\"nickname\",\"type\":\"string\"}]}",
+  "expected": {
+    "compatible": false,
+    "suggestedBump": "MAJOR",
+    "breakingChanges": [
+      {
+        "path": "#/fields/nickname",
+        "kind": "required_field_added",
+        "direction": "BACKWARD",
+        "surface": "WIRE"
+      }
+    ]
+  }
+}

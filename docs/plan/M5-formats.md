@@ -20,17 +20,16 @@ things built early on purpose" for the pattern; this is a third.
 
 ## M5.2 Avro
 
-**Done 2026-08-13 except references · `Concordat.Formats.Avro` · 83 tests**
+**Done 2026-08-13 · `Concordat.Formats.Avro` · 93 tests**
 
 - [x] Canonical form and content-addressed identity
 - [x] Resolution rules: defaults, aliases, union widening, enum symbols
 - [x] Two-axis mapping
-- [ ] Named-type FQN → subject reference resolution — **blocked on
-      [DECISIONS-PENDING #16](../DECISIONS-PENDING.md#16-avro-cross-subject-references-carry-no-version).**
-      Avro references are bare FQN strings with no syntactic room to pin a version. Until it is
-      settled, `ISchemaReferenceExtractor` and `ISchemaBundler` are unimplemented for Avro, so
-      `ISchemaFormatRegistry` throws `NotSupportedException` for them and **an Avro schema still
-      cannot be registered end to end** — canonicalise, identify and check all work today
+- [x] Named-type FQN → subject reference resolution — **settled as a refusal
+      ([ADR-023](../adr/023-no-cross-subject-references-avro-protobuf.md)).** An Avro fullname
+      has nowhere to pin a version, so a schema referencing a type it does not define is
+      rejected with `schema_references_unsupported` naming the type. Self-references and
+      same-document types resolve normally, so recursive schemas still work
 
 ### The canonical form is PCF with one deviation, and finding out why was the milestone
 
@@ -89,14 +88,15 @@ Four tokens were added to `BreakingChangeKinds` — `name_changed`, `fixed_size_
 
 ## M5.3 Protobuf
 
-**Done 2026-08-13 except references · `Concordat.Formats.Protobuf` · 56 tests**
+**Done 2026-08-13 · `Concordat.Formats.Protobuf` · 69 tests**
 
 - [x] Normalised canonical form, import ordering normalised
 - [x] Field numbers as identity — break on number or wire-type change, and on removal without `reserved`
 - [x] Two-axis mapping — a rename is `WIRE`-safe but `WIRE_JSON`- and `SOURCE`-breaking
-- [ ] `import` filename → subject reference resolution — **blocked on
-      [DECISIONS-PENDING #16](../DECISIONS-PENDING.md#16-neither-avro-nor-protobuf-references-carry-a-version),
-      the same hole as Avro's**: an `import` names a file, with nowhere to pin a version
+- [x] `import` filename → subject reference resolution — **settled as a refusal
+      ([ADR-023](../adr/023-no-cross-subject-references-avro-protobuf.md)).** An import names a
+      file and carries no version. `google/protobuf/*` imports are allowed — the runtime
+      resolves those, not a registry — and every other import is rejected by name
 
 ### A hand-written parser, and the second reason is the deciding one
 
@@ -150,11 +150,29 @@ silently. Flagging it at removal is the only moment it is cheap to fix, and the 
 - [x] `int32 → int64` passes `WIRE`, fails `SOURCE` — covered for **both** Protobuf (M5.3) and
       Avro (M5.2, where the promotion is a `Source` finding rather than `WireJson`)
 - [x] Protobuf message rename with stable field tags passes `WIRE`, fails `WIRE_JSON`
-- [ ] Splitting a `.proto` across files is compatible (Confluent rejects this) — **blocked on
-      [#16](../DECISIONS-PENDING.md#16-neither-avro-nor-protobuf-references-carry-a-version)**:
-      the split definition lives behind an `import` the engine cannot follow yet
-- [ ] Promote these from per-format test suites into `tests/Concordat.Conformance` — they are
-      normative under ADR-019 and every SDK must reproduce them, which is what the corpus is for
+- [ ] ~~Splitting a `.proto` across files is compatible (Confluent rejects this)~~ — **cannot be
+      written under [ADR-023](../adr/023-no-cross-subject-references-avro-protobuf.md)**, which
+      refuses the import the split definition lives behind. Recorded in that ADR's consequences
+      as a real loss from the v1 story: the case exists to demonstrate a Confluent defect
+      Concordat fixes. It returns with references
+- [x] Promote these from per-format test suites into `tests/Concordat.Conformance` — **18
+      fixtures added; the corpus runs 82 cases, up from 64**
+
+### The corpus runner was quietly JSON-only
+
+Every fixture already carried a `format` field and **nothing read it**. With one format that was
+invisible; the moment an Avro fixture landed it would have been canonicalised by the JSON
+implementation and passed or failed for the wrong reason. The runner now resolves the
+canonicaliser, checker and extractor by format.
+
+A new **`references/`** category pins ADR-023 itself. The refusal is protocol, not a .NET
+choice: an SDK that resolves what this one rejects would accept schemas the registry will not,
+and the disagreement surfaces as a failed registration nobody can explain. The category also
+carries the JSON contrast case, so the refusals read as a consequence of `$ref` being the only
+reference form that can carry a version rather than as an arbitrary restriction.
+
+Every expected value in the 18 new fixtures was written by hand before running them, and all 18
+matched first time — the same check M1.7 applied to the schema-id preimages.
 
 ---
 
@@ -162,6 +180,13 @@ silently. Flagging it at removal is the only moment it is cheap to fix, and the 
 
 All three formats round-trip through canonicalisation, identity and both compatibility
 axes, with the corpus green.
+
+**Met.** JSON Schema, Avro and Protobuf each canonicalise deterministically and idempotently,
+produce content-addressed ids, and are checked on both axes; the corpus runs all three formats
+and is green at 82 cases. The one documented shortfall is
+[ADR-023](../adr/023-no-cross-subject-references-avro-protobuf.md): Avro and Protobuf accept
+only self-contained schemas, which costs the "splitting a `.proto` across files" case that
+DESIGN §12 wanted.
 
 ---
 

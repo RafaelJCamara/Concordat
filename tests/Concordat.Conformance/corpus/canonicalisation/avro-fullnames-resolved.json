@@ -1,0 +1,7 @@
+{
+  "name": "avro-names-resolve-against-the-enclosing-namespace",
+  "why": "A nested type inherits its parent's namespace, and 'namespace' is then redundant. Two spellings of one schema must collapse to one id, or a registry accumulates near-duplicates that differ only in how the author qualified a name.",
+  "format": "avro",
+  "input": "{\"type\":\"record\",\"name\":\"Outer\",\"namespace\":\"acme\",\"fields\":[{\"name\":\"inner\",\"type\":{\"type\":\"record\",\"name\":\"Inner\",\"fields\":[]}}]}",
+  "canonical": "{\"name\":\"acme.Outer\",\"type\":\"record\",\"fields\":[{\"name\":\"inner\",\"type\":{\"name\":\"acme.Inner\",\"type\":\"record\",\"fields\":[]}}]}"
+}

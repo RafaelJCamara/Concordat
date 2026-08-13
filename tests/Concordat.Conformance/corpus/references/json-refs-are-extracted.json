@@ -1,0 +1,13 @@
+{
+  "name": "json-schema-concordat-refs-become-edges",
+  "why": "JSON Schema is the one format where a reference carries its own version, because $ref takes a URI. This fixture is the contrast that makes ADR-023's refusals for the other two legible rather than arbitrary.",
+  "format": "json",
+  "canonicalBody": "{\"properties\":{\"address\":{\"$ref\":\"concordat://prod/acme.Address/2\"}},\"type\":\"object\"}",
+  "references": [
+    {
+      "name": "concordat://prod/acme.Address/2",
+      "subject": "acme.Address",
+      "version": 2
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "name": "avro-int-promoted-to-long-is-source-only",
+  "why": "Avro's int32 to int64. The specification defines the promotion, so the bytes decode and only the generated type changes - which the default BACKWARD x WIRE_JSON policy must permit. This is the case ADR-016's second axis exists for; a single-axis model cannot express it.",
+  "format": "avro",
+  "contentModel": "open",
+  "policy": {
+    "mode": "BACKWARD",
+    "surface": "WIRE_JSON"
+  },
+  "previous": [
+    {
+      "ordinal": 1,
+      "schema": "{\"type\":\"record\",\"name\":\"acme.User\",\"fields\":[{\"name\":\"n\",\"type\":\"int\"}]}"
+    }
+  ],
+  "proposed": "{\"type\":\"record\",\"name\":\"acme.User\",\"fields\":[{\"name\":\"n\",\"type\":\"long\"}]}",
+  "expected": {
+    "compatible": true,
+    "suggestedBump": "MINOR",
+    "breakingChanges": [],
+    "allDivergences": [
+      {
+        "path": "#/fields/n",
+        "kind": "type_promoted",
+        "direction": "BACKWARD",
+        "surface": "SOURCE"
+      }
+    ]
+  }
+}

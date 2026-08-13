@@ -265,58 +265,6 @@ ADR-015 requires. **Hard delete is not implemented**: DESIGN §4 wants "no regis
 consumers, an explicit force flag, and an audit entry", and both registered consumers and the
 audit log are M7. Confirm that v1 can ship with retire-only, or pull the pieces forward.
 
-### 16. Neither Avro nor Protobuf references carry a version
-
-**Blocks the last item of M5.2 and M5.3, and one M5.4 corpus case.** Found while scoping M5.2
-and confirmed to be the same hole in M5.3.
-
-JSON Schema was the easy case and set a misleading precedent: its `$ref` takes a URI, so
-`concordat://<env>/<subject>/<version>` fits with room for the version. Neither other format
-has anywhere to put one.
-
-- **Avro** — a cross-subject reference is a bare named-type fullname, e.g.
-  `"acme.orders.Address"`. In the common case of a reference inside a union or a field's
-  `"type"`, it is a plain JSON *string*, so there is no room to attach anything at all.
-- **Protobuf** — `import "acme/common.proto";` takes a filename. DESIGN §4 says "Protobuf
-  `import` filename → subject", which resolves *which subject*, but says nothing about which
-  version. Encoding one in the filename (`import "acme.Common/3.proto";`) would be inventing a
-  convention every SDK then has to reproduce.
-
-This is not an implementation gap that more effort closes; it is a real hole in what DESIGN §4
-specifies, with no mechanism attached. Both format libraries canonicalise, identify and check
-compatibility today, and neither implements `ISchemaReferenceExtractor`, so **no Avro or
-Protobuf schema can be registered end to end** until this is settled.
-
-> **This is also why the "splitting a `.proto` across files is compatible" corpus case
-> (DESIGN §12, M5.4) cannot be written yet** — the split definition lives behind an `import`
-> the engine cannot follow.
-
-> **Options:**
-> - **Resolve to whichever version is currently `latest`.** Cheap, and works for both formats
->   with no syntax invented. But it reintroduces exactly the silent-behaviour-change problem
->   ADR-017's gated `LatestPointer` exists to prevent — one layer down, in the reference graph
->   instead of the subject itself.
-> - **Pin versions out of band**, in a per-subject reference manifest supplied at registration
->   rather than in the schema text. This is close to what Confluent does, and it works
->   identically for both formats. The cost is that M1.4's rule — *edges are derived from the
->   document, never supplied alongside it* — stops holding for two of the three formats, and
->   that rule exists because a supplied list can disagree with what the schema actually points
->   at.
-> - **Invent a per-format convention**: an object-wrapped Avro reference carrying a Concordat
->   property, and a filename convention for Protobuf `import`. Keeps edges in the document, but
->   each convention is a rule five SDKs must reproduce exactly, and neither has been verified
->   against a second independent implementation of its format.
-> - **Refuse cross-subject references in Avro and Protobuf for v1**, the way M2.3 refused to
->   invent a spelling for generic message types. Self-contained schemas — one file, everything
->   inlined — keep working, and they are the common case for both formats.
->
-> **Recommendation:** refuse for v1, then reconsider with the out-of-band manifest as the
-> favourite. Refusing ships something correct rather than something guessed and matches the call
-> already made for generic types (#10). Of the ways to actually support it, the manifest is the
-> only one that works the same way for both formats — and "one mechanism for two formats" is
-> worth more than keeping M1.4's derive-from-the-document rule universal, given that rule was
-> written when JSON Schema was the only format and its URI-shaped `$ref` made it free.
-
 ---
 
 ## Commitments that must not be forgotten
@@ -442,6 +390,8 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | Bidirectional Protobuf breaks are emitted once per direction | M5.3 | Low, and required: Protobuf is not reader/writer asymmetric like Avro, so a single-direction finding would let a `Forward`-only policy miss a wire-type change entirely |
 | `int32 → int64` is reported at **`WireJson`**, not `Source` | M5.3 | Low. proto3 JSON encodes 64-bit integers as quoted strings and 32-bit as bare numbers, so the JSON mapping genuinely changes. Still satisfies DESIGN §12's "passes `WIRE`, fails `SOURCE`" |
 | Removing a field without `reserved` is reported at `Wire` even though nothing breaks that day | M5.3 | Low. The hazard is a later version reusing the number; flagging it at removal is the only moment it is cheap to fix |
+| Protobuf `google/protobuf/*` imports are **allowed** while every other import is refused | [ADR-023](adr/023-no-cross-subject-references-avro-protobuf.md) | Low. They resolve from the runtime, not a registry, so they cannot drift — and refusing them would rule out most real Protobuf, since `google.protobuf.Timestamp` is close to universal |
+| `ISchemaBundler` for Avro and Protobuf is the identity function | M5.2, M5.3 | Low, and true by construction while ADR-023 holds: a registered schema has no references, so the bundle is the document. It stops being the identity the moment references are supported |
 
 ---
 
@@ -449,6 +399,7 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 
 | Decision | Outcome | Recorded in |
 |---|---|---|
+| Avro and Protobuf cross-subject references (was #16) | **Refused for v1.** Registration fails with `schema_references_unsupported` naming the type or import. Self-contained schemas — the common shape for both formats — register normally, as do same-document self-references and Protobuf `google/protobuf/*` imports, which the runtime resolves rather than a registry | [ADR-023](adr/023-no-cross-subject-references-avro-protobuf.md) — neither format has anywhere to pin a version, so resolving would bind to whatever the target holds now, which is the silent-behaviour-change ADR-017 exists to prevent. If references return, the out-of-band manifest is the favourite: it is the only mechanism that works identically for both formats |
 | Project name | **Concordat**, after rejecting Signet, Hutch, Syngraph, Stipula, Warrenty, Indenture | [ADR-022](adr/022-project-name-concordat.md) |
 | CLI binary name | **`concordat` only**, with a shell alias documented for anyone who wants one. No `cdt` | [M3](plan/M3-cli.md) — an alias is *additive*: shipping it later breaks nobody, removing it later breaks every script. That asymmetry says wait. `kubectl`, `terraform`, `docker` and `git` all ship one name and let users abbreviate. If it is ever added, `cdt` needs the same ecosystem-collision check that killed Signet and Hutch |
 | JSON Schema validator | **NJsonSchema (MIT)** behind an `IPayloadValidator` port | [M2](plan/M2-dotnet-client.md) — `JsonSchema.Net` publishes its binary under a maintenance-fee agreement that would propagate to our users; `Newtonsoft.Json.Schema` is commercial |

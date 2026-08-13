@@ -26,17 +26,19 @@ builder.Services.AddSingleton<ICompatibilityChecker, JsonSchemaCompatibilityChec
 builder.Services.AddSingleton<ISchemaReferenceExtractor, JsonSchemaReferenceExtractor>();
 builder.Services.AddSingleton<ISchemaBundler, JsonSchemaBundler>();
 
-// Avro canonicalisation and compatibility (M5.2, in progress). Reference extraction and
-// bundling are not implemented: Avro references are bare fullnames with nowhere to pin a
-// version, which is DECISIONS-PENDING #16. They resolve lazily through ISchemaFormatRegistry
-// and fail loudly (NotSupportedException) rather than silently doing the wrong thing.
+// Avro and Protobuf are complete surfaces as of M5. Their reference extractors refuse
+// cross-subject references rather than resolving them (ADR-023): neither format has anywhere
+// to pin a version, so following a reference would bind to whatever the target currently holds.
+// Self-contained schemas — the common shape for both — register normally.
 builder.Services.AddSingleton<ISchemaCanonicalizer, AvroSchemaCanonicalizer>();
 builder.Services.AddSingleton<ICompatibilityChecker, AvroSchemaCompatibilityChecker>();
+builder.Services.AddSingleton<ISchemaReferenceExtractor, AvroSchemaReferenceExtractor>();
+builder.Services.AddSingleton<ISchemaBundler, AvroSchemaBundler>();
 
-// Protobuf, on the same footing: `import` carries no version either, so reference extraction
-// waits on the same decision.
 builder.Services.AddSingleton<ISchemaCanonicalizer, ProtoSchemaCanonicalizer>();
 builder.Services.AddSingleton<ICompatibilityChecker, ProtoSchemaCompatibilityChecker>();
+builder.Services.AddSingleton<ISchemaReferenceExtractor, ProtoSchemaReferenceExtractor>();
+builder.Services.AddSingleton<ISchemaBundler, ProtoSchemaBundler>();
 
 builder.Services.AddSingleton<IEnvironmentResolver, DerivedEnvironmentResolver>();
 

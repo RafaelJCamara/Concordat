@@ -1,0 +1,7 @@
+{
+  "name": "avro-a-type-the-document-does-not-define-is-refused",
+  "why": "ADR-023. An Avro fullname carries no version, so resolving it would bind to whatever that subject holds at read time - the silent behaviour change ADR-017's gated latest pointer exists to prevent, one layer down in the reference graph. Refusing is protocol, not a .NET choice: an SDK that resolves this would accept schemas the registry will not.",
+  "format": "avro",
+  "canonicalBody": "{\"name\":\"acme.Order\",\"type\":\"record\",\"fields\":[{\"name\":\"address\",\"type\":\"acme.common.Address\"}]}",
+  "error": "schema_references_unsupported"
+}

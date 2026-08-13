@@ -37,6 +37,18 @@ public static class ConcordatCodes
     /// <summary>A schema body was not well-formed in its declared format.</summary>
     public const string SchemaMalformed = "schema_malformed";
 
+    /// <summary>
+    /// The schema depends on a definition outside itself, which v1 does not support for this
+    /// format (ADR-023).
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="ReferenceInvalid"/>, which means a reference was malformed. This
+    /// one means the reference was well-formed and Concordat is declining to resolve it: Avro
+    /// fullnames and Protobuf <c>import</c>s have nowhere to pin a version, so following them
+    /// would silently bind to whatever the target happens to be at read time.
+    /// </remarks>
+    public const string SchemaReferencesUnsupported = "schema_references_unsupported";
+
     /// <summary>A semantic version label was not <c>MAJOR.MINOR.PATCH</c>.</summary>
     public const string SemverInvalid = "semver_invalid";
 

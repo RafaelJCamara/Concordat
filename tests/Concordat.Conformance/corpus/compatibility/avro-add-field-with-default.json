@@ -1,0 +1,23 @@
+{
+  "name": "avro-adding-a-field-with-a-default-is-backward-compatible",
+  "why": "The ordinary Avro change, and the one that is impossible to judge correctly if canonicalisation has stripped the default. A reader field the writer never wrote takes its default; without one it is an error. An implementation that reports this as breaking is unusable for the same reason Confluent's JSON Schema defaults are.",
+  "format": "avro",
+  "contentModel": "open",
+  "policy": {
+    "mode": "BACKWARD",
+    "surface": "WIRE_JSON"
+  },
+  "previous": [
+    {
+      "ordinal": 1,
+      "schema": "{\"type\":\"record\",\"name\":\"acme.User\",\"fields\":[{\"name\":\"id\",\"type\":\"string\"}]}"
+    }
+  ],
+  "proposed": "{\"type\":\"record\",\"name\":\"acme.User\",\"fields\":[{\"name\":\"id\",\"type\":\"string\"},{\"name\":\"nickname\",\"type\":\"string\",\"default\":\"\"}]}",
+  "expected": {
+    "compatible": true,
+    "suggestedBump": "PATCH",
+    "breakingChanges": [],
+    "allDivergences": []
+  }
+}

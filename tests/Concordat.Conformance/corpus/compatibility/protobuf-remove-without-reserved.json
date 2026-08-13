@@ -1,0 +1,29 @@
+{
+  "name": "protobuf-removing-a-field-without-reserving-its-number",
+  "why": "Nothing breaks the day this lands - readers skip unknown tags - but the number is then free for a later version to reuse, at which point data written before the removal decodes into the new field silently. Removal is the only moment it is cheap to catch, which is why it is reported at Wire rather than deferred.",
+  "format": "protobuf",
+  "contentModel": "open",
+  "policy": {
+    "mode": "BACKWARD",
+    "surface": "WIRE"
+  },
+  "previous": [
+    {
+      "ordinal": 1,
+      "schema": "syntax = \"proto3\";\npackage acme;\nmessage Order { string id = 1; int32 q = 2; }\n"
+    }
+  ],
+  "proposed": "syntax = \"proto3\";\npackage acme;\nmessage Order { string id = 1; }\n",
+  "expected": {
+    "compatible": false,
+    "suggestedBump": "MAJOR",
+    "breakingChanges": [
+      {
+        "path": ".acme.Order/2",
+        "kind": "field_removed_without_reserved",
+        "direction": "BACKWARD",
+        "surface": "WIRE"
+      }
+    ]
+  }
+}

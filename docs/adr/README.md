@@ -37,3 +37,4 @@ it; write a new one and mark the old **Superseded by**.
 | [020](020-rabbitmq-client-only.md) | v1 ships one .NET SDK, over RabbitMQ.Client only | Accepted |
 | [021](021-tier-2-sdk-set.md) | Tier 2 SDKs: TypeScript/JavaScript, Python, Go, Java | Accepted |
 | [022](022-project-name-concordat.md) | The project is named Concordat | Accepted |
+| [023](023-no-cross-subject-references-avro-protobuf.md) | No cross-subject references for Avro and Protobuf in v1 | Accepted |

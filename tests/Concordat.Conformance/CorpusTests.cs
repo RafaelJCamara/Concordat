@@ -2,7 +2,9 @@ using System.Text;
 using Concordat.Domain.Messaging;
 using Concordat.Domain.Registry;
 using Concordat.Formats.Abstractions;
+using Concordat.Formats.Avro;
 using Concordat.Formats.Json;
+using Concordat.Formats.Protobuf;
 
 namespace Concordat.Conformance;
 
@@ -17,9 +19,37 @@ namespace Concordat.Conformance;
 public class CorpusTests
 {
     private static readonly JsonSchemaCanonicalizer Canonicalizer = new();
-    private static readonly JsonSchemaCompatibilityChecker Checker = new();
-    private static readonly JsonSchemaReferenceExtractor Extractor = new();
     private static readonly NJsonSchemaPayloadValidator Validator = new();
+
+    /// <summary>
+    /// Every format's canonicaliser, chosen per fixture by its <c>format</c> field.
+    /// </summary>
+    /// <remarks>
+    /// The corpus is normative for all three formats (ADR-019), so the runner cannot assume
+    /// JSON Schema. Until M5 it did — every fixture happened to declare <c>"format": "json"</c>
+    /// and the field went unread, which would have silently passed an Avro fixture through the
+    /// JSON canonicaliser.
+    /// </remarks>
+    private static readonly Dictionary<SchemaFormat, ISchemaCanonicalizer> Canonicalizers = new()
+    {
+        [SchemaFormat.Json] = Canonicalizer,
+        [SchemaFormat.Avro] = new AvroSchemaCanonicalizer(),
+        [SchemaFormat.Protobuf] = new ProtoSchemaCanonicalizer(),
+    };
+
+    private static readonly Dictionary<SchemaFormat, ICompatibilityChecker> Checkers = new()
+    {
+        [SchemaFormat.Json] = new JsonSchemaCompatibilityChecker(),
+        [SchemaFormat.Avro] = new AvroSchemaCompatibilityChecker(),
+        [SchemaFormat.Protobuf] = new ProtoSchemaCompatibilityChecker(),
+    };
+
+    private static readonly Dictionary<SchemaFormat, ISchemaReferenceExtractor> Extractors = new()
+    {
+        [SchemaFormat.Json] = new JsonSchemaReferenceExtractor(),
+        [SchemaFormat.Avro] = new AvroSchemaReferenceExtractor(),
+        [SchemaFormat.Protobuf] = new ProtoSchemaReferenceExtractor(),
+    };
 
     public static IEnumerable<object[]> Canonicalisation() =>
         Corpus.Load<CanonicalisationFixture>("canonicalisation");
@@ -41,6 +71,37 @@ public class CorpusTests
 
     public static IEnumerable<object[]> SubjectResolution() =>
         Corpus.Load<SubjectResolutionFixture>("subject-resolution");
+
+    public static IEnumerable<object[]> References() =>
+        Corpus.Load<ReferenceFixture>("references");
+
+    [Theory]
+    [MemberData(nameof(References))]
+    public void ReferenceExtractionMatchesTheCorpus(string file, ReferenceFixture fixture)
+    {
+        var result = Extractors[ParseFormat(fixture.Format)].Extract(fixture.CanonicalBody);
+
+        if (fixture.Error is not null)
+        {
+            // ADR-023's refusals live here rather than only in the format test suites, because
+            // an SDK that resolves what this one rejects accepts schemas the registry will not.
+            Assert.True(result.IsFailure, $"{file}: expected refusal. {fixture.Why}");
+            Assert.Equal(fixture.Error, result.Error!.Code);
+            return;
+        }
+
+        Assert.True(result.IsSuccess, $"{file}: {result.Error?.Message}. {fixture.Why}");
+
+        var expected = fixture.References
+            .Select(r => $"{r.Name}|{r.Subject}|{r.Version}")
+            .OrderBy(k => k, StringComparer.Ordinal);
+
+        var actual = result.Value
+            .Select(r => $"{r.Name}|{r.Subject.Value}|{r.Version}")
+            .OrderBy(k => k, StringComparer.Ordinal);
+
+        Assert.Equal(expected, actual);
+    }
 
     [Theory]
     [MemberData(nameof(SubjectResolution))]
@@ -171,7 +232,8 @@ public class CorpusTests
     [MemberData(nameof(Canonicalisation))]
     public void CanonicalisationMatchesTheCorpus(string file, CanonicalisationFixture fixture)
     {
-        var result = Canonicalizer.Canonicalize(fixture.Input);
+        var canonicalizer = Canonicalizers[ParseFormat(fixture.Format)];
+        var result = canonicalizer.Canonicalize(fixture.Input);
 
         if (fixture.Error is not null)
         {
@@ -185,7 +247,7 @@ public class CorpusTests
 
         // Idempotence is part of the contract, not a bonus: canonicalising an already-canonical
         // document must be a no-op or the id is not stable under re-registration.
-        Assert.Equal(fixture.Canonical, Canonicalizer.Canonicalize(result.Value).Value);
+        Assert.Equal(fixture.Canonical, canonicalizer.Canonicalize(result.Value).Value);
     }
 
     [Theory]
@@ -219,14 +281,17 @@ public class CorpusTests
     [MemberData(nameof(Compatibility))]
     public void CompatibilityVerdictsMatchTheCorpus(string file, CompatibilityFixture fixture)
     {
+        var format = ParseFormat(fixture.Format);
+        var canonicalizer = Canonicalizers[format];
+
         var priors = fixture.Previous
-            .Select(p => new PriorSchema(p.Ordinal, Canonicalizer.Canonicalize(p.Schema).Value))
+            .Select(p => new PriorSchema(p.Ordinal, canonicalizer.Canonicalize(p.Schema).Value))
             .ToList();
 
-        var proposed = Canonicalizer.Canonicalize(fixture.Proposed);
+        var proposed = canonicalizer.Canonicalize(fixture.Proposed);
         Assert.True(proposed.IsSuccess, $"{file}: proposed schema did not canonicalise.");
 
-        var report = Checker.Check(
+        var report = Checkers[format].Check(
             proposed.Value,
             priors,
             new CompatibilityPolicy(

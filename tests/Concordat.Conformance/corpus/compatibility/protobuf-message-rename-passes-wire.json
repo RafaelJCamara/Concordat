@@ -1,0 +1,22 @@
+{
+  "name": "protobuf-message-rename-with-stable-tags-passes-wire",
+  "why": "DESIGN section 12 names this case directly. Confluent rejects a message rename outright even though field numbers are what the wire carries and the encoded bytes are byte-identical. Under a WIRE policy it must pass; the paired fixture shows it failing WIRE_JSON.",
+  "format": "protobuf",
+  "contentModel": "open",
+  "policy": {
+    "mode": "BACKWARD",
+    "surface": "WIRE"
+  },
+  "previous": [
+    {
+      "ordinal": 1,
+      "schema": "syntax = \"proto3\";\npackage acme;\nmessage Order { string id = 1; }\n"
+    }
+  ],
+  "proposed": "syntax = \"proto3\";\npackage acme;\nmessage Purchase { string id = 1; }\n",
+  "expected": {
+    "compatible": true,
+    "suggestedBump": "MINOR",
+    "breakingChanges": []
+  }
+}

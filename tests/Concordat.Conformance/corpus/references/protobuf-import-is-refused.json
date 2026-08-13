@@ -1,0 +1,7 @@
+{
+  "name": "protobuf-an-import-of-another-subject-is-refused",
+  "why": "ADR-023. An import names a file and carries no version, so following it has the same failure mode as an Avro fullname.",
+  "format": "protobuf",
+  "canonicalBody": "syntax = \"proto3\";\npackage acme;\nimport \"acme/common.proto\";\nmessage Order {\n  string id = 1;\n}\n",
+  "error": "schema_references_unsupported"
+}

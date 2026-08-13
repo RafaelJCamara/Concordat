@@ -25,7 +25,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\core\Concordat.Application\Concordat.Application.csproj" />
+    <ProjectReference Include="..\..\src\formats\Concordat.Formats.Avro\Concordat.Formats.Avro.csproj" />
     <ProjectReference Include="..\..\src\formats\Concordat.Formats.Json\Concordat.Formats.Json.csproj" />
+    <ProjectReference Include="..\..\src\formats\Concordat.Formats.Protobuf\Concordat.Formats.Protobuf.csproj" />
   </ItemGroup>
 
 </Project>

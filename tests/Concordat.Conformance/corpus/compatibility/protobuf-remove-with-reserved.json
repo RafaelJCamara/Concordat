@@ -1,0 +1,22 @@
+{
+  "name": "protobuf-removing-a-field-and-reserving-its-number-is-compatible",
+  "why": "The pair to the fixture above, and the fix its message tells you to apply. Reserving the number is the whole guarantee: it cannot come back as a different type.",
+  "format": "protobuf",
+  "contentModel": "open",
+  "policy": {
+    "mode": "BACKWARD",
+    "surface": "WIRE"
+  },
+  "previous": [
+    {
+      "ordinal": 1,
+      "schema": "syntax = \"proto3\";\npackage acme;\nmessage Order { string id = 1; int32 q = 2; }\n"
+    }
+  ],
+  "proposed": "syntax = \"proto3\";\npackage acme;\nmessage Order { reserved 2; string id = 1; }\n",
+  "expected": {
+    "compatible": true,
+    "suggestedBump": "PATCH",
+    "breakingChanges": []
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "avro-int-promoted-to-long-fails-a-source-policy",
+  "why": "The same two schemas as the previous fixture with only the surface changed, and the opposite verdict. If these two ever agree, the second axis has stopped working.",
+  "format": "avro",
+  "contentModel": "open",
+  "policy": {
+    "mode": "BACKWARD",
+    "surface": "SOURCE"
+  },
+  "previous": [
+    {
+      "ordinal": 1,
+      "schema": "{\"type\":\"record\",\"name\":\"acme.User\",\"fields\":[{\"name\":\"n\",\"type\":\"int\"}]}"
+    }
+  ],
+  "proposed": "{\"type\":\"record\",\"name\":\"acme.User\",\"fields\":[{\"name\":\"n\",\"type\":\"long\"}]}",
+  "expected": {
+    "compatible": false,
+    "suggestedBump": "MAJOR",
+    "breakingChanges": [
+      {
+        "path": "#/fields/n",
+        "kind": "type_promoted",
+        "direction": "BACKWARD",
+        "surface": "SOURCE"
+      }
+    ]
+  }
+}

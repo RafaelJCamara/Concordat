@@ -1,0 +1,7 @@
+{
+  "name": "protobuf-import-order-does-not-survive-canonicalisation",
+  "why": "DESIGN section 12 requires Protobuf import order not to affect the schema id. Imports are a set, not a sequence, so two files differing only in their order are one schema.",
+  "format": "protobuf",
+  "input": "syntax = \"proto3\";\npackage acme;\nimport \"b.proto\";\nimport \"a.proto\";\n// the order we ship\nmessage Order {\n  int32 quantity = 2;  // how many\n  string id = 1;\n}\n",
+  "canonical": "syntax = \"proto3\";\npackage acme;\nimport \"a.proto\";\nimport \"b.proto\";\nmessage Order {\n  string id = 1;\n  int32 quantity = 2;\n}\n"
+}
