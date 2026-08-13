@@ -287,10 +287,10 @@ Registered consumers and the audit log are both M7. Soft delete works today —
 
 ## M1.6 REST API
 
-**DESIGN §5 · application layer done 2026-08-13, HTTP surface outstanding**
+**DESIGN §5 · done 2026-08-13, except three items that belong elsewhere**
 
-Split into two passes because it is the largest package in M1. **Pass A — the application
-layer — is complete.** Pass B is the HTTP surface.
+Split into two passes because it is the largest package in M1: the application layer, then
+the HTTP surface. Both are complete.
 
 ### Pass A, done
 
@@ -315,7 +315,7 @@ PostgreSQL: the owner reads it, a foreign tenant is refused, a stored-but-unrefe
 is refused *even to the tenant that stored it*, and refusal is byte-identical to absence — a
 distinct "forbidden" would confirm another tenant's schema exists.
 
-### Pass B, mostly done
+### Pass B, done
 
 - [x] Minimal-API endpoints at `/v1` — subjects, versions, approve/reject, compatibility
       dry run, compatibility-policy, schemas, lookup
@@ -412,31 +412,12 @@ M7 (ADR-012) — there is nowhere to store it. Meanwhile `{env}` in the route is
 before environments exist. **M7 must either adopt those derived ids or migrate
 `subject.environment_id`.**
 
-- [ ] Minimal-API endpoints at `/v1`, CQRS dispatcher (hand-rolled, **not** MediatR — ADR-009)
-- [ ] `Result<T>` → Problem Details mapping
-- [ ] Schemas: `GET /schemas/{id}`, `GET /schemas/{id}/subjects`, `POST /schemas/lookup`
-- [ ] 🔴 **Authorise `GET /schemas/{id}` by reachability** — the schema table is global
-      (ADR-015), so there is no tenant column to filter on. A caller may fetch a schema only
-      if some subject in their tenant references it. The naive implementation leaks any
-      schema to anyone who can guess a 128-bit hash; needs a test that asserts a foreign
-      tenant's schema id returns 404, not 200
-- [ ] Subjects: list, create, get, patch, delete
-- [ ] Versions: list, register, get by `{ordinal|latest}`
-- [ ] Approval gate: `POST …/versions/{n}/approve`, `…/reject` (ADR-017)
-- [ ] `GET|PUT /environments/{env}/registration-policy` — **server-side**, so no client config can bypass it
-- [ ] `POST …/compatibility` dry run — never writes; returns `compatible`, `breakingChanges[]`, `suggestedSemver`, `impactedConsumers[]`
-- [ ] `GET|PUT …/compatibility-policy`; `GET …/versions/{a}/diff/{b}`
-- [ ] `POST /environments/{env}/bootstrap` — every schema a client needs in **one** request
-- [ ] **Bundling, deferred from M1.4** — assemble a self-contained document by inlining
-      referenced schemas into `$defs` and rewriting `concordat://` refs to local pointers. A
-      serving concern, deliberately not part of the stored canonical form: bundling at
-      registration would make canonicalisation depend on registry state and stop any SDK from
-      reproducing an id offline
-- [ ] **RFC 9457 Problem Details + stable string `concordatCode`**; catalogue documented
-- [ ] Negative-lookup caching semantics so a missing subject cannot retry-storm
-- [ ] `/health/live`, `/health/ready`
-- [ ] OpenAPI 3.1 generated from endpoints, committed to `docs/api/openapi.v1.json`
-- [ ] **CI fails on OpenAPI drift**
+### One gap not yet closed
+
+`impactedConsumers[]` on the compatibility response (DESIGN §5) is **not implemented**. It
+needs `ServiceRegistration` — services declaring producer and consumer intent — which is M7.
+Until then the dry run answers "is this change safe?" but not "who does it break?", and the
+latter is the capability DESIGN calls the one Confluent most conspicuously lacks.
 
 ## M1.7 Conformance corpus v0
 
