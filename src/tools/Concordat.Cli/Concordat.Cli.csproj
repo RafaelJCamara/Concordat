@@ -13,6 +13,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="RabbitMQ.Client" />
     <PackageReference Include="System.CommandLine" />
   </ItemGroup>
 

@@ -163,8 +163,103 @@ export.Add(directoryOption);
 export.SetAction((parse, token) => Run(parse, (api, output) =>
     InspectCommands.ExportAsync(api, output, parse.GetValue(directoryOption)!, token)));
 
+// ---- infer ----
+var samplesOption = new Option<string?>("--samples")
+{
+    Description = "A directory of sample .json payloads. File mode is the default and is safe.",
+};
+
+var queueOption = new Option<string?>("--queue")
+{
+    Description = "Sample a live queue instead. Reads and requeues; see --i-understand-this-reorders-the-queue.",
+};
+
+var brokerOption = new Option<string>("--broker")
+{
+    Description = "AMQP URI for queue mode. Defaults to $CONCORDAT_BROKER.",
+    DefaultValueFactory = _ =>
+        Environment.GetEnvironmentVariable("CONCORDAT_BROKER") ?? "amqp://guest:guest@localhost:5672/",
+};
+
+var maxOption = new Option<int>("--max")
+{
+    Description = "How many messages to inspect in queue mode.",
+    DefaultValueFactory = _ => 500,
+};
+
+var subjectOption = new Option<string?>("--subject")
+{
+    Description = "The subject to draft for. Required in file mode.",
+};
+
+var outOption = new Option<string>("--out", "-o")
+{
+    Description = "Where to write the draft.",
+    DefaultValueFactory = _ => ContractDirectory.DefaultPath,
+};
+
+var acknowledgeOption = new Option<bool>("--i-understand-this-reorders-the-queue")
+{
+    Description =
+        "Required for queue mode. Requeued messages return to the head of the queue, not their " +
+        "original position.",
+};
+
+var infer = new Command("infer", "Draft a schema from real messages. Never registers anything.");
+infer.Add(samplesOption);
+infer.Add(queueOption);
+infer.Add(brokerOption);
+infer.Add(maxOption);
+infer.Add(subjectOption);
+infer.Add(outOption);
+infer.Add(acknowledgeOption);
+infer.SetAction(async (parse, token) =>
+{
+    var output = NewOutput(parse);
+    var samples = parse.GetValue(samplesOption);
+    var queue = parse.GetValue(queueOption);
+
+    if (samples is null && queue is null)
+    {
+        return output.Fail(
+            ExitCodes.UsageError,
+            "no_source",
+            "Give --samples <dir> (file mode, the safe default) or --queue <name> (reads live traffic).");
+    }
+
+    if (samples is not null && queue is not null)
+    {
+        return output.Fail(
+            ExitCodes.UsageError, "two_sources", "--samples and --queue are alternatives.");
+    }
+
+    if (samples is not null)
+    {
+        var subject = parse.GetValue(subjectOption);
+
+        return subject is null
+            ? output.Fail(
+                ExitCodes.UsageError,
+                "subject_required",
+                "File mode cannot know which subject the payloads belong to. Pass --subject.")
+            : await InferCommand.FromFilesAsync(
+                output, samples, subject, parse.GetValue(outOption)!, token).ConfigureAwait(false);
+    }
+
+    return await InferCommand.FromQueueAsync(
+        output,
+        parse.GetValue(brokerOption)!,
+        queue!,
+        parse.GetValue(maxOption),
+        parse.GetValue(subjectOption),
+        parse.GetValue(outOption)!,
+        parse.GetValue(acknowledgeOption),
+        token).ConfigureAwait(false);
+});
+
 root.Add(check);
 root.Add(lint);
+root.Add(infer);
 root.Add(push);
 root.Add(promote);
 root.Add(diff);

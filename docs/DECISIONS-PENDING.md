@@ -245,6 +245,12 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | `impact` deferred to M7, where registered consumers first exist | M3.1 | Low |
 | The CLI talks to the registry directly rather than through the caching `Concordat.Client` | M3.1 | Low, and required: a gate must never answer from cache |
 | `Concordat.Cli.Tests` references `Concordat.Api.IntegrationTests` to reuse its harness | M3.1 | Low; extract a shared test-support project if a third consumer appears |
+| Queue mode **refuses to run** without `--i-understand-this-reorders-the-queue`, rather than printing a warning | [M3.2](plan/M3-cli.md) | Low, and user-visible. ADR-014 asked for documentation; nobody reads it before running a command |
+| A single repeated value is **not** inferred as an enum — needs ≥2 distinct, ≥10 observations, ≥3× repetition | M3.2 | Low |
+| Whole numbers narrow to `integer` rather than staying `number` | M3.2 | Low, and reported on every occurrence |
+| `format` is inferred (uuid, date-time, date, email); `additionalProperties` never is | M3.2 | Low |
+| Inference is **not** corpus-pinned, unlike canonicalisation and compatibility | M3.2 | Low. It is a drafting aid a human edits, not protocol |
+| `RabbitMQ.Client` is now a CLI dependency, for queue mode | M3.2 | **Possible M3.3 NativeAOT problem.** Fallback is AOT-without-queue-mode |
 
 ---
 

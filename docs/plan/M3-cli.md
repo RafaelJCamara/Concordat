@@ -97,17 +97,68 @@ change. Whether the engine should record informational divergences is
 
 ## M3.2 `concordat infer`
 
-**ADR-014**
+**Done 2026-08-13 · ADR-014 · 29 tests**
 
-- [ ] File mode — infer from a corpus of sample payloads (**the default**)
-- [ ] Queue mode — read-only drain via `basic.get` with requeue, or an exclusive consumer that nacks with requeue
-- [ ] **Document that queue mode can reorder a live queue**
-- [ ] Inference: types, required-by-presence across samples, `format` detection (uuid, date-time, email), low-cardinality enums, nullability
-- [ ] Output is a draft **plus a confidence/ambiguity report** — never auto-registers
+- [x] File mode — infer from a corpus of sample payloads (**the default**)
+- [x] Queue mode — read-only drain via `basic.get` with requeue
+- [x] **Queue mode reordering** — not documented, *enforced*: see below
+- [x] Inference: types, required-by-presence, `format` (uuid, date-time, date, email), low-cardinality enums, nullability, nested objects and arrays
+- [x] Output is a draft **plus a confidence/ambiguity report** — never auto-registers
+
+### The reordering warning is a flag, not a paragraph
+
+ADR-014 says to document that queue mode can reorder a live queue. Documentation is the wrong
+instrument: nobody reads it before running a command, and the cost lands on production traffic.
+
+So queue mode **refuses to run** without
+`--i-understand-this-reorders-the-queue`. That turns a side effect somebody discovers into a
+decision somebody took. Messages are requeued in a `finally`, after the loop, so every fetched
+message goes back even if the drain is cancelled or throws part-way.
+
+`DrainingLosesNothing` asserts the queue depth is unchanged afterwards. That claim is about
+what the broker still holds, so it cannot be made against a mock.
+
+### The report is the deliverable
+
+A schema inferred from samples is a well-informed guess, and the guesses are what a reviewer
+needs. Findings are ranked worst-first and each says what would happen if the assumption is
+wrong — `required` inferred from presence, `integer` narrowed from whole numbers, an enum from
+low cardinality, always-null fields, mixed types, empty arrays.
+
+### Two bad inferences caught by running it on realistic data
+
+Neither showed up in a unit test; both were obvious the moment real samples went through:
+
+- **A single repeated value was becoming `enum: ["hello"]`.** Twenty identical samples are not
+  a closed set, and that inference would reject the second value the field ever takes — in
+  production, long after anyone remembers where the schema came from. An enum now needs at
+  least two distinct values, ten observations, and threefold repetition; a constant value gets
+  a finding instead.
+- **An always-null field was `required` at medium confidence.** "Required, of unknown type" is
+  a combination almost nobody means; it usually marks an optional field the samples never
+  exercised. Now reported as low with an explanation.
+
+### Deliberately not corpus-pinned
+
+Canonicalisation and compatibility are protocol and every SDK must agree to the byte. Inference
+is a drafting aid whose output a human reads and edits before anything is registered, so a
+Python implementation guessing slightly differently costs nothing. Pinning it would freeze
+heuristics that should be free to improve.
+
+The draft still has to survive the real pipeline, though — one test canonicalises it, and
+validates one of the original samples against the result.
+
+### Cost
+
+`RabbitMQ.Client` is now a CLI dependency, for queue mode only. **This is a risk for M3.3's
+NativeAOT target** and is called out there.
 
 ## M3.3 Distribution
 
 - [ ] NativeAOT binaries: win-x64, linux-x64, linux-arm64, osx-arm64
+      — **check `RabbitMQ.Client` first.** M3.2 added it for queue mode, and it is the one
+      dependency likely to resist trimming. If it does: publish AOT without queue mode and
+      ship queue mode in the JIT/Docker build, rather than dropping AOT for everything
 - [ ] **One binary name, `concordat`** ([settled](../DECISIONS-PENDING.md#settled)) — document a
       shell alias rather than shipping a second name into every packaging manifest
 - [ ] Docker image
