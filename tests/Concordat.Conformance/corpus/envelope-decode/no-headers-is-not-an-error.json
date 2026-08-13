@@ -1,0 +1,8 @@
+{
+  "expected": {
+    "kind": "NONE"
+  },
+  "headers": null,
+  "why": "The brownfield path. Mode A exists so a consumer without a Concordat client still reads plain JSON; treating an un-enveloped message as an error would break incremental adoption.",
+  "name": "no-headers-is-not-an-error"
+}

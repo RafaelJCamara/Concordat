@@ -1,0 +1,13 @@
+{
+  "headers": {
+    "concordat-v": {
+      "string": "1"
+    },
+    "concordat-schema-id": {
+      "bytesBase64": "wyg="
+    }
+  },
+  "why": "Lenient decoding substitutes U+FFFD and turns a corrupt id into a valid-looking wrong one. .NET and Go both default to lenient; this must reject.",
+  "error": "envelope_header_encoding_invalid",
+  "name": "invalid-utf8-on-required-header-rejects"
+}

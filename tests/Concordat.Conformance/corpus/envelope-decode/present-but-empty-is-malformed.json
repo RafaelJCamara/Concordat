@@ -1,0 +1,10 @@
+{
+  "headers": {
+    "concordat-v": {
+      "string": ""
+    }
+  },
+  "why": "Empty is not the same as absent. Pinning this stops a writer emitting empty strings for absent optionals, which would quarantine its own valid messages.",
+  "error": "envelope_malformed",
+  "name": "present-but-empty-is-malformed"
+}

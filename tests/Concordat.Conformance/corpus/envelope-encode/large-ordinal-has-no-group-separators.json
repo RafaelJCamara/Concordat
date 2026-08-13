@@ -1,0 +1,11 @@
+{
+  "name": "large-ordinal-has-no-group-separators",
+  "ordinal": 1234567,
+  "headers": {
+    "concordat-v": "1",
+    "concordat-schema-id": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+    "concordat-version": "1234567"
+  },
+  "schemaId": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+  "why": "The ordinal is formatted invariant. A host under a locale with digit grouping would otherwise emit 1,234,567 and no other SDK could read it."
+}

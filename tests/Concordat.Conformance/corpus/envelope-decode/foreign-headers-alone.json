@@ -1,0 +1,15 @@
+{
+  "expected": {
+    "kind": "NONE"
+  },
+  "headers": {
+    "MT-Activity-Id": {
+      "string": "x"
+    },
+    "rbs2-msg-type": {
+      "string": "y"
+    }
+  },
+  "why": "Another library's headers are not an envelope. An SDK that keys off \"any header present\" would misclassify every MassTransit or Rebus message.",
+  "name": "foreign-headers-alone"
+}

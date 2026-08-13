@@ -14,6 +14,8 @@ when the second SDK arrives can only ratify whatever .NET already did.
 | `corpus/schema-id/` | What exact bytes get hashed, and what id results? |
 | `corpus/compatibility/` | Is this change allowed, and what precisely is wrong with it? |
 | `corpus/payload-validation/` | Which documents does this schema accept and reject? |
+| `corpus/envelope-encode/` | What headers does a producer write? |
+| `corpus/envelope-decode/` | What does a consumer read, and when does it refuse? |
 
 Every fixture is a standalone JSON file. Nothing here is C#, and nothing may become C#: the
 acceptance test for ADR-019 is that a Go team implements a client from these files plus the
@@ -87,6 +89,44 @@ are **UTF-8 byte counts**, not character counts.
 
 `breakingChanges` and `allDivergences` are matched on `path`, `kind`, `direction` and
 `surface`, ignoring `message` — messages are for humans and must be free to improve.
+
+### `envelope-encode/`
+
+Identity in, headers out. The expected header set is matched **exactly** — an extra header is
+as much a divergence as a missing one, and an absent optional written as an empty string would
+make a producer quarantine its own valid messages.
+
+```json
+{
+  "name": "minimal",
+  "why": "...",
+  "schemaId": "7f3a…",
+  "headers": { "concordat-v": "1", "concordat-schema-id": "7f3a…" }
+}
+```
+
+### `envelope-decode/`
+
+A message in, identity or a refusal out. Header values are **tagged**, because a plain string
+map cannot express the wrong-type and invalid-UTF-8 cases — two of the behaviours most likely
+to differ between SDKs. Exactly one key is set per value:
+
+```json
+"headers": {
+  "concordat-v":         { "string": "1" },
+  "concordat-schema-id": { "bytesBase64": "N2YzYTlj…" },
+  "some-other":          { "integer": 42 }
+}
+```
+
+`expected.kind` is `NONE`, `HEADERS` or `CONTENT_TYPE`; `expected.warnings` lists advisory
+codes in any order. A fixture that must be refused carries `error` instead, naming the
+`concordatCode`.
+
+The distinction these fixtures exist to pin: **rejecting and warning are different**. A bad
+schema id refuses the message; a mistyped semver label does not, because the schema id already
+identifies the schema and quarantining a structurally valid payload over a human label would be
+a self-inflicted outage.
 
 ### `payload-validation/`
 

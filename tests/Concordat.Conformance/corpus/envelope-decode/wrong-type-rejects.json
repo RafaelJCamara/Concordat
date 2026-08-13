@@ -1,0 +1,13 @@
+{
+  "headers": {
+    "concordat-v": {
+      "string": "1"
+    },
+    "concordat-schema-id": {
+      "integer": 42
+    }
+  },
+  "why": "An integer header value must not be stringified. ToString() would produce a plausible-looking value that is silently wrong.",
+  "error": "envelope_header_type_invalid",
+  "name": "wrong-type-rejects"
+}

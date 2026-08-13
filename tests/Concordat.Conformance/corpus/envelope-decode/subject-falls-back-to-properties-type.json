@@ -1,0 +1,18 @@
+{
+  "expected": {
+    "subject": "acme.orders.OrderCreated",
+    "schemaId": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+    "kind": "HEADERS"
+  },
+  "propertiesType": "acme.orders.OrderCreated",
+  "headers": {
+    "concordat-v": {
+      "string": "1"
+    },
+    "concordat-schema-id": {
+      "string": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4"
+    }
+  },
+  "why": "properties.type is where RabbitMQ.Client producers put the message type. Falling back to it is what lets a partially-adopted estate resolve subjects.",
+  "name": "subject-falls-back-to-properties-type"
+}

@@ -183,6 +183,102 @@ public sealed record CompatibilityFixture : FixtureBase
     public FixtureExpectation Expected { get; init; } = new();
 }
 
+/// <summary>
+/// A header value, tagged so the corpus can express types JSON cannot.
+/// </summary>
+/// <remarks>
+/// Exactly one property is set. A plain string map would be unable to express the wrong-type
+/// and invalid-UTF-8 cases, which are two of the four decode behaviours most likely to differ
+/// between SDKs.
+/// </remarks>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Naming",
+    "CA1720:Identifier contains type name",
+    Justification = "These names are the fixture JSON's discriminator keys and are part of the " +
+        "corpus format that every SDK reads. Renaming them for a C# analyzer would change the " +
+        "wire format of the specification.")]
+public sealed record FixtureHeaderValue
+{
+    /// <summary>A UTF-8 string value.</summary>
+    public string? String { get; init; }
+
+    /// <summary>Raw bytes, base64-encoded — what an AMQP client typically hands back.</summary>
+    public string? BytesBase64 { get; init; }
+
+    /// <summary>An integer, to exercise the wrong-type path.</summary>
+    public int? Integer { get; init; }
+
+    /// <summary>A boolean, to exercise the wrong-type path.</summary>
+    public bool? Boolean { get; init; }
+}
+
+/// <summary>What a decode fixture expects to be read.</summary>
+public sealed record EnvelopeExpectation
+{
+    /// <summary><c>NONE</c>, <c>HEADERS</c> or <c>CONTENT_TYPE</c>.</summary>
+    public string Kind { get; init; } = "NONE";
+
+    /// <summary>The schema id, when one was read.</summary>
+    public string? SchemaId { get; init; }
+
+    /// <summary>The subject, when one was resolved.</summary>
+    public string? Subject { get; init; }
+
+    /// <summary>The version ordinal, when readable.</summary>
+    public int? Ordinal { get; init; }
+
+    /// <summary>The semantic version label, when readable.</summary>
+    public string? Semver { get; init; }
+
+    /// <summary>The declared format token.</summary>
+    public string? Format { get; init; }
+
+    /// <summary>Advisory problem codes, in any order.</summary>
+    public IReadOnlyList<string> Warnings { get; init; } = [];
+}
+
+/// <summary>An envelope encode case: identity in, headers out.</summary>
+public sealed record EnvelopeEncodeFixture : FixtureBase
+{
+    /// <summary>The schema id to write.</summary>
+    public string SchemaId { get; init; } = "";
+
+    /// <summary>The subject, when the producer knows it.</summary>
+    public string? Subject { get; init; }
+
+    /// <summary>The version ordinal.</summary>
+    public int? Ordinal { get; init; }
+
+    /// <summary>The semantic version label.</summary>
+    public string? Semver { get; init; }
+
+    /// <summary>The format token.</summary>
+    public string? Format { get; init; }
+
+    /// <summary>The exact headers that must be produced — no more, no fewer.</summary>
+    public IReadOnlyDictionary<string, string> Headers { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+}
+
+/// <summary>An envelope decode case: a message in, identity or a verdict out.</summary>
+public sealed record EnvelopeDecodeFixture : FixtureBase
+{
+    /// <summary>The header table, or null to represent a message with none.</summary>
+    public IReadOnlyDictionary<string, FixtureHeaderValue>? Headers { get; init; }
+
+    /// <summary>AMQP <c>properties.type</c>.</summary>
+    public string? PropertiesType { get; init; }
+
+    /// <summary>AMQP <c>properties.content-type</c>.</summary>
+    public string? ContentType { get; init; }
+
+    /// <summary>What must be read, when reading succeeds.</summary>
+    public EnvelopeExpectation? Expected { get; init; }
+
+    /// <summary>The <c>concordatCode</c> that must be returned, when the envelope is unusable.</summary>
+    public string? Error { get; init; }
+}
+
 /// <summary>A payload-validation case.</summary>
 /// <remarks>
 /// Not executed yet: Concordat has no validator of its own, because validation is client-side

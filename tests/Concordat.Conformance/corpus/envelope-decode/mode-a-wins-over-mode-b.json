@@ -1,0 +1,17 @@
+{
+  "contentType": "application/json+concordat.v1.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "expected": {
+    "schemaId": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+    "kind": "HEADERS"
+  },
+  "headers": {
+    "concordat-v": {
+      "string": "1"
+    },
+    "concordat-schema-id": {
+      "string": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4"
+    }
+  },
+  "why": "Precedence must be pinned or two SDKs reading a message carrying both would resolve different schemas.",
+  "name": "mode-a-wins-over-mode-b"
+}

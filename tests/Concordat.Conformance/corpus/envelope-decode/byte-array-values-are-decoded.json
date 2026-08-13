@@ -1,0 +1,16 @@
+{
+  "expected": {
+    "schemaId": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+    "kind": "HEADERS"
+  },
+  "headers": {
+    "concordat-v": {
+      "bytesBase64": "MQ=="
+    },
+    "concordat-schema-id": {
+      "bytesBase64": "N2YzYTljMmVhMWI4NGQ1YzllMDdmMmIzYzRkNWU2YjQ="
+    }
+  },
+  "why": "RabbitMQ.Client returns byte[] for a value it wrote as a string - by design and permanent per ADR-010. An SDK that only accepts strings reads nothing.",
+  "name": "byte-array-values-are-decoded"
+}

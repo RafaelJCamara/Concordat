@@ -1,0 +1,11 @@
+{
+  "contentType": "application/json+concordat.v1.7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+  "expected": {
+    "schemaId": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+    "format": "json",
+    "kind": "CONTENT_TYPE"
+  },
+  "headers": null,
+  "why": "Mode B for paths where headers may not survive. The v1 token is what lets the framing evolve, unlike Azure's unversioned scheme.",
+  "name": "mode-b-content-type"
+}

@@ -1,0 +1,22 @@
+{
+  "expected": {
+    "schemaId": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+    "warnings": [
+      "subject_name_invalid"
+    ],
+    "kind": "HEADERS"
+  },
+  "headers": {
+    "concordat-v": {
+      "string": "1"
+    },
+    "concordat-schema-id": {
+      "string": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4"
+    },
+    "concordat-subject": {
+      "string": "  acme.Order  "
+    }
+  },
+  "why": "The reader does not trim. If it did, \"  acme.A  \" and \"acme.A\" would be two spellings of one wire value and an SDK that does not trim would disagree with one that does.",
+  "name": "padded-subject-warns-and-is-ignored"
+}

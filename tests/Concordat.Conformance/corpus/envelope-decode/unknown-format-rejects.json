@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "concordat-v": {
+      "string": "1"
+    },
+    "concordat-schema-id": {
+      "string": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4"
+    },
+    "concordat-format": {
+      "string": "yaml"
+    }
+  },
+  "why": "Unlike the advisory fields: an unknown format means the client cannot know how to validate the payload, so proceeding would be a guess.",
+  "error": "envelope_format_unknown",
+  "name": "unknown-format-rejects"
+}

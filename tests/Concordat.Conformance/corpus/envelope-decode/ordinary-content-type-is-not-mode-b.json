@@ -1,0 +1,9 @@
+{
+  "contentType": "application/json",
+  "expected": {
+    "kind": "NONE"
+  },
+  "headers": null,
+  "why": "A plain application/json must not be mistaken for an envelope.",
+  "name": "ordinary-content-type-is-not-mode-b"
+}

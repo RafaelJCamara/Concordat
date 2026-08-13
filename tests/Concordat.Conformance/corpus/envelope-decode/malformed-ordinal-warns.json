@@ -1,0 +1,22 @@
+{
+  "expected": {
+    "schemaId": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+    "warnings": [
+      "envelope_ordinal_malformed"
+    ],
+    "kind": "HEADERS"
+  },
+  "headers": {
+    "concordat-v": {
+      "string": "1"
+    },
+    "concordat-schema-id": {
+      "string": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4"
+    },
+    "concordat-version": {
+      "string": "not-a-number"
+    }
+  },
+  "why": "Advisory. The schema id already pins the exact schema, so an unreadable ordinal tells us nothing new - rejecting over it would be a self-inflicted outage.",
+  "name": "malformed-ordinal-warns"
+}

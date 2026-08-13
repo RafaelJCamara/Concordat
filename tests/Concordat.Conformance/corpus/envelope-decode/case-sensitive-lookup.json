@@ -1,0 +1,15 @@
+{
+  "expected": {
+    "kind": "NONE"
+  },
+  "headers": {
+    "Concordat-V": {
+      "string": "1"
+    },
+    "Concordat-Schema-Id": {
+      "string": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4"
+    }
+  },
+  "why": "Lookup is ordinal and case-sensitive. An implementer reaching for HTTP-style header canonicalisation would accept Concordat-V from one SDK and not another.",
+  "name": "case-sensitive-lookup"
+}

@@ -1,0 +1,24 @@
+{
+  "expected": {
+    "subject": "acme.FromHeader",
+    "schemaId": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+    "warnings": [
+      "envelope_subject_type_mismatch"
+    ],
+    "kind": "HEADERS"
+  },
+  "propertiesType": "acme.FromType",
+  "headers": {
+    "concordat-v": {
+      "string": "1"
+    },
+    "concordat-schema-id": {
+      "string": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4"
+    },
+    "concordat-subject": {
+      "string": "acme.FromHeader"
+    }
+  },
+  "why": "A disagreement usually means two libraries are both setting identity. The header is the one Concordat wrote, so it wins - but the disagreement is reported.",
+  "name": "header-wins-over-properties-type"
+}

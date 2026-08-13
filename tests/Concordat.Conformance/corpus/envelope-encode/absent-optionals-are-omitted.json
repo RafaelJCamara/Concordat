@@ -1,0 +1,11 @@
+{
+  "subject": "acme.A",
+  "name": "absent-optionals-are-omitted",
+  "headers": {
+    "concordat-v": "1",
+    "concordat-schema-id": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+    "concordat-subject": "acme.A"
+  },
+  "schemaId": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+  "why": "An absent optional must not be written as an empty string. The reader treats present-but-empty as malformed, so a writer that emits empty strings would quarantine its own valid messages."
+}

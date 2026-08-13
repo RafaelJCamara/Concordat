@@ -1,0 +1,9 @@
+{
+  "name": "minimal",
+  "headers": {
+    "concordat-v": "1",
+    "concordat-schema-id": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4"
+  },
+  "schemaId": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+  "why": "A minimal envelope carries only the version and the schema id. Every other header is optional and must be omitted, not written empty."
+}

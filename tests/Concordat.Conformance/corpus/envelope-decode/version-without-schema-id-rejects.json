@@ -1,0 +1,10 @@
+{
+  "headers": {
+    "concordat-v": {
+      "string": "1"
+    }
+  },
+  "why": "The schema id is what makes an envelope useful. Declaring a version without one is a producer bug.",
+  "error": "envelope_schema_id_missing",
+  "name": "version-without-schema-id-rejects"
+}

@@ -1,0 +1,17 @@
+{
+  "why": "Every field populated. Pins the exact header names and the value spellings - \"1\" not \"v1\", the bare ordinal, dotted semver, lowercase format token.",
+  "schemaId": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+  "headers": {
+    "concordat-v": "1",
+    "concordat-schema-id": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+    "concordat-subject": "acme.orders.OrderCreated",
+    "concordat-version": "3",
+    "concordat-semver": "2.1.0",
+    "concordat-format": "json"
+  },
+  "subject": "acme.orders.OrderCreated",
+  "name": "full",
+  "format": "json",
+  "semver": "2.1.0",
+  "ordinal": 3
+}

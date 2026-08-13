@@ -1,4 +1,5 @@
 using System.Text;
+using Concordat.Domain.Messaging;
 using Concordat.Domain.Registry;
 using Concordat.Formats.Abstractions;
 using Concordat.Formats.Json;
@@ -31,6 +32,88 @@ public class CorpusTests
 
     public static IEnumerable<object[]> PayloadValidation() =>
         Corpus.Load<PayloadValidationFixture>("payload-validation");
+
+    public static IEnumerable<object[]> EnvelopeEncode() =>
+        Corpus.Load<EnvelopeEncodeFixture>("envelope-encode");
+
+    public static IEnumerable<object[]> EnvelopeDecode() =>
+        Corpus.Load<EnvelopeDecodeFixture>("envelope-decode");
+
+    [Theory]
+    [MemberData(nameof(EnvelopeEncode))]
+    public void EnvelopeEncodingMatchesTheCorpus(string file, EnvelopeEncodeFixture fixture)
+    {
+        var headers = EnvelopeWriter.Headers(
+            SchemaId.Create(fixture.SchemaId).Value,
+            fixture.Subject is null ? null : SubjectName.Create(fixture.Subject).Value,
+            fixture.Ordinal,
+            fixture.Semver is null ? null : SemanticVersion.Create(fixture.Semver).Value,
+            fixture.Format is null ? null : ParseFormat(fixture.Format));
+
+        // Exact set equality: an extra header is as much a divergence as a missing one, and an
+        // absent optional written as an empty string would quarantine its own message.
+        Assert.True(
+            fixture.Headers.OrderBy(h => h.Key, StringComparer.Ordinal)
+                .SequenceEqual(headers.OrderBy(h => h.Key, StringComparer.Ordinal)),
+            $"{file}: header mismatch. {fixture.Why}\n" +
+            $"  expected: {string.Join(", ", fixture.Headers.Select(h => $"{h.Key}={h.Value}"))}\n" +
+            $"  actual:   {string.Join(", ", headers.Select(h => $"{h.Key}={h.Value}"))}");
+    }
+
+    [Theory]
+    [MemberData(nameof(EnvelopeDecode))]
+    public void EnvelopeDecodingMatchesTheCorpus(string file, EnvelopeDecodeFixture fixture)
+    {
+        var headers = fixture.Headers?.ToDictionary(
+            h => h.Key, h => ToHeaderValue(h.Value), StringComparer.Ordinal);
+
+        var result = EnvelopeReader.Read(headers, fixture.PropertiesType, fixture.ContentType);
+
+        if (fixture.Error is not null)
+        {
+            Assert.True(result.IsMalformed, $"{file}: expected rejection. {fixture.Why}");
+            Assert.Equal(fixture.Error, result.Error!.Code);
+            return;
+        }
+
+        var expected = fixture.Expected!;
+        Assert.False(result.IsMalformed, $"{file}: {result.Error?.Message}. {fixture.Why}");
+        Assert.Equal(expected.Kind, KindToken(result.Kind));
+
+        if (expected.Kind == "NONE")
+        {
+            return;
+        }
+
+        var envelope = result.Envelope!;
+        Assert.Equal(expected.SchemaId, envelope.SchemaId.Value);
+        Assert.Equal(expected.Subject, envelope.Subject?.Value);
+        Assert.Equal(expected.Ordinal, envelope.Ordinal);
+        Assert.Equal(expected.Semver, envelope.Semver?.ToString());
+        Assert.Equal(expected.Format, envelope.Format is { } f ? WireTokens.For(f) : null);
+
+        Assert.Equal(
+            expected.Warnings.Order(StringComparer.Ordinal),
+            envelope.Warnings.Select(w => w.Code).Order(StringComparer.Ordinal));
+    }
+
+    private static object? ToHeaderValue(FixtureHeaderValue value) =>
+        value switch
+        {
+            { String: { } s } => s,
+            { BytesBase64: { } b } => Convert.FromBase64String(b),
+            { Integer: { } i } => i,
+            { Boolean: { } b } => b,
+            _ => null,
+        };
+
+    private static string KindToken(EnvelopeKind kind) => kind switch
+    {
+        EnvelopeKind.None => "NONE",
+        EnvelopeKind.Headers => "HEADERS",
+        EnvelopeKind.ContentType => "CONTENT_TYPE",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
+    };
 
     [Theory]
     [MemberData(nameof(Canonicalisation))]

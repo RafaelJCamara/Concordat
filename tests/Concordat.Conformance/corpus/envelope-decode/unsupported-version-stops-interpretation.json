@@ -1,0 +1,13 @@
+{
+  "headers": {
+    "concordat-v": {
+      "string": "2"
+    },
+    "concordat-schema-id": {
+      "string": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4"
+    }
+  },
+  "why": "A v2 producer may have redefined the other headers, so reading what we recognise would be guessing. Declining is safer.",
+  "error": "envelope_version_unsupported",
+  "name": "unsupported-version-stops-interpretation"
+}
