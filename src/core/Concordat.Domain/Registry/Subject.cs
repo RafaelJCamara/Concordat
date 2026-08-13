@@ -42,6 +42,7 @@ public sealed class Subject
         SchemaFormat format,
         ActorId owner,
         CompatibilityPolicy? compatibilityPolicy,
+        ContentModel contentModel,
         DateTimeOffset createdAt,
         List<SchemaVersion> versions,
         LatestPointer? latest,
@@ -53,6 +54,7 @@ public sealed class Subject
         Format = format;
         Owner = owner;
         CompatibilityPolicy = compatibilityPolicy;
+        ContentModel = contentModel;
         CreatedAt = createdAt;
         _versions = versions;
         Latest = latest;
@@ -84,6 +86,16 @@ public sealed class Subject
     /// </remarks>
     public CompatibilityPolicy? CompatibilityPolicy { get; private set; }
 
+    /// <summary>
+    /// Whether documents may carry properties the schema does not describe.
+    /// </summary>
+    /// <remarks>
+    /// Non-nullable and explicit, unlike <see cref="CompatibilityPolicy"/>. Inferring it from
+    /// each schema document would let it flip silently between versions and change the meaning
+    /// of every subsequent verdict (DESIGN §7).
+    /// </remarks>
+    public ContentModel ContentModel { get; private set; }
+
     /// <summary>The lifecycle state.</summary>
     public SubjectLifecycle Lifecycle { get; private set; }
 
@@ -112,6 +124,10 @@ public sealed class Subject
     /// An explicit policy, or <see langword="null"/> to inherit the environment default.
     /// </param>
     /// <param name="createdAt">When the subject was created. Normalised to UTC.</param>
+    /// <param name="contentModel">
+    /// Whether unknown properties are permitted. Defaults to <see cref="ContentModel.Open"/>,
+    /// matching JSON Schema's own default.
+    /// </param>
     /// <returns>The subject.</returns>
     public static Result<Subject> Create(
         EnvironmentId environmentId,
@@ -119,7 +135,8 @@ public sealed class Subject
         SchemaFormat format,
         ActorId owner,
         CompatibilityPolicy? compatibilityPolicy,
-        DateTimeOffset createdAt) =>
+        DateTimeOffset createdAt,
+        ContentModel contentModel = ContentModel.Open) =>
         Result<Subject>.Success(new Subject(
             SubjectId.New(),
             environmentId,
@@ -127,6 +144,7 @@ public sealed class Subject
             format,
             owner,
             compatibilityPolicy,
+            contentModel,
             createdAt.ToUniversalTime(),
             [],
             latest: null,
@@ -325,6 +343,26 @@ public sealed class Subject
         }
 
         CompatibilityPolicy = policy;
+        return Result.Success();
+    }
+
+    /// <summary>Changes the content model.</summary>
+    /// <param name="contentModel">Whether unknown properties are permitted.</param>
+    /// <returns>Success, or a failure when the subject is retired.</returns>
+    /// <remarks>
+    /// Changing this alters how every future compatibility check is evaluated, but it does not
+    /// retroactively invalidate versions already registered.
+    /// </remarks>
+    public Result SetContentModel(ContentModel contentModel)
+    {
+        if (Lifecycle is SubjectLifecycle.Retired)
+        {
+            return Result.Failure(
+                ConcordatCodes.LifecycleTransitionInvalid,
+                $"Subject '{Name}' is retired.");
+        }
+
+        ContentModel = contentModel;
         return Result.Success();
     }
 

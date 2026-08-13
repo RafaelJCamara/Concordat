@@ -384,12 +384,22 @@ usability win over Confluent, whose messages are notoriously hard to act on:
 ```json
 { "type": "https://concordat.dev/errors/incompatible-schema", "status": 409,
   "concordatCode": "incompatible_schema", "subject": "acme.orders.OrderCreated",
-  "policy": "BACKWARD_TRANSITIVE",
-  "breakingChanges": [{ "path": "#/properties/legacyId", "kind": "required_field_removed",
-    "message": "Required field 'legacyId' removed; consumers on v1 will fail",
+  "policy": { "mode": "BACKWARD_TRANSITIVE", "surface": "WIRE_JSON" },
+  "breakingChanges": [{ "path": "#/required",
+    "kind": "required_field_added",
+    "direction": "BACKWARD",
+    "surface": "WIRE_JSON",
+    "message": "'legacyId' is now required; documents written under the previous version that omit it will be rejected.",
     "conflictsWithVersion": 1 }],
   "suggestedSemver": "2.0.0" }
 ```
+
+> **Corrected in M1.3.** This example previously showed `required_field_removed` under a
+> BACKWARD policy, with the message "consumers on v1 will fail". That contradicts §7's own
+> definition: BACKWARD means the *new* schema reads data written by the previous one, and data
+> written under the old schema always carries a field the old schema required — so a new
+> reader copes fine. It is readers **on v1** that break, which is the *forward* direction. The
+> example now shows genuine engine output.
 
 ### The protocol is the product (ADR-019)
 

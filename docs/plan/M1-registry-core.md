@@ -122,23 +122,58 @@ belongs with M1.4's reference work.
 Consequence until then: two documents differing only in the spelling of an equivalent `$id`
 URI get different ids. A missed deduplication, not a correctness bug.
 
-## M1.3 Compatibility engine 🔴🔴 (ADR-016, DESIGN §7)
+## M1.3 Compatibility engine 🔴🔴 — **DONE 2026-08-13**
 
-**The correctness heart of the product. Heaviest test investment in the repo.**
+- [x] Axis 1 — all seven modes, transitive and non-transitive
+- [x] Axis 2 — the `Wire ⊂ WireJson ⊂ Source` lattice
+- [x] JSON Schema rules, designed from scratch — every acceptance criterion:
+  - [x] **Adding an optional property is fully compatible**, in all three directions
+  - [x] **Removing an optional property is fully compatible**
+  - [x] Content model is explicit subject config, never inferred per-schema
+  - [x] Narrowing `type`/`enum`/`maximum`, adding to `required`, `additionalProperties: true → false` are backward-breaking
+  - [x] Widening is forward-breaking
+- [x] Every finding carries an exact JSON-Pointer path (RFC 6901 escaped), `kind`, direction, surface, actionable message, `conflictsWithVersion`
+- [x] `suggestedSemver` derivation
+- [x] Golden corpus — 32 compatibility tests; 150 across the solution
+- [x] Semver label verification — already enforced by the aggregate in M1.1
 
-- [ ] Axis 1 — `Backward | BackwardTransitive | Forward | ForwardTransitive | Full | FullTransitive | None`
-- [ ] Axis 2 — `Wire ⊂ WireJson ⊂ Source`
-- [ ] Policy resolution: environment default, per-subject override
-- [ ] JSON Schema rules, designed from scratch — acceptance criteria:
-  - [ ] **Adding an optional property is fully compatible**
-  - [ ] **Removing an optional property is fully compatible**
-  - [ ] Content model is explicit subject config, never inferred per-schema
-  - [ ] Narrowing `type`/`enum`/`maximum`, adding to `required`, `additionalProperties: true → false` are backward-breaking
-  - [ ] Widening is forward-breaking
-- [ ] Every finding carries an exact **JSON-Pointer path**, `kind`, actionable message, `conflictsWithVersion`, and the narrowest axis it violates
-- [ ] `suggestedSemver` derivation
-- [ ] Semver label verification (ADR-004) — a breaking change cannot be labelled MINOR
-- [ ] Golden corpus: table-driven `(old, new, who-axis, what-axis) → (verdict, expected paths)`, including the cases Confluent gets wrong
+### What the second axis buys, concretely
+
+`integer → number` is JSON Schema's `int32 → int64`: every existing document still validates,
+but generated code changes from an integral to a floating-point type. It passes
+`Backward × WireJson` and fails `Backward × Source`. A single-axis registry cannot express
+that at all, and this is the case ADR-016 exists for.
+
+The same shape covers `format` changes, which are annotation-only in JSON Schema — validation
+is untouched, but a generator maps `date-time` to a date type.
+
+**A `× Wire` policy is effectively no checking for JSON Schema.** JSON is self-describing, so
+no divergence breaks byte decoding. That is asserted as a test, because it is the justification
+for `Backward × WireJson` being the default rather than `× Wire`.
+
+`AllDivergences` reports everything found; `BreakingChanges` reports only what the policy
+actually violates. The difference is what lets the API explain *why* a change was allowed
+instead of silently permitting it.
+
+### Documentation defect this surfaced
+
+DESIGN §5's example error showed `required_field_removed` under a BACKWARD policy with the
+message "consumers on v1 will fail". That contradicts §7's own definition — data written under
+the old schema always carries a field the old schema required, so a new reader copes; it is
+readers *on v1* that break, which is **forward**. The example now shows genuine engine output
+and the correction is noted inline.
+
+### Deliberate limits, so the gaps are known rather than assumed
+
+- **Comparison covers a practical subset**: `type`, `enum`, `required`, `properties`, `items`,
+  numeric and string bounds, `pattern`, `additionalProperties`, `format`. Not compared:
+  `oneOf`/`anyOf`/`allOf`/`not`, `$ref` targets, `patternProperties`, `dependentRequired`,
+  conditional `if`/`then`/`else`, tuple-form `prefixItems`. A change confined to those is
+  currently reported as compatible.
+- **`pattern` changes are always treated as narrowing.** Two regexes cannot be proven
+  equivalent in general, so over-reporting is the safe direction.
+- **Property renames read as a remove plus an add**, not a rename. Under an open content model
+  that is compatible, which is correct by the validation rules but may surprise.
 
 ## M1.4 Schema references
 
