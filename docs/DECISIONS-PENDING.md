@@ -8,6 +8,52 @@ architectural, becomes an ADR in [`adr/`](adr/README.md).
 
 ---
 
+## Defect — found by the test pass, not yet fixed
+
+### 18. The ADR-017 approval gate is defeated by submitting the same schema twice
+
+**Reproduced over real HTTP against real PostgreSQL**, not only against fakes:
+`ApprovalGateTests.ResubmittingAPendingBreakingSchemaMustNotBypassTheGate` and
+`RegisterVersionHandlerTests.ResubmittingAPendingBreakingSchemaBypassesTheApprovalGate`, both
+skipped with the reason recorded so they fail loudly the moment someone unskips them.
+
+`RegisterVersionHandler.LoadPriorsAsync` excludes `Rejected` versions from the compatibility
+history but **includes `AwaitingApproval` ones**. The default mode is non-transitive, so it
+compares against the **highest ordinal only**. Therefore:
+
+1. v1 registers `Active`; `latest` = 1.
+2. v2, breaking against v1, registers `AwaitingApproval`; `latest` stays 1. **Correct.**
+3. v3, byte-identical to v2, is compared **against v2** — no divergence, so compatible — and
+   registers **`Active`, moving `latest` to 3**.
+
+A consumer tracking `latest` moves from v1 straight onto a schema that is backward-incompatible
+with v1, and **nobody approved anything**. A retrying CI job does this on its own.
+`CheckCompatibilityHandler` shares the filter, so the dry run also reports the resubmission as
+compatible — the gate and the preview agree with each other and are both wrong.
+
+This defeats [ADR-017](adr/017-gated-latest-pointer.md), which exists precisely so that "a
+third party registering a version silently changes what your producer serializes with, at
+runtime, with no deploy" cannot happen.
+
+> **Options:**
+> - **Exclude `AwaitingApproval` from the history too**, so priors are approved versions only.
+>   Simplest, and matches the intent: an unapproved proposal is not part of what the subject
+>   promises. Needs care that a *second, different* breaking proposal is still compared against
+>   the last approved version rather than waved through.
+> - **Compare against the `latest` pointer rather than the highest ordinal** in non-transitive
+>   mode. Arguably what "non-transitive" should always have meant, given ADR-017 made `latest`
+>   an explicit gated pointer rather than "whatever has the highest ordinal".
+> - **Refuse a registration identical to a pending proposal**, returning the pending version.
+>   Narrower — it fixes the resubmission path without touching what counts as history — but
+>   leaves the underlying "pending counts as approved" rule in place for any other route to it.
+>
+> **Recommendation:** the second. It makes the compatibility engine agree with ADR-017's own
+> model of what `latest` means, and the first option falls out of it. It touches
+> `SelectPriors` in all three format checkers, so it wants the conformance corpus extended in
+> the same change.
+
+---
+
 ## Proceeded on my judgement — confirm or overturn
 
 ### 17. Avro's Parsing Canonical Form is lossy, and the architecture stores the canonical form
