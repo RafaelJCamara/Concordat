@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Microsoft.CodeAnalysis" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      A plain reference, not an Analyzer one: these tests drive the generator through
+      CSharpGeneratorDriver rather than letting the compiler run it, so that diagnostics can
+      be asserted individually.
+    -->
+    <ProjectReference Include="..\..\src\contracts\Concordat.Contracts.Generators\Concordat.Contracts.Generators.csproj" />
+    <!-- The generated schema must survive the real canonicaliser and validator. -->
+    <ProjectReference Include="..\..\src\formats\Concordat.Formats.Json\Concordat.Formats.Json.csproj" />
+  </ItemGroup>
+
+</Project>

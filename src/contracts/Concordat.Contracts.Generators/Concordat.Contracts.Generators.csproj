@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      netstandard2.0 is not a preference, it is the requirement: Roslyn loads analyzers into
+      the compiler's own process, and that process may be .NET Framework MSBuild.
+    -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <!-- Shipped inside Concordat.Contracts, so it needs no dependency of its own. -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Roslyn reads these to enforce RS2008. -->
+    <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
+    <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Pinned to 4.14 rather than the newest release. An analyzer built against a Roslyn newer
+      than the host compiler fails to load, and the error a consumer sees is "analyzer could
+      not be loaded" with nothing to act on. 4.14 runs on every SDK this project supports.
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="4.14.0" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

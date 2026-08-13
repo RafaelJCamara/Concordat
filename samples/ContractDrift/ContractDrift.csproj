@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A worked example of the build-time drift check, and the end-to-end proof that the MSBuild
+    wiring works. Deliberately outside Concordat.slnx: the solution build must not depend on a
+    sample, and a sample that breaks should not stop the product from building.
+
+    To see it fail, add a property to OrderCreated and build. The error names the member.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\contracts\Concordat.Contracts\Concordat.Contracts.csproj" />
+
+    <!--
+      A consumer installing the NuGet package gets the generator automatically, because it
+      ships under analyzers/dotnet/cs. Analyzers do not flow across a ProjectReference, so an
+      in-repo sample has to ask for it explicitly.
+    -->
+    <ProjectReference Include="..\..\src\contracts\Concordat.Contracts.Generators\Concordat.Contracts.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- The package does this automatically via build/Concordat.Contracts.props. -->
+  <Import Project="..\..\src\contracts\Concordat.Contracts\build\Concordat.Contracts.props" />
+
+</Project>

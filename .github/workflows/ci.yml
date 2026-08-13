@@ -87,6 +87,47 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  contract-drift:
+    name: contract drift gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # M3's exit criterion, asserted rather than assumed. The generator's own tests drive it
+    # through CSharpGeneratorDriver; this proves the MSBuild wiring — the props file, the
+    # AdditionalFiles glob, analyzer delivery — which those tests bypass entirely.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: The sample builds while its contract matches
+        run: dotnet build samples/ContractDrift --nologo
+
+      - name: Breaking the record must fail the build
+        run: |
+          set +e
+          cp samples/ContractDrift/OrderCreated.cs /tmp/OrderCreated.cs.bak
+          sed -i 's/string? Note/string Note/' samples/ContractDrift/OrderCreated.cs
+
+          OUT=$(dotnet build samples/ContractDrift --nologo 2>&1)
+          STATUS=$?
+          cp /tmp/OrderCreated.cs.bak samples/ContractDrift/OrderCreated.cs
+
+          echo "$OUT" | grep -F 'CDT003' || true
+
+          if [ $STATUS -eq 0 ]; then
+            echo "::error::a breaking change to the record did not fail the build"
+            exit 1
+          fi
+
+          echo "$OUT" | grep -qF '#/properties/note/type' || {
+            echo "::error::CDT003 fired but did not name the offending path"
+            exit 1
+          }
+
   cli-container:
     name: CLI container
     runs-on: ubuntu-latest

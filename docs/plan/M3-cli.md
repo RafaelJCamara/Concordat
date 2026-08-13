@@ -216,9 +216,86 @@ It is a Docker action rather than a composite one because a composite would have
 
 ## M3.4 Build-time packages
 
-- [ ] `Concordat.Contracts` — `[ConcordatContract("acme.orders.OrderCreated")]`
-- [ ] `Concordat.Contracts.MSBuild` — MSBuild task + Roslyn analyzer; generate a schema per attributed type, diff against checked-in `contracts/`, **error on drift**
-- [ ] `Concordat.Contracts.Testing` — `await Concordat.Assert.CompatibleAsync<OrderCreated>(env: "prod")`
+**Done 2026-08-13 · 22 tests + a worked sample verified end to end**
+
+- [x] `Concordat.Contracts` — `[ConcordatContract("acme.orders.OrderCreated")]`
+- [x] Roslyn generator: a schema per attributed type, diffed against checked-in `contracts/`, **error on drift**
+- [x] `samples/ContractDrift` — the feature as a runnable example, gated in CI
+- [ ] `Concordat.Contracts.Testing` — **deferred**, and the reason is below
+
+### No MSBuild task. A generator instead.
+
+The plan said "MSBuild task + Roslyn analyzer". It is only the analyzer, because the task would
+have had to load the compiled assembly to reflect over it — resolving the consumer's entire
+dependency graph inside the build process, and failing in ways that depend on their package set
+rather than on anything Concordat controls. Reading Roslyn symbols needs nothing but the
+compilation already in memory.
+
+### Nullability *is* the requiredness contract
+
+A non-nullable member is required; a nullable one is optional. No second annotation, because a
+second annotation is a second thing to keep in sync and it falls out of sync immediately.
+
+Worth stating plainly: **enabling nullable reference types on an existing project changes the
+generated schema**, and the drift check will say so.
+
+### The comparison is structural, and that is load-bearing
+
+Byte-comparing the generated schema against the checked-in file would make this generator and
+the CLI's canonicaliser two implementations of one format that must agree exactly — the
+divergence this project spends most of its effort preventing. Parsing both and comparing shapes
+means whitespace, key order and number spelling cannot cause a false failure. A test pins it:
+a reformatted, reordered contract file is **not** drift.
+
+The comparer carries its own hand-written JSON parser. An analyzer ships into the compiler's
+own load context, where dragging in a JSON library invites a version conflict with whatever the
+host already loaded — which the consumer sees as "the analyzer crashed", with nothing to act on.
+
+### The message names the member, not the mechanism
+
+The first version said *"the file has Array where the type produces String"* — accurate and
+useless. It now shows the values:
+
+```
+error CDT003: 'ContractDrift.OrderCreated' has drifted from contracts/acme.orders.OrderCreated.json.
+At #/properties/note/type: the file has ["string","null"], the type produces "string".
+```
+
+Which reads as *you removed a `?`*.
+
+### Five diagnostics, and the one that matters most is a warning
+
+| Id | Severity | Meaning |
+|---|---|---|
+| CDT001 | Error | The subject name breaks the ADR-011 grammar |
+| CDT002 | Warning | A member has no JSON Schema mapping and is emitted unconstrained |
+| CDT003 | **Error** | The checked-in contract has drifted from the type |
+| CDT004 | **Warning** | The type has **no** contract file, so nothing is being checked |
+| CDT005 | Error | Two types declare the same subject |
+
+CDT004 exists because a drift check with nothing to compare against passes vacuously — green
+build, unguarded contract. It is a warning rather than an error only because a type must be
+allowed to exist before its contract is written.
+
+### Roslyn 4.14, deliberately older than the repository uses
+
+Central package management resolves one version repo-wide, and EF Core's Design package
+requires Roslyn 5. The generator overrides *down* to 4.14 with `VersionOverride`, and the
+direction matters: an analyzer built against a Roslyn **newer** than the host compiler fails to
+load outright. A consumer on the .NET 8 SDK must be able to run a generator this repository
+builds on .NET 10.
+
+### `Concordat.Contracts.Testing` is deferred, on purpose
+
+`ConcordatAssert.CompatibleAsync<T>(env: "prod")` needs the schema for `T` at test time. The
+obvious implementation — reflect over the runtime type — would be **a second implementation of
+the C#-to-JSON-Schema mapping**, and the two would drift apart exactly as this milestone's
+whole subject warns.
+
+The groundwork is in place: the generator already emits
+`[assembly: ConcordatGeneratedSchema(subject, clrType, schema)]`, so the testing package can
+read the compile-time schema rather than recomputing it. That is a small, correct package to
+build next, and building it wrong would be worse than not having it.
 
 ---
 

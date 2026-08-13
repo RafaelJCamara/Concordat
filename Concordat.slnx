@@ -4,6 +4,10 @@
     <Project Path="src/clients/Concordat.Client/Concordat.Client.csproj" />
     <Project Path="src/clients/Concordat.RabbitMq/Concordat.RabbitMq.csproj" />
   </Folder>
+  <Folder Name="/src/contracts/">
+    <Project Path="src/contracts/Concordat.Contracts.Generators/Concordat.Contracts.Generators.csproj" />
+    <Project Path="src/contracts/Concordat.Contracts/Concordat.Contracts.csproj" />
+  </Folder>
   <Folder Name="/src/core/">
     <Project Path="src/core/Concordat.Application/Concordat.Application.csproj" />
     <Project Path="src/core/Concordat.Domain/Concordat.Domain.csproj" />
@@ -26,6 +30,7 @@
     <Project Path="tests/Concordat.Cli.Tests/Concordat.Cli.Tests.csproj" />
     <Project Path="tests/Concordat.Client.Tests/Concordat.Client.Tests.csproj" />
     <Project Path="tests/Concordat.Conformance/Concordat.Conformance.csproj" />
+    <Project Path="tests/Concordat.Contracts.Tests/Concordat.Contracts.Tests.csproj" />
     <Project Path="tests/Concordat.Domain.Tests/Concordat.Domain.Tests.csproj" />
     <Project Path="tests/Concordat.Formats.Json.Tests/Concordat.Formats.Json.Tests.csproj" />
     <Project Path="tests/Concordat.HeaderSurvival/Concordat.HeaderSurvival.csproj" />

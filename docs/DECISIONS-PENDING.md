@@ -135,7 +135,24 @@ disappoints, because a human reading it wants to know what changed, not only wha
 > **Recommendation:** leave it for v1. The CLI says so explicitly, and widening
 > `allDivergences[]` risks the corpus for a reporting nicety.
 
-### 13. The quarantine exchange is declared by the application — confirm
+### 13. `Concordat.Contracts.Testing` — deferred out of M3.4, decide whether v1 needs it
+
+`await ConcordatAssert.CompatibleAsync<OrderCreated>(env: "prod")` was in the M3.4 list and is
+not built. The reason is not effort: the obvious implementation reflects over the runtime type
+to produce a schema, which would be **a second implementation of the C#-to-JSON-Schema
+mapping** alongside the generator's, and the two would drift — the exact failure this milestone
+exists to prevent.
+
+The groundwork is done. The generator emits
+`[assembly: ConcordatGeneratedSchema(subject, clrType, schema)]`, so the package can read the
+compile-time schema instead of recomputing it, and only needs to POST it to the compatibility
+endpoint.
+
+> **Recommendation:** build it, small, before v1 — the compile-time check catches drift from
+> the *file*, but only a call to the registry catches drift from what is deployed in `prod`.
+> Those are different questions and a team needs both.
+
+### 14. The quarantine exchange is declared by the application — confirm
 
 `ConcordatRabbitMqOptions.DeclareQuarantineExchange` defaults to **on**, so the middleware
 declares `concordat.quarantine` itself the first time it needs it. The alternative is that the
@@ -149,7 +166,7 @@ and the exchange provisioned ahead of time.
 > **Which is your estate?** It changes the recommended default in the deployment docs, not the
 > code.
 
-### 14. Hard-delete semantics — before v1 ships
+### 15. Hard-delete semantics — before v1 ships
 
 M1.5 implements soft delete (`Subject.Retire()`) and never deletes schemas, which is what
 ADR-015 requires. **Hard delete is not implemented**: DESIGN §4 wants "no registered
@@ -256,6 +273,14 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | One release runner per architecture instead of cross-compiling | M3.3 | Low; four jobs, but a mis-linked AOT binary builds cleanly and refuses to start |
 | The GitHub Action passes config as environment variables, not `args` | M3.3 | Low, and required: a fixed `args` list turns an empty optional input into a parse error |
 | The Action wraps `check`/`lint`/`push` only; other commands run the container directly | M3.3 | Low |
+| A Roslyn generator, **not** an MSBuild task — no assembly loading | [M3.4](plan/M3-cli.md) | Low, and it removes a whole class of consumer-specific build failure |
+| Nullability is the requiredness contract: non-nullable ⇒ required | M3.4 | Low, but **enabling NRT on an existing project changes the schema** |
+| Drift is compared structurally, not byte-wise | M3.4 | Low, and required: byte comparison would make the generator and the canonicaliser two implementations of one format |
+| The analyzer carries a hand-written JSON parser rather than a dependency | M3.4 | Low. An analyzer sharing the compiler's load context cannot safely bring a JSON library |
+| Enums map to their **names**, sorted; properties are camelCased and sorted | M3.4 | **User-visible in every generated schema** |
+| Diagnostic ids `CDT001`–`CDT005` are public surface, with release tracking | M3.4 | Low, but a consumer will put them in `<NoWarn>` |
+| The generator pins Roslyn **4.14** while the repo resolves 5.x | M3.4 | Low. An analyzer built against a newer Roslyn than the host fails to load |
+| `samples/ContractDrift` lives outside the solution | M3.4 | Low; the solution build must not depend on a sample |
 
 ---
 

@@ -1,0 +1,25 @@
+<Project>
+
+  <!--
+    Hands the checked-in contracts to the generator.
+
+    Without this the drift check silently does nothing: the generator would find no
+    AdditionalFiles, conclude there is nothing to compare against, and report success on a
+    project whose contracts were never checked. A gate that passes when it is not wired up is
+    the worst kind, so ConcordatContractsDirectory defaults to the same `contracts/` the CLI
+    uses and the generator warns when the directory is absent.
+  -->
+  <PropertyGroup>
+    <ConcordatContractsDirectory Condition="'$(ConcordatContractsDirectory)' == ''">contracts</ConcordatContractsDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="$(ConcordatContractsDirectory)\**\*.json" />
+  </ItemGroup>
+
+  <!-- Lets the generator see where it was told to look, so a diagnostic can name the path. -->
+  <ItemGroup>
+    <CompilerVisibleProperty Include="ConcordatContractsDirectory" />
+  </ItemGroup>
+
+</Project>

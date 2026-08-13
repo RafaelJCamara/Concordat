@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      netstandard2.0, not net10.0. This package is referenced by projects a consumer may
+      compile for anything, and it contains nothing but attributes. Tying the contract
+      marker to a framework version would be an arbitrary constraint on who can use it.
+    -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Description>Marks a C# type as the source of truth for a Concordat subject.</Description>
+    <PackageTags>concordat;schema-registry;contract-testing;source-generator</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The generator travels with the attribute. Referencing Concordat.Contracts and getting
+      no drift checking would be a trap: the attribute would look like it was doing something.
+    -->
+    <ProjectReference
+      Include="..\Concordat.Contracts.Generators\Concordat.Contracts.Generators.csproj"
+      OutputItemType="Analyzer"
+      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ships the generator inside this package, under the path the SDK loads analyzers from. -->
+    <None Include="..\Concordat.Contracts.Generators\bin\$(Configuration)\netstandard2.0\Concordat.Contracts.Generators.dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
+    <None Include="build\Concordat.Contracts.props" Pack="true" PackagePath="build" Visible="false" />
+  </ItemGroup>
+
+</Project>

@@ -28,7 +28,21 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
   </ItemGroup>
+  <ItemGroup Label="Analyzers">
+    <!--
+      5.x here because EF Core's Design package requires it transitively, and central package
+      management resolves one version for the whole repository.
+
+      The generator project overrides this down to 4.14 with VersionOverride, and that
+      direction matters: an analyzer built against a Roslyn NEWER than the host compiler fails
+      to load outright, and all the consumer sees is "analyzer could not be loaded". A .NET 8
+      SDK must be able to run a generator this repository builds on .NET 10.
+    -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
+  </ItemGroup>
   <ItemGroup Label="Tooling">
+
     <!-- MIT, from Microsoft, and the parser the .NET SDK itself uses. AOT-friendly for M3.3. -->
     <PackageVersion Include="System.CommandLine" Version="2.0.11" />
   </ItemGroup>
