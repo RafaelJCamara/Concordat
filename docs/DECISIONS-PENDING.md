@@ -41,13 +41,7 @@ Availability is not reservation. From M0.1:
 
 ## Needed before a specific milestone
 
-### 4. CLI alias — before M3
-
-`concordat check --env staging` is a lot to type in CI. **Recommendation:** ship `concordat`
-as the binary name and add `cdt` as an alias in M3.3. Deciding now costs nothing; deciding
-after the GitHub Action and docs exist means changing both.
-
-### 5. External coverage reporting — now live
+### 4. External coverage reporting — now live
 
 M0.3 deferred this to "when M1.3 makes the number meaningful". **M1.3 is done**, so it is
 decidable: wire up Codecov (needs an account and a token to rotate), or keep the current
@@ -57,7 +51,7 @@ coverage artifact and look at it manually.
 generates noise; the useful signal is whether the compatibility corpus grows, which a number
 does not capture.
 
-### 6. Windows in the CI matrix — now decidable, and now cheaper to skip
+### 5. Windows in the CI matrix — now decidable, and now cheaper to skip
 
 M0.3 shipped Ubuntu-only with a note to reconsider at M2, where Testcontainers and the RabbitMQ
 tests first make platform differences real. **M2.5 is that point**, and it changed the sum:
@@ -67,7 +61,7 @@ Linux-container support that GitHub's Windows runners do not provide.
 **Recommendation:** stay Ubuntu-only. Add Windows later as a *build-and-unit-test-only* job if
 you want the platform signal — the container suites cannot follow it there regardless.
 
-### 6b. When should the header-survival suite run?
+### 6. When should the header-survival suite run?
 
 It raises three brokers (two of them for federation alone) and takes ~15 s locally, more on a
 cold runner pulling `rabbitmq:4.1-management`. It also almost never changes: it re-measures
@@ -234,6 +228,7 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | Decision | Outcome | Recorded in |
 |---|---|---|
 | Project name | **Concordat**, after rejecting Signet, Hutch, Syngraph, Stipula, Warrenty, Indenture | [ADR-022](adr/022-project-name-concordat.md) |
+| CLI binary name | **`concordat` only**, with a shell alias documented for anyone who wants one. No `cdt` | [M3](plan/M3-cli.md) — an alias is *additive*: shipping it later breaks nobody, removing it later breaks every script. That asymmetry says wait. `kubectl`, `terraform`, `docker` and `git` all ship one name and let users abbreviate. If it is ever added, `cdt` needs the same ecosystem-collision check that killed Signet and Hutch |
 | JSON Schema validator | **NJsonSchema (MIT)** behind an `IPayloadValidator` port | [M2](plan/M2-dotnet-client.md) — `JsonSchema.Net` publishes its binary under a maintenance-fee agreement that would propagate to our users; `Newtonsoft.Json.Schema` is commercial |
 | Default compatibility policy | **`Backward × WireJson`** | [ADR-016](adr/016-two-axis-compatibility.md), DESIGN §7 |
 | Schema table scope | **Global**, keyed by `SchemaId` alone | [ADR-015](adr/015-content-addressed-ids.md) |

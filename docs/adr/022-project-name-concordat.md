@@ -50,8 +50,10 @@ Burrow are all taken by messaging projects, precisely because everyone reaches f
   test — ecosystem collision is.** Signet and Hutch were both free on NuGet *and* PyPI.
   What disqualified them appeared only on GitHub and RubyGems. Any future naming check must
   include those.
-- **Negative:** nine characters is long for a CLI verb. An `cdt` alias is worth adding in
-  M3.3.
+- **Negative:** nine characters is long for a CLI verb. **Resolved, 2026-08-13: the CLI ships
+  as `concordat` only**, with a shell alias documented for anyone who wants one. A shipped
+  alias is additive — adding it later breaks nobody, removing it later breaks every script —
+  and that asymmetry says wait. `kubectl`, `terraform`, `docker` and `git` all ship one name.
 - **Negative:** availability is not reservation. `concordat.dev` and the `@concordat` npm
   org are unclaimed but unheld; package IDs are only claimed on first publish, at M2, M3
   and M6.

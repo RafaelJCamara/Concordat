@@ -26,6 +26,8 @@ Last milestone on the critical path. With M3 done, Concordat is genuinely useful
 ## M3.3 Distribution
 
 - [ ] NativeAOT binaries: win-x64, linux-x64, linux-arm64, osx-arm64
+- [ ] **One binary name, `concordat`** ([settled](../DECISIONS-PENDING.md#settled)) — document a
+      shell alias rather than shipping a second name into every packaging manifest
 - [ ] Docker image
 - [ ] GitHub Action wrapping the container
 - [ ] Verify: a Python or Go shop can gate CI with **zero .NET installed**
