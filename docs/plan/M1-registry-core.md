@@ -48,7 +48,7 @@ engine is independently reviewable without the API on top.
 
 ## M1.4 Schema references
 
-- [ ] `Reference = (name, subject, version)`; `indenture://<env>/<subject>/<version>` resolution
+- [ ] `Reference = (name, subject, version)`; `concordat://<env>/<subject>/<version>` resolution
 - [ ] Registration resolves into a bundled canonical form **and** retains the edges
 - [ ] Cycle detection, rejected at registration
 - [ ] Transitive compatibility — a referenced subject's new version re-checks every referrer
@@ -57,7 +57,7 @@ engine is independently reviewable without the API on top.
 ## M1.5 Persistence
 
 - [ ] EF Core model + PostgreSQL provider (ADR-007)
-- [ ] Migrations; `Indenture.Migrator` host; auto-migrate on startup, toggleable
+- [ ] Migrations; `Concordat.Migrator` host; auto-migrate on startup, toggleable
 - [ ] Unique constraint backing M1.2 idempotency
 - [ ] `ITenantContext` + EF global query filters — wired now with a single implicit tenant, so M9 is not a retrofit
 - [ ] Deletion semantics: schemas never deleted; subjects soft-delete to `Retired`; hard delete requires no registered consumers + force flag + audit entry
@@ -75,7 +75,7 @@ engine is independently reviewable without the API on top.
 - [ ] `POST …/compatibility` dry run — never writes; returns `compatible`, `breakingChanges[]`, `suggestedSemver`, `impactedConsumers[]`
 - [ ] `GET|PUT …/compatibility-policy`; `GET …/versions/{a}/diff/{b}`
 - [ ] `POST /environments/{env}/bootstrap` — every schema a client needs in **one** request
-- [ ] **RFC 9457 Problem Details + stable string `indentureCode`**; catalogue documented
+- [ ] **RFC 9457 Problem Details + stable string `concordatCode`**; catalogue documented
 - [ ] Negative-lookup caching semantics so a missing subject cannot retry-storm
 - [ ] `/health/live`, `/health/ready`
 - [ ] OpenAPI 3.1 generated from endpoints, committed to `docs/api/openapi.v1.json`
@@ -85,7 +85,7 @@ engine is independently reviewable without the API on top.
 
 Normative from day one — a corpus written later only ratifies whatever .NET already did.
 
-- [ ] `tests/Indenture.Conformance` layout and fixture format, language-neutral
+- [ ] `tests/Concordat.Conformance` layout and fixture format, language-neutral
 - [ ] Canonicalisation cases
 - [ ] Compatibility verdict cases
 - [ ] Payload-validation corpus — documents that must accept / must reject
@@ -93,9 +93,9 @@ Normative from day one — a corpus written later only ratifies whatever .NET al
 
 ## M1.8 Deployment (minimum)
 
-- [ ] `Indenture.Api` container image
-- [ ] `docker compose up` → Indenture + PostgreSQL
-- [ ] `INDENTURE__*` configuration binding
+- [ ] `Concordat.Api` container image
+- [ ] `docker compose up` → Concordat + PostgreSQL
+- [ ] `CONCORDAT__*` configuration binding
 
 ---
 

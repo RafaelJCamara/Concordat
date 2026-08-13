@@ -3,7 +3,7 @@
 # The repository stores LF, and checks out LF on every platform. Without this,
 # core.autocrlf=true on Windows rewrites every file to CRLF on checkout, which
 # produces phantom whole-file diffs the moment a contributor on Linux or macOS
-# touches the same file. Indenture targets .NET, TypeScript, Python, Go and Java
+# touches the same file. Concordat targets .NET, TypeScript, Python, Go and Java
 # with CI on Linux containers, so LF everywhere is the only consistent choice.
 
 * text=auto eol=lf

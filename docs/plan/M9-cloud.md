@@ -1,15 +1,15 @@
-# M9 — Indenture Cloud
+# M9 — Concordat Cloud
 
 **Depends on:** [M8](M8-identity.md) · **Design refs:** [§10](../DESIGN.md#10-deployment-flavours), decisions 009
 
-Same image, `INDENTURE__PROFILE=Cloud`. Everything here is Apache-2.0 too (ADR-009) — Cloud
+Same image, `CONCORDAT__PROFILE=Cloud`. Everything here is Apache-2.0 too (ADR-009) — Cloud
 competes on managed upgrades, backups, HA, SLA and support, not on withheld code.
 
 ---
 
 ## M9.1 Tenancy
 
-- [ ] `IndentureProfile` swaps `ITenantResolver`, `IBillingGate`, `IIdentityProvider` **at the composition root** — no `if (cloud)` scattered around
+- [ ] `ConcordatProfile` swaps `ITenantResolver`, `IBillingGate`, `IIdentityProvider` **at the composition root** — no `if (cloud)` scattered around
 - [ ] Multi-tenant row-level isolation via the EF global query filters wired in [M1.5](M1-registry-core.md#m15-persistence)
 - [ ] KMS-backed Data Protection key ring
 

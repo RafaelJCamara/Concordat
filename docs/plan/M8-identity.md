@@ -9,7 +9,7 @@
 - [ ] `Tenant`, `User`, `Membership`, `Role`
 - [ ] `ApiKey`, hashed at rest, with scopes
 - [ ] Scopes: `subject:read|write|admin`, `contract:*`, `env:*`, `broker:*`, `org:admin`
-- [ ] Local accounts; **OIDC optional** (ADR-008 — no third-party dependency required to run Indenture)
+- [ ] Local accounts; **OIDC optional** (ADR-008 — no third-party dependency required to run Concordat)
 
 ## M8.2 Authorization (ADR-018)
 

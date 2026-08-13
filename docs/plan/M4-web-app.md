@@ -20,7 +20,7 @@ Off the critical path — can slip without invalidating M0–M3.
 Build now, not in M8 — retrofitting across finished screens is how a write path gets missed.
 
 - [ ] `canWriteSchemas` computed on the session store, derived from API-returned scopes
-- [ ] `*indIfScope` structural directive for affordances
+- [ ] `*cdIfScope` structural directive for affordances
 - [ ] `scopeGuard` on write routes; direct navigation redirects to the read view
 - [ ] Stub returning admin in the single-user self-hosted profile until M8
 - [ ] Write affordances **absent, not disabled**, for non-admins

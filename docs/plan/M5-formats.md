@@ -6,7 +6,7 @@
 
 ## M5.1 Format abstraction
 
-- [ ] `Indenture.Formats.Abstractions` — canonicalisation, validation, compatibility per format
+- [ ] `Concordat.Formats.Abstractions` — canonicalisation, validation, compatibility per format
 - [ ] Format projects depend only on the abstraction + their parser library
 
 ## M5.2 Avro

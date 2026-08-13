@@ -1,4 +1,4 @@
-# Indenture — A Schema Registry for RabbitMQ
+# Concordat — A Schema Registry for RabbitMQ
 
 > **Status: design, not yet implemented.** This document records the architecture and the
 > decisions behind it. No code exists yet; see [Milestones](#11-milestones) for the
@@ -12,10 +12,10 @@ rejected before production. RabbitMQ has no equivalent. Teams ship untyped JSON,
 discover breaking changes at runtime, and have no central answer to *"what flows through
 this broker, and who owns it?"*
 
-**The goal.** Indenture: a schema registry and contract-enforcement platform for RabbitMQ,
+**The goal.** Concordat: a schema registry and contract-enforcement platform for RabbitMQ,
 built in .NET but usable from any language.
 
-**Two flavours, one codebase:** self-hosted and Indenture Cloud (multi-tenant SaaS).
+**Two flavours, one codebase:** self-hosted and Concordat Cloud (multi-tenant SaaS).
 
 A React prototype (Vite + shadcn/ui, maintained separately) sketches the intended UX and
 serves as the design reference for the Angular port described in §9.
@@ -42,25 +42,25 @@ Each of these should be expanded into an ADR under `docs/adr/`.
 | 001 | **Native API only** — no Confluent wire-compat layer | RabbitMQ semantics don't fit Kafka's topic-shaped API. Redpanda, Apicurio and Karapace all clone Confluent's REST surface because Confluent's **Apache-2.0** serializers are compiled into Connect, ksqlDB, Flink, Spark and Debezium and hardcode both the `/subjects/…` paths and the 5-byte prefix — so a Kafka estate can only be migrated by matching that API. **No such installed base exists on RabbitMQ**, so that lock-in doesn't transfer. |
 | 002 | **Three formats in v1**: JSON Schema, Avro, Protobuf | JSON Schema is the RabbitMQ norm; Avro has the best-specified compatibility rules; Protobuf carries the polyglot story. |
 | 003 | **Monorepo** — backend, web, CLI, SDKs, deploy assets, docs | Atomic cross-cutting changes, one CI pipeline, one version. |
-| 004 | **Version identity = integer ordinal + optional semver label** | The integer is canonical, immutable, totally ordered. The semver label carries intent and Indenture *verifies* it — a breaking change cannot be labelled MINOR. |
+| 004 | **Version identity = integer ordinal + optional semver label** | The integer is canonical, immutable, totally ordered. The semver label carries intent and Concordat *verifies* it — a breaking change cannot be labelled MINOR. |
 | 005 | **Enforcement = client SDK middleware + CI-time checks** | The only viable path — see §1. |
 | 006 | **Angular port keeps the prototype's design system, rebuilds the code** | Its `index.css` token set is framework-agnostic and ports verbatim; the component and state layer is rebuilt with real boundaries. |
 | 007 | **PostgreSQL + EF Core** | Deliberately *not* the Confluent/Karapace/Redpanda pattern of storing schemas in a broker log. Apicurio's PostgreSQL backend is the precedent. |
-| 008 | **Built-in identity + scoped API keys, OIDC optional** | No third-party dependency required to run Indenture. |
-| 009 | **Fully open source (Apache-2.0)**, including Cloud | **Accepted risk:** a third party could host the same code; Cloud competes on operations and iteration speed. *Upside:* Confluent's server is under the Confluent Community License, and **all authorization — RBAC and subject ACLs — is separately Enterprise-licensed**, so free-tier Confluent SR has no authz at all; anyone with credentials can mutate or delete any subject. Indenture shipping RBAC, API-key scopes and audit under Apache-2.0 is a concrete differentiator. |
+| 008 | **Built-in identity + scoped API keys, OIDC optional** | No third-party dependency required to run Concordat. |
+| 009 | **Fully open source (Apache-2.0)**, including Cloud | **Accepted risk:** a third party could host the same code; Cloud competes on operations and iteration speed. *Upside:* Confluent's server is under the Confluent Community License, and **all authorization — RBAC and subject ACLs — is separately Enterprise-licensed**, so free-tier Confluent SR has no authz at all; anyone with credentials can mutate or delete any subject. Concordat shipping RBAC, API-key scopes and audit under Apache-2.0 is a concrete differentiator. |
 | 010 | **Header envelope: no `x-` prefix, all values UTF-8 strings** | Forced by AMQP conversion rules and .NET client behaviour — see §2. |
 | 011 | **Subject = message type, via a pluggable `ISubjectResolver`** | The only identifier both sides share. See §3. |
 | 012 | **Environment is a logical label over registered brokers** | Handles "prod is its own cluster" and "prod is a vhost" without forcing either. See §4. |
 | 013 | **AMQP 0-9-1 only in v1, designed to survive 1.0 conversion** | Streams and 1.0 become additive, not a rewrite. |
-| 014 | **`indenture infer` for brownfield onboarding** | Turns a 200-message-type estate from weeks of authoring into an afternoon. |
+| 014 | **`concordat infer` for brownfield onboarding** | Turns a 200-message-type estate from weeks of authoring into an afternoon. |
 | 015 | **Schema IDs are content-addressed**, not sequential | Same schema ⇒ same ID in every environment and install, so promotion never invalidates an in-flight envelope. Registration becomes idempotent via a unique constraint; no single-writer counter. Confluent's own `IncrementalIdGenerator` needs a collision-retry loop that can hard-fail, and **CP 8.1+ retrofitted a content-derived GUID carried in a header**. Glue, Azure and Buf converged here independently. |
 | 016 | **Two-axis compatibility**: *who breaks* × *what breaks* | BACKWARD/FORWARD/FULL answers who; WIRE / WIRE_JSON / SOURCE answers what. Confluent cannot express "`int32→int64` is wire-safe but source-breaking" at all. |
 | 017 | **Breaking changes register but gate the `latest` label** | Buf's pattern. CI never wedges, the proposed schema is a reviewable artifact, and consumers pinned to `latest` are unaffected until approval. |
 | 018 | **Schema editing in the web app is admin-only** | Registering a version is a governance action with blast radius across every registered consumer, not a routine edit. Non-admins get the full read surface — browse, diff, impact, export — and no write affordance. **The UI is not the boundary:** it reflects a server-side `subject:write` scope check (§5, Context E), because the same endpoints are reachable from the CLI, the SDKs and curl. See §9. |
-| 019 | **The registry is a language-neutral HTTP service; every SDK is an ordinary client of the same public protocol** | The server happens to be .NET. Nothing about the protocol may assume it. No capability exists that isn't reachable over documented REST — the .NET SDK gets no privileged endpoint, no private header, no serialisation shortcut, no behaviour that isn't written down. The **normative artifacts** are the OpenAPI document, the envelope spec (§2), the canonicalisation rules (§4), the `indentureCode` catalogue and the conformance corpus (§12) — all language-neutral and versioned with the API. Acceptance test for the principle: a team writes a complete Go client from those five documents without reading a line of C#, and hits no surprises. See §5. |
+| 019 | **The registry is a language-neutral HTTP service; every SDK is an ordinary client of the same public protocol** | The server happens to be .NET. Nothing about the protocol may assume it. No capability exists that isn't reachable over documented REST — the .NET SDK gets no privileged endpoint, no private header, no serialisation shortcut, no behaviour that isn't written down. The **normative artifacts** are the OpenAPI document, the envelope spec (§2), the canonicalisation rules (§4), the `concordatCode` catalogue and the conformance corpus (§12) — all language-neutral and versioned with the API. Acceptance test for the principle: a team writes a complete Go client from those five documents without reading a line of C#, and hits no surprises. See §5. |
 | 020 | **v1 ships one .NET SDK, over RabbitMQ.Client only** | Service-bus adapters (MassTransit, EasyNetQ, Wolverine, NServiceBus, Rebus) are deferred; the hook research is preserved in **Appendix A**. Raw RabbitMQ.Client has unrestricted AMQP access both directions, so it exercises the envelope with nothing mediating it, and it is the substrate all five sit on. Absorbing five libraries' reject-path and header quirks *before* a second-language client exists would risk hardening .NET accidents into the wire format — the opposite of ADR-019. |
 | 021 | **Tier 2 SDKs: TypeScript/JavaScript, Python, Go, Java** | TS and JS are **one npm package**, not two — written in TypeScript, published with ESM + CJS builds and `.d.ts`, so a plain-JS consumer needs no TypeScript toolchain and gets types for free if they want them. Every SDK binds its language's **raw** AMQP client only; framework adapters are deferred uniformly for ADR-020's reason, which puts **Spring AMQP** in Appendix A alongside MassTransit. Order, bindings and the validator-divergence hazard: §5. |
-| 022 | **Named Indenture. "Signet" was abandoned before any code existed** | M0.1 found `Signet.Client` on NuGet and `signet-client` on PyPI both published by an **active** project (`bytepunx/signet-proto`; PyPI upload 2026-08-08) — the exact two package names ADR-021 depends on, in the same registries, for the same polyglot-client shape. NuGet's `signet` id is separately held by **SigNET** (7,452 downloads; NuGet ids are case-insensitive), npm `signet` by a type library, and `signet.dev` is registered. `Indenture` is unclaimed on NuGet, PyPI and npm — unscoped *and* the `@indenture` scope — with `.io`/`.sh` free. It also describes the product: an indenture is a contract deed cut into matching halves, one held by each party, which is exactly the producer/consumer contract being enforced. Maven uses `io.github.rafaeljcamara`, so no domain is on the critical path. |
+| 022 | **Named Concordat. Signet, Hutch, Syngraph and Stipula were rejected first** | A concordat *is* a formal agreement between two parties — no metaphor to unpack — and it is unclaimed on NuGet, PyPI, the `@concordat` npm scope and `.dev`/`.io`/`.sh`. The highest-starred GitHub repo bearing the name has **zero** stars. `crates.io/concordat` is taken and irrelevant: ADR-021 ships no Rust SDK. Maven uses `io.github.rafaeljcamara`, so no domain sits on the critical path. **Rejected, recorded so they don't resurface:** *Signet* — `Signet.Client` (NuGet) and `signet-client` (PyPI) are published by an **active** project, `bytepunx/signet-proto`, PyPI upload 2026-08-08 — the exact two package names ADR-021 depends on, in the same registries, for the same polyglot-client shape; NuGet's `signet` id is separately held by **SigNET** (7,452 downloads; ids are case-insensitive) and `signet.dev` is registered. *Hutch* — `ruby-amqp/hutch` (878 stars) is "a system for processing messages from RabbitMQ": same ecosystem, strictly worse than Signet. *Syngraph / Chirograph* — clean on every registry, but `-graph` reads as graph database or GraphQL to this audience. *Stipula* — the best metaphor of the lot (the straw broken in two to seal a bargain), but `stipula-language/stipula` is a DSL for legal contracts. **The transferable lesson: registry availability is not the test — ecosystem collision is.** Signet and Hutch were both free on NuGet. |
 
 ### Non-goals for v1
 - **No inline AMQP proxy** — universal enforcement, but a new availability-critical hop.
@@ -81,7 +81,7 @@ Each of these should be expanded into an ADR under `docs/adr/`.
 3. **Routing keys are high-cardinality and dynamic.** They cannot each be a subject.
 4. **Alternate/dead-letter/exchange-to-exchange bindings** change the effective routing key in flight.
 
-**Easier — the design lever:** AMQP 0-9-1 has carried rich per-message metadata since 2008 (`type`, `content-type`, `app-id`, plus an arbitrary `headers` field table). Kafka had no headers until 0.11, which is *why* Confluent invented magic-byte payload framing. **Indenture does not have to mutate payloads.**
+**Easier — the design lever:** AMQP 0-9-1 has carried rich per-message metadata since 2008 (`type`, `content-type`, `app-id`, plus an arbitrary `headers` field table). Kafka had no headers until 0.11, which is *why* Confluent invented magic-byte payload framing. **Concordat does not have to mutate payloads.**
 
 ### Where enforcement can live
 
@@ -90,37 +90,37 @@ Each of these should be expanded into an ADR under `docs/adr/`.
 | **Client SDK middleware** | ✅ **Chosen.** Every major .NET library has a usable hook (§6). Voluntary, but portable and zero-infrastructure. |
 | **CI-time checks** | ✅ **Chosen.** Catches breakage before deploy. Language-agnostic via CLI. |
 | `rabbit_msg_interceptor` (4.x, all protocols) | ❌ **Cannot reject.** Signature is `intercept(mc:state(), context(), stage(), config()) -> mc:state()` — no error tuple exists. Observe-and-annotate only. |
-| `rabbit_channel_interceptor` (0-9-1 only) | ❌ Can reject, but `check_no_overlap/1` allows **one interceptor per AMQP method broker-wide** — Indenture would conflict with any other `basic.publish` plugin. Only new channels pick it up, and rejection **kills the channel** rather than nacking. Plus shipping Erlang from a .NET product. |
+| `rabbit_channel_interceptor` (0-9-1 only) | ❌ Can reject, but `check_no_overlap/1` allows **one interceptor per AMQP method broker-wide** — Concordat would conflict with any other `basic.publish` plugin. Only new channels pick it up, and rejection **kills the channel** rather than nacking. Plus shipping Erlang from a .NET product. |
 | Inline AMQP proxy | ❌ Deferred. Genuinely enforcing (the Kong pattern), but requires a 0-9-1 frame codec and becomes availability-critical. |
 
 > **Honest limitation, to be documented publicly:** client-side enforcement is opt-in.
-> Indenture cannot stop a publisher that doesn't use an SDK. The mitigation is CI-time checks
+> Concordat cannot stop a publisher that doesn't use an SDK. The mitigation is CI-time checks
 > plus registered-consumer impact analysis, not a broker gate. Note **Confluent's own
 > broker-side validation doesn't introspect data either** — it only checks that the ID in
 > the prefix is registered. That's the bar to beat, and it's low.
 
 ---
 
-## 2. The Indenture Envelope (ADR-010)
+## 2. The Concordat Envelope (ADR-010)
 
-**Mode A — header binding (default).** Payload untouched, so a consumer with no Indenture
+**Mode A — header binding (default).** Payload untouched, so a consumer with no Concordat
 client still reads plain JSON and adoption is incremental.
 
 ```
 properties.type          = "acme.orders.OrderCreated"
 properties.content-type  = "application/json"
-headers["indenture-v"]         = "1"      # REQUIRED — envelope version
-headers["indenture-schema-id"] = "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4"   # REQUIRED
-headers["indenture-subject"]   = "acme.orders.OrderCreated"
-headers["indenture-version"]   = "3"
-headers["indenture-semver"]    = "2.0.0"  # optional
-headers["indenture-format"]    = "json" | "avro" | "protobuf"
+headers["concordat-v"]         = "1"      # REQUIRED — envelope version
+headers["concordat-schema-id"] = "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4"   # REQUIRED
+headers["concordat-subject"]   = "acme.orders.OrderCreated"
+headers["concordat-version"]   = "3"
+headers["concordat-semver"]    = "2.0.0"  # optional
+headers["concordat-format"]    = "json" | "avro" | "protobuf"
 ```
 
-`indenture-schema-id` is the **content-addressed ID (ADR-015)**: the canonical-form hash
+`concordat-schema-id` is the **content-addressed ID (ADR-015)**: the canonical-form hash
 truncated to 128 bits, lowercase hex. Identical schemas produce identical IDs across
-every environment and every Indenture install, so a message published in `staging` stays
-valid after the subject is promoted to `prod`. `indenture-v` exists so the envelope can
+every environment and every Concordat install, so a message published in `staging` stays
+valid after the subject is promoted to `prod`. `concordat-v` exists so the envelope can
 evolve — Azure's unversioned `avro/binary+{id}` scheme is a documented dead end for
 exactly this reason.
 
@@ -135,7 +135,7 @@ Three constraints force this exact shape:
 version byte plus a `secondaryDeserializer` hook and can evolve; Azure's unversioned
 `avro/binary+{id}` cannot, and is the cautionary example.
 
-- `content-type: application/json+indenture.v1.<hex-id>` — the Azure approach *with the
+- `content-type: application/json+concordat.v1.<hex-id>` — the Azure approach *with the
   version defect fixed*. No payload mutation, so the body stays readable by any tool.
   AMQP 0-9-1 `content_type` is a `shortstr` (255 bytes); a version token plus a 32-char
   hex id fits easily. **The better default of the two.**
@@ -144,7 +144,7 @@ version byte plus a `secondaryDeserializer` hook and can evolve; Azure's unversi
   brownfield consumer. The legacy `0x00 | <int32 BE>` layout is **read-only** support,
   for ingesting messages from a Kafka bridge.
 
-**CloudEvents interop (read-only, v1).** Two incompatible conventions exist and Indenture
+**CloudEvents interop (read-only, v1).** Two incompatible conventions exist and Concordat
 must read both: `cloudEvents_` / `cloudEvents:` (official CNCF, **AMQP 1.0 only**,
 `datacontenttype` mapping to `content-type` as the sole exception) and `ce-` (Knative's
 `eventing-rabbitmq` working draft, **AMQP 0-9-1**, shipping in real clusters, never
@@ -155,7 +155,7 @@ a credible post-v1 standardisation play.
 
 > **Verify empirically in M2:** whether custom headers survive dead-lettering, shovel,
 > federation and the STOMP/MQTT adapters. That sets the documented Mode A vs Mode B guidance.
-> **Also verify the AMQP 1.0 conversion itself** — that `indenture-*` headers surface as
+> **Also verify the AMQP 1.0 conversion itself** — that `concordat-*` headers surface as
 > application-properties rather than message-annotations to a 1.0 client. ADR-013's
 > "designed to survive 1.0 conversion" rests entirely on that behaviour and is otherwise
 > an untested assertion.
@@ -187,7 +187,7 @@ version, culture and public-key-token are always stripped.
 
 **How this resolves the publisher/consumer asymmetry — the key insight:**
 the resolver runs **only on the publish side**. The envelope then carries
-`indenture-subject` and `indenture-schema-id`, so a consumer never re-derives anything; it
+`concordat-subject` and `concordat-schema-id`, so a consumer never re-derives anything; it
 reads the subject off the message and validates against its `ConsumeBinding`. The
 `Contract` (§4) is what bridges the two naming worlds:
 
@@ -260,10 +260,10 @@ common complaint about Confluent is that "contexts" bolted this on late.
   > Confluent's `auto.register.schemas` is **client-side only with no server-side kill
   > switch** (open issue #2761). Combined with its Community edition having no
   > authorization at all, one misconfigured producer in any language permanently pollutes
-  > the registry. Indenture enforces this server-side: `prod` defaults to `CiOnly`.
+  > the registry. Concordat enforces this server-side: `prod` defaults to `CiOnly`.
 
 **Schema references.** `Reference = (name, subject, version)`. Resolution per format:
-JSON Schema `$ref` → `indenture://<env>/<subject>/<version>`; Protobuf `import` filename →
+JSON Schema `$ref` → `concordat://<env>/<subject>/<version>`; Protobuf `import` filename →
 subject; Avro named-type FQN → subject. Registration resolves references into a bundled
 canonical form *and* retains the edges. Cycle detection is required, and **compatibility
 must be evaluated transitively** — a breaking change inside a referenced schema breaks
@@ -319,7 +319,7 @@ Scopes: `subject:read|write|admin`, `contract:*`, `env:*`, `broker:*`, `org:admi
 granted to admin roles only; a non-admin membership carries `subject:read`. Every
 mutating subject/version endpoint — create subject, register version, approve/reject,
 patch, delete, promote — checks the scope server-side and returns `403` with
-`indentureCode: "insufficient_scope"`. This is the enforcement point; §9's UI gating is a
+`concordatCode: "insufficient_scope"`. This is the enforcement point; §9's UI gating is a
 presentation of it, not a substitute. Approve/reject (ADR-017) is admin-only for the same
 reason, which keeps the author of a breaking change from waving it through themselves
 once reviewers land in M7.
@@ -370,13 +370,13 @@ GET /v1/audit | POST /v1/api-keys | GET|PUT /v1/environments/{env}/notifications
 GET /health/live /health/ready /openapi/v1.json
 ```
 
-**Errors: RFC 9457 Problem Details + a stable string `indentureCode`** (not Confluent's
+**Errors: RFC 9457 Problem Details + a stable string `concordatCode`** (not Confluent's
 opaque numerics). The `breakingChanges[]` array with JSON-Pointer paths is the biggest
 usability win over Confluent, whose messages are notoriously hard to act on:
 
 ```json
-{ "type": "https://indenture.io/errors/incompatible-schema", "status": 409,
-  "indentureCode": "incompatible_schema", "subject": "acme.orders.OrderCreated",
+{ "type": "https://concordat.dev/errors/incompatible-schema", "status": 409,
+  "concordatCode": "incompatible_schema", "subject": "acme.orders.OrderCreated",
   "policy": "BACKWARD_TRANSITIVE",
   "breakingChanges": [{ "path": "#/properties/legacyId", "kind": "required_field_removed",
     "message": "Required field 'legacyId' removed; consumers on v1 will fail",
@@ -394,8 +394,8 @@ is normative, language-neutral and versioned with the API:
 | OpenAPI 3.1 | `docs/api/openapi.v1.json` (generated, committed) | the REST surface |
 | Envelope spec | §2 — a header table and prose, not a C# type | what goes on the wire |
 | Canonicalisation rules | §4, per format, deferring to each format's own spec | how a schema id is derived |
-| `indentureCode` catalogue | with the Problem Details shapes | every error a client must handle |
-| Conformance corpus | `tests/Indenture.Conformance` | required client *behaviour* |
+| `concordatCode` catalogue | with the Problem Details shapes | every error a client must handle |
+| Conformance corpus | `tests/Concordat.Conformance` | required client *behaviour* |
 
 **No endpoint, header, error code or shortcut is reserved for the .NET SDK.** Two
 concrete rules that follow, worth stating because they are the ones quietly violated
@@ -411,7 +411,7 @@ contract against the same fixtures rather than reverse-engineering C#.
 
 **Client tiers.** Tier 1 .NET — first only because it is where the server is written.
 Tier 2 **TypeScript/JavaScript, Python, Go, Java** (ADR-021): a generated REST client plus a
-hand-written cache and AMQP middleware. **`indenture` CLI** is the universal escape
+hand-written cache and AMQP middleware. **`concordat` CLI** is the universal escape
 hatch: one NativeAOT binary for win-x64/linux-x64/linux-arm64/osx-arm64, plus a Docker
 image and GitHub Action — a Python or Go shop needs zero .NET installed. (.NET is
 genuinely underserved here: Apicurio ships Java/TS/Python/Go and no .NET SDK; only Azure
@@ -421,10 +421,10 @@ and AWS Glue have first-party .NET, both cloud-locked.)
 
 | SDK | Packages | AMQP binding | JSON Schema validator |
 |---|---|---|---|
-| **TypeScript / JavaScript** | `@indenture/client` (isomorphic REST + cache) and `@indenture/amqp` (Node-only middleware) | `amqplib` | `ajv` |
-| **Python** (3.11+) | `indenture-client` | `pika` (sync) **and** `aio-pika` (async) | `jsonschema` |
-| **Go** | `indenture-go` | `rabbitmq/amqp091-go` | `santhosh-tekuri/jsonschema` |
-| **Java** (21 LTS) | `io.github.rafaeljcamara:indenture-client` | `com.rabbitmq:amqp-client` | `networknt/json-schema-validator` |
+| **TypeScript / JavaScript** | `@concordat/client` (isomorphic REST + cache) and `@concordat/amqp` (Node-only middleware) | `amqplib` | `ajv` |
+| **Python** (3.11+) | `concordat-client` | `pika` (sync) **and** `aio-pika` (async) | `jsonschema` |
+| **Go** | `concordat-go` | `rabbitmq/amqp091-go` | `santhosh-tekuri/jsonschema` |
+| **Java** (21 LTS) | `io.github.rafaeljcamara:concordat-client` | `com.rabbitmq:amqp-client` | `networknt/json-schema-validator` |
 
 Four things that fall out of the specific choices, each affecting the package layout:
 
@@ -446,12 +446,12 @@ Four things that fall out of the specific choices, each affecting the package la
   SDK reaches a smaller fraction of its language's estate than the other three do.
   Spring AMQP is therefore **first in line when adapters resume** (Appendix A).
 
-> **The real cross-language hazard: payload validation is not Indenture's code.** The
+> **The real cross-language hazard: payload validation is not Concordat's code.** The
 > compatibility engine is server-side and has one implementation, so its verdicts are
 > identical everywhere. **Payload validation is client-side and uses a different
 > third-party library in every language** — `ajv`, `jsonschema`, `santhosh-tekuri`, `networknt`,
 > and .NET's own. Draft coverage and edge-case behaviour differ between them, so the same
-> message can pass in one language and fail in another with no bug on Indenture's part.
+> message can pass in one language and fail in another with no bug on Concordat's part.
 > Mitigations, all required before the first Tier 2 SDK ships: **pin draft 2020-12** as
 > the only supported dialect; define the **interoperable keyword subset** and warn at
 > registration when a schema uses anything outside it; and carry a payload-validation
@@ -468,7 +468,7 @@ rolling restart means every instance has an empty cache simultaneously and stamp
 registry — which sits on the *deserialize* path, so a registry that buckles takes
 consumption down with it. Confluent Cloud caps Schema Registry at **75 reads/sec on
 every tier, Essentials and Advanced alike**, which is a low ceiling for exactly this
-burst. Indenture's mitigations: `POST /bootstrap` returns every schema reachable from a
+burst. Concordat's mitigations: `POST /bootstrap` returns every schema reachable from a
 client's contracts in **one** request instead of N; SDKs jitter their warm-up; and
 negative lookups are cached so a missing subject doesn't retry-storm.
 
@@ -488,7 +488,7 @@ five service buses sit on, so nothing learned here is wasted when they land.
 
 1. **A schema violation must never retry.** It is deterministic — redelivery cannot change
    the verdict, and under a default retry policy one bad message becomes dozens of failed
-   deliveries. Nack without requeue and route to a `indenture.quarantine` exchange with
+   deliveries. Nack without requeue and route to a `concordat.quarantine` exchange with
    failure-reason headers, so bad messages are inspectable rather than lost or looping.
 2. **The registry is never in the delivery path after warm-up** (§5). Unreachable ⇒ serve
    from cache; fail open or closed by configuration.
@@ -508,15 +508,15 @@ v8.5.x is the last Apache-2.0 release) out of the v1 dependency surface entirely
 
 ## 7. Contract checks — CLI and build-time
 
-**CI-time — the `indenture` CLI (the primary gate)**
+**CI-time — the `concordat` CLI (the primary gate)**
 ```
-indenture check   --env staging --dir ./contracts   # dry-run compat; exit 1 on break
-indenture push | promote | diff | impact | lint | export
-indenture infer   --dir ./samples --out ./contracts            # ADR-014
-indenture infer   --queue order-events --broker prod/eu-1 --max 500 --out ./contracts
+concordat check   --env staging --dir ./contracts   # dry-run compat; exit 1 on break
+concordat push | promote | diff | impact | lint | export
+concordat infer   --dir ./samples --out ./contracts            # ADR-014
+concordat infer   --queue order-events --broker prod/eu-1 --max 500 --out ./contracts
 ```
 
-**`indenture infer` (ADR-014)** reads sample payloads from files, or drains a queue
+**`concordat infer` (ADR-014)** reads sample payloads from files, or drains a queue
 **read-only** — `basic.get` with requeue, or an exclusive consumer that nacks with
 requeue; document that this can reorder a live queue and default to file mode. It infers
 JSON Schema from the corpus: types, required-by-presence across samples, `format`
@@ -524,12 +524,12 @@ detection (uuid, date-time, email), enums at low cardinality, nullability. Outpu
 **draft plus a confidence/ambiguity report for human review** — it never auto-registers.
 
 **Build/test-time NuGet packages**
-- **`Indenture.Client`** — HTTP + caching.
-- **`Indenture.Contracts`** — `[IndentureContract("acme.orders.OrderCreated")]` on C# records.
-- **`Indenture.Contracts.MSBuild`** — MSBuild task + Roslyn analyzer generating a schema
+- **`Concordat.Client`** — HTTP + caching.
+- **`Concordat.Contracts`** — `[ConcordatContract("acme.orders.OrderCreated")]` on C# records.
+- **`Concordat.Contracts.MSBuild`** — MSBuild task + Roslyn analyzer generating a schema
   from every attributed type at build time, diffing against checked-in `contracts/`,
   **erroring on drift**. The C# type is the source of truth; breaking it breaks the build.
-- **`Indenture.Contracts.Testing`** — `await Indenture.Assert.CompatibleAsync<OrderCreated>(env: "prod")`.
+- **`Concordat.Contracts.Testing`** — `await Concordat.Assert.CompatibleAsync<OrderCreated>(env: "prod")`.
 
 ### Compatibility semantics (ADR-016)
 
@@ -561,7 +561,7 @@ compatible under the defaults** — you hit `PROPERTY_ADDED_TO_OPEN_CONTENT_MODE
 content models fail, and the workaround teams actually ship is setting compatibility to
 `NONE` — a registry with its central value proposition switched off.
 
-Indenture's requirements, stated as acceptance criteria for M1:
+Concordat's requirements, stated as acceptance criteria for M1:
 - **Adding and removing an optional property MUST be fully compatible.** This is the
   single most common schema change; if it is blocked, the product is unusable.
 - **The content model is explicit subject config**, not inferred per-schema, so it cannot
@@ -573,29 +573,29 @@ Indenture's requirements, stated as acceptance criteria for M1:
   schema at all unless you opt in.
 
 Every finding carries an exact JSON-Pointer path. **This is where Confluent is weakest
-and where Indenture should be unambiguously better.**
+and where Concordat should be unambiguously better.**
 
 ---
 
 ## 8. Backend architecture (DDD + Clean Architecture)
 
 ```
-Indenture/
-  Indenture.slnx  Directory.Build.props  Directory.Packages.props  global.json
+Concordat/
+  Concordat.slnx  Directory.Build.props  Directory.Packages.props  global.json
   docs/adr/  docs/api/openapi.v1.json
   src/
-    core/      Indenture.Domain/  Indenture.Application/  Indenture.Infrastructure/
-    formats/   Indenture.Formats.Abstractions/ .Json/ .Avro/ .Protobuf/
-    hosts/     Indenture.Api/  Indenture.Migrator/
-    cloud/     Indenture.Cloud.Tenancy/  Indenture.Cloud.Billing/
-    clients/   Indenture.Client/  Indenture.Contracts{,.MSBuild,.Testing}/
-               Indenture.Messaging.RabbitMq/     # service-bus adapters deferred — Appendix A
-    tools/     Indenture.Cli/          # NativeAOT
+    core/      Concordat.Domain/  Concordat.Application/  Concordat.Infrastructure/
+    formats/   Concordat.Formats.Abstractions/ .Json/ .Avro/ .Protobuf/
+    hosts/     Concordat.Api/  Concordat.Migrator/
+    cloud/     Concordat.Cloud.Tenancy/  Concordat.Cloud.Billing/
+    clients/   Concordat.Client/  Concordat.Contracts{,.MSBuild,.Testing}/
+               Concordat.Messaging.RabbitMq/     # service-bus adapters deferred — Appendix A
+    tools/     Concordat.Cli/          # NativeAOT
   clients/     typescript/ python/ go/ java/          # ADR-021
   web/         # Angular
   deploy/      docker/ compose/ helm/
-  tests/       Indenture.Domain.Tests/ Indenture.Application.Tests/ Indenture.Formats.*.Tests/
-               Indenture.Api.IntegrationTests/ Indenture.Messaging.Tests/ Indenture.Conformance/
+  tests/       Concordat.Domain.Tests/ Concordat.Application.Tests/ Concordat.Formats.*.Tests/
+               Concordat.Api.IntegrationTests/ Concordat.Messaging.Tests/ Concordat.Conformance/
 ```
 
 **Dependency rule:** Domain ← Application ← Infrastructure/Api. Format projects depend
@@ -607,7 +607,7 @@ conflict with ADR-009. `Result<T>` for domain failures → Problem Details. Outb
 domain events → notifications and webhooks. **Tenancy is one code path:**
 `ITenantContext` from API key or session; self-hosted binds a fixed tenant, Cloud
 resolves per request; EF Core global query filters enforce isolation.
-`IndentureProfile.SelfHosted | Cloud` swaps `ITenantResolver`/`IBillingGate`/
+`ConcordatProfile.SelfHosted | Cloud` swaps `ITenantResolver`/`IBillingGate`/
 `IIdentityProvider` at the composition root — no `if (cloud)` scattered around.
 
 ---
@@ -645,7 +645,7 @@ analysis, audit, export — since hiding the contract from the people who have t
 it defeats the product.
 
 Mechanically: a single `canWriteSchemas` computed on the session SignalStore, derived
-from the scopes the API returns at login, consumed by a `*indIfScope` structural directive
+from the scopes the API returns at login, consumed by a `*cdIfScope` structural directive
 for affordances and a `scopeGuard` on the write routes. One source of truth, so a new
 write screen can't quietly ship ungated. A direct navigation to a write route by a
 non-admin redirects to the read view; a `403` from the API surfaces through the existing
@@ -682,10 +682,10 @@ cmdk, vaul, embla, input-otp — all installed, none used).
 ## 10. Deployment flavours
 
 **Self-hosted** — one image serving API + embedded SPA. `docker compose up` brings
-Indenture + Postgres + optional RabbitMQ. Helm chart. `INDENTURE__*` env vars. Auto-migrate on
+Concordat + Postgres + optional RabbitMQ. Helm chart. `CONCORDAT__*` env vars. Auto-migrate on
 startup (toggleable). Single implicit tenant, local accounts + optional OIDC.
 
-**Indenture Cloud** — same image, `INDENTURE__PROFILE=Cloud`. Multi-tenant, row-level
+**Concordat Cloud** — same image, `CONCORDAT__PROFILE=Cloud`. Multi-tenant, row-level
 isolation. Org signup, Google/GitHub SSO, SAML on the top tier. Stripe metered on
 subjects, versions/month, API requests, environments, seats. Free (1 env, 10 subjects) →
 Team → Business → Enterprise. Per ADR-009 everything is Apache-2.0, so Cloud competes on
@@ -700,10 +700,10 @@ managed upgrades, backups, HA, SLA and support.
 
 | M | Deliverable |
 |---|---|
-| **M0** | Solution skeleton, `Directory.*.props`, `global.json`, CI, ADRs 001–022. Name availability **done** — the project was renamed from Signet to Indenture (ADR-022); `indenture.io` still to buy. |
+| **M0** | Solution skeleton, `Directory.*.props`, `global.json`, CI, ADRs 001–022. Name availability **done** — the project was renamed from Signet to Concordat (ADR-022); `concordat.dev` still to buy. |
 | **M1** | Registry core, **JSON Schema only**: subjects, versions, canonicalisation, **content-addressed IDs**, **two-axis compatibility engine**, references, **gated `latest` pointer + registration policy**, REST API + `/bootstrap`, Postgres, OpenAPI |
-| **M2** | `Indenture.Client` + `Indenture.Messaging.RabbitMq` + `ISubjectResolver`; Testcontainers tests; **verify header survival** (§2) |
-| **M3** | `indenture` CLI incl. `infer` + GitHub Action + `Indenture.Contracts{,.MSBuild,.Testing}` |
+| **M2** | `Concordat.Client` + `Concordat.Messaging.RabbitMq` + `ISubjectResolver`; Testcontainers tests; **verify header survival** (§2) |
+| **M3** | `concordat` CLI incl. `infer` + GitHub Action + `Concordat.Contracts{,.MSBuild,.Testing}` |
 | **M4** | Angular app port |
 | **M5** | Avro + Protobuf formats |
 | **M6** | **Tier 2 SDKs** (ADR-021) — TypeScript/JavaScript → Python → Go → Java — plus the cross-language conformance suite running in every SDK's CI |
@@ -772,11 +772,11 @@ clients have already hardened.
 - **Reference tests** — transitive breakage: changing a referenced schema must fail its
   referrers; cycles must be rejected at registration.
 - **Header round-trip tests** — the `string` → `byte[]` decode holds on the
-  RabbitMQ.Client path, and no Indenture header collides with `MT-`, `NServiceBus.`,
+  RabbitMQ.Client path, and no Concordat header collides with `MT-`, `NServiceBus.`,
   `rbs2-`, `rabbitmq-` or `x-`. The collision check stays despite ADR-020: those headers
-  ride on messages Indenture reads today, and the namespace must still be clear when the
+  ride on messages Concordat reads today, and the namespace must still be clear when the
   adapters land.
-- **Cross-language conformance suite** (`tests/Indenture.Conformance`) — a language-neutral
+- **Cross-language conformance suite** (`tests/Concordat.Conformance`) — a language-neutral
   corpus of envelope fixtures, canonicalisation cases and expected verdicts, executed by
   every SDK's CI so the Python and .NET clients cannot silently diverge.
   **Includes a payload-validation corpus** (§5): documents that must accept and must
@@ -792,12 +792,12 @@ clients have already hardened.
   > the second SDK arrives only ratifies whatever .NET already did.
 - **Integration** — Testcontainers Postgres for the API; Testcontainers RabbitMQ for
   messaging (publish a conforming and a non-conforming message; assert the latter is
-  rejected into `indenture.quarantine` with reason headers).
+  rejected into `concordat.quarantine` with reason headers).
 - **Contract** — CI fails if generated OpenAPI drifts from the committed spec.
 - **E2E** — Playwright against the Angular app and a real API.
 - **Manual smoke** — `docker compose up`; create a subject in the UI; run a sample .NET
   producer publishing one valid and one invalid message; watch enforcement and the
-  quarantine queue; attempt a breaking version and confirm `indenture check` exits 1 with
+  quarantine queue; attempt a breaking version and confirm `concordat check` exits 1 with
   the offending JSON-Pointer path.
 
 ---
@@ -805,8 +805,8 @@ clients have already hardened.
 ## 13. Deliberately deferred — decide during implementation
 
 Recorded so nothing is silently dropped: registry HA and leader election, backup/restore
-procedure, API rate limiting, Indenture's own observability (metrics/traces it emits), SLO
-targets for the validate path, the versioning and deprecation policy for Indenture's own
+procedure, API rate limiting, Concordat's own observability (metrics/traces it emits), SLO
+targets for the validate path, the versioning and deprecation policy for Concordat's own
 REST API, and community scaffolding (CONTRIBUTING, code of conduct, issue templates,
 docs site).
 
@@ -854,7 +854,7 @@ publish hook, whether a throw blocks, consume hook, and raw AMQP property access
    NServiceBus burns ~24 attempts by default. Wolverine's serializer path goes straight
    to `MoveToErrorQueue`. → Ship explicit per-framework poison config.
 2. **MassTransit v9 is commercially licensed (Massient); v8.5.x is the last Apache-2.0
-   release**, and every interface Indenture touches is byte-identical between them. →
+   release**, and every interface Concordat touches is byte-identical between them. →
    **Target `MassTransit.Abstractions` 8.5.x**, which runs unchanged on v9. Matters given
    ADR-009. Deferring the adapters keeps this out of the v1 dependency surface.
 

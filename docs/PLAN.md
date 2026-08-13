@@ -1,4 +1,4 @@
-# Indenture — Delivery Plan
+# Concordat — Delivery Plan
 
 Work breakdown for the architecture in **[DESIGN.md](DESIGN.md)**. Every item traces to a
 decision or section there; where it does, the reference is given. This index changes
@@ -19,7 +19,7 @@ a plan edit.
 | [M6](plan/M6-sdks.md) | Tier 2 SDKs — TS/JS → Python → Go → Java | M5 |
 | [M7](plan/M7-governance.md) | Environments, brokers, governance | M1 |
 | [M8](plan/M8-identity.md) | Identity, RBAC, API keys | M7 |
-| [M9](plan/M9-cloud.md) | Indenture Cloud | M8 |
+| [M9](plan/M9-cloud.md) | Concordat Cloud | M8 |
 
 **Critical path: M0 → M1 → M2 → M3.** That sequence is the smallest genuinely useful
 product — register a JSON Schema, block a breaking change in CI, enforce it at runtime
@@ -53,7 +53,7 @@ Where the risk concentrates. If any of these is going badly, the milestone is go
 
 | Package | Why |
 |---|---|
-| [M0.1](plan/M0-foundations.md#m01-name-availability--blocking--done-2026-08-13) Name availability ✅ | **Done, and it paid for itself** — "Signet" collided with an active project publishing the same package names; renamed to Indenture (ADR-022) before a line of code existed |
+| [M0.1](plan/M0-foundations.md#m01-name-availability--blocking--done-2026-08-13) Name availability ✅ | **Done, and it paid for itself** — "Signet" collided with an active project publishing the same package names; renamed to Concordat (ADR-022) before a line of code existed |
 | [M1.2](plan/M1-registry-core.md#m12-canonicalisation-and-identity--adr-015) Canonicalisation | Get the hash envelope wrong and schemas collide across reference sets |
 | [M1.3](plan/M1-registry-core.md#m13-compatibility-engine--adr-016-design-7) Compatibility engine 🔴🔴 | The correctness heart. A wrong verdict blocks safe changes or waves breaking ones through |
 | [M1.7](plan/M1-registry-core.md#m17-conformance-corpus-v0--adr-019) Conformance corpus | Written late, it only ratifies whatever .NET already did |
@@ -73,9 +73,9 @@ Both are cheap now and expensive as retrofits:
 ## Not scheduled
 
 Deliberately deferred ([DESIGN §13](DESIGN.md#13-deliberately-deferred--decide-during-implementation)) — decide during implementation, not before:
-registry HA and leader election, backup/restore, API rate limiting, Indenture's own
+registry HA and leader election, backup/restore, API rate limiting, Concordat's own
 observability, SLO targets for the validate path, the versioning and deprecation policy
-for Indenture's own REST API, community scaffolding.
+for Concordat's own REST API, community scaffolding.
 
 Deferred with research preserved ([DESIGN Appendix A](DESIGN.md#appendix-a--framework-adapter-research-deferred-adr-020)): .NET service-bus adapters,
 Spring AMQP, Celery, NestJS microservices. **Spring AMQP outranks all of them** on estate
