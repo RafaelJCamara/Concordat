@@ -21,6 +21,55 @@ Scope is RabbitMQ.Client only (ADR-020). Service-bus adapters are [Appendix A](.
 
 ## M2.2 Envelope
 
+**Done 2026-08-13 · DESIGN §2 · ADR-010**
+
+`EnvelopeWriter` and `EnvelopeReader` live in the Domain and operate over a plain header
+dictionary, so the encoding is testable without a broker and shared by every transport
+adapter. 25 tests.
+
+### Reading has three outcomes, not two
+
+Read, **absent**, or malformed. "No envelope" is not a failure: Mode A exists so a consumer
+without a Concordat client still reads plain JSON, and treating an un-enveloped message as an
+error would break the incremental adoption ADR-010 is built around.
+
+### Four decisions that look fussy and are not
+
+- **Lookup is ordinal and case-sensitive.** An implementer reaching for HTTP-style header
+  canonicalisation would accept `Concordat-V` from one SDK and not another.
+- **Decoding is strict UTF-8.** `Encoding.UTF8` substitutes U+FFFD, which would turn a
+  corrupted schema id into a valid-looking wrong one. Same trap in Go, where `string(bytes)`
+  does the same; Python is the exception in erroring by default.
+- **Values are not trimmed.** `SubjectName.Create` trims — right for a form field, wrong on
+  the wire, because `"  acme.A  "` and `"acme.A"` would become two spellings of one value and
+  an SDK that does not trim would disagree with one that does. A padded subject warns and is
+  ignored.
+- **A present-but-empty header is malformed, not absent.** So the writer omits absent
+  optionals entirely rather than writing empty strings, or it would quarantine its own
+  perfectly good messages.
+
+### The warn/reject split
+
+Rejects: a malformed or missing schema id, an unsupported envelope version, a non-string
+header value, invalid UTF-8 on a required header, an unknown format token. Warns: a
+subject/`properties.type` disagreement, an unparseable ordinal, a bad semver label, an
+unreadable advisory header.
+
+The schema id pins the exact schema, so an advisory field tells us nothing we do not already
+know. Quarantining a structurally valid payload because someone mistyped a version label
+would be a self-inflicted outage.
+
+An unsupported envelope **version** stops interpretation entirely rather than reading what it
+can: a v2 producer may have redefined the other headers, and guessing is worse than declining.
+
+### Two defects the tests caught
+
+The reader trimmed subjects, via `SubjectName.Create` — exactly what the research warned
+against. And invalid UTF-8 on an advisory header fell through silently, making an unreadable
+subject indistinguishable from an absent one.
+
+## M2.2 notes (original scope)
+
 **DESIGN §2 · ADR-010**
 
 - [ ] Mode A writer/reader — `concordat-v`, `concordat-schema-id`, `concordat-subject`, `concordat-version`, `concordat-semver`, `concordat-format`
