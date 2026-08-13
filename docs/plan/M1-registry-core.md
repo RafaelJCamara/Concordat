@@ -7,17 +7,69 @@ engine is independently reviewable without the API on top.
 
 ---
 
-## M1.1 Domain model (DESIGN §4)
+## M1.1 Domain model — **DONE 2026-08-13**
 
-- [ ] `SchemaId` value object — content-addressed, 128-bit, lowercase hex
-- [ ] `Schema` aggregate — immutable; `Format`, `Body` (canonical text), `References[]`
-- [ ] `Subject` aggregate root — `SubjectName`, `Format`, `CompatibilityPolicy`, `Owner`, `Lifecycle`, `Versions[]`
-- [ ] `SchemaVersion` entity — `Ordinal`, `SemanticVersion?`, `SchemaId`, `Changelog`, `RegisteredAt/By`, `Deprecated`, `Status`
-- [ ] `LatestPointer` — explicit and gated, **not** "highest ordinal" (ADR-017)
-- [ ] `CompatibilityPolicy` — the two-axis pair (ADR-016)
-- [ ] `RegistrationPolicy` — `Open | CiOnly | Closed`, per environment
-- [ ] Invariants: one format across all versions; ordinals contiguous and monotonic; new version satisfies policy
-- [ ] Domain unit tests
+- [x] `SchemaId` — 32 lowercase hex, validated; `FromTrusted` escape hatch for M1.2/M1.5
+- [x] `Schema` — immutable; references name-unique and canonically ordered so M1.2's hash is stable
+- [x] `Subject` aggregate root, owning every invariant below
+- [x] `SchemaVersion` entity — ordinal, optional semver, status, decision audit
+- [x] `LatestPointer` — explicit and gated, **not** "highest ordinal" (ADR-017)
+- [x] `CompatibilityPolicy` — the two-axis pair, with the `Wire ⊂ WireJson ⊂ Source` lattice
+- [x] `RegistrationPolicy` — `Open | CiOnly | Closed`
+- [x] Invariants: one format per subject; ordinals contiguous and monotonic from 1; approval gate; semver verification; soft delete
+- [x] 78 unit tests — build 0 warnings, `dotnet format` clean
+
+### Decisions taken during implementation
+
+- **`VersionStatus` gained `Rejected`.** Rejection had nowhere to record its outcome, and a
+  declined proposal left as `AwaitingApproval` is ADR-017's graveyard. DESIGN §4 amended.
+- **`Result<T>` lives in `Concordat.Domain.Results`**, not Application — Domain must return it
+  and cannot reference upward. DESIGN §8 amended rather than deviating silently.
+- **`Subject.CompatibilityPolicy` is nullable**, meaning "inherit the environment default".
+  This one cannot be retrofitted: copying the default at creation would permanently destroy
+  the distinction between *configured* and *inheriting*, with no data to reconstruct it from.
+- **`SubjectId` and `EnvironmentId` added** though environments are M7, for the same reason
+  M1.5 wires `ITenantContext` early — adding a required FK to a populated table later is worse.
+- **Registration is idempotent at the tip.** Re-registering the current schema returns the
+  existing version and allocates no ordinal; re-registering an *older* schema is a revert and
+  does. A retried publish must not inflate the history.
+- **A `Deprecated` subject still accepts versions; a `Retired` one does not.** Deprecated is
+  advisory — existing producers still need to patch their contract. Retired is the soft delete
+  and must be a wall or it means nothing.
+- **Approval never regresses `LatestPointer`.** If a compatible v3 registered while breaking v2
+  sat pending, approving v2 marks it active but leaves latest at 3.
+- **Pre-release and build metadata are rejected** with a dedicated code. A pipeline emitting
+  `2.0.0-rc.1` cannot label a version until this lands — a known gap, not a bug.
+
+### Verification-caught defects
+
+Two real bugs, both found by tests rather than review:
+
+- `IReadOnlyList<T>` backed by `List<T>` **can be cast to `ICollection<T>` and mutated**,
+  bypassing every ordinal invariant. Both `Subject.Versions` and `Schema.References` now wrap.
+- Scanning for `-` anywhere to detect a pre-release misreported `-1.0.0` as
+  "pre-release unsupported" when it is simply malformed, sending the user to the wrong place.
+
+### Known hole, closable only in M1.6
+
+The aggregate **trusts `CompatibilityVerdict`**. It narrows the risk — the verdict carries the
+policy it was evaluated under, and a subject with an explicit override rejects a mismatched
+one — but a handler passing `Compatible` for a genuinely breaking change still moves the
+pointer. M1.6 must guarantee exactly one handler constructs a verdict and that it sources it
+from the engine, with a recording-fake test asserting the handler cannot complete without
+invoking the checker.
+
+### Needs a product decision before M1.6
+
+- **The default `CompatibilityPolicy` pair for new environments.** DESIGN §7 gives the who-axis
+  default (`Backward`) and is silent on the surface. The domain deliberately ships no default.
+  Suggested `Backward × WireJson`: `Backward × Source` would block `int32 → int64`, the exact
+  change ADR-016 celebrates permitting, while `Backward × Wire` is a no-op for JSON Schema and
+  becomes surprisingly permissive once Avro and Protobuf land.
+- **Is the `Schema` table tenant-scoped?** Recommend global and deduplicated, keyed by
+  `SchemaId` alone, preserving ADR-015's "same content ⇒ same id everywhere" at the storage
+  layer. Cost: M1.6 must authorise `GET /schemas/{id}` by reachability from a subject in the
+  caller's tenant. Decide before M1.5 writes a migration.
 
 ## M1.2 Canonicalisation and identity 🔴 (ADR-015)
 

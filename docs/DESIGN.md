@@ -237,7 +237,11 @@ common complaint about Confluent is that "contexts" bolted this on late.
   *Invariants:* one format across all versions; a new version satisfies the policy;
   ordinals contiguous and monotonic.
   - **`SchemaVersion`** — `Ordinal`, `SemanticVersion` (optional), `SchemaId`,
-    `Changelog`, `RegisteredAt/By`, `Deprecated`, **`Status`** (`Active | AwaitingApproval`).
+    `Changelog`, `RegisteredAt/By`, `Deprecated`, **`Status`**
+    (`Active | AwaitingApproval | Rejected`).
+    > **`Rejected` added during M1.1.** Rejection needs somewhere to record its outcome, and
+    > leaving a declined proposal as `AwaitingApproval` forever is precisely the graveyard
+    > ADR-017 warns about. The value is wire-visible and therefore normative under ADR-019.
 - **`LatestPointer`** (ADR-017) — the `latest` label is an explicit, gated pointer on the
   Subject, not "whatever has the highest ordinal". A breaking registration succeeds with
   `Status = AwaitingApproval` and does **not** advance it.
@@ -606,7 +610,10 @@ only on `Formats.Abstractions` + their parser lib; Domain references interfaces 
 
 **Patterns.** CQRS via a hand-rolled dispatcher (`ICommandHandler<,>`/`IQueryHandler<,>`
 with DI scanning) — deliberately **not MediatR**, now commercially licensed and in
-conflict with ADR-009. `Result<T>` for domain failures → Problem Details. Outbox for
+conflict with ADR-009. `Result<T>` for domain failures → Problem Details — **declared in
+`Concordat.Domain.Results`, not Application**: the domain must return it and cannot reference
+anything above itself, so the only alternative is a per-operation outcome type that
+Application immediately remaps. Outbox for
 domain events → notifications and webhooks. **Tenancy is one code path:**
 `ITenantContext` from API key or session; self-hosted binds a fixed tenant, Cloud
 resolves per request; EF Core global query filters enforce isolation.
