@@ -54,6 +54,17 @@ public sealed record Reference(string Name, SubjectName Subject, int Version)
 /// </remarks>
 public sealed class Schema
 {
+    /// <summary>
+    /// The largest permitted schema body, in UTF-8 bytes.
+    /// </summary>
+    /// <remarks>
+    /// A documented ceiling is required: without one, a registry accumulates schemas large
+    /// enough to make every read expensive, and the failure arrives as a timeout rather than a
+    /// clear rejection. 512 KiB is generous against comparable products — AWS Glue caps at
+    /// 170 KB and Redpanda warns above 128 KB.
+    /// </remarks>
+    public const int MaxBodyBytes = 512 * 1024;
+
     private readonly List<Reference> _references;
 
     private Schema(SchemaId id, SchemaFormat format, string body, List<Reference> references)
@@ -105,6 +116,14 @@ public sealed class Schema
         {
             return Result<Schema>.Failure(
                 ConcordatCodes.SchemaBodyEmpty, "A schema body is required.");
+        }
+
+        var bytes = System.Text.Encoding.UTF8.GetByteCount(body);
+        if (bytes > MaxBodyBytes)
+        {
+            return Result<Schema>.Failure(
+                ConcordatCodes.SchemaTooLarge,
+                $"A schema body may be at most {MaxBodyBytes} bytes; got {bytes}.");
         }
 
         // Copied before validation: an IEnumerable supplied by a caller could yield different

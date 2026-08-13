@@ -28,6 +28,12 @@ public static class ConcordatCodes
     /// <summary>A schema body was empty or whitespace.</summary>
     public const string SchemaBodyEmpty = "schema_body_empty";
 
+    /// <summary>A schema body exceeded the documented size ceiling.</summary>
+    public const string SchemaTooLarge = "schema_too_large";
+
+    /// <summary>A schema body was not well-formed in its declared format.</summary>
+    public const string SchemaMalformed = "schema_malformed";
+
     /// <summary>A semantic version label was not <c>MAJOR.MINOR.PATCH</c>.</summary>
     public const string SemverInvalid = "semver_invalid";
 

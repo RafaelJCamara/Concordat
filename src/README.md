@@ -24,14 +24,22 @@ carries empty projects nobody builds.
 ## The dependency rule
 
 ```
-Domain  <-  Application  <-  Infrastructure
-                         <-  Api
+Domain  <-  Application            <-  Infrastructure
+        <-  Formats.Abstractions   <-  Api
+                ^
+                |
+            Formats.Json
 ```
 
 Domain references **nothing** — not Application, not Infrastructure, not a NuGet package
 beyond the BCL. Application depends on Domain and on `Formats.Abstractions`, never on a
 concrete format. Concrete formats are wired at the composition root in `Api`.
 
-This is enforced only by review today. If it starts drifting, add
-[NetArchTest](https://github.com/BenMorris/NetArchTest) assertions to
-`Concordat.Domain.Tests` rather than relying on discipline.
+`Formats.Abstractions` references Domain (added in M1.2): the format layer speaks in
+`SchemaId`, `Reference` and `SchemaFormat`, and duplicating those as a parallel type set
+would be worse than the dependency. Domain remains the root and the graph stays acyclic.
+
+`DependencyRuleTests` asserts the Domain half of this as a build failure. The rest is still
+review-enforced; if it drifts, add
+[NetArchTest](https://github.com/BenMorris/NetArchTest) assertions rather than relying on
+discipline.

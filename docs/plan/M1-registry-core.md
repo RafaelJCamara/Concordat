@@ -68,14 +68,59 @@ invoking the checker.
   [ADR-015](../adr/015-content-addressed-ids.md). Carries an authorisation obligation into
   M1.6 — see below.
 
-## M1.2 Canonicalisation and identity 🔴 (ADR-015)
+## M1.2 Canonicalisation and identity 🔴 — **DONE 2026-08-13**
 
-- [ ] JSON Schema canonical form — key-sorted, whitespace-normalised, `$id` resolved
-- [ ] SHA-256 of canonical form, truncated to 128 bits
-- [ ] **Hash covers body + references + metadata**, not body alone
-- [ ] Unique constraint on schema id → registration idempotent, no single-writer counter
-- [ ] Size ceiling with a documented limit → `schema_too_large`
-- [ ] Golden tests: whitespace / key order / `$id` form variants collapse to one id; differing reference sets produce **different** ids
+- [x] JSON Schema canonical form — key-sorted, whitespace-normalised, escaping normalised
+- [x] SHA-256 of the preimage, truncated to 128 bits, lowercase hex
+- [x] **Hash covers format + canonical body + references**, not body alone
+- [x] Size ceiling — 512 KiB of UTF-8, enforced in `Schema.Create` → `schema_too_large`
+- [x] Golden tests: whitespace and key-order variants collapse to one id; differing reference sets produce **different** ids
+- [ ] Unique constraint on schema id → **M1.5**, it is a database constraint
+
+36 tests in `Concordat.Formats.Json.Tests`; 118 across the solution.
+
+### The preimage is itself normative
+
+The hash input is not the body. It is a length-prefixed, version-tagged framing:
+
+```
+concordat-schema-id/v1
+format:json
+body:<utf8-bytes>:<canonical body>
+refs:<count>
+ref-name:<utf8-bytes>:<name>
+ref-subject:<utf8-bytes>:<subject>
+ref-version:<n>
+```
+
+Two properties this buys, both tested. **Length prefixes remove ambiguity**: without them a
+reference named `a:b` and a pair named `a` and `b` could serialise to identical bytes.
+**The version tag makes the derivation evolvable** — changing it invalidates every stored id
+in every installation, so it needs a bump plus a migration, not a quiet edit. Azure's
+unversioned scheme is the cautionary example (ADR-010).
+
+`SchemaIdComputer.BuildPreimage` is public so the M1.7 corpus can pin the bytes directly, and
+one test pins a golden id so any accidental change to the derivation fails loudly.
+
+### Two deliberate deviations
+
+- **Number literals are preserved verbatim**, so `1.0` and `1` yield different ids. RFC 8785
+  routes numbers through an ECMAScript double, which loses precision on large integers and
+  would silently corrupt a `maximum` or `multipleOf`. A missed deduplication is the safer
+  failure, and raw preservation is markedly easier to reimplement identically in Python, Go
+  and Java — which ADR-019 requires.
+- **Duplicate object keys are rejected** rather than resolved. Parsers disagree on which value
+  wins, so such a document has no single meaning and must not get an id at all.
+
+### Deferred to M1.4: `$id` and `$ref` normalisation
+
+ADR-015 lists "`$id` resolved" as part of the canonical form; it is **not implemented**.
+Normalising `$id` without also resolving the `$ref` values that point at it is incoherent —
+it changes the base a reference resolves against while leaving the reference alone. It
+belongs with M1.4's reference work.
+
+Consequence until then: two documents differing only in the spelling of an equivalent `$id`
+URI get different ids. A missed deduplication, not a correctness bug.
 
 ## M1.3 Compatibility engine 🔴🔴 (ADR-016, DESIGN §7)
 
@@ -98,6 +143,10 @@ invoking the checker.
 ## M1.4 Schema references
 
 - [ ] `Reference = (name, subject, version)`; `concordat://<env>/<subject>/<version>` resolution
+- [ ] **`$id` and `$ref` normalisation, deferred from M1.2** — ADR-015 requires "`$id`
+      resolved"; it lands here because normalising `$id` without resolving the `$ref` values
+      pointing at it would change the base a reference resolves against. Changing the
+      canonical form after M1.2 means bumping the preimage version and migrating stored ids
 - [ ] Registration resolves into a bundled canonical form **and** retains the edges
 - [ ] Cycle detection, rejected at registration
 - [ ] Transitive compatibility — a referenced subject's new version re-checks every referrer
