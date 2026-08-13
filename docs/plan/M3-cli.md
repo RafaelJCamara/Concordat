@@ -2,18 +2,18 @@
 
 **Depends on:** [M1](M1-registry-core.md) (M2 for runtime bits) · **Design refs:** [§7](../DESIGN.md#7-contract-checks--cli-and-build-time), decisions 005, 014
 
-Last milestone on the critical path. With M3 done, Signet is genuinely useful.
+Last milestone on the critical path. With M3 done, Indenture is genuinely useful.
 
 ---
 
-## M3.1 `signet` CLI
+## M3.1 `indenture` CLI
 
 - [ ] `check --env <env> --dir ./contracts` — dry-run compatibility, **exit 1 on break**, offending JSON-Pointer path in output
 - [ ] `push`, `promote`, `diff`, `impact`, `lint`, `export`
 - [ ] `--json` output mode for scripting
 - [ ] Documented exit codes
 
-## M3.2 `signet infer` (ADR-014)
+## M3.2 `indenture infer` (ADR-014)
 
 - [ ] File mode — infer from a corpus of sample payloads (**the default**)
 - [ ] Queue mode — read-only drain via `basic.get` with requeue, or an exclusive consumer that nacks with requeue
@@ -30,9 +30,9 @@ Last milestone on the critical path. With M3 done, Signet is genuinely useful.
 
 ## M3.4 Build-time packages
 
-- [ ] `Signet.Contracts` — `[SignetContract("acme.orders.OrderCreated")]`
-- [ ] `Signet.Contracts.MSBuild` — MSBuild task + Roslyn analyzer; generate a schema per attributed type, diff against checked-in `contracts/`, **error on drift**
-- [ ] `Signet.Contracts.Testing` — `await Signet.Assert.CompatibleAsync<OrderCreated>(env: "prod")`
+- [ ] `Indenture.Contracts` — `[IndentureContract("acme.orders.OrderCreated")]`
+- [ ] `Indenture.Contracts.MSBuild` — MSBuild task + Roslyn analyzer; generate a schema per attributed type, diff against checked-in `contracts/`, **error on drift**
+- [ ] `Indenture.Contracts.Testing` — `await Indenture.Assert.CompatibleAsync<OrderCreated>(env: "prod")`
 
 ---
 

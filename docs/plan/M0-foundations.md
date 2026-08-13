@@ -4,22 +4,43 @@
 
 ---
 
-## M0.1 Name availability 🔴 **blocking, do first**
+## M0.1 Name availability 🔴 **blocking — DONE 2026-08-13**
 
-- [ ] NuGet: `Signet`, `Signet.Client`, `Signet.Contracts`
-- [ ] npm: the `@signet` scope
-- [ ] PyPI: `signet-client`
-- [ ] Go module path
-- [ ] Maven groupId `dev.signet`
-- [ ] Domain(s)
-- [ ] If any are taken, decide branding **now** — renaming after M1 touches every artifact
+**Outcome: the project was renamed from Signet to Indenture** (ADR-022). This package did
+its job — it found a blocker on day one instead of during M6.
 
-> ADR-021 makes all five registries load-bearing. This is an afternoon of work that
-> invalidates weeks if skipped.
+- [x] NuGet: `indenture`, `indenture.client`, `indenture.contracts` — all free
+- [x] PyPI: `indenture`, `indenture-client` — free
+- [x] npm: `indenture` unscoped **and** the `@indenture` scope — free
+- [x] Go module path — `github.com/RafaelJCamara/…`, owned
+- [x] Maven groupId `io.github.rafaeljcamara` — needs no domain; Maven Central accepts it for GitHub projects
+- [x] Domains — `indenture.io`, `indenture.sh`, `getindenture.dev` free (`indenture.dev` is taken)
+- [x] Branding decided before any code was written
+
+**Why Signet failed**, recorded so nobody proposes it again:
+
+| Name | Status |
+|---|---|
+| NuGet `Signet.Client` | **taken** — v0.4.0, *"C# client for signet, generated from bytepunx/signet-proto"* |
+| PyPI `signet-client` | **taken** — v0.3.0, same project, uploaded 2026-08-08 |
+| NuGet `signet` | taken by **SigNET** (7,452 downloads; NuGet ids are case-insensitive) |
+| npm `signet` / PyPI `signet` | taken |
+| `signet.dev` | registered to a domain reseller |
+
+An *active* project was publishing the exact two package names ADR-021 depends on, in the
+same registries, for the same polyglot-client shape.
+
+### Remaining — availability is not reservation
+
+Free today, claimed by someone else tomorrow. These are cheap and worth doing before M1:
+
+- [ ] Buy `indenture.io` (Problem Details `type` URIs point at it — see DESIGN §5)
+- [ ] Create the `@indenture` npm org
+- [ ] Note that NuGet/PyPI/Maven ids are only claimed on first publish (M2, M3, M6)
 
 ## M0.2 Repository skeleton
 
-- [ ] `Signet.slnx`, `global.json` pinning .NET SDK 10 (`net10.0`)
+- [ ] `Indenture.slnx`, `global.json` pinning .NET SDK 10 (`net10.0`)
 - [ ] `Directory.Build.props` — shared TFM, nullable, warnings-as-errors, deterministic builds
 - [ ] `Directory.Packages.props` — central package management
 - [ ] `.editorconfig`, analyzer ruleset
@@ -35,7 +56,7 @@
 ## M0.4 ADRs
 
 - [ ] ADR template
-- [ ] Expand decisions 001–021 from the DESIGN.md table into `docs/adr/`, one file each
+- [ ] Expand decisions 001–022 from the DESIGN.md table into `docs/adr/`, one file each
 
 ---
 

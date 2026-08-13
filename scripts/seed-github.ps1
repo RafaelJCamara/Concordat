@@ -49,7 +49,7 @@ $labels = @(
     @{ Name = 'area:infra';      Color = '6e7781'; Desc = 'Build, CI, repo plumbing' }
     @{ Name = 'area:registry';   Color = '0969da'; Desc = 'Registry core: domain, compatibility, API' }
     @{ Name = 'area:client';     Color = '1f883d'; Desc = '.NET client and RabbitMQ middleware' }
-    @{ Name = 'area:cli';        Color = '8250df'; Desc = 'signet CLI and CI gate' }
+    @{ Name = 'area:cli';        Color = '8250df'; Desc = 'indenture CLI and CI gate' }
     @{ Name = 'area:web';        Color = 'bf3989'; Desc = 'Angular web app' }
     @{ Name = 'area:formats';    Color = 'bc4c00'; Desc = 'JSON Schema, Avro, Protobuf' }
     @{ Name = 'area:sdk';        Color = '0e8a16'; Desc = 'Tier 2 polyglot SDKs' }
@@ -82,9 +82,9 @@ $milestones = @(
     @{ Key = 'M1'; Title = 'M1 - Registry core (JSON Schema only)'
        Desc = 'Domain model, content-addressed identity, two-axis compatibility engine, references, REST API, conformance corpus. Largest milestone. Exit: register a schema, get a correct two-axis verdict with JSON-Pointer paths, breaking change gated at AwaitingApproval. docs/plan/M1-registry-core.md' }
     @{ Key = 'M2'; Title = 'M2 - .NET client + RabbitMQ.Client middleware'
-       Desc = 'Signet.Client with caching, the Signet envelope, publish/consume middleware, quarantine. Exit: an invalid message is rejected to quarantine and not retried; the registry can be killed after warm-up without affecting delivery. docs/plan/M2-dotnet-client.md' }
+       Desc = 'Indenture.Client with caching, the Indenture envelope, publish/consume middleware, quarantine. Exit: an invalid message is rejected to quarantine and not retried; the registry can be killed after warm-up without affecting delivery. docs/plan/M2-dotnet-client.md' }
     @{ Key = 'M3'; Title = 'M3 - CLI, CI gate, build-time packages'
-       Desc = 'signet CLI including infer, NativeAOT binaries, GitHub Action, MSBuild/Roslyn contract packages. Exit: a breaking change to a C# record fails the build and CI, naming the JSON-Pointer path. docs/plan/M3-cli.md' }
+       Desc = 'indenture CLI including infer, NativeAOT binaries, GitHub Action, MSBuild/Roslyn contract packages. Exit: a breaking change to a C# record fails the build and CI, naming the JSON-Pointer path. docs/plan/M3-cli.md' }
     @{ Key = 'M4'; Title = 'M4 - Angular web app'
        Desc = 'Angular 22 + Spartan UI port of the React prototype, with the admin-only write gate built from day one. Exit: create a subject, register a version, view diff and impact, approve a breaking change - entirely in the UI. docs/plan/M4-web-app.md' }
     @{ Key = 'M5'; Title = 'M5 - Avro + Protobuf'
@@ -95,7 +95,7 @@ $milestones = @(
        Desc = 'Environments, encrypted broker credentials, contracts, impact analysis, promotion, audit, notifications. Exit: registering in staging reports exactly which consumers break and can be promoted with a fresh check. docs/plan/M7-governance.md' }
     @{ Key = 'M8'; Title = 'M8 - Identity, RBAC, API keys'
        Desc = 'Tenants, users, roles, hashed API keys, and server-side enforcement of admin-only schema writes. Exit: a non-admin can browse everything and change nothing, and that holds against curl. docs/plan/M8-identity.md' }
-    @{ Key = 'M9'; Title = 'M9 - Signet Cloud'
+    @{ Key = 'M9'; Title = 'M9 - Indenture Cloud'
        Desc = 'Multi-tenancy, SSO, Stripe metering, Helm parity. Exit: two tenants on one deployment cannot see each other subjects, proven by test, and metered usage reaches Stripe. docs/plan/M9-cloud.md' }
 )
 
@@ -130,17 +130,17 @@ $issues = @(
     New-Issue 'M0.1' 'M0' 'Name availability' @('area:infra','critical-path','heavy','blocking') @'
 **Blocking. Do this before anything else.** ADR-021 makes all five package registries load-bearing; renaming after M1 touches every artifact.
 
-- [ ] NuGet: `Signet`, `Signet.Client`, `Signet.Contracts`
-- [ ] npm: the `@signet` scope
-- [ ] PyPI: `signet-client`
+- [ ] NuGet: `Indenture`, `Indenture.Client`, `Indenture.Contracts`
+- [ ] npm: the `@indenture` scope
+- [ ] PyPI: `indenture-client`
 - [ ] Go module path
-- [ ] Maven groupId `dev.signet`
+- [ ] Maven groupId `io.github.rafaeljcamara`
 - [ ] Domain(s)
 - [ ] If any are taken, decide branding **now**
 '@
 
     New-Issue 'M0.2' 'M0' 'Repository skeleton' @('area:infra','critical-path') @'
-- [ ] `Signet.slnx`, `global.json` pinning .NET SDK 10 (`net10.0`)
+- [ ] `Indenture.slnx`, `global.json` pinning .NET SDK 10 (`net10.0`)
 - [ ] `Directory.Build.props` - shared TFM, nullable, warnings-as-errors, deterministic builds
 - [ ] `Directory.Packages.props` - central package management
 - [ ] `.editorconfig`, analyzer ruleset
@@ -202,7 +202,7 @@ ADR-015. Get the hash envelope wrong and schemas with different reference sets c
 '@
 
     New-Issue 'M1.4' 'M1' 'Schema references' @('area:registry','critical-path') @'
-- [ ] `Reference = (name, subject, version)`; `signet://<env>/<subject>/<version>` resolution
+- [ ] `Reference = (name, subject, version)`; `indenture://<env>/<subject>/<version>` resolution
 - [ ] Registration resolves into a bundled canonical form **and** retains the edges
 - [ ] Cycle detection, rejected at registration
 - [ ] Transitive compatibility - a referenced subject new version re-checks every referrer
@@ -213,7 +213,7 @@ ADR-015. Get the hash envelope wrong and schemas with different reference sets c
 `ITenantContext` and the global query filters are wired now, with a single implicit tenant, so M9 multi-tenancy is a config swap rather than surgery.
 
 - [ ] EF Core model + PostgreSQL provider (ADR-007)
-- [ ] Migrations; `Signet.Migrator` host; auto-migrate on startup, toggleable
+- [ ] Migrations; `Indenture.Migrator` host; auto-migrate on startup, toggleable
 - [ ] Unique constraint backing M1.2 idempotency
 - [ ] `ITenantContext` + EF global query filters
 - [ ] Deletion semantics: schemas never deleted; subjects soft-delete to `Retired`; hard delete requires no registered consumers + force flag + audit entry
@@ -233,7 +233,7 @@ DESIGN §5.
 - [ ] `POST .../compatibility` dry run - never writes
 - [ ] `GET|PUT .../compatibility-policy`; `GET .../versions/{a}/diff/{b}`
 - [ ] `POST /environments/{env}/bootstrap` - every schema a client needs in **one** request
-- [ ] **RFC 9457 Problem Details + stable string `signetCode`**; catalogue documented
+- [ ] **RFC 9457 Problem Details + stable string `indentureCode`**; catalogue documented
 - [ ] Negative-lookup caching so a missing subject cannot retry-storm
 - [ ] `/health/live`, `/health/ready`
 - [ ] OpenAPI 3.1 generated and committed to `docs/api/openapi.v1.json`
@@ -243,7 +243,7 @@ DESIGN §5.
     New-Issue 'M1.7' 'M1' 'Conformance corpus v0' @('area:registry','critical-path','heavy') @'
 ADR-019. Normative from day one - a corpus written later only ratifies whatever .NET already did.
 
-- [ ] `tests/Signet.Conformance` layout and fixture format, language-neutral
+- [ ] `tests/Indenture.Conformance` layout and fixture format, language-neutral
 - [ ] Canonicalisation cases
 - [ ] Compatibility verdict cases
 - [ ] Payload-validation corpus - documents that must accept / must reject
@@ -251,15 +251,15 @@ ADR-019. Normative from day one - a corpus written later only ratifies whatever 
 '@
 
     New-Issue 'M1.8' 'M1' 'Deployment (minimum)' @('area:infra','critical-path') @'
-- [ ] `Signet.Api` container image
-- [ ] `docker compose up` -> Signet + PostgreSQL
-- [ ] `SIGNET__*` configuration binding
+- [ ] `Indenture.Api` container image
+- [ ] `docker compose up` -> Indenture + PostgreSQL
+- [ ] `INDENTURE__*` configuration binding
 '@
 
     # ------------------------------------------------------------------ M2
-    New-Issue 'M2.1' 'M2' 'Signet.Client' @('area:client','critical-path') @'
+    New-Issue 'M2.1' 'M2' 'Indenture.Client' @('area:client','critical-path') @'
 - [ ] Typed HTTP client over the `/v1` surface; API-key auth
-- [ ] Problem Details -> typed exceptions, `signetCode` preserved
+- [ ] Problem Details -> typed exceptions, `indentureCode` preserved
 - [ ] Cache: `schema-id -> schema` and `subject+version -> schema-id` **immutable, cached forever**
 - [ ] Cache: `subject -> latest` 30s TTL; contract resolution 60s TTL; negative lookups cached
 - [ ] Warm-up via `POST /bootstrap`, **with jitter** - a fleet-wide rolling restart must not stampede
@@ -270,10 +270,10 @@ ADR-019. Normative from day one - a corpus written later only ratifies whatever 
     New-Issue 'M2.2' 'M2' 'Envelope' @('area:client','critical-path') @'
 DESIGN §2, ADR-010.
 
-- [ ] Mode A writer/reader - `signet-v`, `signet-schema-id`, `signet-subject`, `signet-version`, `signet-semver`, `signet-format`
+- [ ] Mode A writer/reader - `indenture-v`, `indenture-schema-id`, `indenture-subject`, `indenture-version`, `indenture-semver`, `indenture-format`
 - [ ] All values UTF-8 strings; **decode `byte[]` on read** (RabbitMQ.Client writes `S`, reads back `byte[]`)
 - [ ] No `x-` prefix (ADR-013 - RabbitMQ turns `x-` headers into AMQP 1.0 message-annotations; keeping clear of it is what makes the "1.0-safe" claim real); avoid `ulong`, `bool false`, values > 64 KiB
-- [ ] Mode B: `content-type: application/json+signet.v1.<hex-id>`
+- [ ] Mode B: `content-type: application/json+indenture.v1.<hex-id>`
 - [ ] Mode B: `0x01 | <16-byte id> | payload`, opt-in
 - [ ] Legacy `0x00 | <int32 BE>` - **read-only**, for Kafka-bridge ingestion
 - [ ] CloudEvents read-only interop: both `cloudEvents_`/`cloudEvents:` and `ce-`
@@ -289,7 +289,7 @@ DESIGN §2, ADR-010.
 - [ ] Publish: decorator over `IChannel.BasicPublishAsync`; a throw blocks the publish
 - [ ] Consume: `IAsyncBasicConsumer` decorator - **nack, never throw** (throws surface via `CallbackExceptionAsync`)
 - [ ] Payload validation **on by default**
-- [ ] Reject to a `signet.quarantine` exchange with failure-reason headers
+- [ ] Reject to a `indenture.quarantine` exchange with failure-reason headers
 - [ ] **No retry on schema violation** - deterministic, so redelivery is pure waste
 - [ ] `EnforcementMode` honoured: `Off | Monitor | Enforce`
 '@
@@ -301,25 +301,25 @@ Empirical work with **no code deliverable**. The result *is* the documented Mode
 - [ ] Shovel
 - [ ] Federation
 - [ ] STOMP and MQTT adapters
-- [ ] **AMQP 1.0 conversion (ADR-013)** - confirm `signet-*` headers arrive as application-properties, not message-annotations, when the same message is read by a 1.0 client. This is the only check that turns ADR-013 "designed to survive 1.0 conversion" from an assertion into a verified property.
+- [ ] **AMQP 1.0 conversion (ADR-013)** - confirm `indenture-*` headers arrive as application-properties, not message-annotations, when the same message is read by a 1.0 client. This is the only check that turns ADR-013 "designed to survive 1.0 conversion" from an assertion into a verified property.
 - [ ] Write findings back into DESIGN §2
 '@
 
     New-Issue 'M2.6' 'M2' 'Tests' @('area:client','critical-path') @'
-- [ ] Testcontainers RabbitMQ: publish conforming + non-conforming; assert the latter lands in `signet.quarantine` with reason headers
+- [ ] Testcontainers RabbitMQ: publish conforming + non-conforming; assert the latter lands in `indenture.quarantine` with reason headers
 - [ ] Header round-trip: `string -> byte[]` holds; no collision with `MT-`, `NServiceBus.`, `rbs2-`, `rabbitmq-`, `x-`
 - [ ] Conformance corpus runs against the client
 '@
 
     # ------------------------------------------------------------------ M3
-    New-Issue 'M3.1' 'M3' 'signet CLI' @('area:cli','critical-path') @'
+    New-Issue 'M3.1' 'M3' 'indenture CLI' @('area:cli','critical-path') @'
 - [ ] `check --env <env> --dir ./contracts` - dry-run compatibility, **exit 1 on break**, offending JSON-Pointer path in output
 - [ ] `push`, `promote`, `diff`, `impact`, `lint`, `export`
 - [ ] `--json` output mode for scripting
 - [ ] Documented exit codes
 '@
 
-    New-Issue 'M3.2' 'M3' 'signet infer' @('area:cli','critical-path') @'
+    New-Issue 'M3.2' 'M3' 'indenture infer' @('area:cli','critical-path') @'
 ADR-014. Turns a 200-message-type estate from weeks of authoring into an afternoon.
 
 - [ ] File mode - infer from a corpus of sample payloads (**the default**)
@@ -337,9 +337,9 @@ ADR-014. Turns a 200-message-type estate from weeks of authoring into an afterno
 '@
 
     New-Issue 'M3.4' 'M3' 'Build-time packages' @('area:cli','critical-path') @'
-- [ ] `Signet.Contracts` - `[SignetContract("acme.orders.OrderCreated")]`
-- [ ] `Signet.Contracts.MSBuild` - MSBuild task + Roslyn analyzer; generate a schema per attributed type, diff against checked-in `contracts/`, **error on drift**
-- [ ] `Signet.Contracts.Testing` - `await Signet.Assert.CompatibleAsync<OrderCreated>(env: "prod")`
+- [ ] `Indenture.Contracts` - `[IndentureContract("acme.orders.OrderCreated")]`
+- [ ] `Indenture.Contracts.MSBuild` - MSBuild task + Roslyn analyzer; generate a schema per attributed type, diff against checked-in `contracts/`, **error on drift**
+- [ ] `Indenture.Contracts.Testing` - `await Indenture.Assert.CompatibleAsync<OrderCreated>(env: "prod")`
 '@
 
     # ------------------------------------------------------------------ M4
@@ -356,7 +356,7 @@ ADR-014. Turns a 200-message-type estate from weeks of authoring into an afterno
 ADR-018. **Built now, not in M8** - retrofitting an authorization check across finished screens is how a write path gets missed.
 
 - [ ] `canWriteSchemas` computed on the session store, derived from API-returned scopes
-- [ ] `*sgIfScope` structural directive for affordances
+- [ ] `*indIfScope` structural directive for affordances
 - [ ] `scopeGuard` on write routes; direct navigation redirects to the read view
 - [ ] Stub returning admin in the single-user self-hosted profile until M8
 - [ ] Write affordances **absent, not disabled**, for non-admins
@@ -389,7 +389,7 @@ ADR-018. **Built now, not in M8** - retrofitting an authorization check across f
 
     # ------------------------------------------------------------------ M5
     New-Issue 'M5.1' 'M5' 'Format abstraction' @('area:formats') @'
-- [ ] `Signet.Formats.Abstractions` - canonicalisation, validation, compatibility per format
+- [ ] `Indenture.Formats.Abstractions` - canonicalisation, validation, compatibility per format
 - [ ] Format projects depend only on the abstraction + their parser library
 '@
 
@@ -417,7 +417,7 @@ ADR-018. **Built now, not in M8** - retrofitting an authorization check across f
     New-Issue 'M6.1' 'M6' 'Protocol freeze and interop prerequisites' @('area:sdk','heavy') @'
 Do this **before** the first SDK, not during it.
 
-- [ ] Publish the five normative artifacts as a coherent set (OpenAPI, envelope spec, canonicalisation rules, `signetCode` catalogue, conformance corpus)
+- [ ] Publish the five normative artifacts as a coherent set (OpenAPI, envelope spec, canonicalisation rules, `indentureCode` catalogue, conformance corpus)
 - [ ] **Pin JSON Schema draft 2020-12** as the only supported dialect
 - [ ] Define the **interoperable keyword subset**; warn at registration when a schema strays outside it
 - [ ] Expand the payload-validation corpus - five independent validators (`ajv`, `jsonschema`, `santhosh-tekuri`, `networknt`, .NET) disagree at the edges
@@ -425,15 +425,15 @@ Do this **before** the first SDK, not during it.
 '@
 
     New-Issue 'M6.2' 'M6' 'TypeScript / JavaScript SDK' @('area:sdk') @'
-- [ ] `@signet/client` - isomorphic REST + cache, browser-safe
-- [ ] `@signet/amqp` - Node-only middleware over `amqplib` (**separate package**, so `amqplib` never enters a browser bundle)
+- [ ] `@indenture/client` - isomorphic REST + cache, browser-safe
+- [ ] `@indenture/amqp` - Node-only middleware over `amqplib` (**separate package**, so `amqplib` never enters a browser bundle)
 - [ ] `ajv` validation, shared behaviour with the Angular app
 - [ ] ESM + CJS builds + `.d.ts`; a plain-JS consumer needs no TypeScript toolchain
 - [ ] Conformance corpus in CI; publish to npm
 '@
 
     New-Issue 'M6.3' 'M6' 'Python SDK' @('area:sdk') @'
-- [ ] `signet-client`, Python 3.11+
+- [ ] `indenture-client`, Python 3.11+
 - [ ] `pika` adapter (sync)
 - [ ] `aio-pika` adapter (async) - **a separate programming model, not a flag**
 - [ ] `jsonschema` validation
@@ -441,14 +441,14 @@ Do this **before** the first SDK, not during it.
 '@
 
     New-Issue 'M6.4' 'M6' 'Go SDK' @('area:sdk') @'
-- [ ] `signet-go` over `rabbitmq/amqp091-go`
+- [ ] `indenture-go` over `rabbitmq/amqp091-go`
 - [ ] `santhosh-tekuri/jsonschema`
 - [ ] Fail-open/closed and reject paths as **error returns** - expect this to surface places where the corpus specified .NET control flow rather than behaviour; fix the corpus, not just the client
 - [ ] Conformance corpus in CI; publish module
 '@
 
     New-Issue 'M6.5' 'M6' 'Java SDK' @('area:sdk') @'
-- [ ] `dev.signet:signet-client`, Java 21 LTS, over `com.rabbitmq:amqp-client`
+- [ ] `io.github.rafaeljcamara:indenture-client`, Java 21 LTS, over `com.rabbitmq:amqp-client`
 - [ ] `networknt/json-schema-validator`
 - [ ] Conformance corpus in CI; publish to Maven Central
 - [ ] **Known gap:** Spring AMQP is deferred (DESIGN Appendix A), so this reaches a minority of Java RabbitMQ estate. Budget the Spring adapter alongside it or expect the SDK to under-deliver.
@@ -500,7 +500,7 @@ The differentiator - the part Kafka has no equivalent for. DESIGN §4 Context B.
 - [ ] `Tenant`, `User`, `Membership`, `Role`
 - [ ] `ApiKey`, hashed at rest, with scopes
 - [ ] Scopes: `subject:read|write|admin`, `contract:*`, `env:*`, `broker:*`, `org:admin`
-- [ ] Local accounts; **OIDC optional** (ADR-008 - no third-party dependency required to run Signet)
+- [ ] Local accounts; **OIDC optional** (ADR-008 - no third-party dependency required to run Indenture)
 '@
 
     New-Issue 'M8.2' 'M8' 'Authorization' @('area:identity') @'
@@ -520,7 +520,7 @@ ADR-018.
 
     # ------------------------------------------------------------------ M9
     New-Issue 'M9.1' 'M9' 'Tenancy' @('area:cloud') @'
-- [ ] `SignetProfile` swaps `ITenantResolver`, `IBillingGate`, `IIdentityProvider` **at the composition root** - no `if (cloud)` scattered around
+- [ ] `IndentureProfile` swaps `ITenantResolver`, `IBillingGate`, `IIdentityProvider` **at the composition root** - no `if (cloud)` scattered around
 - [ ] Multi-tenant row-level isolation via the EF global query filters wired in M1.5
 - [ ] KMS-backed Data Protection key ring
 '@
