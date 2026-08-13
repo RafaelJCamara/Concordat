@@ -243,7 +243,7 @@ Git cannot track an empty directory anyway, so a `.gitkeep` would be the artefac
 structure.
 
 **Domain vocabulary = wire vocabulary.** `domain/registry/` uses the API's own tokens
-(`'ACTIVE'`, `'AWAITING_APPROVAL'`, `'BACKWARDTRANSITIVE'`) rather than a prettier
+(`'ACTIVE'`, `'AWAITING_APPROVAL'`, `'BACKWARD_TRANSITIVE'`) rather than a prettier
 client-side spelling. ADR-019 guarantees those tokens will not be renamed, so a second
 vocabulary would buy nicer templates at the cost of a two-way mapping table to get wrong.
 Display formatting is a presentation concern and belongs in a pipe. The _shapes_ are still
@@ -283,7 +283,7 @@ clean at zero.
 **One test file exists.** M4.5 owns testing, and this is not it. `subject-dtos.spec.ts` is
 there because an unrun test target is another piece of unverified scaffolding, and because
 the surface spelling in §3.3 is exactly the kind of thing that gets "cleaned up" by someone
-who does not know why it is there. It now pins the *corrected* protocol, including a negative
+who does not know why it is there. It now pins the _corrected_ protocol, including a negative
 case asserting the old spelling is refused rather than quietly accepted.
 
 **A known, accepted flash.** `main.ts` applies the stored theme before `bootstrapApplication`,
