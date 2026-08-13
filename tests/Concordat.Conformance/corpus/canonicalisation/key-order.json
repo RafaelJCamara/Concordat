@@ -1,0 +1,7 @@
+{
+  "name": "object-keys-are-sorted-ordinally",
+  "why": "JSON object member order is not semantic, so two spellings of one schema must collapse. Ordinal rather than culture-aware, or the canonical form would depend on the server's locale.",
+  "format": "json",
+  "input": "{\"z\":3,\"a\":1,\"nested\":{\"y\":2,\"b\":1}}",
+  "canonical": "{\"a\":1,\"nested\":{\"b\":1,\"y\":2},\"z\":3}"
+}

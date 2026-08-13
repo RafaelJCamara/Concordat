@@ -106,7 +106,8 @@ into the milestone that owes it, and collected here because they are the ones th
 | ~~M1.6~~ ✅ | ~~One constructor for `CompatibilityVerdict`, proven by a recording fake~~ | **Discharged.** `ICompatibilityEvaluator` + `Evaluate_AlwaysConsultsTheChecker` |
 | **M1.6** | Bundling, deferred from M1.4 | Cannot live at registration: it would make canonicalisation depend on registry state and stop any SDK reproducing an id offline |
 | **M1.6** | Subject prefix search needs a `ComplexProperty` mapping or a shadow column | Value converters do not translate `StartsWith` |
-| **M1.7** | The corpus must pin the schema-id **preimage bytes**, not just ids | `BuildPreimage` is public precisely so it can |
+| ~~M1.7~~ ✅ | ~~Pin the schema-id preimage bytes, not just ids~~ | **Discharged.** 4 fixtures pin the exact framing; all matched hand-written expectations first run |
+| **M2** | Run the payload-validation fixtures against a real validator | Written in M1.7 but unexecutable — Concordat has no validator of its own |
 | **M2.5** | Verify the AMQP 1.0 header conversion | ADR-013's "designed to survive 1.0" is an assertion until a 1.0 client reads a Concordat message |
 | **M7** | Hard delete: no registered consumers + force flag + audit entry | Soft delete is all that exists today |
 | **M7** | Adopt the derived environment ids, or migrate `subject.environment_id` | `DerivedEnvironmentResolver` hashes the name to a stable id so `/environments/{env}/…` works before environments exist. Real rows will generate their own |

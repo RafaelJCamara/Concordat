@@ -1,0 +1,10 @@
+{
+  "name": "the-first-version-is-trivially-compatible",
+  "why": "There is no predecessor, so nothing can break. The engine must not invent a divergence, and the suggested bump is NONE rather than PATCH.",
+  "format": "json",
+  "contentModel": "open",
+  "policy": { "mode": "BACKWARD", "surface": "WIRE_JSON" },
+  "previous": [],
+  "proposed": "{\"type\":\"object\"}",
+  "expected": { "compatible": true, "suggestedBump": "NONE", "breakingChanges": [], "allDivergences": [] }
+}

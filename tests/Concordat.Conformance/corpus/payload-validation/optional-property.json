@@ -1,0 +1,7 @@
+{
+  "name": "an-optional-property-may-be-absent",
+  "why": "The most basic disagreement to guard against across validators: whether a property described but not required has to appear.",
+  "schema": "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"note\":{\"type\":\"string\"}},\"required\":[\"id\"]}",
+  "mustAccept": ["{\"id\":\"a\"}", "{\"id\":\"a\",\"note\":\"n\"}"],
+  "mustReject": ["{}", "{\"note\":\"n\"}", "{\"id\":1}"]
+}

@@ -1,0 +1,9 @@
+{
+  "format": "json",
+  "canonicalBody": "{\"type\":\"object\"}",
+  "schemaId": "696e1e6b82db0848e5c59eaa7a89f7d0",
+  "why": "The baseline framing. Pins the version tag, the format token and the UTF-8 byte length prefix on the body.",
+  "references": [],
+  "name": "no-references",
+  "preimage": "concordat-schema-id/v1\nformat:json\nbody:17:{\"type\":\"object\"}\nrefs:0\n"
+}

@@ -1,0 +1,9 @@
+{
+  "format": "json",
+  "canonicalBody": "{\"t\":\"é\"}",
+  "schemaId": "8298cedf683163e4d9a915dd36d4a674",
+  "why": "An accented character is one UTF-16 char but two UTF-8 bytes. A char count would not delimit the encoded field, and an implementation using string length would diverge on any non-ASCII schema.",
+  "references": [],
+  "name": "length-prefixes-are-utf8-byte-counts",
+  "preimage": "concordat-schema-id/v1\nformat:json\nbody:10:{\"t\":\"é\"}\nrefs:0\n"
+}

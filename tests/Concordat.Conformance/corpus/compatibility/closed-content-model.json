@@ -1,0 +1,16 @@
+{
+  "name": "closed-content-model-makes-adding-a-property-forward-breaking",
+  "why": "Same two documents as add-optional-property, opposite verdict, decided entirely by subject configuration. This is what 'the content model is explicit, never inferred' buys: it cannot flip silently between versions.",
+  "format": "json",
+  "contentModel": "closed",
+  "policy": { "mode": "FORWARD", "surface": "WIRE_JSON" },
+  "previous": [{ "ordinal": 1, "schema": "{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}" }],
+  "proposed": "{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"},\"b\":{\"type\":\"string\"}}}",
+  "expected": {
+    "compatible": false,
+    "suggestedBump": "MAJOR",
+    "breakingChanges": [
+      { "path": "#/properties/b", "kind": "property_added", "direction": "FORWARD", "surface": "WIRE_JSON" }
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "integer-widened-to-number-fails-source",
+  "why": "The same two documents, opposite verdict, decided only by the surface axis. If these two fixtures ever agree, the second axis has stopped working.",
+  "format": "json",
+  "contentModel": "open",
+  "policy": { "mode": "BACKWARD", "surface": "SOURCE" },
+  "previous": [{ "ordinal": 1, "schema": "{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"integer\"}}}" }],
+  "proposed": "{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"number\"}}}",
+  "expected": {
+    "compatible": false,
+    "suggestedBump": "MAJOR",
+    "breakingChanges": [
+      { "path": "#/properties/n", "kind": "integer_widened_to_number", "direction": "BACKWARD", "surface": "SOURCE" }
+    ]
+  }
+}

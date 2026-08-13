@@ -444,11 +444,45 @@ before environments exist. **M7 must either adopt those derived ids or migrate
 
 Normative from day one — a corpus written later only ratifies whatever .NET already did.
 
-- [ ] `tests/Concordat.Conformance` layout and fixture format, language-neutral
-- [ ] Canonicalisation cases
-- [ ] Compatibility verdict cases
-- [ ] Payload-validation corpus — documents that must accept / must reject
-- [ ] .NET runner executing the corpus in CI
+- [x] `tests/Concordat.Conformance` layout and fixture format, specified in its own README
+- [x] 7 canonicalisation cases
+- [x] 4 schema-id cases, **pinning the preimage bytes as well as the id**
+- [x] 12 compatibility cases
+- [x] 4 payload-validation cases — fixtures written, execution deferred, see below
+- [x] .NET runner, 28 tests, running in CI with the rest
+
+### The fixtures are JSON on disk, not C#
+
+Loose files beside the assembly rather than embedded resources or test literals, because the
+acceptance test for ADR-019 is that a Go team runs *exactly these files*. The format is
+specified in [`tests/Concordat.Conformance/README.md`](../../tests/Concordat.Conformance/README.md),
+which is part of the normative set.
+
+Findings are matched on path, kind, direction and surface, **ignoring the message** — messages
+are for humans and must stay free to improve without breaking every SDK's test run.
+
+### The preimage is pinned, not just the id
+
+An implementation that produces the right id from the wrong framing diverges the moment a
+reference set changes, and the id alone would not catch it. Writing these by hand was worth
+it: all four preimages matched the implementation exactly on the first run, including the
+UTF-8 byte counts, which means the framing is genuinely reproducible from the written spec
+rather than only from the code.
+
+### One category cannot execute yet, and that is recorded rather than hidden
+
+Concordat has no payload validator of its own — validation is client-side and uses a
+different third-party library in every language. The runner currently asserts only that the
+payload fixtures load, that their schema canonicalises and that every document parses. **M2
+wires the first real validator; M6.1 makes every SDK run them.** They are written now because
+that is the whole point: five independent validators disagree at the edges, and a corpus
+written after the fact would just ratify whatever the first one did.
+
+### A meta-test guards the corpus itself
+
+`EveryFixtureExplainsWhyItExists` fails if any fixture lacks a `why`. A fixture whose purpose
+nobody recorded is one nobody dares change when it fails — so it gets deleted or suppressed,
+and both are worse than the failure.
 
 ## M1.8 Deployment
 

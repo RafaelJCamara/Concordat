@@ -1,0 +1,7 @@
+{
+  "name": "duplicate-object-keys-are-rejected",
+  "why": "Parsers disagree on which value wins, so the document has no single meaning and must not be given an id at all. Picking a winner would make the same bytes mean different things to producer and consumer.",
+  "format": "json",
+  "input": "{\"a\":1,\"a\":2}",
+  "error": "schema_malformed"
+}

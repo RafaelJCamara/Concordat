@@ -1,0 +1,7 @@
+{
+  "name": "number-literals-are-preserved-verbatim",
+  "why": "A deliberate deviation from RFC 8785, which routes numbers through an ECMAScript double and loses precision on large integers. Corrupting a maximum is worse than missing a deduplication, and verbatim preservation is far easier to reimplement identically in Python, Go and Java.",
+  "format": "json",
+  "input": "{\"maximum\":123456789012345678901234567890,\"exclusiveMinimum\":1.0}",
+  "canonical": "{\"exclusiveMinimum\":1.0,\"maximum\":123456789012345678901234567890}"
+}

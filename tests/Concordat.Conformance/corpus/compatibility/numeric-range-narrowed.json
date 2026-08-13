@@ -1,0 +1,16 @@
+{
+  "name": "tightening-maximum-is-backward-breaking",
+  "why": "Also pins the JSON Pointer down to the keyword, not just the property: a caller needs to know which constraint moved.",
+  "format": "json",
+  "contentModel": "open",
+  "policy": { "mode": "BACKWARD", "surface": "WIRE_JSON" },
+  "previous": [{ "ordinal": 1, "schema": "{\"type\":\"object\",\"properties\":{\"n\":{\"maximum\":100}}}" }],
+  "proposed": "{\"type\":\"object\",\"properties\":{\"n\":{\"maximum\":50}}}",
+  "expected": {
+    "compatible": false,
+    "suggestedBump": "MAJOR",
+    "breakingChanges": [
+      { "path": "#/properties/n/maximum", "kind": "numeric_range_narrowed", "direction": "BACKWARD", "surface": "WIRE_JSON" }
+    ]
+  }
+}

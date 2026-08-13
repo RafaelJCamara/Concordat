@@ -1,0 +1,19 @@
+{
+  "name": "transitive-catches-what-comparing-only-the-tip-hides",
+  "why": "v1 permitted string|null, v2 narrowed to string. Proposing string again is a no-op against v2 but still narrower than v1. A chain of individually compatible changes can leave you unable to read the oldest data - which is why BACKWARD being non-transitive by default is worth documenting loudly.",
+  "format": "json",
+  "contentModel": "open",
+  "policy": { "mode": "BACKWARD_TRANSITIVE", "surface": "WIRE_JSON" },
+  "previous": [
+    { "ordinal": 1, "schema": "{\"type\":\"object\",\"properties\":{\"n\":{\"type\":[\"string\",\"null\"]}}}" },
+    { "ordinal": 2, "schema": "{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"string\"}}}" }
+  ],
+  "proposed": "{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"string\"}}}",
+  "expected": {
+    "compatible": false,
+    "suggestedBump": "MAJOR",
+    "breakingChanges": [
+      { "path": "#/properties/n", "kind": "type_narrowed", "direction": "BACKWARD", "surface": "WIRE_JSON" }
+    ]
+  }
+}

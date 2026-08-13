@@ -1,0 +1,7 @@
+{
+  "name": "undescribed-properties-are-allowed-by-default",
+  "why": "JSON Schema's default is additionalProperties: true. A validator that defaults to closed would reject documents the registry considers valid, which is precisely the cross-language divergence this corpus exists to catch.",
+  "schema": "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}}}",
+  "mustAccept": ["{\"id\":\"a\",\"extra\":true}"],
+  "mustReject": ["{\"id\":[]}"]
+}

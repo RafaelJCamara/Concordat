@@ -1,0 +1,15 @@
+{
+  "format": "json",
+  "canonicalBody": "{\"type\":\"object\"}",
+  "schemaId": "0617b836e433e81284ebfa2a16da9aaa",
+  "why": "The same body as no-references, but with a reference. The ids MUST differ: two schemas with identical bodies and different reference sets are different schemas. Hashing the body alone is the specific mistake Confluent CP 8.1 GUID computation exists to avoid.",
+  "references": [
+    {
+      "version": 1,
+      "subject": "acme.A",
+      "name": "concordat://prod/acme.A/1"
+    }
+  ],
+  "name": "references-are-covered-by-the-hash",
+  "preimage": "concordat-schema-id/v1\nformat:json\nbody:17:{\"type\":\"object\"}\nrefs:1\nref-name:25:concordat://prod/acme.A/1\nref-subject:6:acme.A\nref-version:1\n"
+}

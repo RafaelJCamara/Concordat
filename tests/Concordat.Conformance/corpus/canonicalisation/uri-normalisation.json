@@ -1,0 +1,7 @@
+{
+  "name": "id-and-ref-uris-are-normalised",
+  "why": "Only $id and $ref, and only absolute URIs. Normalising any string that happens to parse as a URI would rewrite ordinary schema content such as a const value.",
+  "format": "json",
+  "input": "{\"$id\":\"HTTPS://Example.COM:443/a/../schema\",\"const\":\"HTTPS://Example.COM/x\"}",
+  "canonical": "{\"$id\":\"https://example.com/schema\",\"const\":\"HTTPS://Example.COM/x\"}"
+}

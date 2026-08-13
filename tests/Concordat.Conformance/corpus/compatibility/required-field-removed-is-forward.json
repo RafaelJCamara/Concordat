@@ -1,0 +1,10 @@
+{
+  "name": "removing-from-required-is-forward-not-backward",
+  "why": "Data written under the old schema always carries the field, so a new reader copes. It is readers ON THE OLD SCHEMA that break. DESIGN section 5 previously showed this the wrong way round; the definition in section 7 governs.",
+  "format": "json",
+  "contentModel": "open",
+  "policy": { "mode": "BACKWARD", "surface": "WIRE_JSON" },
+  "previous": [{ "ordinal": 1, "schema": "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}},\"required\":[\"id\"]}" }],
+  "proposed": "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}}}",
+  "expected": { "compatible": true, "suggestedBump": "PATCH", "breakingChanges": [] }
+}

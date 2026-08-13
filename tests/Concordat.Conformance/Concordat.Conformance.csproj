@@ -5,6 +5,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!--
+      The fixtures ship as loose JSON beside the assembly rather than as embedded resources,
+      so another language's runner can read exactly the same files (ADR-019).
+    -->
+    <Content Include="corpus\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />

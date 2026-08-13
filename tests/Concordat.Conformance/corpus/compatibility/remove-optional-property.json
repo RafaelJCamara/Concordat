@@ -1,0 +1,10 @@
+{
+  "name": "removing-an-optional-property-is-fully-compatible",
+  "why": "The other half of the acceptance criterion. Under an open content model a document carrying the removed property still validates.",
+  "format": "json",
+  "contentModel": "open",
+  "policy": { "mode": "FULL", "surface": "WIRE_JSON" },
+  "previous": [{ "ordinal": 1, "schema": "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"note\":{\"type\":\"string\"}}}" }],
+  "proposed": "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}}}",
+  "expected": { "compatible": true, "suggestedBump": "PATCH", "breakingChanges": [], "allDivergences": [] }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "integer-widened-to-number-passes-wirejson",
+  "why": "JSON Schema's int32-to-int64. Every existing document still validates, but generated code changes from an integral to a floating-point type. A single-axis registry cannot express this at all - it is the case ADR-016 exists for.",
+  "format": "json",
+  "contentModel": "open",
+  "policy": { "mode": "BACKWARD", "surface": "WIRE_JSON" },
+  "previous": [{ "ordinal": 1, "schema": "{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"integer\"}}}" }],
+  "proposed": "{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"number\"}}}",
+  "expected": {
+    "compatible": true,
+    "suggestedBump": "MINOR",
+    "breakingChanges": [],
+    "allDivergences": [
+      { "path": "#/properties/n", "kind": "integer_widened_to_number", "direction": "BACKWARD", "surface": "SOURCE" }
+    ]
+  }
+}

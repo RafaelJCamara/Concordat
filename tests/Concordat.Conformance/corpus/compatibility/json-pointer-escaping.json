@@ -1,0 +1,16 @@
+{
+  "name": "json-pointer-escapes-per-rfc-6901",
+  "why": "A property name containing '/' must be escaped as '~1' or the pointer is unparseable. Every SDK surfacing these paths has to agree on the escaping.",
+  "format": "json",
+  "contentModel": "open",
+  "policy": { "mode": "BACKWARD", "surface": "WIRE_JSON" },
+  "previous": [{ "ordinal": 1, "schema": "{\"properties\":{\"a/b\":{\"type\":[\"string\",\"null\"]}}}" }],
+  "proposed": "{\"properties\":{\"a/b\":{\"type\":\"string\"}}}",
+  "expected": {
+    "compatible": false,
+    "suggestedBump": "MAJOR",
+    "breakingChanges": [
+      { "path": "#/properties/a~1b", "kind": "type_narrowed", "direction": "BACKWARD", "surface": "WIRE_JSON" }
+    ]
+  }
+}

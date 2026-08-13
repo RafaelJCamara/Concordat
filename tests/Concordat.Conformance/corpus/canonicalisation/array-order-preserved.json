@@ -1,0 +1,7 @@
+{
+  "name": "array-order-is-preserved",
+  "why": "Array order IS semantic in JSON Schema: prefixItems is positional and enum order is observable. Sorting arrays would change the meaning of the schema.",
+  "format": "json",
+  "input": "{\"enum\":[3,1,2]}",
+  "canonical": "{\"enum\":[3,1,2]}"
+}

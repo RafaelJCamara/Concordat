@@ -1,0 +1,7 @@
+{
+  "name": "malformed-json-is-rejected",
+  "why": "Comments and trailing commas are not JSON. Accepting them would make the canonical form depend on which parser's leniency was in play.",
+  "format": "json",
+  "input": "{\"a\":1,}",
+  "error": "schema_malformed"
+}

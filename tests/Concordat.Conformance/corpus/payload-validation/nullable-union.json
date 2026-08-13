@@ -1,0 +1,7 @@
+{
+  "name": "a-type-union-including-null",
+  "why": "Nullability is expressed as a type union in JSON Schema, not a separate keyword. A validator treating null as universally allowed, or never allowed, diverges here.",
+  "schema": "{\"type\":\"object\",\"properties\":{\"s\":{\"type\":[\"string\",\"null\"]}}}",
+  "mustAccept": ["{\"s\":null}", "{\"s\":\"x\"}"],
+  "mustReject": ["{\"s\":1}"]
+}

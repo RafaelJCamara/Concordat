@@ -1,0 +1,7 @@
+{
+  "name": "whitespace-is-removed",
+  "why": "Insignificant whitespace must not produce a second schema id for one schema. This is the failure mode that lets a registry accumulate thousands of near-duplicates.",
+  "format": "json",
+  "input": "  {\n  \"type\"  :  \"object\"\n }  ",
+  "canonical": "{\"type\":\"object\"}"
+}

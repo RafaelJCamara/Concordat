@@ -1,0 +1,16 @@
+{
+  "name": "removing-an-enum-value-is-backward-breaking",
+  "why": "Documents written under the previous version may carry the removed value.",
+  "format": "json",
+  "contentModel": "open",
+  "policy": { "mode": "BACKWARD", "surface": "WIRE_JSON" },
+  "previous": [{ "ordinal": 1, "schema": "{\"type\":\"object\",\"properties\":{\"s\":{\"enum\":[\"a\",\"b\",\"c\"]}}}" }],
+  "proposed": "{\"type\":\"object\",\"properties\":{\"s\":{\"enum\":[\"a\",\"b\"]}}}",
+  "expected": {
+    "compatible": false,
+    "suggestedBump": "MAJOR",
+    "breakingChanges": [
+      { "path": "#/properties/s", "kind": "enum_value_removed", "direction": "BACKWARD", "surface": "WIRE_JSON" }
+    ]
+  }
+}

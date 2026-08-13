@@ -1,0 +1,9 @@
+{
+  "format": "avro",
+  "canonicalBody": "{\"type\":\"object\"}",
+  "schemaId": "548725813d68316619b8894e5f830eca",
+  "why": "The same bytes under a different schema language are a different schema. Without the format in the preimage a JSON and an Avro document with identical text would collide.",
+  "references": [],
+  "name": "format-is-part-of-the-identity",
+  "preimage": "concordat-schema-id/v1\nformat:avro\nbody:17:{\"type\":\"object\"}\nrefs:0\n"
+}

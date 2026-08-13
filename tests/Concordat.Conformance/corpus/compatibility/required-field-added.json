@@ -1,0 +1,16 @@
+{
+  "name": "adding-to-required-is-backward-breaking",
+  "why": "Documents written under the previous version may omit the field, so a new reader rejects data that was valid. The path must point at #/required, not at the property.",
+  "format": "json",
+  "contentModel": "open",
+  "policy": { "mode": "BACKWARD", "surface": "WIRE_JSON" },
+  "previous": [{ "ordinal": 1, "schema": "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}}}" }],
+  "proposed": "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}},\"required\":[\"id\"]}",
+  "expected": {
+    "compatible": false,
+    "suggestedBump": "MAJOR",
+    "breakingChanges": [
+      { "path": "#/required", "kind": "required_field_added", "direction": "BACKWARD", "surface": "WIRE_JSON" }
+    ]
+  }
+}
