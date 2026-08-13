@@ -31,12 +31,29 @@
   <ItemGroup Label="Hosting">
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
   </ItemGroup>
+  <ItemGroup Label="Messaging">
+    <!--
+      Apache-2.0 OR MPL-2.0. We take the Apache-2.0 arm, matching ADR-009.
+    -->
+    <PackageVersion Include="RabbitMQ.Client" Version="7.2.2" />
+  </ItemGroup>
   <ItemGroup Label="Testing">
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="Testcontainers" Version="4.13.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <!--
+      M2.5 only, to read a Concordat message back over a protocol that is not AMQP 0-9-1.
+      Both are test-only and never referenced by a shipped package, but both were licence-
+      checked all the same: AMQPNetLite is Apache-2.0, MQTTnet is MIT. MQTTnet declares a
+      licence FILE rather than an SPDX expression, which is the same shape that concealed
+      JsonSchema.Net's maintenance fee, so the file itself was read rather than the metadata
+      trusted.
+    -->
+    <PackageVersion Include="AMQPNetLite" Version="2.5.3" />
+    <PackageVersion Include="MQTTnet" Version="5.2.0.1603" />
   </ItemGroup>
   <ItemGroup Label="Transitive pins">
     <!--

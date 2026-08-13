@@ -57,11 +57,25 @@ coverage artifact and look at it manually.
 generates noise; the useful signal is whether the compatibility corpus grows, which a number
 does not capture.
 
-### 6. Windows in the CI matrix — at M2
+### 6. Windows in the CI matrix — now decidable, and now cheaper to skip
 
-M0.3 shipped Ubuntu-only deliberately, with the note to add `windows-latest` at M2 where
-Testcontainers and the RabbitMQ integration tests first make platform differences real.
-Confirm when we get there.
+M0.3 shipped Ubuntu-only with a note to reconsider at M2, where Testcontainers and the RabbitMQ
+tests first make platform differences real. **M2.5 is that point**, and it changed the sum:
+the suite raises up to three Linux broker containers, which on `windows-latest` needs
+Linux-container support that GitHub's Windows runners do not provide.
+
+**Recommendation:** stay Ubuntu-only. Add Windows later as a *build-and-unit-test-only* job if
+you want the platform signal — the container suites cannot follow it there regardless.
+
+### 6b. When should the header-survival suite run?
+
+It raises three brokers (two of them for federation alone) and takes ~15 s locally, more on a
+cold runner pulling `rabbitmq:4.1-management`. It also almost never changes: it re-measures
+broker behaviour, not our code.
+
+**Recommendation:** run it on pull requests anyway, at least until v1. It is the only thing
+standing between DESIGN §2 and quiet fiction, and a broker upgrade landing unnoticed is exactly
+the scenario it exists to catch. Revisit if CI time becomes a real cost.
 
 ### 7. Milestone order: SDKs (M6) before governance (M7) and identity (M8)
 
@@ -133,7 +147,7 @@ into the milestone that owes it, and collected here because they are the ones th
 | ~~M1.7~~ ✅ | ~~Pin the schema-id preimage bytes, not just ids~~ | **Discharged.** 4 fixtures pin the exact framing; all matched hand-written expectations first run |
 | ~~M2~~ ✅ | ~~Run the payload-validation fixtures against a real validator~~ | **Discharged.** NJsonSchema behind `IPayloadValidator`; the corpus caught a real draft-conformance gap on its first run |
 | **M7** | Contract-resolution caching, deferred from M2.1 | The 60 s TTL was specified before contracts existed; there is no endpoint to cache until M7 ships one |
-| **M2.5** | Verify the AMQP 1.0 header conversion | ADR-013's "designed to survive 1.0" is an assertion until a 1.0 client reads a Concordat message |
+| ~~M2.5~~ ✅ | ~~Verify the AMQP 1.0 header conversion~~ | **Discharged.** Measured on `rabbitmq:4.1-management`: `concordat-*` arrive as application-properties, and an `x-`-prefixed control header on the same message is demoted to an annotation, so the prefix rule is load-bearing rather than precautionary |
 | **M7** | Hard delete: no registered consumers + force flag + audit entry | Soft delete is all that exists today |
 | **M7** | Adopt the derived environment ids, or migrate `subject.environment_id` | `DerivedEnvironmentResolver` hashes the name to a stable id so `/environments/{env}/…` works before environments exist. Real rows will generate their own |
 | **M7** | `GET\|PUT …/registration-policy` | Per-environment, and the `Environment` aggregate does not exist yet, so there is nowhere to store it |
@@ -187,6 +201,9 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | Subject case is preserved, never folded | M2.3 | **Would merge existing subjects** |
 | Hyphens are refused rather than rewritten to underscores | M2.3 | Low |
 | The publish side trims surrounding whitespace; envelope reading still does not | M2.3 | Low |
+| M2.5 ships a **code** deliverable — findings as assertions — against a brief that said there would be none | [M2.5](plan/M2-dotnet-client.md) | Low. A written report is true on the day it is written and silently becomes fiction at the next broker upgrade |
+| The broker image is pinned to `rabbitmq:4.1-management`; findings are stated as true *of that version* | M2.5 | Low, but the pin must be bumped deliberately, not floated |
+| Four test-only dependencies added (RabbitMQ.Client, Testcontainers, AMQPNetLite, MQTTnet) | M2.5 | Low; all licence-checked, none reaches a shipped package |
 
 ---
 

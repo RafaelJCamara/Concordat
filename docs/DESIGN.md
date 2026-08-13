@@ -156,12 +156,57 @@ explicit that it's **informational** — the word "validat" appears nowhere in t
 spec. *That gap is the product.* Filing an AMQP 0-9-1 binding with the CloudEvents WG is
 a credible post-v1 standardisation play.
 
-> **Verify empirically in M2:** whether custom headers survive dead-lettering, shovel,
-> federation and the STOMP/MQTT adapters. That sets the documented Mode A vs Mode B guidance.
-> **Also verify the AMQP 1.0 conversion itself** — that `concordat-*` headers surface as
-> application-properties rather than message-annotations to a 1.0 client. ADR-013's
-> "designed to survive 1.0 conversion" rests entirely on that behaviour and is otherwise
-> an untested assertion.
+### Header survival — measured, not assumed (M2.5)
+
+Every claim below was measured against **`rabbitmq:4.1-management`** by
+[`tests/Concordat.HeaderSurvival`](../tests/Concordat.HeaderSurvival), which raises real
+brokers and asserts each finding. The experiments are assertions rather than a written-up
+report on purpose: a broker upgrade that changes any of this breaks the build instead of
+quietly turning this section into fiction.
+
+| Hop | Envelope survives | Notes |
+|---|---|---|
+| Dead-letter — nack, TTL expiry, overflow | ✅ all three | broker adds `x-death`, `x-first-death-*` |
+| Shovel — `dest-add-forward-headers` on and off | ✅ both | adds `x-shovelled*` when on |
+| Federation — two brokers over a real link | ✅ | adds `x-received-from` |
+| STOMP subscriber | ✅ | frame headers, unprefixed and unmangled |
+| MQTT 5.0 subscriber | ✅ | arrives as user properties |
+| MQTT 3.1.1 subscriber | ❌ **impossible** | the protocol has no user properties at all |
+| AMQP 1.0 client | ✅ | **application-properties**, as ADR-013 requires |
+
+**ADR-013 holds, and the counterfactual is measured too.** `concordat-*` headers reach an
+AMQP 1.0 client as application-properties. A deliberately `x-`-prefixed control header sent on
+the same message is demoted to a message-annotation — so the prefix really is what would have
+cost us, rather than being a precaution against a hazard nobody confirmed.
+
+**`byte[]` on read is confirmed.** Constraint 3 above was taken from documentation; it is now
+measured. Every envelope header arrives from RabbitMQ.Client as `Byte[]`, never `string`.
+`properties.type` is the exception, because it is a frame field rather than a table entry.
+
+#### Two findings that change the guidance
+
+**Mode A alone does not survive AMQP 1.0 conversion.** `properties.type` does *not* become the
+AMQP 1.0 `subject`, which is where anyone would look. It is demoted to the message-annotation
+`x-basic-type` — exactly the fate the envelope avoids. So for an estate with AMQP 1.0
+consumers, **the header envelope is not an optimisation, it is the only thing that works**: a
+message whose subject lives solely in `properties.type` arrives with that subject in a section
+an ordinary 1.0 client is not obliged to surface. (`content-type` does survive into the
+standard properties section, so Mode B's format token is unaffected.)
+
+**MQTT 3.1.1 consumers cannot be reached by any header scheme.** Not a defect to fix — a limit
+to publish. The payload is untouched, so **Mode B is the only option** for those consumers,
+and otherwise they are simply unvalidated.
+
+#### What this means for Mode A vs Mode B
+
+**Mode A remains the default and is safe across every hop RabbitMQ itself performs** —
+dead-lettering, shovels and federation all rebuild the header table and all preserve what they
+do not recognise. Reach for Mode B only for the two cases above: MQTT 3.1.1 consumers, and any
+path that strips headers outright.
+
+The `x-`-prefix rule earns its keep at every hop, not just at 1.0 conversion: after
+dead-lettering the table contains both the broker's bookkeeping and ours, and prefix alone
+tells them apart.
 
 ---
 

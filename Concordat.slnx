@@ -23,5 +23,6 @@
     <Project Path="tests/Concordat.Conformance/Concordat.Conformance.csproj" />
     <Project Path="tests/Concordat.Domain.Tests/Concordat.Domain.Tests.csproj" />
     <Project Path="tests/Concordat.Formats.Json.Tests/Concordat.Formats.Json.Tests.csproj" />
+    <Project Path="tests/Concordat.HeaderSurvival/Concordat.HeaderSurvival.csproj" />
   </Folder>
 </Solution>

@@ -249,16 +249,60 @@ exists.
 
 ## M2.5 Header survival experiments
 
-**🔴 Heavy · DESIGN §2 · empirical, no code deliverable**
+**Done 2026-08-13 · DESIGN §2 · ADR-013 · 14 experiments against `rabbitmq:4.1-management`**
 
-Empirical work with no code deliverable; the result **is** the documented Mode A vs Mode B guidance.
+- [x] Dead-lettering — nack, TTL expiry, and queue overflow, separately
+- [x] Shovel — with `dest-add-forward-headers` both on and off
+- [x] Federation — two brokers on a container network, over a real link
+- [x] STOMP adapter
+- [x] MQTT adapter — 5.0 **and** 3.1.1, because "MQTT" alone is not an actionable answer
+- [x] **AMQP 1.0 conversion (ADR-013)** — plus the `x-`-prefixed counterfactual
+- [x] Findings written into [DESIGN §2](../DESIGN.md#2-the-concordat-envelope-adr-010)
 
-- [ ] Dead-lettering
-- [ ] Shovel
-- [ ] Federation
-- [ ] STOMP and MQTT adapters
-- [ ] **AMQP 1.0 conversion (ADR-013)** — confirm `concordat-*` headers arrive as application-properties, not message-annotations, when the same message is read by a 1.0 client. This is the only check that turns ADR-013's "designed to survive 1.0 conversion" from an assertion into a verified property.
-- [ ] Write findings back into DESIGN §2
+### The findings are assertions, not a report
+
+The brief said "empirical, no code deliverable". It got one anyway, and the reason is the
+failure mode of the alternative: a written-up report is true on the day it is written and
+silently becomes fiction at the next broker upgrade. `tests/Concordat.HeaderSurvival` raises
+real brokers and **asserts** each finding, so a change in RabbitMQ's behaviour breaks the build
+rather than invalidating a paragraph nobody re-reads.
+
+Everything survives every hop RabbitMQ itself performs. The two exceptions are below.
+
+### ADR-013 holds — and so does its counterfactual
+
+`concordat-*` headers reach an AMQP 1.0 client as **application-properties**. That alone would
+only show our headers arrive; it would not show the `x-` prefix was ever a real hazard. So the
+same message carries a deliberately `x-`-prefixed control header, and that one **is** demoted
+to a message-annotation. The prefix rule is now measured to be load-bearing rather than
+precautionary.
+
+`byte[]`-on-read is confirmed too. M2.2 took it from documentation and built the reader around
+it; it is the one assumption whose failure would have broken every SDK silently.
+
+### Mode A alone does not survive AMQP 1.0 — the finding that changes advice
+
+`properties.type` does **not** become the AMQP 1.0 `subject`. It is demoted to the
+message-annotation `x-basic-type`, exactly the fate the envelope avoids.
+
+So for an estate containing AMQP 1.0 consumers the envelope is **mandatory, not an
+optimisation**: a Mode A message whose subject lives only in `properties.type` arrives with its
+subject in a section an ordinary 1.0 client need not surface.
+
+### MQTT 3.1.1 cannot be reached by any header scheme
+
+The protocol has no user properties. Not a defect to fix — a limit to publish. The payload
+arrives untouched, so Mode B works; otherwise those consumers are unvalidated. MQTT 5.0 carries
+the whole envelope as user properties.
+
+### Cost
+
+Four new test-only dependencies, all licence-checked before use: RabbitMQ.Client
+(Apache-2.0 OR MPL-2.0), Testcontainers (MIT), AMQPNetLite (Apache-2.0), MQTTnet (MIT —
+declared as a licence *file* rather than an SPDX expression, the same shape that concealed
+`JsonSchema.Net`'s maintenance fee, so the file was read rather than the metadata trusted).
+
+The suite takes ~15 s, dominated by federation's two brokers.
 
 ## M2.6 Tests
 
