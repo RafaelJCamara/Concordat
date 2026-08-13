@@ -107,6 +107,35 @@ public static class BreakingChangeKinds
     /// Decoding succeeds, but the value read is not the value written.
     /// </summary>
     public const string EnumValueDefaulted = "enum_value_defaulted";
+
+    // --------------------------------------------------------------------- Protobuf
+    //
+    // Added in M5.3. Additive, and normative under ADR-019 once published.
+
+    /// <summary>
+    /// A field moved between wire types, or between encodings within one wire type. Either the
+    /// bytes fail to decode or they decode to a different value.
+    /// </summary>
+    public const string WireTypeChanged = "wire_type_changed";
+
+    /// <summary>
+    /// A field was removed without reserving its number. Nothing breaks immediately — readers
+    /// skip unknown tags — but the number is now free to be reused for another type, at which
+    /// point data written before the removal decodes into it silently.
+    /// </summary>
+    public const string FieldRemovedWithoutReserved = "field_removed_without_reserved";
+
+    /// <summary>
+    /// A field claimed a number the previous version had reserved, which is the hazard
+    /// reservation exists to prevent.
+    /// </summary>
+    public const string FieldNumberReused = "field_number_reused";
+
+    /// <summary>
+    /// A proto3 field moved between implicit and explicit presence. Encoding is identical;
+    /// generated code gains or loses a presence accessor.
+    /// </summary>
+    public const string PresenceChanged = "presence_changed";
 }
 
 /// <summary>

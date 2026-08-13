@@ -17,6 +17,7 @@
     <ProjectReference Include="..\..\core\Concordat.Infrastructure\Concordat.Infrastructure.csproj" />
     <ProjectReference Include="..\..\formats\Concordat.Formats.Avro\Concordat.Formats.Avro.csproj" />
     <ProjectReference Include="..\..\formats\Concordat.Formats.Json\Concordat.Formats.Json.csproj" />
+    <ProjectReference Include="..\..\formats\Concordat.Formats.Protobuf\Concordat.Formats.Protobuf.csproj" />
   </ItemGroup>
 
   <Target Name="NameOpenApiDocumentForTheProtocol" AfterTargets="Build"

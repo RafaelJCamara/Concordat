@@ -17,6 +17,7 @@
     <Project Path="src/formats/Concordat.Formats.Abstractions/Concordat.Formats.Abstractions.csproj" />
     <Project Path="src/formats/Concordat.Formats.Avro/Concordat.Formats.Avro.csproj" />
     <Project Path="src/formats/Concordat.Formats.Json/Concordat.Formats.Json.csproj" />
+    <Project Path="src/formats/Concordat.Formats.Protobuf/Concordat.Formats.Protobuf.csproj" />
   </Folder>
   <Folder Name="/src/hosts/">
     <Project Path="src/hosts/Concordat.Api/Concordat.Api.csproj" />
@@ -35,6 +36,7 @@
     <Project Path="tests/Concordat.Domain.Tests/Concordat.Domain.Tests.csproj" />
     <Project Path="tests/Concordat.Formats.Avro.Tests/Concordat.Formats.Avro.Tests.csproj" />
     <Project Path="tests/Concordat.Formats.Json.Tests/Concordat.Formats.Json.Tests.csproj" />
+    <Project Path="tests/Concordat.Formats.Protobuf.Tests/Concordat.Formats.Protobuf.Tests.csproj" />
     <Project Path="tests/Concordat.HeaderSurvival/Concordat.HeaderSurvival.csproj" />
     <Project Path="tests/Concordat.RabbitMq.Tests/Concordat.RabbitMq.Tests.csproj" />
   </Folder>

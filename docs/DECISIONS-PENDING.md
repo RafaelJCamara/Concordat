@@ -265,42 +265,57 @@ ADR-015 requires. **Hard delete is not implemented**: DESIGN §4 wants "no regis
 consumers, an explicit force flag, and an audit entry", and both registered consumers and the
 audit log are M7. Confirm that v1 can ship with retire-only, or pull the pieces forward.
 
-### 16. Avro cross-subject references carry no version
+### 16. Neither Avro nor Protobuf references carry a version
 
-Found while scoping M5.2. JSON Schema's `$ref` resolves through an explicit
-`concordat://<env>/<subject>/<version>` URI (ADR terms already settled), and Protobuf's
-`import` filename will need its own answer in M5.3. Avro has neither: a cross-subject
-reference is just a bare named-type FQN string, e.g. `"acme.orders.Address"`, with no
-syntactic room to attach a version — or, in the common case of a reference buried inside a
-union or a field's `"type"`, no room to attach *anything*, since it is a plain JSON string,
-not an object.
+**Blocks the last item of M5.2 and M5.3, and one M5.4 corpus case.** Found while scoping M5.2
+and confirmed to be the same hole in M5.3.
+
+JSON Schema was the easy case and set a misleading precedent: its `$ref` takes a URI, so
+`concordat://<env>/<subject>/<version>` fits with room for the version. Neither other format
+has anywhere to put one.
+
+- **Avro** — a cross-subject reference is a bare named-type fullname, e.g.
+  `"acme.orders.Address"`. In the common case of a reference inside a union or a field's
+  `"type"`, it is a plain JSON *string*, so there is no room to attach anything at all.
+- **Protobuf** — `import "acme/common.proto";` takes a filename. DESIGN §4 says "Protobuf
+  `import` filename → subject", which resolves *which subject*, but says nothing about which
+  version. Encoding one in the filename (`import "acme.Common/3.proto";`) would be inventing a
+  convention every SDK then has to reproduce.
 
 This is not an implementation gap that more effort closes; it is a real hole in what DESIGN §4
-specifies ("Avro named-type FQN → subject reference resolution") with no mechanism attached.
-`Concordat.Formats.Avro` today canonicalises and identifies Avro schemas but does not yet
-implement `ISchemaReferenceExtractor`, so no Avro schema can be registered with cross-subject
-references until this is settled.
+specifies, with no mechanism attached. Both format libraries canonicalise, identify and check
+compatibility today, and neither implements `ISchemaReferenceExtractor`, so **no Avro or
+Protobuf schema can be registered end to end** until this is settled.
+
+> **This is also why the "splitting a `.proto` across files is compatible" corpus case
+> (DESIGN §12, M5.4) cannot be written yet** — the split definition lives behind an `import`
+> the engine cannot follow.
 
 > **Options:**
-> - **Resolve to whichever version is currently `latest`.** Cheap, but reintroduces exactly the
->   silent-behaviour-change problem ADR-017's gated `LatestPointer` exists to prevent — just one
->   layer down, in the reference graph instead of the subject itself.
-> - **An object-wrapped reference carrying a Concordat-specific property**, e.g.
->   `{"type": "acme.orders.Address", "concordat.refVersion": 3}`. The Avro specification's
->   object form of a type (`{"type": "typeName", ...attributes}`) is documented for attaching
->   extra attributes to any type, including a named-type reference, and unclaimed properties are
->   preserved-but-ignored by conformant parsers — but this reading has not been verified against
->   a second independent Avro implementation, and ADR-019 needs it to hold in every SDK, not just
->   .NET's parser of its own convention.
-> - **Refuse cross-subject references in Avro for v1**, the way M2.3 refused to invent a
->   spelling for generic message types rather than guess. A schema with an unresolvable external
->   FQN fails registration with a clear error; self-contained (fully inlined) Avro schemas keep
->   working today.
+> - **Resolve to whichever version is currently `latest`.** Cheap, and works for both formats
+>   with no syntax invented. But it reintroduces exactly the silent-behaviour-change problem
+>   ADR-017's gated `LatestPointer` exists to prevent — one layer down, in the reference graph
+>   instead of the subject itself.
+> - **Pin versions out of band**, in a per-subject reference manifest supplied at registration
+>   rather than in the schema text. This is close to what Confluent does, and it works
+>   identically for both formats. The cost is that M1.4's rule — *edges are derived from the
+>   document, never supplied alongside it* — stops holding for two of the three formats, and
+>   that rule exists because a supplied list can disagree with what the schema actually points
+>   at.
+> - **Invent a per-format convention**: an object-wrapped Avro reference carrying a Concordat
+>   property, and a filename convention for Protobuf `import`. Keeps edges in the document, but
+>   each convention is a rule five SDKs must reproduce exactly, and neither has been verified
+>   against a second independent implementation of its format.
+> - **Refuse cross-subject references in Avro and Protobuf for v1**, the way M2.3 refused to
+>   invent a spelling for generic message types. Self-contained schemas — one file, everything
+>   inlined — keep working, and they are the common case for both formats.
 >
-> **Recommendation:** the third option for now — it ships something correct rather than
-> something guessed, and is the same call already made for generic types (#10). If Avro
-> references turn out to matter for your schemas, the object-wrapped-property option is worth a
-> real spec check (or a message to the Avro mailing list) before it becomes an ADR.
+> **Recommendation:** refuse for v1, then reconsider with the out-of-band manifest as the
+> favourite. Refusing ships something correct rather than something guessed and matches the call
+> already made for generic types (#10). Of the ways to actually support it, the manifest is the
+> only one that works the same way for both formats — and "one mechanism for two formats" is
+> worth more than keeping M1.4's derive-from-the-document rule universal, given that rule was
+> written when JSON Schema was the only format and its URI-shaped `$ref` made it free.
 
 ---
 
@@ -419,6 +434,14 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | Numeric **and** `string`↔`bytes` promotions are all reported at `Source` | M5.2 | Low. `string`↔`bytes` is the arguable one: Avro's JSON encoding escapes bytes differently, so a case could be made for `WireJson`. Revisit if it bites |
 | Avro paths are name-based (`#/fields/note`), not RFC 6901 index-based like the JSON engine's | M5.2 | Low, but **user-visible in every finding**. Avro matches fields by name, so an index is not a stable identifier — reordering fields is compatible and would renumber every path |
 | `ContentModel` is ignored by the Avro checker | M5.2 | Low. Avro records are closed by construction; there is no `additionalProperties` equivalent to honour |
+| The `.proto` parser is hand-written rather than taking a dependency | [M5.3](plan/M5-formats.md) | Low, and doubly forced: ADR-019 needs canonicalisation reproduced byte-for-byte in every SDK, and the mature .NET `.proto` parsers are reflection-heavy — which M3.3 established fails *silently* in the CLI's NativeAOT binary |
+| The Protobuf canonical form is normalised `.proto` source, not a serialised `FileDescriptorProto` | M5.3 | **Free today, needs a preimage bump and a migration once a Protobuf schema is stored.** DESIGN §4 names the descriptor; a descriptor is the right model but the wrong thing to *serve*, since a consumer wants source it can give to `protoc` — the same lesson as [#17](#17-avros-parsing-canonical-form-is-lossy-and-the-architecture-stores-the-canonical-form) |
+| Protobuf canonical output is indented, not minified like the JSON and Avro forms | M5.3 | Low. Determinism and idempotence are what canonicalisation needs; this one is read and compiled by people |
+| proto2, groups, `extend`, `service` and aggregate option values are **refused**, not parsed | M5.3 | Low, and user-visible. A parser that silently mis-reads a construct yields a confidently wrong id *and* a confidently wrong verdict |
+| Four more `BreakingChangeKinds` tokens: `wire_type_changed`, `field_removed_without_reserved`, `field_number_reused`, `presence_changed` | M5.3 | Low, additive, normative under ADR-019 once published |
+| Bidirectional Protobuf breaks are emitted once per direction | M5.3 | Low, and required: Protobuf is not reader/writer asymmetric like Avro, so a single-direction finding would let a `Forward`-only policy miss a wire-type change entirely |
+| `int32 → int64` is reported at **`WireJson`**, not `Source` | M5.3 | Low. proto3 JSON encodes 64-bit integers as quoted strings and 32-bit as bare numbers, so the JSON mapping genuinely changes. Still satisfies DESIGN §12's "passes `WIRE`, fails `SOURCE`" |
+| Removing a field without `reserved` is reported at `Wire` even though nothing breaks that day | M5.3 | Low. The hazard is a later version reusing the number; flagging it at removal is the only moment it is cheap to fix |
 
 ---
 

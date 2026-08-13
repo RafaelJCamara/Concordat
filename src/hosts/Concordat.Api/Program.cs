@@ -4,6 +4,7 @@ using Concordat.Application.Abstractions;
 using Concordat.Formats.Abstractions;
 using Concordat.Formats.Avro;
 using Concordat.Formats.Json;
+using Concordat.Formats.Protobuf;
 using Concordat.Infrastructure;
 using Concordat.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -31,6 +32,11 @@ builder.Services.AddSingleton<ISchemaBundler, JsonSchemaBundler>();
 // and fail loudly (NotSupportedException) rather than silently doing the wrong thing.
 builder.Services.AddSingleton<ISchemaCanonicalizer, AvroSchemaCanonicalizer>();
 builder.Services.AddSingleton<ICompatibilityChecker, AvroSchemaCompatibilityChecker>();
+
+// Protobuf, on the same footing: `import` carries no version either, so reference extraction
+// waits on the same decision.
+builder.Services.AddSingleton<ISchemaCanonicalizer, ProtoSchemaCanonicalizer>();
+builder.Services.AddSingleton<ICompatibilityChecker, ProtoSchemaCompatibilityChecker>();
 
 builder.Services.AddSingleton<IEnvironmentResolver, DerivedEnvironmentResolver>();
 
