@@ -1,0 +1,11 @@
+{
+  "name": "unique-items-treats-1-and-1.0-as-equal",
+  "why": "JSON equality is mathematical for numbers, so 1 and 1.0 are the same value even though they are different literals. Canonicalisation deliberately preserves the literals (they produce different schema ids), which makes it easy to assume validation distinguishes them too. It does not.",
+  "schema": "{\"type\":\"object\",\"properties\":{\"xs\":{\"type\":\"array\",\"uniqueItems\":true}}}",
+  "mustAccept": [
+    "{\"xs\":[1,2]}"
+  ],
+  "mustReject": [
+    "{\"xs\":[1,1.0]}"
+  ]
+}

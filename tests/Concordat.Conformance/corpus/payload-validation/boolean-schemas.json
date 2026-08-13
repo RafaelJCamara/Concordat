@@ -1,0 +1,14 @@
+{
+  "name": "true-and-false-are-schemas",
+  "why": "A schema may be a boolean rather than an object: true accepts everything, false rejects everything. Implementations that assume a schema is always an object throw on these instead of validating, which surfaces as a crash rather than a verdict on the delivery path.",
+  "schema": "{\"type\":\"object\",\"properties\":{\"anything\":true,\"nothing\":false}}",
+  "mustAccept": [
+    "{\"anything\":1}",
+    "{\"anything\":{\"deep\":[]}}",
+    "{}"
+  ],
+  "mustReject": [
+    "{\"nothing\":1}",
+    "{\"nothing\":null}"
+  ]
+}

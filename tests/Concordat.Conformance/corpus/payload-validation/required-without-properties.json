@@ -1,0 +1,14 @@
+{
+  "name": "required-may-name-an-undescribed-property",
+  "why": "'required' and 'properties' are independent keywords. A property can be required without being described, and an implementation that resolves required against the properties map silently stops enforcing it.",
+  "schema": "{\"type\":\"object\",\"required\":[\"id\"]}",
+  "mustAccept": [
+    "{\"id\":1}",
+    "{\"id\":null}",
+    "{\"id\":\"x\",\"other\":true}"
+  ],
+  "mustReject": [
+    "{}",
+    "{\"other\":true}"
+  ]
+}

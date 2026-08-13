@@ -1,0 +1,14 @@
+{
+  "name": "pattern-matches-anywhere-in-the-string",
+  "why": "JSON Schema's 'pattern' is an unanchored search, not a full match. Python's re.match anchors at the start and re.fullmatch anchors both ends, so an implementation reaching for the obvious function rejects documents every other validator accepts. Authors who want anchoring must write ^ and $ themselves.",
+  "schema": "{\"type\":\"object\",\"properties\":{\"s\":{\"type\":\"string\",\"pattern\":\"abc\"}}}",
+  "mustAccept": [
+    "{\"s\":\"abc\"}",
+    "{\"s\":\"xxabcxx\"}",
+    "{\"s\":\"abcdef\"}"
+  ],
+  "mustReject": [
+    "{\"s\":\"abd\"}",
+    "{\"s\":\"\"}"
+  ]
+}

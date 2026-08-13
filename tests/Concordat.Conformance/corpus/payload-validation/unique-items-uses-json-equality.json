@@ -1,0 +1,12 @@
+{
+  "name": "unique-items-compares-values-not-serialised-text",
+  "why": "uniqueItems compares JSON values, so two objects with the same members in a different order are equal and violate it. An implementation that compares serialised strings - the obvious shortcut - accepts this array, and two SDKs then disagree about whether the same payload is valid.",
+  "schema": "{\"type\":\"object\",\"properties\":{\"xs\":{\"type\":\"array\",\"uniqueItems\":true}}}",
+  "mustAccept": [
+    "{\"xs\":[{\"a\":1},{\"a\":2}]}",
+    "{\"xs\":[]}"
+  ],
+  "mustReject": [
+    "{\"xs\":[{\"a\":1,\"b\":2},{\"b\":2,\"a\":1}]}"
+  ]
+}

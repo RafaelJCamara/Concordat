@@ -1,0 +1,17 @@
+{
+  "name": "enum-membership-is-type-strict",
+  "why": "enum compares JSON values, so the string \"1\" is not the number 1. A validator that coerces - the JavaScript instinct - accepts a payload every other SDK rejects.",
+  "schema": "{\"type\":\"object\",\"properties\":{\"v\":{\"enum\":[1,\"a\",null,true]}}}",
+  "mustAccept": [
+    "{\"v\":1}",
+    "{\"v\":\"a\"}",
+    "{\"v\":null}",
+    "{\"v\":true}"
+  ],
+  "mustReject": [
+    "{\"v\":\"1\"}",
+    "{\"v\":0}",
+    "{\"v\":false}",
+    "{\"v\":\"b\"}"
+  ]
+}

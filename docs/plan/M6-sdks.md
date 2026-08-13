@@ -21,10 +21,41 @@ Do this before the first SDK, not during it.
       Settles what was [DECISIONS-PENDING #9](../DECISIONS-PENDING.md#settled)
 - [x] **Audit the API for CLR-shaped leakage** — done, and it found something worse than
       leakage. See below
+- [x] Expand the payload-validation corpus — **4 fixtures to 12, and every one of the 8 new
+      cases failed on first run.** See below
 - [ ] Publish the five normative artifacts as a coherent set (OpenAPI, envelope spec, canonicalisation rules, `concordatCode` catalogue, conformance corpus)
-- [ ] Expand the payload-validation corpus — five independent validators (`ajv`, `jsonschema`, `santhosh-tekuri`, `networknt`, .NET) disagree at the edges, and this is the only thing that turns that into a CI failure rather than a support ticket
 - [ ] Surface portability findings in `concordat lint` — the offline path, and the one a
       pre-commit hook can afford
+
+### The payload corpus found four real divergences, all in our own validator
+
+The brief said the corpus is "the only thing that turns disagreement into a CI failure rather
+than a support ticket". It did that immediately: eight new fixtures, **four failures**, all of
+them NJsonSchema disagreeing with draft 2020-12. Every one would have shipped as a payload that
+passes in .NET and is quarantined elsewhere, or the reverse — with no bug on any SDK author's
+part.
+
+| Divergence | NJsonSchema | The specification | Consequence |
+|---|---|---|---|
+| **Boolean subschemas** (`{"a": true}`) | fails to compile | `true` accepts all, `false` rejects all | **Severe.** An uncompilable schema is reported invalid, so a registerable schema quarantines *all its own traffic* |
+| `maxLength`/`minLength` | counts UTF-16 code units | counts characters | An emoji fails `maxLength: 1` in .NET and passes in Python and Go |
+| `enum` / `const` | coerces `"1"` to match `1` | JSON equality is type-strict | .NET accepts a payload every other SDK rejects |
+| `uniqueItems` | compares serialised text | compares JSON values | `[{"a":1,"b":2},{"b":2,"a":1}]` is two spellings of one value and must violate uniqueness |
+
+All four are corrected in `Draft202012Corrections`, following the precedent M2 set for
+`integer`: **the corpus is normative and the library is not.** The corrections never touch the
+canonical text or its hash — a correction that changed a schema id would be a worse bug than
+the one it fixed.
+
+The boolean-subschema fix rewrites `true` → `{}` and `false` → `{"not":{}}` before compiling,
+and only in genuine schema positions. `{"uniqueItems": true}` is a boolean *keyword*, not a
+subschema, and rewriting it would corrupt the schema — which is why the keyword sets are
+enumerated rather than inferred.
+
+**The two over-permissive cases could not be fixed by filtering**, unlike `integer` and the
+length bounds: there is no error to drop, so the violation has to be found. That walk covers
+`properties`, `items` and `prefixItems` and stops at the applicator keywords — exactly where
+`JsonSchemaPortabilityChecker` starts warning, so the boundary is one line rather than two.
 
 ### The OpenAPI document described no responses at all
 

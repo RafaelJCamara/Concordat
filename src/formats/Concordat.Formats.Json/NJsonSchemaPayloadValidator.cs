@@ -48,7 +48,11 @@ public sealed class NJsonSchemaPayloadValidator : IPayloadValidator
         {
             schema = _compiled.GetOrAdd(
                 canonicalSchema,
-                static text => JsonSchema.FromJsonAsync(text).GetAwaiter().GetResult());
+                // Boolean subschemas are rewritten to their object equivalents purely so this
+                // library can compile them; the canonical text and its id are untouched.
+                static text => JsonSchema
+                    .FromJsonAsync(Draft202012Corrections.RewriteBooleanSubschemas(text))
+                    .GetAwaiter().GetResult());
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
@@ -73,11 +77,24 @@ public sealed class NJsonSchemaPayloadValidator : IPayloadValidator
                 [new PayloadError("#", "malformed_json", $"The payload is not well-formed JSON: {ex.Message}")]);
         }
 
-        var corrected = CorrectToDraft202012(errors, payload);
+        var corrected = CorrectToDraft202012(errors, payload, canonicalSchema);
 
-        return corrected.Count == 0
-            ? PayloadValidationResult.Valid
-            : new PayloadValidationResult(false, [.. corrected.Select(Translate)]);
+        // NJsonSchema is over-strict on string length and over-permissive on enum, const and
+        // uniqueItems. The first is filtered above; the second cannot be, because there is no
+        // error to drop — the violation has to be found.
+        var missed = Draft202012Corrections.FindMissedViolations(canonicalSchema, payload);
+
+        if (corrected.Count == 0 && missed.Count == 0)
+        {
+            return PayloadValidationResult.Valid;
+        }
+
+        return new PayloadValidationResult(
+            false,
+            [
+                .. corrected.Select(Translate),
+                .. missed.Select(m => new PayloadError(m.Path, m.Kind, m.Message)),
+            ]);
     }
 
     /// <summary>
@@ -101,19 +118,108 @@ public sealed class NJsonSchemaPayloadValidator : IPayloadValidator
     /// </para>
     /// </remarks>
     private static List<ValidationError> CorrectToDraft202012(
-        ICollection<ValidationError> errors, string payload)
+        ICollection<ValidationError> errors, string payload, string canonicalSchema)
     {
-        if (errors.Count == 0 || errors.All(e => e.Kind is not ValidationErrorKind.IntegerExpected))
+        var correctable = errors.Where(e =>
+            e.Kind is ValidationErrorKind.IntegerExpected
+                or ValidationErrorKind.StringTooLong
+                or ValidationErrorKind.StringTooShort).ToList();
+
+        if (correctable.Count == 0)
         {
             return [.. errors];
         }
 
         using var document = System.Text.Json.JsonDocument.Parse(payload);
+        using var schema = System.Text.Json.JsonDocument.Parse(canonicalSchema);
 
-        return [.. errors.Where(e =>
-            e.Kind is not ValidationErrorKind.IntegerExpected ||
-            !HasZeroFractionalPart(document.RootElement, e.Path))];
+        return [.. errors.Where(e => e.Kind switch
+        {
+            ValidationErrorKind.IntegerExpected =>
+                !HasZeroFractionalPart(document.RootElement, e.Path),
+
+            // NJsonSchema counts UTF-16 code units; 2020-12 counts characters. Anything outside
+            // the Basic Multilingual Plane counts double, so an emoji fails maxLength 1 here and
+            // passes in Python and Go.
+            ValidationErrorKind.StringTooLong or ValidationErrorKind.StringTooShort =>
+                !LengthIsActuallySatisfied(schema.RootElement, document.RootElement, e),
+
+            _ => true,
+        })];
     }
+
+    private static bool LengthIsActuallySatisfied(
+        System.Text.Json.JsonElement schemaRoot,
+        System.Text.Json.JsonElement payloadRoot,
+        ValidationError error)
+    {
+        if (Resolve(payloadRoot, error.Path) is not
+            { ValueKind: System.Text.Json.JsonValueKind.String } value)
+        {
+            return false;
+        }
+
+        var isMaximum = error.Kind is ValidationErrorKind.StringTooLong;
+        var keyword = isMaximum ? "maxLength" : "minLength";
+
+        return FindBound(schemaRoot, error.Path, keyword) is { } bound &&
+            Draft202012Corrections.LengthSatisfiedByCodePoints(value.GetString()!, bound, isMaximum);
+    }
+
+    /// <summary>Reads the length bound that applies at a payload path.</summary>
+    /// <remarks>
+    /// Walks <c>properties</c> and <c>items</c> alongside the payload path. It deliberately
+    /// does not chase applicator keywords: a bound reached only through <c>oneOf</c> is already
+    /// outside the interoperable subset that <c>JsonSchemaPortabilityChecker</c> warns about, so
+    /// the correction stops exactly where the warning starts.
+    /// </remarks>
+    private static int? FindBound(
+        System.Text.Json.JsonElement schema, string? path, string keyword)
+    {
+        var current = schema;
+
+        foreach (var segment in Segments(path))
+        {
+            if (current.ValueKind is not System.Text.Json.JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            if (int.TryParse(segment, CultureInfo.InvariantCulture, out _))
+            {
+                if (!current.TryGetProperty("items", out var items))
+                {
+                    return null;
+                }
+
+                current = items;
+                continue;
+            }
+
+            if (!current.TryGetProperty("properties", out var properties) ||
+                !properties.TryGetProperty(segment, out var member))
+            {
+                return null;
+            }
+
+            current = member;
+        }
+
+        return current.ValueKind is System.Text.Json.JsonValueKind.Object &&
+            current.TryGetProperty(keyword, out var bound) &&
+            bound.ValueKind is System.Text.Json.JsonValueKind.Number &&
+            bound.TryGetInt32(out var value)
+            ? value
+            : null;
+    }
+
+    private static string[] Segments(string? path) =>
+        string.IsNullOrEmpty(path) || path is "#"
+            ? []
+            : (path.StartsWith('#') ? path[1..] : path)
+                .Replace("[", ".", StringComparison.Ordinal)
+                .Replace("]", string.Empty, StringComparison.Ordinal)
+                .Split(['.', '/'], StringSplitOptions.RemoveEmptyEntries);
 
     private static bool HasZeroFractionalPart(
         System.Text.Json.JsonElement root, string? path)

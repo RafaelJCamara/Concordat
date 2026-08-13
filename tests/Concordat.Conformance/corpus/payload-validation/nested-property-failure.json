@@ -1,0 +1,13 @@
+{
+  "name": "validation-descends-into-nested-objects-and-arrays",
+  "why": "A shallow implementation that checks only top-level properties passes every fixture above and still lets a malformed nested payload through. This is the cheapest way to catch that.",
+  "schema": "{\"type\":\"object\",\"properties\":{\"order\":{\"type\":\"object\",\"properties\":{\"items\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"sku\":{\"type\":\"string\"}},\"required\":[\"sku\"]}}}}}}",
+  "mustAccept": [
+    "{\"order\":{\"items\":[{\"sku\":\"a\"}]}}",
+    "{\"order\":{\"items\":[]}}"
+  ],
+  "mustReject": [
+    "{\"order\":{\"items\":[{\"sku\":1}]}}",
+    "{\"order\":{\"items\":[{}]}}"
+  ]
+}

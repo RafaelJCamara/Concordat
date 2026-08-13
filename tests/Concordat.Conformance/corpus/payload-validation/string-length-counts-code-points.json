@@ -1,0 +1,13 @@
+{
+  "name": "string-length-counts-characters-not-utf16-units",
+  "why": "The classic cross-language divergence, and the reason this category exists. JSON Schema counts Unicode characters; JavaScript's String.length counts UTF-16 code units, so a naive JS validator sees the treble-clef U+1D11E as length 2 and rejects it against maxLength 1. Python and Go count code points and accept. ajv special-cases this correctly - an SDK that reimplements the check by hand will not.",
+  "schema": "{\"type\":\"object\",\"properties\":{\"s\":{\"type\":\"string\",\"maxLength\":1}}}",
+  "mustAccept": [
+    "{\"s\":\"𝄞\"}",
+    "{\"s\":\"a\"}",
+    "{\"s\":\"\"}"
+  ],
+  "mustReject": [
+    "{\"s\":\"ab\"}"
+  ]
+}
