@@ -111,10 +111,25 @@ format, build, test — all exit 0 and produce `test-results.trx` plus five
 - Dependabot for `nuget` and `github-actions`
 - A markdown link check — the docs already carry ~60 cross-references
 
-## M0.4 ADRs
+## M0.4 ADRs — **DONE 2026-08-13**
 
-- [ ] ADR template
-- [ ] Expand decisions 001–022 from the DESIGN.md table into `docs/adr/`, one file each
+- [x] [`docs/adr/TEMPLATE.md`](../adr/TEMPLATE.md) — Context / Decision / Alternatives / Consequences / References
+- [x] [`docs/adr/README.md`](../adr/README.md) — index of all 22, with status
+- [x] All 22 decisions expanded, one file each
+
+**The ADRs are canonical; the DESIGN.md table is a digest that links to them.** Two sources
+of truth would drift, so the relationship is stated in both places.
+
+Each record carries what a table cannot: **alternatives rejected with the specific reason**,
+and **consequences including the negative ones**. An ADR with only upside is not finished —
+[ADR-005](../adr/005-enforcement-location.md) states plainly that enforcement is opt-in and
+Concordat cannot stop a publisher that skips the SDK; [ADR-013](../adr/013-amqp-091-only.md)
+states that its 1.0-safety claim is currently an assertion, not a verified property.
+
+The rejected-alternatives sections exist so settled questions stay settled.
+[ADR-022](../adr/022-project-name-concordat.md) is the clearest case: it records why Signet,
+Hutch, Syngraph, Stipula, Warrenty and Indenture were each rejected, so "why not Signet?"
+is answered once rather than every few months.
 
 ---
 

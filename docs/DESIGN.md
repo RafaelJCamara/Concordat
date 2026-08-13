@@ -35,7 +35,10 @@ Kafka-only and was archived in 2024.
 
 ## Decisions
 
-Each of these should be expanded into an ADR under `docs/adr/`.
+**This table is a digest.** The full records — alternatives rejected and why, consequences
+including the bad ones, status — live in [`docs/adr/`](adr/README.md), one file per
+decision. **The ADR is canonical**; if the two ever disagree, this table is what needs
+updating.
 
 | # | Decision | Rationale |
 |---|---|---|
