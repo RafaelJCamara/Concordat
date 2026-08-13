@@ -310,6 +310,22 @@ public sealed class Subject
         return Result.Success();
     }
 
+    /// <summary>Transfers ownership.</summary>
+    /// <param name="owner">The new owner.</param>
+    /// <returns>Success, or a failure when the subject is retired.</returns>
+    public Result ChangeOwner(ActorId owner)
+    {
+        if (Lifecycle is SubjectLifecycle.Retired)
+        {
+            return Result.Failure(
+                ConcordatCodes.LifecycleTransitionInvalid,
+                $"Subject '{Name}' is retired.");
+        }
+
+        Owner = owner;
+        return Result.Success();
+    }
+
     /// <summary>Marks the subject deprecated. Advisory: it still accepts versions.</summary>
     /// <returns>Success, or a failure when the subject is retired.</returns>
     public Result Deprecate()

@@ -325,12 +325,40 @@ distinct "forbidden" would confirm another tenant's schema exists.
 - [x] **Bundling**, deferred from M1.4 — `GET /v1/schemas/{id}/bundled`
 - [x] **OpenAPI 3.1 generated, committed and drift-gated** — `docs/api/openapi.v1.json`,
       12 paths, emitted on every build; CI fails when it differs from what is committed
-- [ ] `POST /environments/{env}/bootstrap`
-- [ ] `GET …/versions/{a}/diff/{b}`
-- [ ] Subject patch and delete
+- [x] **`POST /environments/{env}/bootstrap`** — every subject plus every schema they need,
+      including ones reachable only by reference, in one request
+- [x] **`GET …/versions/{from}/diff/{to}`**
+- [x] **Subject patch and retire** — `PATCH` for owner and deprecation, `DELETE` for the
+      soft delete
 - [ ] `GET|PUT …/registration-policy` → **blocked on M7**, see below
-- [ ] Negative-lookup caching semantics
+- [ ] Negative-lookup caching semantics → deferred to M2, where the client cache exists
 - [ ] Subject prefix search — needs a `ComplexProperty` mapping or a shadow column
+
+14 paths in the committed OpenAPI document; 245 tests.
+
+### Bootstrap exists because cold start is the real load pattern
+
+Not steady state. A fleet-wide rolling restart empties every cache at the same instant and
+stampedes the registry — which sits on the *deserialize* path, so a registry that buckles
+takes consumption down with it. Confluent Cloud caps Schema Registry at 75 reads/sec on every
+tier, which is a low ceiling for exactly that burst.
+
+The payload is self-sufficient: referenced schemas are included transitively, so a cold client
+never has to follow a reference with a call it did not plan for. Retired subjects are
+excluded — priming a cache with soft-deleted contracts would be worse than useless.
+
+### The diff reports everything, not just violations
+
+Filtering a diff by the current policy would hide differences that matter to a consumer who
+generates code. A test asserts a forward-breaking widening still appears on a subject whose
+policy is `Backward`, where a policy-filtered view would show nothing.
+
+### There is still no hard delete
+
+`DELETE` retires. Schemas are never removed (ADR-015), and removing a subject needs the
+registered-consumer check and audit entry from DESIGN §4, both M7. Retirement is terminal and
+blocks further registration; deprecation is advisory and does not, because existing producers
+still need to patch their contract.
 
 ### Bundling stayed out of storage, deliberately
 

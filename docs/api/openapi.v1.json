@@ -5,6 +5,30 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/v1/environments/{env}/bootstrap": {
+      "post": {
+        "tags": [
+          "Bootstrap"
+        ],
+        "summary": "Fetch everything needed to warm a client cache, in one request",
+        "description": "Cold start is the real load pattern, not steady state. A fleet-wide rolling restart empties every cache at the same moment and stampedes the registry — which sits on the deserialize path, so a registry that buckles takes consumption down with it. One request instead of N is the mitigation. Referenced schemas are included transitively, so the payload is self-sufficient and a client never has to follow a reference it did not plan for. Retired subjects are excluded.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/v1/environments/{env}/subjects": {
       "post": {
         "tags": [
@@ -66,6 +90,76 @@
           "Subjects"
         ],
         "summary": "Get a subject and its versions",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Subjects"
+        ],
+        "summary": "Change a subject's owner, or deprecate it",
+        "description": "Deprecation is advisory: a deprecated subject still accepts versions, because existing producers need to be able to patch their contract.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSubjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Subjects"
+        ],
+        "summary": "Retire a subject",
+        "description": "The soft delete, and terminal. There is no hard delete: schemas are never removed (ADR-015), and removing a subject needs the registered-consumer check and audit entry that arrive in M7.",
         "parameters": [
           {
             "name": "env",
@@ -339,6 +433,58 @@
           },
           "required": true
         },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/subjects/{subject}/versions/{from}/diff/{to}": {
+      "get": {
+        "tags": [
+          "Subjects"
+        ],
+        "summary": "Compare two versions",
+        "description": "Reports every difference, not only policy violations. A diff answers 'what changed'; filtering it by the current policy would hide differences that matter to a consumer generating code.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "to",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -656,10 +802,31 @@
           }
         },
         "description": "Request to change a subject's compatibility policy."
+      },
+      "UpdateSubjectRequest": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "A new owner, or `null` to leave it unchanged."
+          },
+          "deprecate": {
+            "type": "boolean",
+            "description": "Whether to mark the subject deprecated.",
+            "default": false
+          }
+        },
+        "description": "Request to change a subject's owner or deprecate it."
       }
     }
   },
   "tags": [
+    {
+      "name": "Bootstrap"
+    },
     {
       "name": "Subjects"
     },

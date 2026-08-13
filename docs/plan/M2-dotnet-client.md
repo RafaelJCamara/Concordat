@@ -12,6 +12,9 @@ Scope is RabbitMQ.Client only (ADR-020). Service-bus adapters are [Appendix A](.
 - [ ] Problem Details → typed exceptions, `concordatCode` preserved
 - [ ] Cache: `schema-id → schema` and `subject+version → schema-id` **immutable, cached forever** (guaranteed by content-addressing, not assumed)
 - [ ] Cache: `subject → latest` 30 s TTL; contract resolution 60 s TTL; negative lookups cached
+- [ ] **Negative-lookup caching, deferred from M1.6** — it belongs on the client, not as a
+      server cache header. The failure it prevents is a missing subject retry-storming the
+      registry during a cold start, and only the client can decline to retry
 - [ ] Warm-up via `POST /bootstrap`, **with jitter** — a fleet-wide rolling restart must not stampede
 - [ ] `fail-open | fail-closed` configuration
 - [ ] **Hard rule enforced by test: after warm-up the registry is never in the delivery path**

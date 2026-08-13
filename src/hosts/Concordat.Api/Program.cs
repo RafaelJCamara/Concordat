@@ -41,6 +41,7 @@ app.MapOpenApi();
 
 app.MapSubjectEndpoints();
 app.MapSchemaEndpoints();
+app.MapBootstrapEndpoint();
 
 // Liveness answers "is the process up", readiness answers "can it serve". Conflating them
 // makes an orchestrator restart a healthy process during a database blip.

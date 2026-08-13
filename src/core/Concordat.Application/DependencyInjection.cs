@@ -67,6 +67,8 @@ public static class DependencyInjection
             ICommandHandler<RegisterVersionCommand, RegisterVersionResult>, RegisterVersionHandler>();
         services.AddScoped<ICommandHandler<CreateSubjectCommand, Subject>, CreateSubjectHandler>();
         services.AddScoped<ICommandHandler<DecideVersionCommand, Subject>, DecideVersionHandler>();
+        services.AddScoped<ICommandHandler<UpdateSubjectCommand, Subject>, UpdateSubjectHandler>();
+        services.AddScoped<ICommandHandler<RetireSubjectCommand, Subject>, RetireSubjectHandler>();
 
         services.AddScoped<IQueryHandler<GetSubjectQuery, Subject>, GetSubjectHandler>();
         services.AddScoped<
@@ -78,6 +80,8 @@ public static class DependencyInjection
             IQueryHandler<GetBundledSchemaQuery, BundledSchema>, GetBundledSchemaHandler>();
         services.AddScoped<
             IQueryHandler<GetSchemaUsagesQuery, IReadOnlyList<SchemaUsage>>, GetSchemaUsagesHandler>();
+        services.AddScoped<IQueryHandler<DiffVersionsQuery, DiffResult>, DiffVersionsHandler>();
+        services.AddScoped<IQueryHandler<BootstrapQuery, BootstrapResult>, BootstrapHandler>();
 
         return services;
     }

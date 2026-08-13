@@ -51,6 +51,26 @@ public static class SubjectEndpoints
             .WithSummary("Check a schema without registering it")
             .WithDescription("A dry run. Never writes.");
 
+        group.MapGet("/{subject}/versions/{from:int}/diff/{to:int}", DiffVersions)
+            .WithSummary("Compare two versions")
+            .WithDescription(
+                "Reports every difference, not only policy violations. A diff answers 'what " +
+                "changed'; filtering it by the current policy would hide differences that " +
+                "matter to a consumer generating code.");
+
+        group.MapPatch("/{subject}", UpdateSubject)
+            .WithSummary("Change a subject's owner, or deprecate it")
+            .WithDescription(
+                "Deprecation is advisory: a deprecated subject still accepts versions, because " +
+                "existing producers need to be able to patch their contract.");
+
+        group.MapDelete("/{subject}", RetireSubject)
+            .WithSummary("Retire a subject")
+            .WithDescription(
+                "The soft delete, and terminal. There is no hard delete: schemas are never " +
+                "removed (ADR-015), and removing a subject needs the registered-consumer " +
+                "check and audit entry that arrive in M7.");
+
         group.MapGet("/{subject}/compatibility-policy", GetPolicy)
             .WithSummary("Get the compatibility policy");
         group.MapPut("/{subject}/compatibility-policy", SetPolicy)
@@ -254,6 +274,62 @@ public static class SubjectEndpoints
         return result.IsFailure
             ? ProblemDetailsMapping.From(result.Error!)
             : TypedResults.Ok(CompatibilityResponse.From(result.Value));
+    }
+
+    private static async Task<IResult> DiffVersions(
+        string env, string subject, int from, int to,
+        IDispatcher dispatcher, IEnvironmentResolver environments,
+        CancellationToken cancellationToken)
+    {
+        var result = await dispatcher.QueryAsync(
+            new DiffVersionsQuery(environments.Resolve(env), subject, from, to), cancellationToken)
+            .ConfigureAwait(false);
+
+        if (result.IsFailure)
+        {
+            return ProblemDetailsMapping.From(result.Error!);
+        }
+
+        var value = result.Value;
+        return TypedResults.Ok(new DiffResponse(
+            value.From,
+            value.To,
+            value.FromSchemaId,
+            value.ToSchemaId,
+            value.Identical,
+            PolicyResponse.From(value.Policy),
+            [.. value.Divergences.Select(BreakingChangeResponse.From)]));
+    }
+
+    private static async Task<IResult> UpdateSubject(
+        string env, string subject, UpdateSubjectRequest request,
+        IDispatcher dispatcher, IEnvironmentResolver environments,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var result = await dispatcher.SendAsync(
+            new UpdateSubjectCommand(
+                environments.Resolve(env), subject, request.Owner, request.Deprecate),
+            cancellationToken).ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(SubjectResponse.From(result.Value));
+    }
+
+    private static async Task<IResult> RetireSubject(
+        string env, string subject,
+        IDispatcher dispatcher, IEnvironmentResolver environments,
+        CancellationToken cancellationToken)
+    {
+        var result = await dispatcher.SendAsync(
+            new RetireSubjectCommand(environments.Resolve(env), subject), cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(SubjectResponse.From(result.Value));
     }
 
     private static async Task<IResult> GetPolicy(

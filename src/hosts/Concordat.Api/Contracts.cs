@@ -45,6 +45,11 @@ public sealed record DecideVersionRequest(string DecidedBy);
 /// <param name="Surface">How much must keep working.</param>
 public sealed record SetCompatibilityPolicyRequest(string? Mode, string? Surface);
 
+/// <summary>Request to change a subject's owner or deprecate it.</summary>
+/// <param name="Owner">A new owner, or <see langword="null"/> to leave it unchanged.</param>
+/// <param name="Deprecate">Whether to mark the subject deprecated.</param>
+public sealed record UpdateSubjectRequest(string? Owner = null, bool Deprecate = false);
+
 /// <summary>Request to look a schema up by its content.</summary>
 /// <param name="Format">One of <c>json</c>, <c>avro</c>, <c>protobuf</c>.</param>
 /// <param name="Schema">The schema document.</param>
@@ -257,6 +262,45 @@ public sealed record SchemaResponse(
 /// <param name="Subject">The referenced subject.</param>
 /// <param name="Version">The referenced version ordinal.</param>
 public sealed record ReferenceResponse(string Name, string Subject, int Version);
+
+/// <summary>The difference between two versions.</summary>
+/// <param name="From">The earlier ordinal.</param>
+/// <param name="To">The later ordinal.</param>
+/// <param name="FromSchemaId">The earlier schema id.</param>
+/// <param name="ToSchemaId">The later schema id.</param>
+/// <param name="Identical">Whether both ordinals point at the same content.</param>
+/// <param name="Policy">The policy the comparison was evaluated under.</param>
+/// <param name="Divergences">Every difference, whether or not the policy tolerates it.</param>
+public sealed record DiffResponse(
+    int From,
+    int To,
+    string FromSchemaId,
+    string ToSchemaId,
+    bool Identical,
+    PolicyResponse Policy,
+    IReadOnlyList<BreakingChangeResponse> Divergences);
+
+/// <summary>The bootstrap payload: everything a client needs to warm its cache.</summary>
+/// <param name="Subjects">Every non-retired subject in the environment.</param>
+/// <param name="Schemas">
+/// Every schema those subjects need, keyed by id, including ones reached only by reference.
+/// </param>
+public sealed record BootstrapResponse(
+    IReadOnlyList<BootstrapSubjectResponse> Subjects,
+    IReadOnlyDictionary<string, SchemaResponse> Schemas);
+
+/// <summary>One subject's current state in a bootstrap payload.</summary>
+/// <param name="Name">The subject name.</param>
+/// <param name="Format">The schema language.</param>
+/// <param name="LatestOrdinal">The gated latest pointer, or <see langword="null"/>.</param>
+/// <param name="LatestSchemaId">The schema the pointer resolves to.</param>
+/// <param name="LatestSemver">Its optional label.</param>
+public sealed record BootstrapSubjectResponse(
+    string Name,
+    string Format,
+    int? LatestOrdinal,
+    string? LatestSchemaId,
+    string? LatestSemver);
 
 /// <summary>The outcome of registering a version.</summary>
 /// <param name="Subject">The subject name.</param>

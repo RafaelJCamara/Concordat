@@ -347,6 +347,129 @@ public class RegistryApiTests(ApiFactory factory)
     }
 
     [Fact]
+    public async Task Bootstrap_ReturnsEverySubjectAndEverySchemaItNeeds()
+    {
+        // One request instead of N. The payload must be self-sufficient, including schemas
+        // reachable only by reference, or a cold client still makes the follow-up calls this
+        // endpoint exists to avoid.
+        var client = Client();
+
+        var address = await NewSubjectAsync(client);
+        await RegisterAsync(
+            client, address, """{"type":"object","properties":{"city":{"type":"string"}}}""");
+
+        var order = await NewSubjectAsync(client);
+        var reference = $"concordat://{Env}/{address}/1";
+        await RegisterAsync(
+            client, order,
+            """{"type":"object","properties":{"addr":{"$ref":"REF"}}}""".Replace(
+                "REF", reference, StringComparison.Ordinal));
+
+        var response = await client.PostAsync($"/v1/environments/{Env}/bootstrap", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await ApiFactory.ReadAsync<BootstrapResponse>(response);
+
+        var orderEntry = Assert.Single(body.Subjects, s => s.Name == order);
+        Assert.Equal(1, orderEntry.LatestOrdinal);
+        Assert.NotNull(orderEntry.LatestSchemaId);
+
+        // Both the referring schema and the referenced one, keyed by id.
+        Assert.True(body.Schemas.ContainsKey(orderEntry.LatestSchemaId!));
+        var addressEntry = Assert.Single(body.Subjects, s => s.Name == address);
+        Assert.True(body.Schemas.ContainsKey(addressEntry.LatestSchemaId!));
+    }
+
+    [Fact]
+    public async Task Bootstrap_ExcludesRetiredSubjects()
+    {
+        var client = Client();
+        var subject = await NewSubjectAsync(client);
+        await RegisterAsync(client, subject, """{"type":"object","x":"retiring"}""");
+
+        await client.DeleteAsync($"/v1/environments/{Env}/subjects/{subject}");
+
+        var body = await ApiFactory.ReadAsync<BootstrapResponse>(
+            await client.PostAsync($"/v1/environments/{Env}/bootstrap", null));
+
+        Assert.DoesNotContain(body.Subjects, s => s.Name == subject);
+    }
+
+    [Fact]
+    public async Task Diff_ReportsBothDirectionsRegardlessOfPolicy()
+    {
+        var client = Client();
+        var subject = await NewSubjectAsync(client);
+
+        await RegisterAsync(client, subject, """{"type":"object","properties":{"a":{"type":"string"}}}""");
+        await RegisterAsync(
+            client, subject,
+            """{"type":"object","properties":{"a":{"type":["string","null"]}}}""");
+
+        var response = await client.GetAsync(
+            $"/v1/environments/{Env}/subjects/{subject}/versions/1/diff/2");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await ApiFactory.ReadAsync<DiffResponse>(response);
+
+        Assert.False(body.Identical);
+        // Widening is forward-breaking. The subject's policy is Backward, so a
+        // policy-filtered view would show nothing - a diff must not hide it.
+        Assert.Contains(body.Divergences, d => d.Direction == "FORWARD");
+    }
+
+    [Fact]
+    public async Task Diff_OfAVersionAgainstItself_IsIdentical()
+    {
+        var client = Client();
+        var subject = await NewSubjectAsync(client);
+        await RegisterAsync(client, subject, """{"type":"object","x":"same"}""");
+
+        var body = await ApiFactory.ReadAsync<DiffResponse>(
+            await client.GetAsync($"/v1/environments/{Env}/subjects/{subject}/versions/1/diff/1"));
+
+        Assert.True(body.Identical);
+        Assert.Empty(body.Divergences);
+    }
+
+    [Fact]
+    public async Task Retire_IsTerminalAndBlocksFurtherRegistration()
+    {
+        var client = Client();
+        var subject = await NewSubjectAsync(client);
+        await RegisterAsync(client, subject, """{"type":"object","x":"gone"}""");
+
+        var retired = await client.DeleteAsync($"/v1/environments/{Env}/subjects/{subject}");
+        Assert.Equal(HttpStatusCode.OK, retired.StatusCode);
+        Assert.Equal("RETIRED", (await ApiFactory.ReadAsync<SubjectResponse>(retired)).Lifecycle);
+
+        var blocked = await RegisterAsync(client, subject, """{"type":"object","x":"after"}""");
+        Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
+    }
+
+    [Fact]
+    public async Task Deprecate_IsAdvisoryAndStillAcceptsVersions()
+    {
+        // Existing producers still need to be able to patch their contract.
+        var client = Client();
+        var subject = await NewSubjectAsync(client);
+        await RegisterAsync(client, subject, """{"type":"object","properties":{"a":{"type":"string"}}}""");
+
+        var patched = await client.PatchAsJsonAsync(
+            $"/v1/environments/{Env}/subjects/{subject}",
+            new UpdateSubjectRequest(Owner: "bob", Deprecate: true),
+            ApiFactory.Json);
+
+        var body = await ApiFactory.ReadAsync<SubjectResponse>(patched);
+        Assert.Equal("DEPRECATED", body.Lifecycle);
+        Assert.Equal("bob", body.Owner);
+
+        var still = await RegisterAsync(
+            client, subject,
+            """{"type":"object","properties":{"a":{"type":"string"},"b":{"type":"string"}}}""");
+        Assert.Equal(HttpStatusCode.Created, still.StatusCode);
+    }
+
+    [Fact]
     public async Task AnUnreachableSchemaId_Is404()
     {
         var client = Client();
