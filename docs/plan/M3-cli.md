@@ -8,10 +8,92 @@ Last milestone on the critical path. With M3 done, Concordat is genuinely useful
 
 ## M3.1 `concordat` CLI
 
-- [ ] `check --env <env> --dir ./contracts` — dry-run compatibility, **exit 1 on break**, offending JSON-Pointer path in output
-- [ ] `push`, `promote`, `diff`, `impact`, `lint`, `export`
-- [ ] `--json` output mode for scripting
-- [ ] Documented exit codes
+**Done 2026-08-13 · DESIGN §7 · 19 tests**
+
+- [x] `check --env <env> --dir ./contracts` — dry-run compatibility, **exit 1 on break**, offending JSON-Pointer path in output
+- [x] `push`, `promote`, `diff`, `lint`, `export`
+- [x] `--json` output mode for scripting
+- [x] Documented exit codes, in `--help` as well as here
+- [ ] `impact` — **deferred to M7.** It answers "who consumes this", and registered consumers
+      do not exist until M7. A version that guessed from traffic would be worse than absent
+
+`System.CommandLine` 2.0.11 (MIT, Microsoft, the parser the .NET SDK itself uses, AOT-friendly
+for M3.3).
+
+### Exit codes are the product here
+
+| Code | Meaning |
+|---|---|
+| 0 | Success |
+| 1 | **Contract violation** — the one CI gates on |
+| 2 | Usage error |
+| 3 | Registry unavailable |
+| 4 | Local file error |
+| 70 | Internal error |
+
+**The split that matters is 1 against 3.** "Your change breaks the contract" and "the registry
+is unreachable" must never share a code. If they do, a pipeline cannot tell a violation from an
+outage, and the way that gets resolved in practice is somebody appending `|| true` — which
+switches the gate off permanently and silently.
+
+That nearly shipped broken: **`System.CommandLine` returns 1 for a parse error**, so
+`concordat lint --jsno` reported a contract violation that never happened. Parse errors are now
+intercepted before invocation and mapped to 2, and `ExitCodeTests` runs the real executable to
+prove it, because an in-process test skips exactly the code that gets this wrong.
+
+### The `./contracts` layout: file name is the subject, extension is the format
+
+No manifest, no front-matter. A manifest is a second source of truth that can disagree with the
+directory, and front-matter is impossible in JSON anyway. It also has to work for people who
+will never run .NET (ADR-019): a Go shop writes `contracts/acme.orders.OrderCreated.json` from
+its own tooling, and `ls` tells them what is registered.
+
+This holds by construction rather than luck — the subject grammar (letters, digits, underscores,
+dots) is a subset of what every filesystem allows.
+
+### `check` gates, `push` records
+
+A breaking change is **not** a push failure. Under ADR-017 it registers as `AwaitingApproval`
+and does not move `latest` — a reviewable artifact, not an error. Making `push` fail too would
+mean a deliberately-approved breaking change could never be recorded at all.
+
+So the merge build runs `check` and the deploy build runs `push`.
+
+### An empty contracts directory is a failure, not a pass
+
+A gate that silently passes because it found nothing is worse than no gate: the pipeline is
+green and nothing was verified. `check` exits 4 and says so.
+
+### The CLI does not use `Concordat.Client`
+
+That client caches schemas forever and the latest pointer for 30 seconds — right on the
+delivery path, wrong for a CI gate. A build that passed because the CLI answered from a stale
+cache is worse than no gate. Every call here goes to the registry.
+
+### Three bugs the real-API tests caught
+
+None of these would have failed against a mock, because a mock would have been written from the
+same wrong assumptions:
+
+- **`VersionResponse` carries no schema text**, only the id. `promote` and `export` both
+  silently produced nulls. Both now fetch the document by id — the right split (the schema table
+  is global and content-addressed, a version is per-environment) but it costs a second call.
+- **The status token is `AWAITING_APPROVAL`, not `AwaitingApproval`.** `push` reported every
+  gated version as a normal registration.
+- **The subject list field is `latest`, not `latestOrdinal`.** It deserialised to null without
+  error, so `export` skipped every subject as "no approved version" and wrote nothing.
+
+### A limitation found and pinned, not hidden
+
+**`diff` cannot show an added or removed property under an open content model** — the default.
+The compatibility engine records a divergence only where one could affect compatibility, and
+under an open model adding a property cannot. So the most common schema change produces two
+different schema ids and an empty divergence list.
+
+The first version of the command called that "a formatting change", which is plainly wrong.
+It now says exactly what happened and why, and a test pins the behaviour so it cannot quietly
+change. Whether the engine should record informational divergences is
+[a decision for you](../DECISIONS-PENDING.md).
 
 ## M3.2 `concordat infer`
 

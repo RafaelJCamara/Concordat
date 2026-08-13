@@ -17,9 +17,13 @@
     <Project Path="src/hosts/Concordat.Api/Concordat.Api.csproj" />
     <Project Path="src/hosts/Concordat.Migrator/Concordat.Migrator.csproj" />
   </Folder>
+  <Folder Name="/src/tools/">
+    <Project Path="src/tools/Concordat.Cli/Concordat.Cli.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Concordat.Api.IntegrationTests/Concordat.Api.IntegrationTests.csproj" />
     <Project Path="tests/Concordat.Application.Tests/Concordat.Application.Tests.csproj" />
+    <Project Path="tests/Concordat.Cli.Tests/Concordat.Cli.Tests.csproj" />
     <Project Path="tests/Concordat.Client.Tests/Concordat.Client.Tests.csproj" />
     <Project Path="tests/Concordat.Conformance/Concordat.Conformance.csproj" />
     <Project Path="tests/Concordat.Domain.Tests/Concordat.Domain.Tests.csproj" />

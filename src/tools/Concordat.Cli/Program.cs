@@ -1,0 +1,228 @@
+using System.CommandLine;
+using Concordat.Cli;
+using Concordat.Cli.Commands;
+
+// Global options. Every one of them also reads an environment variable, because a CI job
+// should configure the registry once for the whole pipeline rather than repeating
+// --registry on nine steps and getting one of them wrong.
+// Recursive, so they work on every subcommand. Without it `concordat lint --json` is a parse
+// error, which is both surprising and — see below — indistinguishable from a broken contract.
+var registryOption = new Option<string>("--registry")
+{
+    Description = "Registry base address. Defaults to $CONCORDAT_REGISTRY.",
+    DefaultValueFactory = _ =>
+        Environment.GetEnvironmentVariable("CONCORDAT_REGISTRY") ?? "http://localhost:8080",
+    Recursive = true,
+};
+
+var environmentOption = new Option<string>("--env", "-e")
+{
+    Description = "Environment name. Defaults to $CONCORDAT_ENV.",
+    DefaultValueFactory = _ => Environment.GetEnvironmentVariable("CONCORDAT_ENV") ?? "default",
+    Recursive = true,
+};
+
+var apiKeyOption = new Option<string?>("--api-key")
+{
+    Description = "API key. Prefer $CONCORDAT_API_KEY — an argument is visible in the process list.",
+    DefaultValueFactory = _ => Environment.GetEnvironmentVariable("CONCORDAT_API_KEY"),
+    Recursive = true,
+};
+
+var jsonOption = new Option<bool>("--json")
+{
+    Description = "Emit one JSON document on stdout and nothing else.",
+    Recursive = true,
+};
+
+var directoryOption = new Option<string>("--dir", "-d")
+{
+    Description = "The contracts directory.",
+    DefaultValueFactory = _ => ContractDirectory.DefaultPath,
+};
+
+var byOption = new Option<string>("--by")
+{
+    Description = "Who is making this change, for the audit trail.",
+    DefaultValueFactory = _ =>
+        Environment.GetEnvironmentVariable("CONCORDAT_ACTOR")
+        ?? Environment.GetEnvironmentVariable("GITHUB_ACTOR")
+        ?? "cli",
+};
+
+var ownerOption = new Option<string>("--owner")
+{
+    Description = "Owner recorded when a subject has to be created.",
+    DefaultValueFactory = _ => Environment.GetEnvironmentVariable("CONCORDAT_OWNER") ?? "unknown",
+};
+
+var root = new RootCommand(
+    "Concordat — schema registry and contract enforcement for RabbitMQ.\n\n" +
+    "Exit codes: 0 success · 1 contract violation · 2 usage · 3 registry unavailable · " +
+    "4 local file error · 70 internal.");
+
+root.Add(registryOption);
+root.Add(environmentOption);
+root.Add(apiKeyOption);
+root.Add(jsonOption);
+
+// ---- check ----
+var check = new Command("check", "Dry-run every contract against the registry. Exits 1 on breakage.");
+check.Add(directoryOption);
+check.SetAction((parse, token) => Run(parse, (api, output) =>
+    CheckCommand.RunAsync(api, output, parse.GetValue(directoryOption)!, token)));
+
+// ---- lint ----
+var lint = new Command("lint", "Check the contracts directory itself. Needs no registry.");
+lint.Add(directoryOption);
+lint.SetAction((parse, _) =>
+{
+    var output = NewOutput(parse);
+    return Task.FromResult(CheckCommand.Lint(output, parse.GetValue(directoryOption)!));
+});
+
+// ---- push ----
+var dryRunOption = new Option<bool>("--dry-run")
+{
+    Description = "Report what would be registered, and change nothing.",
+};
+
+var push = new Command("push", "Register every contract in the directory.");
+push.Add(directoryOption);
+push.Add(ownerOption);
+push.Add(byOption);
+push.Add(dryRunOption);
+push.SetAction((parse, token) => Run(parse, (api, output) =>
+    PushCommand.RunAsync(
+        api,
+        output,
+        parse.GetValue(directoryOption)!,
+        parse.GetValue(ownerOption)!,
+        parse.GetValue(byOption)!,
+        parse.GetValue(dryRunOption),
+        token)));
+
+// ---- promote ----
+var subjectArgument = new Argument<string>("subject") { Description = "The subject to promote." };
+var fromEnvOption = new Option<string>("--from") { Description = "Source environment.", Required = true };
+var toEnvOption = new Option<string>("--to") { Description = "Target environment.", Required = true };
+var ordinalOption = new Option<string>("--version")
+{
+    Description = "Ordinal to promote, or 'latest'.",
+    DefaultValueFactory = _ => "latest",
+};
+
+var promote = new Command("promote", "Copy one subject's version from one environment to another.");
+promote.Add(subjectArgument);
+promote.Add(fromEnvOption);
+promote.Add(toEnvOption);
+promote.Add(ordinalOption);
+promote.Add(ownerOption);
+promote.Add(byOption);
+promote.SetAction(async (parse, token) =>
+{
+    var output = NewOutput(parse);
+
+    try
+    {
+        using var sourceHttp = NewHttpClient(parse);
+        using var targetHttp = NewHttpClient(parse);
+
+        return await PushCommand.PromoteAsync(
+            new RegistryApi(sourceHttp, parse.GetValue(fromEnvOption)!),
+            new RegistryApi(targetHttp, parse.GetValue(toEnvOption)!),
+            output,
+            parse.GetValue(subjectArgument)!,
+            parse.GetValue(ordinalOption)!,
+            parse.GetValue(ownerOption)!,
+            parse.GetValue(byOption)!,
+            token).ConfigureAwait(false);
+    }
+    catch (RegistryException ex)
+    {
+        return output.Fail(ex.ExitCode, ex.Code, ex.Message);
+    }
+});
+
+// ---- diff ----
+var fromOrdinal = new Argument<int>("from") { Description = "The earlier ordinal." };
+var toOrdinal = new Argument<int>("to") { Description = "The later ordinal." };
+
+var diff = new Command("diff", "Show what changed between two versions of a subject.");
+diff.Add(subjectArgument);
+diff.Add(fromOrdinal);
+diff.Add(toOrdinal);
+diff.SetAction((parse, token) => Run(parse, (api, output) =>
+    InspectCommands.DiffAsync(
+        api, output, parse.GetValue(subjectArgument)!,
+        parse.GetValue(fromOrdinal), parse.GetValue(toOrdinal), token)));
+
+// ---- export ----
+var export = new Command("export", "Write an environment's contracts to disk.");
+export.Add(directoryOption);
+export.SetAction((parse, token) => Run(parse, (api, output) =>
+    InspectCommands.ExportAsync(api, output, parse.GetValue(directoryOption)!, token)));
+
+root.Add(check);
+root.Add(lint);
+root.Add(push);
+root.Add(promote);
+root.Add(diff);
+root.Add(export);
+
+var parsed = root.Parse(args);
+
+// System.CommandLine returns 1 for a parse error, which is ExitCodes.ContractViolation. That
+// collision is the exact failure ExitCodes exists to prevent: a mistyped flag would tell CI
+// that a schema broke, and the pipeline would report a contract violation that never happened.
+// Parse errors are intercepted here and mapped to 2 before anything is invoked.
+if (parsed.Errors.Count > 0)
+{
+    foreach (var error in parsed.Errors)
+    {
+        Console.Error.WriteLine($"error: {error.Message}");
+    }
+
+    Console.Error.WriteLine("\nRun 'concordat --help' for usage.");
+    return ExitCodes.UsageError;
+}
+
+return await parsed.InvokeAsync().ConfigureAwait(false);
+
+Output NewOutput(ParseResult parse) =>
+    new(parse.GetValue(jsonOption), Console.Out, Console.Error);
+
+HttpClient NewHttpClient(ParseResult parse)
+{
+    var client = new HttpClient { BaseAddress = new Uri(parse.GetValue(registryOption)!) };
+    var key = parse.GetValue(apiKeyOption);
+
+    if (!string.IsNullOrWhiteSpace(key))
+    {
+        client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", $"Bearer {key}");
+    }
+
+    return client;
+}
+
+// One place where a registry failure becomes an exit code, so no command can accidentally
+// report an outage as a contract violation.
+async Task<int> Run(ParseResult parse, Func<RegistryApi, Output, Task<int>> body)
+{
+    var output = NewOutput(parse);
+
+    try
+    {
+        using var http = NewHttpClient(parse);
+        return await body(new RegistryApi(http, parse.GetValue(environmentOption)!), output)
+            .ConfigureAwait(false);
+    }
+    catch (RegistryException ex)
+    {
+        return output.Fail(ex.ExitCode, ex.Code, ex.Message);
+    }
+    catch (UriFormatException ex)
+    {
+        return output.Fail(ExitCodes.UsageError, "registry_uri_invalid", ex.Message);
+    }
+}

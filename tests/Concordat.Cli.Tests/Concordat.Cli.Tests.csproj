@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\tools\Concordat.Cli\Concordat.Cli.csproj" />
+    <!--
+      The API host and its PostgreSQL harness, reused rather than duplicated. A CLI test that
+      talked to a mocked registry would verify the mock: the whole value here is that the
+      commands work against the real endpoints, real canonicalisation and real compatibility
+      engine.
+    -->
+    <ProjectReference Include="..\Concordat.Api.IntegrationTests\Concordat.Api.IntegrationTests.csproj" />
+  </ItemGroup>
+
+</Project>

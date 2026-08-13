@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>concordat</AssemblyName>
+    <RootNamespace>Concordat.Cli</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!--
+      The exit code is the product on this path: CI keys on it. Returning it from Main is
+      clearer than Environment.Exit scattered through commands, which skips finally blocks.
+    -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\core\Concordat.Domain\Concordat.Domain.csproj" />
+    <ProjectReference Include="..\..\formats\Concordat.Formats.Json\Concordat.Formats.Json.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Concordat.Cli.Tests" />
+  </ItemGroup>
+
+</Project>

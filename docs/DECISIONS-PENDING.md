@@ -118,7 +118,24 @@ written. **Recommendation:** keep it. The collision needs two types whose names 
 the rewrite, which is rare and immediately visible in the registry's subject list; refusing all
 nested types would hurt far more publishers.
 
-### 12. The quarantine exchange is declared by the application — confirm
+### 12. `diff` is blind to added properties under an open content model
+
+Found while building M3.1. The compatibility engine records a divergence only where one could
+affect compatibility. Under an **open** content model — the default — adding or removing a
+property cannot, so it produces no finding. `concordat diff v1 v2` therefore shows two
+different schema ids and an empty list for the single most common schema change there is.
+
+`check` is unaffected and correct: the change genuinely is compatible. It is `diff` that
+disappoints, because a human reading it wants to know what changed, not only what broke.
+
+> **Options:** leave it and rely on `git diff` of the schema files (what the CLI now tells you
+> to do); or have the engine record informational divergences with no surface, which changes
+> the meaning of `allDivergences[]` and touches the M1.3 corpus.
+>
+> **Recommendation:** leave it for v1. The CLI says so explicitly, and widening
+> `allDivergences[]` risks the corpus for a reporting nicety.
+
+### 13. The quarantine exchange is declared by the application — confirm
 
 `ConcordatRabbitMqOptions.DeclareQuarantineExchange` defaults to **on**, so the middleware
 declares `concordat.quarantine` itself the first time it needs it. The alternative is that the
@@ -132,7 +149,7 @@ and the exchange provisioned ahead of time.
 > **Which is your estate?** It changes the recommended default in the deployment docs, not the
 > code.
 
-### 13. Hard-delete semantics — before v1 ships
+### 14. Hard-delete semantics — before v1 ships
 
 M1.5 implements soft delete (`Subject.Retire()`) and never deletes schemas, which is what
 ADR-015 requires. **Hard delete is not implemented**: DESIGN §4 wants "no registered
@@ -220,6 +237,14 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | Quarantine keeps the original routing key, so operators can bind selectively | M2.4 | Low |
 | A format with no registered validator is treated as valid, not invalid | M2.4 | Low, until Avro/Protobuf validators land |
 | Quarantine detail is truncated at 4 KiB | M2.4 | Low |
+| `./contracts` layout is `<subject>.<ext>` — no manifest, no front-matter | [M3.1](plan/M3-cli.md) | **User-visible convention.** Changing it breaks everyone's repo layout |
+| Parse errors are intercepted and mapped to exit **2**, overriding `System.CommandLine`'s default of 1 | M3.1 | Low, and it is what keeps a typo from reading as a contract violation |
+| `push` exits **0** on a breaking change; only `check` gates | M3.1 | Low, but it defines how pipelines are wired |
+| An empty contracts directory is exit 4, not a vacuous pass | M3.1 | Low |
+| `promote` moves one subject, never a whole environment | M3.1 | Low. Bulk promotion reads as atomic and is not |
+| `impact` deferred to M7, where registered consumers first exist | M3.1 | Low |
+| The CLI talks to the registry directly rather than through the caching `Concordat.Client` | M3.1 | Low, and required: a gate must never answer from cache |
+| `Concordat.Cli.Tests` references `Concordat.Api.IntegrationTests` to reuse its harness | M3.1 | Low; extract a shared test-support project if a third consumer appears |
 
 ---
 
