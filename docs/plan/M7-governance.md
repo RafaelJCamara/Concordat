@@ -6,7 +6,9 @@ Contexts B, C and D of the domain model — the contract layer Kafka has no equi
 
 ---
 
-## M7.1 Environments and brokers (ADR-012)
+## M7.1 Environments and brokers
+
+**ADR-012**
 
 - [ ] `Environment` aggregate — `Name`, `Description`, `Brokers[]`, `DefaultCompatibilityPolicy`
 - [ ] `BrokerConnection` entity — `Uri`, `VirtualHost`, `CredentialRef`, `TlsSettings`, `Status`
@@ -17,7 +19,9 @@ Contexts B, C and D of the domain model — the contract layer Kafka has no equi
 - [ ] Encryption at rest via ASP.NET Core Data Protection; disk/DB key ring self-hosted
 - [ ] **Write-only over the API** — reads return `hasCredentials`, never the secret
 
-## M7.3 Contracts (DESIGN §4 Context B)
+## M7.3 Contracts
+
+**DESIGN §4 Context B · the differentiator**
 
 - [ ] `Contract` aggregate, environment-scoped
 - [ ] `PublishBinding` — `TopologyScope + Exchange + RoutingKeyPattern → SubjectRef[]`

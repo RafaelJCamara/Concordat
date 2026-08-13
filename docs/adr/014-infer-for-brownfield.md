@@ -45,4 +45,4 @@ confidence and ambiguity report for human review. It never auto-registers.**
 ## References
 
 - [DESIGN §7](../DESIGN.md#7-contract-checks--cli-and-build-time)
-- [M3.2 — `concordat infer`](../plan/M3-cli.md#m32-concordat-infer-adr-014)
+- [M3.2 — `concordat infer`](../plan/M3-cli.md#m32-concordat-infer)

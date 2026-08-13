@@ -4,7 +4,9 @@
 
 ---
 
-## M0.1 Name availability 🔴 **blocking — DONE 2026-08-13**
+## M0.1 Name availability
+
+**🔴 Blocking · Done 2026-08-13**
 
 **Outcome: the project was renamed from Signet to Concordat** (ADR-022). This package did
 its job — it found a blocker on day one instead of during M6.
@@ -40,7 +42,9 @@ Free today, claimed by someone else tomorrow. These are cheap and worth doing be
 - [ ] Create the `@concordat` npm org
 - [ ] Note that NuGet/PyPI/Maven ids are only claimed on first publish (M2, M3, M6)
 
-## M0.2 Repository skeleton — **DONE 2026-08-13**
+## M0.2 Repository skeleton
+
+**Done 2026-08-13**
 
 - [x] `Concordat.slnx` (12 projects), `global.json` pinning .NET 10 — `10.0.100` + `rollForward: latestFeature`, so any 10.0.x SDK works rather than only the one on this machine
 - [x] `Directory.Build.props` — `net10.0`, nullable, implicit usings, **warnings-as-errors**, analyzers at `latest-recommended`, `EnforceCodeStyleInBuild`, deterministic output
@@ -71,7 +75,9 @@ The DESIGN §8 dependency rule (Domain ← Application ← Infrastructure/Api) i
 correctly in the project references but **enforced only by review**. If it drifts, add
 NetArchTest assertions to `Concordat.Domain.Tests` — noted in `src/README.md`.
 
-## M0.3 CI — **DONE 2026-08-13**
+## M0.3 CI
+
+**Done 2026-08-13**
 
 `.github/workflows/ci.yml`, one job, eight steps.
 
@@ -96,7 +102,7 @@ format, build, test — all exit 0 and produce `test-results.trx` plus five
   code. **Add `windows-latest` at M2**, where Testcontainers and the RabbitMQ integration
   tests are the first things that can genuinely differ by platform.
 - **No external coverage service.** Codecov means an account and a token to rotate before
-  there is any coverage worth reading. Revisit at [M1.3](M1-registry-core.md#m13-compatibility-engine---done-2026-08-13),
+  there is any coverage worth reading. Revisit at [M1.3](M1-registry-core.md#m13-compatibility-engine),
   where the compatibility corpus makes the number meaningful.
 
 > **Not yet observed running on GitHub.** With these triggers, pushing a feature branch
@@ -111,7 +117,9 @@ format, build, test — all exit 0 and produce `test-results.trx` plus five
 - Dependabot for `nuget` and `github-actions`
 - A markdown link check — the docs already carry ~60 cross-references
 
-## M0.4 ADRs — **DONE 2026-08-13**
+## M0.4 ADRs
+
+**Done 2026-08-13**
 
 - [x] [`docs/adr/TEMPLATE.md`](../adr/TEMPLATE.md) — Context / Decision / Alternatives / Consequences / References
 - [x] [`docs/adr/README.md`](../adr/README.md) — index of all 22, with status

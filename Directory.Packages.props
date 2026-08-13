@@ -13,11 +13,36 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
+  <ItemGroup Label="Persistence">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="Hosting">
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
+  </ItemGroup>
+
   <ItemGroup Label="Testing">
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup Label="Transitive pins">
+    <!--
+      Testcontainers 4.13.0 drags in SSH.NET 2025.1.0, which carries a high-severity
+      advisory (GHSA-q939-rpr3-3284) that NuGet audit turns into a build error. Pinned
+      forward to the patched release rather than suppressed: SSH.NET is only used by
+      Testcontainers' docker-over-SSH transport, which we never touch, but a suppressed
+      advisory stays suppressed long after it stops being harmless.
+
+      CentralPackageTransitivePinningEnabled makes this pin apply to the transitive
+      reference. Remove it once Testcontainers ships a version that requires the fix.
+    -->
+    <PackageVersion Include="SSH.NET" Version="2026.0.0" />
   </ItemGroup>
 
 </Project>

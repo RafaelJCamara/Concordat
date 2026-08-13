@@ -52,3 +52,12 @@ dotnet_diagnostic.CA1848.severity = suggestion
 # Test projects: naming freedom for Given_When_Then style, no doc comments.
 dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.CS1591.severity = none
+
+[**/Migrations/*.cs]
+# EF Core writes these; they are a record of what was applied, not hand-maintained source.
+# Reformatting them to house style would make every regeneration a spurious diff, and
+# editing them after they ship is how a database and its migration history diverge.
+generated_code = true
+dotnet_diagnostic.IDE0161.severity = none
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.CS1591.severity = none

@@ -43,4 +43,4 @@ rather than a rewrite: **no header uses the `x-` prefix**, because RabbitMQ conv
 
 - [DESIGN §2](../DESIGN.md#2-the-concordat-envelope-adr-010)
 - [ADR-010](010-header-envelope.md) — the `x-` constraint this depends on
-- [M2.5](../plan/M2-dotnet-client.md#m25-header-survival-experiments--design-2) — where the claim gets verified
+- [M2.5](../plan/M2-dotnet-client.md#m25-header-survival-experiments) — where the claim gets verified

@@ -75,6 +75,16 @@ public sealed class Schema
         _references = references;
     }
 
+    // Materialisation only. EF cannot bind an owned collection through a constructor, so it
+    // needs a parameterless one and populates the backing fields directly. The nulls are
+    // immediately overwritten; nothing else may call this.
+    private Schema()
+    {
+        _references = [];
+        Id = null!;
+        Body = null!;
+    }
+
     /// <summary>The content-addressed identity.</summary>
     public SchemaId Id { get; }
 

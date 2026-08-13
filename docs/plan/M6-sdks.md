@@ -8,7 +8,9 @@ to revise, just a queue that stops advancing.
 
 ---
 
-## M6.1 Protocol freeze and interop prerequisites 🔴
+## M6.1 Protocol freeze and interop prerequisites
+
+**🔴 Heavy · do this before the first SDK**
 
 Do this before the first SDK, not during it.
 

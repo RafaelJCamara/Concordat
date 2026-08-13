@@ -52,4 +52,4 @@ endpoint returns `403 insufficient_scope` regardless of caller.
 ## References
 
 - [DESIGN §9](../DESIGN.md#9-frontend-architecture-angular), [Context E](../DESIGN.md#context-e--identity--access)
-- [M4.2](../plan/M4-web-app.md#m42-access-control-adr-018), [M8.2](../plan/M8-identity.md#m82-authorization-adr-018)
+- [M4.2](../plan/M4-web-app.md#m42-access-control), [M8.2](../plan/M8-identity.md#m82-authorization)

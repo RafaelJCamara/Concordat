@@ -63,4 +63,4 @@ assembly-qualified names, no `System.*` type strings.
 ## References
 
 - [DESIGN §5](../DESIGN.md#5-api-surface-and-cross-language-strategy)
-- [M1.7](../plan/M1-registry-core.md#m17-conformance-corpus-v0--adr-019), [M6.1](../plan/M6-sdks.md#m61-protocol-freeze-and-interop-prerequisites-)
+- [M1.7](../plan/M1-registry-core.md#m17-conformance-corpus-v0), [M6.1](../plan/M6-sdks.md#m61-protocol-freeze-and-interop-prerequisites)

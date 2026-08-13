@@ -11,12 +11,14 @@
 - [ ] Scopes: `subject:read|write|admin`, `contract:*`, `env:*`, `broker:*`, `org:admin`
 - [ ] Local accounts; **OIDC optional** (ADR-008 — no third-party dependency required to run Concordat)
 
-## M8.2 Authorization (ADR-018)
+## M8.2 Authorization
+
+**ADR-018**
 
 - [ ] `subject:write` and `subject:admin` granted to admin roles only; non-admin membership carries `subject:read`
 - [ ] Every mutating subject/version endpoint checks scope server-side → `403 insufficient_scope`
 - [ ] Approve/reject is admin-only — keeps the author of a breaking change from waving it through
-- [ ] Replace [M4.2](M4-web-app.md#m42-access-control-adr-018)'s admin stub with real role resolution
+- [ ] Replace [M4.2](M4-web-app.md#m42-access-control)'s admin stub with real role resolution
 
 ## M8.3 Tests
 

@@ -57,4 +57,4 @@ form is a `content-type` token, `application/json+concordat.v1.<hex-id>`.
 ## References
 
 - [DESIGN §2](../DESIGN.md#2-the-concordat-envelope-adr-010)
-- [M2.5 — Header survival experiments](../plan/M2-dotnet-client.md#m25-header-survival-experiments--design-2)
+- [M2.5 — Header survival experiments](../plan/M2-dotnet-client.md#m25-header-survival-experiments)

@@ -57,12 +57,12 @@ Where the risk concentrates. If any of these is going badly, the milestone is go
 
 | Package | Why |
 |---|---|
-| [M0.1](plan/M0-foundations.md#m01-name-availability--blocking--done-2026-08-13) Name availability ✅ | **Done, and it paid for itself** — "Signet" collided with an active project publishing the same package names; renamed to Concordat (ADR-022) before a line of code existed |
-| [M1.2](plan/M1-registry-core.md#m12-canonicalisation-and-identity---done-2026-08-13) Canonicalisation | Get the hash envelope wrong and schemas collide across reference sets |
-| [M1.3](plan/M1-registry-core.md#m13-compatibility-engine---done-2026-08-13) Compatibility engine 🔴🔴 | The correctness heart. A wrong verdict blocks safe changes or waves breaking ones through |
-| [M1.7](plan/M1-registry-core.md#m17-conformance-corpus-v0--adr-019) Conformance corpus | Written late, it only ratifies whatever .NET already did |
-| [M2.5](plan/M2-dotnet-client.md#m25-header-survival-experiments--design-2) Header survival | Empirical, no code deliverable; the result *is* the Mode A vs Mode B guidance |
-| [M6.1](plan/M6-sdks.md#m61-protocol-freeze-and-interop-prerequisites-) Protocol freeze | Five JSON Schema validators disagree at the edges; this is where that becomes a CI failure instead of a support ticket |
+| [M0.1](plan/M0-foundations.md#m01-name-availability) Name availability ✅ | **Done, and it paid for itself** — "Signet" collided with an active project publishing the same package names; renamed to Concordat (ADR-022) before a line of code existed |
+| [M1.2](plan/M1-registry-core.md#m12-canonicalisation-and-identity) Canonicalisation | Get the hash envelope wrong and schemas collide across reference sets |
+| [M1.3](plan/M1-registry-core.md#m13-compatibility-engine) Compatibility engine 🔴🔴 | The correctness heart. A wrong verdict blocks safe changes or waves breaking ones through |
+| [M1.7](plan/M1-registry-core.md#m17-conformance-corpus-v0) Conformance corpus | Written late, it only ratifies whatever .NET already did |
+| [M2.5](plan/M2-dotnet-client.md#m25-header-survival-experiments) Header survival | Empirical, no code deliverable; the result *is* the Mode A vs Mode B guidance |
+| [M6.1](plan/M6-sdks.md#m61-protocol-freeze-and-interop-prerequisites) Protocol freeze | Five JSON Schema validators disagree at the edges; this is where that becomes a CI failure instead of a support ticket |
 
 ## Two things built early on purpose
 
@@ -70,7 +70,7 @@ Both are cheap now and expensive as retrofits:
 
 - **[M1.5](plan/M1-registry-core.md#m15-persistence) wires `ITenantContext` and EF global query filters** with a single implicit
   tenant, so M9's multi-tenancy is a config swap rather than surgery.
-- **[M4.2](plan/M4-web-app.md#m42-access-control-adr-018) builds the admin gate against a stub**, four milestones before real roles
+- **[M4.2](plan/M4-web-app.md#m42-access-control) builds the admin gate against a stub**, four milestones before real roles
   exist in M8. Retrofitting an authorization check across finished screens is how a write
   path gets missed.
 

@@ -61,6 +61,16 @@ public sealed class Subject
         Lifecycle = lifecycle;
     }
 
+    // Materialisation only. EF cannot bind an owned collection through a constructor, so it
+    // needs a parameterless one and populates the backing fields directly. The nulls are
+    // immediately overwritten; nothing else may call this.
+    private Subject()
+    {
+        _versions = [];
+        Name = null!;
+        Owner = null!;
+    }
+
     /// <summary>The surrogate identity.</summary>
     public SubjectId Id { get; }
 

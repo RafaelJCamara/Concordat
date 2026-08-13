@@ -86,6 +86,32 @@ That is a real hole for anyone using composition keywords, which is common in ma
 Decide whether v1 ships with it, closes it, or rejects schemas using unsupported keywords
 outright rather than silently under-reporting.
 
+### 10. Hard-delete semantics — before v1 ships
+
+M1.5 implements soft delete (`Subject.Retire()`) and never deletes schemas, which is what
+ADR-015 requires. **Hard delete is not implemented**: DESIGN §4 wants "no registered
+consumers, an explicit force flag, and an audit entry", and both registered consumers and the
+audit log are M7. Confirm that v1 can ship with retire-only, or pull the pieces forward.
+
+---
+
+## Commitments that must not be forgotten
+
+Not decisions — obligations already incurred that land in a later milestone. Each is written
+into the milestone that owes it, and collected here because they are the ones that get lost.
+
+| Owed by | Commitment | Why it matters |
+|---|---|---|
+| **M1.6** | Authorise `GET /schemas/{id}` by **reachability** | The schema table is global with no tenant column. The naive implementation leaks any schema to anyone who can guess a 128-bit hash |
+| **M1.6** | Exactly one handler may construct a `CompatibilityVerdict`, sourced from the engine, proven by a recording-fake test | The aggregate trusts the verdict. A handler passing `Compatible` for a breaking change still moves the pointer |
+| **M1.6** | Bundling, deferred from M1.4 | Cannot live at registration: it would make canonicalisation depend on registry state and stop any SDK reproducing an id offline |
+| **M1.6** | Subject prefix search needs a `ComplexProperty` mapping or a shadow column | Value converters do not translate `StartsWith` |
+| **M1.7** | The corpus must pin the schema-id **preimage bytes**, not just ids | `BuildPreimage` is public precisely so it can |
+| **M2.5** | Verify the AMQP 1.0 header conversion | ADR-013's "designed to survive 1.0" is an assertion until a 1.0 client reads a Concordat message |
+| **M7** | Hard delete: no registered consumers + force flag + audit entry | Soft delete is all that exists today |
+| **After M1.5** | Any change to canonicalisation now needs a **preimage version bump and a migration** | Schemas are persisted from here on. The golden id test exists to make such a change impossible to miss |
+| **Maintenance** | Drop the `SSH.NET` pin when Testcontainers requires a patched version itself | A stale forward-pin eventually holds a dependency *back* |
+
 ---
 
 ## Taken on your behalf — object if any is wrong
@@ -108,6 +134,12 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | `pattern` changes always read as narrowing | M1.3 | Low |
 | Bundling deferred to M1.6, not stored | [M1.4](plan/M1-registry-core.md) | Low |
 | No per-file licence headers | [M0.2](plan/M0-foundations.md) | Low |
+| Migration runs as a separate process, **not** auto-migrate on startup | [M1.5](plan/M1-registry-core.md) | Low |
+| snake_case column names, set explicitly per property | M1.5 | **Renames every column** |
+| `SemanticVersion` stored as `MAJOR.MINOR.PATCH` text, not three columns | M1.5 | Low, needs a migration |
+| Enums stored as text via `WireTokens`, never `Enum.ToString()` | M1.5 | Low |
+| `SSH.NET` pinned forward past a security advisory | M1.5 | Low |
+| PostgreSQL image pinned to `17-alpine` in tests | M1.5 | Low |
 
 ---
 

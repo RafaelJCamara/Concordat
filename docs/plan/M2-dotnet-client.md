@@ -16,7 +16,9 @@ Scope is RabbitMQ.Client only (ADR-020). Service-bus adapters are [Appendix A](.
 - [ ] `fail-open | fail-closed` configuration
 - [ ] **Hard rule enforced by test: after warm-up the registry is never in the delivery path**
 
-## M2.2 Envelope (DESIGN §2)
+## M2.2 Envelope
+
+**DESIGN §2 · ADR-010**
 
 - [ ] Mode A writer/reader — `concordat-v`, `concordat-schema-id`, `concordat-subject`, `concordat-version`, `concordat-semver`, `concordat-format`
 - [ ] All values UTF-8 strings; **decode `byte[]` on read** (RabbitMQ.Client writes `S`, reads back `byte[]`)
@@ -41,7 +43,9 @@ Scope is RabbitMQ.Client only (ADR-020). Service-bus adapters are [Appendix A](.
 - [ ] **No retry on schema violation** — deterministic, so redelivery is pure waste
 - [ ] `EnforcementMode` honoured: `Off | Monitor | Enforce`
 
-## M2.5 Header survival experiments 🔴 (DESIGN §2)
+## M2.5 Header survival experiments
+
+**🔴 Heavy · DESIGN §2 · empirical, no code deliverable**
 
 Empirical work with no code deliverable; the result **is** the documented Mode A vs Mode B guidance.
 

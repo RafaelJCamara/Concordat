@@ -15,7 +15,9 @@ Off the critical path — can slip without invalidating M0–M3.
 - [ ] Folder structure per DESIGN §9; **ESLint boundaries rule** enforcing it
 - [ ] `core/` interceptors: auth, tenant, problem-details
 
-## M4.2 Access control (ADR-018)
+## M4.2 Access control
+
+**ADR-018**
 
 Build now, not in M8 — retrofitting across finished screens is how a write path gets missed.
 

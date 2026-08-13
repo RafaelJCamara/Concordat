@@ -13,7 +13,9 @@ Last milestone on the critical path. With M3 done, Concordat is genuinely useful
 - [ ] `--json` output mode for scripting
 - [ ] Documented exit codes
 
-## M3.2 `concordat infer` (ADR-014)
+## M3.2 `concordat infer`
+
+**ADR-014**
 
 - [ ] File mode — infer from a corpus of sample payloads (**the default**)
 - [ ] Queue mode — read-only drain via `basic.get` with requeue, or an exclusive consumer that nacks with requeue

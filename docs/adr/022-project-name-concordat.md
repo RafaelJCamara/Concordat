@@ -61,4 +61,4 @@ Burrow are all taken by messaging projects, precisely because everyone reaches f
 
 ## References
 
-- [M0.1 — Name availability](../plan/M0-foundations.md#m01-name-availability--blocking--done-2026-08-13)
+- [M0.1 — Name availability](../plan/M0-foundations.md#m01-name-availability)
