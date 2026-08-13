@@ -243,12 +243,12 @@ public class RegisterVersionHandlerTests
     }
 
     [Fact]
-    public async Task AVersionAwaitingApprovalIsStillPartOfTheHistory()
+    public async Task AVersionAwaitingApprovalIsNotPartOfTheHistory()
     {
-        // The filter is "not rejected" rather than "active", so a proposal that is only awaiting
-        // review is compared against. That is the current behaviour and this pins it — but see
-        // ResubmittingAPendingBreakingSchemaBypassesTheApprovalGate below, which is what it
-        // costs. Changing this filter is expected to make that test pass and this one fail.
+        // History is what was approved. A proposal awaiting review has not been accepted, so
+        // letting it into the comparison set lets a proposal justify itself — which is exactly
+        // how the approval gate came to be defeatable by submitting the same schema twice.
+        // ResubmittingAPendingBreakingSchemaBypassesTheApprovalGate is the other half of this.
         var subject = Build.Subject(_environment);
         subject.Register(_schemas, V1);
         subject.Register(_schemas, V1Required, breaking: true);
@@ -256,20 +256,26 @@ public class RegisterVersionHandlerTests
 
         await RegisterAsync(V1PlusOptional);
 
+        Assert.Equal([1], _evaluator.Priors.Select(p => p.Ordinal));
+    }
+
+    [Fact]
+    public async Task EveryApprovedVersionIsPartOfTheHistory()
+    {
+        // The filter is on status, not on the latest pointer, so an approved version below the
+        // tip still counts. Under a transitive policy it is compared directly; under the
+        // default it is what the tip was itself judged against.
+        var subject = Build.Subject(_environment);
+        subject.Register(_schemas, V1);
+        subject.Register(_schemas, V1PlusOptional);
+        _subjects.Seed(subject);
+
+        await RegisterAsync(V1Required);
+
         Assert.Equal([1, 2], _evaluator.Priors.Select(p => p.Ordinal));
     }
 
-    [Fact(Skip =
-        "Exposes a defect in RegisterVersionHandler.LoadPriorsAsync, which is deliberately not " +
-        "fixed here. Priors exclude Rejected versions but include AwaitingApproval ones, and " +
-        "the default non-transitive mode compares against the HIGHEST ordinal only. So " +
-        "submitting a breaking schema twice compares the second submission against the first " +
-        "— byte-identical, therefore no divergence, therefore compatible — and it registers " +
-        "ACTIVE and moves the latest pointer. The ADR-017 gate is defeated by pressing the " +
-        "button twice, which is what a retrying CI job does. Observed: v2 AwaitingApproval with " +
-        "latest=1, then v3 Active with latest=3. CheckCompatibilityHandler shares the filter, so " +
-        "the dry run reports the resubmission as compatible too. Unskip once an unapproved " +
-        "proposal stops counting as history.")]
+    [Fact]
     public async Task ResubmittingAPendingBreakingSchemaBypassesTheApprovalGate()
     {
         var subject = Build.Subject(_environment);

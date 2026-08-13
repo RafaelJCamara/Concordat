@@ -8,52 +8,6 @@ architectural, becomes an ADR in [`adr/`](adr/README.md).
 
 ---
 
-## Defect — found by the test pass, not yet fixed
-
-### 18. The ADR-017 approval gate is defeated by submitting the same schema twice
-
-**Reproduced over real HTTP against real PostgreSQL**, not only against fakes:
-`ApprovalGateTests.ResubmittingAPendingBreakingSchemaMustNotBypassTheGate` and
-`RegisterVersionHandlerTests.ResubmittingAPendingBreakingSchemaBypassesTheApprovalGate`, both
-skipped with the reason recorded so they fail loudly the moment someone unskips them.
-
-`RegisterVersionHandler.LoadPriorsAsync` excludes `Rejected` versions from the compatibility
-history but **includes `AwaitingApproval` ones**. The default mode is non-transitive, so it
-compares against the **highest ordinal only**. Therefore:
-
-1. v1 registers `Active`; `latest` = 1.
-2. v2, breaking against v1, registers `AwaitingApproval`; `latest` stays 1. **Correct.**
-3. v3, byte-identical to v2, is compared **against v2** — no divergence, so compatible — and
-   registers **`Active`, moving `latest` to 3**.
-
-A consumer tracking `latest` moves from v1 straight onto a schema that is backward-incompatible
-with v1, and **nobody approved anything**. A retrying CI job does this on its own.
-`CheckCompatibilityHandler` shares the filter, so the dry run also reports the resubmission as
-compatible — the gate and the preview agree with each other and are both wrong.
-
-This defeats [ADR-017](adr/017-gated-latest-pointer.md), which exists precisely so that "a
-third party registering a version silently changes what your producer serializes with, at
-runtime, with no deploy" cannot happen.
-
-> **Options:**
-> - **Exclude `AwaitingApproval` from the history too**, so priors are approved versions only.
->   Simplest, and matches the intent: an unapproved proposal is not part of what the subject
->   promises. Needs care that a *second, different* breaking proposal is still compared against
->   the last approved version rather than waved through.
-> - **Compare against the `latest` pointer rather than the highest ordinal** in non-transitive
->   mode. Arguably what "non-transitive" should always have meant, given ADR-017 made `latest`
->   an explicit gated pointer rather than "whatever has the highest ordinal".
-> - **Refuse a registration identical to a pending proposal**, returning the pending version.
->   Narrower — it fixes the resubmission path without touching what counts as history — but
->   leaves the underlying "pending counts as approved" rule in place for any other route to it.
->
-> **Recommendation:** the second. It makes the compatibility engine agree with ADR-017's own
-> model of what `latest` means, and the first option falls out of it. It touches
-> `SelectPriors` in all three format checkers, so it wants the conformance corpus extended in
-> the same change.
-
----
-
 ## Proceeded on my judgement — confirm or overturn
 
 ### 17. Avro's Parsing Canonical Form is lossy, and the architecture stores the canonical form
@@ -443,6 +397,7 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 
 | Decision | Outcome | Recorded in |
 |---|---|---|
+| The approval gate could be bypassed by resubmitting (was #18) | **Fixed.** Compatibility history is now approved (`Active`) versions only, in one place — `CompatibilityHistory.Of` — used by both registration and the dry-run check | Found by the M6-era test pass. The rule had been written out at both call sites and was wrong identically in both, so the preview agreed with the gate and neither contradicted the other. `AwaitingApproval` counting as history let a proposal justify itself: submit the same breaking schema twice and the second attempt was compared against the first, found no divergence, and registered `Active`, moving `latest` onto a schema incompatible with the last approved version. A retrying CI job did it unaided. The semver suggester deliberately still counts pending labels, because `Subject`'s own increasing-label check does — suggesting a label the aggregate would refuse would be a worse bug |
 | JSON Schema keyword coverage (was #9) | **Warn, do not refuse and do not stay silent.** `JsonSchemaPortabilityChecker` reports every keyword the compatibility engine does not compare, with a message saying what it costs — "a change confined to it is reported as compatible even when it is not". Findings ride on the registration response and on `concordat lint` | [M6.1](plan/M6-sdks.md) — this is the option M6.1 already prescribed ("warn at registration when a schema strays outside it"), so implementing it settles the question rather than reopening it. Refusing composition keywords would rule out most mature schemas; staying silent is the under-reporting the decision existed to stop |
 | JSON Schema dialect | **draft 2020-12 only, and other dialects are refused** with `schema_dialect_unsupported` | M6.1 — keywords changed meaning between drafts (`items` most visibly), so validating a draft-07 document under 2020-12 rules would apply rules its author never wrote against. The one error-severity portability finding; everything else warns |
 | Avro and Protobuf cross-subject references (was #16) | **Refused for v1.** Registration fails with `schema_references_unsupported` naming the type or import. Self-contained schemas — the common shape for both formats — register normally, as do same-document self-references and Protobuf `google/protobuf/*` imports, which the runtime resolves rather than a registry | [ADR-023](adr/023-no-cross-subject-references-avro-protobuf.md) — neither format has anywhere to pin a version, so resolving would bind to whatever the target holds now, which is the silent-behaviour-change ADR-017 exists to prevent. If references return, the out-of-band manifest is the favourite: it is the only mechanism that works identically for both formats |

@@ -137,9 +137,7 @@ public sealed class RegisterVersionHandler(
     {
         var priors = new List<PriorSchema>();
 
-        // Rejected proposals are not part of the history a new version must stay compatible
-        // with — they were declined precisely so that nothing would depend on them.
-        foreach (var version in subject.Versions.Where(v => v.Status is not VersionStatus.Rejected))
+        foreach (var version in CompatibilityHistory.Of(subject))
         {
             var schema = await schemas.FindAsync(version.SchemaId, cancellationToken)
                 .ConfigureAwait(false);

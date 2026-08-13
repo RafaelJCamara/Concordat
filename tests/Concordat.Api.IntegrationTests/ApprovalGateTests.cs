@@ -64,16 +64,7 @@ public class ApprovalGateTests(ApiFactory factory)
         Assert.Equal(1, await LatestAsync(client, subject));
     }
 
-    [Fact(Skip =
-        "DEFECT, deliberately not fixed here: the ADR-017 approval gate is defeated by " +
-        "submitting the same breaking schema twice. RegisterVersionHandler.LoadPriorsAsync " +
-        "excludes Rejected versions but INCLUDES AwaitingApproval ones, and the default " +
-        "non-transitive mode compares only against the highest ordinal. So the resubmission is " +
-        "compared against the pending proposal rather than against the last approved version, " +
-        "finds no divergence, and registers ACTIVE — moving latest onto a schema that is " +
-        "backward-incompatible with it, with nobody having approved anything. A retrying CI " +
-        "job does this by itself. Reproduced here over real HTTP and real PostgreSQL, not only " +
-        "against fakes. Unskip when an unapproved proposal stops counting as history.")]
+    [Fact]
     public async Task ResubmittingAPendingBreakingSchemaMustNotBypassTheGate()
     {
         var client = factory.CreateClient();

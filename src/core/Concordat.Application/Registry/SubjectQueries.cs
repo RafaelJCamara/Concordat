@@ -177,8 +177,10 @@ public sealed class CheckCompatibilityHandler(
                 $"No subject '{name.Value}' in this environment.");
         }
 
+        // The same history registration uses. A dry run that answered a different question
+        // from the gate would be worse than no dry run at all.
         var priors = new List<PriorSchema>();
-        foreach (var version in subject.Versions.Where(v => v.Status is not VersionStatus.Rejected))
+        foreach (var version in CompatibilityHistory.Of(subject))
         {
             var schema = await schemas.FindAsync(version.SchemaId, cancellationToken)
                 .ConfigureAwait(false);
