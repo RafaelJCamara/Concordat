@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege: CI only reads the repo. Anything needing write gets its own workflow.
+permissions:
+  contents: read
+
+# A new push to the same branch makes the in-flight run obsolete.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  build:
+    name: build & test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # Keyed on the one file that owns every package version (central package
+      # management), so the cache invalidates exactly when dependencies change.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore Concordat.slnx
+
+      # Before build: a formatting failure should be reported in seconds, not after
+      # a full compile.
+      - name: Verify formatting
+        run: dotnet format Concordat.slnx --verify-no-changes --no-restore
+
+      # Directory.Build.props sets TreatWarningsAsErrors, and ContinuousIntegrationBuild
+      # switches on automatically here via GITHUB_ACTIONS.
+      - name: Build
+        run: dotnet build Concordat.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: >
+          dotnet test Concordat.slnx
+          --configuration Release
+          --no-build
+          --collect:"XPlat Code Coverage"
+          --results-directory ./TestResults
+          --logger "trx;LogFileName=test-results.trx"
+
+      # Non-blocking for now (M0.3). There is nothing worth measuring until the
+      # compatibility engine lands in M1.3; wiring an external service before then
+      # just adds a token to rotate.
+      - name: Upload test results and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ./TestResults
+          if-no-files-found: ignore
+          retention-days: 14

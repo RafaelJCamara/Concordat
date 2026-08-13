@@ -71,11 +71,45 @@ The DESIGN §8 dependency rule (Domain ← Application ← Infrastructure/Api) i
 correctly in the project references but **enforced only by review**. If it drifts, add
 NetArchTest assertions to `Concordat.Domain.Tests` — noted in `src/README.md`.
 
-## M0.3 CI
+## M0.3 CI — **DONE 2026-08-13**
 
-- [ ] Build + test on PR, matrix over supported OS
-- [ ] Format and analyzer gate
-- [ ] Coverage reporting, non-blocking initially
+`.github/workflows/ci.yml`, one job, eight steps.
+
+- [x] Build + test — triggers on pull request, push to `main`, and manual dispatch
+- [x] Format gate — `dotnet format --verify-no-changes`, run **before** build so a
+      formatting failure reports in seconds instead of after a full compile
+- [x] Analyzer gate — no separate step needed; `TreatWarningsAsErrors` in
+      `Directory.Build.props` means analyzer violations already fail the build
+- [x] Coverage — collected via coverlet and uploaded as an artifact, non-blocking
+- [x] NuGet cache keyed on `Directory.Packages.props`, the one file that owns every
+      version, so the cache invalidates exactly when dependencies change
+- [x] `permissions: contents: read`, and `concurrency` cancels superseded runs
+
+**Verified locally:** the exact Release-configuration command sequence CI runs — restore,
+format, build, test — all exit 0 and produce `test-results.trx` plus five
+`coverage.cobertura.xml` files. The workflow YAML parses.
+
+### Decisions taken
+
+- **Ubuntu only**, not a three-OS matrix. Development is on Windows and deployment is
+  Linux containers, but there is nothing platform-specific to catch in a solution with no
+  code. **Add `windows-latest` at M2**, where Testcontainers and the RabbitMQ integration
+  tests are the first things that can genuinely differ by platform.
+- **No external coverage service.** Codecov means an account and a token to rotate before
+  there is any coverage worth reading. Revisit at [M1.3](M1-registry-core.md#m13-compatibility-engine--adr-016-design-7),
+  where the compatibility corpus makes the number meaningful.
+
+> **Not yet observed running on GitHub.** With these triggers, pushing a feature branch
+> does *not* start CI — it fires on pull requests and on `main`. The first real run
+> happens when this branch is merged or a PR is opened.
+
+### Later additions, noted not built
+
+- OpenAPI drift check (M1.6) — CI must fail when the generated spec differs from the
+  committed one
+- Testcontainers services for PostgreSQL and RabbitMQ (M1.5, M2.6)
+- Dependabot for `nuget` and `github-actions`
+- A markdown link check — the docs already carry ~60 cross-references
 
 ## M0.4 ADRs
 
