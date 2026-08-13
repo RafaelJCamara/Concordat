@@ -109,6 +109,8 @@ into the milestone that owes it, and collected here because they are the ones th
 | **M1.7** | The corpus must pin the schema-id **preimage bytes**, not just ids | `BuildPreimage` is public precisely so it can |
 | **M2.5** | Verify the AMQP 1.0 header conversion | ADR-013's "designed to survive 1.0" is an assertion until a 1.0 client reads a Concordat message |
 | **M7** | Hard delete: no registered consumers + force flag + audit entry | Soft delete is all that exists today |
+| **M7** | Adopt the derived environment ids, or migrate `subject.environment_id` | `DerivedEnvironmentResolver` hashes the name to a stable id so `/environments/{env}/…` works before environments exist. Real rows will generate their own |
+| **M7** | `GET\|PUT …/registration-policy` | Per-environment, and the `Environment` aggregate does not exist yet, so there is nowhere to store it |
 | **After M1.5** | Any change to canonicalisation now needs a **preimage version bump and a migration** | Schemas are persisted from here on. The golden id test exists to make such a change impossible to miss |
 | **Maintenance** | Drop the `SSH.NET` pin when Testcontainers requires a patched version itself | A stale forward-pin eventually holds a dependency *back* |
 
@@ -143,6 +145,12 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | Rejected versions are excluded from the compatibility history | [M1.6](plan/M1-registry-core.md) | Low |
 | A subject must exist before a version can be registered — no implicit creation | M1.6 | Low, but it is user-visible REST behaviour |
 | Schema refusal returns `schema_not_found`, never a distinct "forbidden" | M1.6 | Low |
+| Re-registering the tip returns **200**, not 201, since nothing was created | M1.6 | Low, but user-visible |
+| A breaking change returns **201**, not 409 — it is a reviewable artifact | M1.6 | Low, but user-visible |
+| An unmapped `concordatCode` falls through to HTTP 400 | M1.6 | Low |
+| `/health/live` and `/health/ready` are separate, and liveness ignores the database | M1.6 | Low |
+| Environment ids are derived by hashing the name until M7 exists | M1.6 | **Needs an M7 migration** |
+| With no prior semver label, a breaking change suggests `1.0.0` — an unlabelled history reads as pre-1.0 | M1.6 | Low |
 
 ---
 

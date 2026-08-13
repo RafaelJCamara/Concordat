@@ -315,19 +315,50 @@ PostgreSQL: the owner reads it, a foreign tenant is refused, a stored-but-unrefe
 is refused *even to the tenant that stored it*, and refusal is byte-identical to absence — a
 distinct "forbidden" would confirm another tenant's schema exists.
 
-### Pass B, outstanding
+### Pass B, mostly done
 
-- [ ] Minimal-API endpoints at `/v1`
-- [ ] RFC 9457 Problem Details + the `concordatCode` catalogue, mapped from `Result<T>`
+- [x] Minimal-API endpoints at `/v1` — subjects, versions, approve/reject, compatibility
+      dry run, compatibility-policy, schemas, lookup
+- [x] RFC 9457 Problem Details with a stable `concordatCode` extension on every failure
+- [x] `/health/live` and `/health/ready`, separated
+- [x] 17 end-to-end tests over real HTTP against real PostgreSQL; 230 across the solution
 - [ ] `POST /environments/{env}/bootstrap`
 - [ ] Bundling, deferred from M1.4
 - [ ] `GET …/versions/{a}/diff/{b}`
-- [ ] Subject patch and delete; `GET|PUT …/registration-policy`; `GET|PUT …/compatibility-policy`
+- [ ] Subject patch and delete
+- [ ] `GET|PUT …/registration-policy` → **blocked on M7**, see below
 - [ ] Negative-lookup caching semantics
-- [ ] `/health/live`, `/health/ready`
 - [ ] OpenAPI 3.1 generated, committed, and drift-gated in CI
-- [ ] Subject prefix search — needs a `ComplexProperty` mapping or a shadow column, because
-      value converters do not translate `StartsWith` (recorded in M1.5)
+- [ ] Subject prefix search — needs a `ComplexProperty` mapping or a shadow column
+
+### The end-to-end tests are the M1 exit criterion
+
+Not mocked at any layer, deliberately: the point is that canonicalisation, identity, the
+compatibility engine, the aggregate and the database agree, and a test double at any of those
+seams would hide precisely the disagreement worth finding.
+
+They cover: adding an optional property is accepted; a breaking change returns **201 with
+`AWAITING_APPROVAL`** and leaves `latest` alone; approval advances it; re-registering the tip
+returns **200 with `created: false`** and allocates no ordinal; a breaking change labelled
+MINOR is refused with `semver_label_understates_breakage`; the dry run reports
+`#/required` and writes nothing; `integer → number` passes the default policy while staying
+visible in `allDivergences`; a closed content model flips the verdict for the same two
+documents; and an unreachable schema id is 404.
+
+### `concordatCode` is the contract, not the status
+
+Statuses are coarse — three unrelated failures share 409 — so a client branching on status
+alone cannot tell a name collision from an incompatible schema. Every failure carries the
+stable string. An unmapped code falls through to 400 rather than throwing: wrong-but-safe
+beats an unhandled exception, and the code is still in the body.
+
+### Registration policy is blocked on M7
+
+`GET|PUT …/registration-policy` is per **environment**, and the `Environment` aggregate is
+M7 (ADR-012) — there is nowhere to store it. Meanwhile `{env}` in the route is resolved by
+`DerivedEnvironmentResolver`, an M1 shim that hashes the name to a stable id so the API works
+before environments exist. **M7 must either adopt those derived ids or migrate
+`subject.environment_id`.**
 
 - [ ] Minimal-API endpoints at `/v1`, CQRS dispatcher (hand-rolled, **not** MediatR — ADR-009)
 - [ ] `Result<T>` → Problem Details mapping

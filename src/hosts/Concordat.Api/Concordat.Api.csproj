@@ -6,4 +6,9 @@
     <ProjectReference Include="..\..\formats\Concordat.Formats.Json\Concordat.Formats.Json.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
+  </ItemGroup>
+
 </Project>
