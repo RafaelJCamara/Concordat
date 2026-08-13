@@ -1,0 +1,53 @@
+name: 'Concordat contract check'
+description: >
+  Gate a pull request on schema compatibility. Runs the concordat CLI as a container,
+  so the repository being checked needs no .NET installed.
+author: 'Concordat'
+
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  command:
+    description: 'check (gate, exits 1 on breakage), lint (offline, no registry) or push (record).'
+    required: false
+    default: 'check'
+  dir:
+    description: 'The contracts directory, relative to the repository root.'
+    required: false
+    default: 'contracts'
+  registry:
+    description: 'Registry base address, for example https://concordat.internal.'
+    required: false
+    default: ''
+  environment:
+    description: 'Environment name to check against.'
+    required: false
+    default: 'default'
+  api-key:
+    description: 'API key. Pass a secret, never a literal.'
+    required: false
+    default: ''
+
+# A Docker action rather than a composite one. A composite action would have to install
+# a .NET SDK on the runner, which is exactly the dependency M3.3 exists to remove: the
+# realistic user of this gate is a Python or Go shop.
+runs:
+  using: 'docker'
+  image: 'docker/cli.Dockerfile'
+
+  # Configuration travels as environment variables, not arguments, and that is deliberate.
+  # A Docker action's `args` list is fixed — every entry is always passed — so an empty
+  # optional input would arrive as an empty string argument and be rejected as an unknown
+  # token. Environment variables simply go unset instead. The CLI reads all three natively.
+  env:
+    CONCORDAT_REGISTRY: ${{ inputs.registry }}
+    CONCORDAT_ENV: ${{ inputs.environment }}
+    CONCORDAT_API_KEY: ${{ inputs.api-key }}
+    CONCORDAT_ACTOR: ${{ github.actor }}
+
+  args:
+    - ${{ inputs.command }}
+    - --dir
+    - ${{ inputs.dir }}

@@ -25,7 +25,7 @@ public static class InspectCommands
 
         var diff = await api.DiffAsync(subject, from, to, cancellationToken).ConfigureAwait(false);
 
-        output.Document(diff);
+        output.Document(diff, CliJson.Default.DiffResult);
 
         if (diff.Identical)
         {
@@ -92,8 +92,8 @@ public static class InspectCommands
 
         Directory.CreateDirectory(directory);
 
-        var written = new List<object>();
-        var skipped = new List<object>();
+        var written = new List<ExportedSubject>();
+        var skipped = new List<SkippedSubject>();
 
         foreach (var subject in subjects)
         {
@@ -102,7 +102,7 @@ public static class InspectCommands
                 // A subject whose only versions are awaiting approval has no latest pointer
                 // (ADR-017). Exporting a pending version would put an unapproved contract into
                 // source control as though it were live.
-                skipped.Add(new { subject = subject.Name, reason = "no approved version" });
+                skipped.Add(new SkippedSubject(subject.Name, "no approved version"));
                 output.Line($"- {subject.Name}  (no approved version)");
                 continue;
             }
@@ -112,7 +112,7 @@ public static class InspectCommands
 
             if (version is null)
             {
-                skipped.Add(new { subject = subject.Name, reason = "latest version unavailable" });
+                skipped.Add(new SkippedSubject(subject.Name, "latest version unavailable"));
                 continue;
             }
 
@@ -122,7 +122,7 @@ public static class InspectCommands
 
             if (schema is null)
             {
-                skipped.Add(new { subject = subject.Name, reason = $"schema {version.SchemaId} unavailable" });
+                skipped.Add(new SkippedSubject(subject.Name, $"schema {version.SchemaId} unavailable"));
                 continue;
             }
 
@@ -136,18 +136,13 @@ public static class InspectCommands
             var path = ContractDirectory.FileFor(directory, subject.Name, format);
             await File.WriteAllTextAsync(path, schema, cancellationToken).ConfigureAwait(false);
 
-            written.Add(new
-            {
-                subject = subject.Name,
-                path,
-                ordinal = version.Ordinal,
-                schemaId = version.SchemaId,
-            });
+            written.Add(new ExportedSubject(subject.Name, path, version.Ordinal, version.SchemaId));
 
             output.Line($"  {path}  v{version.Ordinal}  {version.SchemaId}");
         }
 
-        output.Document(new { ok = true, writtenCount = written.Count, written, skipped });
+        output.Document(
+            new ExportReport(true, written.Count, written, skipped), CliJson.Default.ExportReport);
         output.Line($"\n{written.Count} contract(s) written to {directory}.");
 
         return ExitCodes.Success;

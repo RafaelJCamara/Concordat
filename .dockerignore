@@ -1,0 +1,17 @@
+# Keeping the build context small matters more than usual here: the CLI image is
+# built on every CI run, and bin/obj from a local build would be copied in and then
+# fight the container's own restore.
+**/bin/
+**/obj/
+**/.vs/
+**/.idea/
+
+.git/
+.github/
+tests/
+docs/
+scripts/
+artifacts/
+
+*.user
+*.suo

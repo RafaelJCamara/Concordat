@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace Concordat.Cli;
 
@@ -134,11 +133,6 @@ public static class VersionStatuses
 /// </remarks>
 public sealed class RegistryApi(HttpClient http, string environment)
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
-    {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
     private string Root => $"/v1/environments/{Uri.EscapeDataString(environment)}";
 
     /// <summary>Checks a proposal without registering it.</summary>
@@ -152,14 +146,15 @@ public sealed class RegistryApi(HttpClient http, string environment)
         using var response = await SendAsync(
             HttpMethod.Post,
             $"{Root}/subjects/{Uri.EscapeDataString(subject)}/compatibility",
-            new { schema },
+            JsonContent.Create(new CheckRequest(schema), RegistryJson.Default.CheckRequest),
             cancellationToken).ConfigureAwait(false);
 
         // A subject nobody has created is not an error here. A first version cannot break
         // anything, so `check` reports it as new rather than as a missing resource.
         return response.StatusCode is HttpStatusCode.NotFound
             ? null
-            : await ReadAsync<CompatibilityResult>(response, cancellationToken).ConfigureAwait(false);
+            : await ReadAsync(response, RegistryJson.Default.CompatibilityResult, cancellationToken)
+                .ConfigureAwait(false);
     }
 
     /// <summary>Registers a version.</summary>
@@ -175,10 +170,12 @@ public sealed class RegistryApi(HttpClient http, string environment)
         using var response = await SendAsync(
             HttpMethod.Post,
             $"{Root}/subjects/{Uri.EscapeDataString(subject)}/versions",
-            new { schema, semanticVersion = semver, registeredBy = by },
+            JsonContent.Create(
+                new RegisterRequest(schema, semver, by), RegistryJson.Default.RegisterRequest),
             cancellationToken).ConfigureAwait(false);
 
-        return await ReadAsync<RegisterResult>(response, cancellationToken).ConfigureAwait(false);
+        return await ReadAsync(response, RegistryJson.Default.RegisterResult, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Creates a subject.</summary>
@@ -193,7 +190,9 @@ public sealed class RegistryApi(HttpClient http, string environment)
         using var response = await SendAsync(
             HttpMethod.Post,
             $"{Root}/subjects",
-            new { name = subject, format, owner },
+            JsonContent.Create(
+                new CreateSubjectRequest(subject, format, owner),
+                RegistryJson.Default.CreateSubjectRequest),
             cancellationToken).ConfigureAwait(false);
 
         if (response.StatusCode is HttpStatusCode.Conflict)
@@ -213,7 +212,8 @@ public sealed class RegistryApi(HttpClient http, string environment)
         using var response = await SendAsync(HttpMethod.Get, $"{Root}/subjects", null, cancellationToken)
             .ConfigureAwait(false);
 
-        return await ReadAsync<List<SubjectSummary>>(response, cancellationToken).ConfigureAwait(false);
+        return await ReadAsync(response, RegistryJson.Default.ListSubjectSummary, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Fetches one version.</summary>
@@ -232,7 +232,8 @@ public sealed class RegistryApi(HttpClient http, string environment)
 
         return response.StatusCode is HttpStatusCode.NotFound
             ? null
-            : await ReadAsync<VersionDetail>(response, cancellationToken).ConfigureAwait(false);
+            : await ReadAsync(response, RegistryJson.Default.VersionDetail, cancellationToken)
+                .ConfigureAwait(false);
     }
 
     /// <summary>Fetches a schema's canonical text by id.</summary>
@@ -256,7 +257,8 @@ public sealed class RegistryApi(HttpClient http, string environment)
             return null;
         }
 
-        var schema = await ReadAsync<SchemaDetail>(response, cancellationToken).ConfigureAwait(false);
+        var schema = await ReadAsync(response, RegistryJson.Default.SchemaDetail, cancellationToken)
+            .ConfigureAwait(false);
         return schema.Schema;
     }
 
@@ -275,18 +277,16 @@ public sealed class RegistryApi(HttpClient http, string environment)
             null,
             cancellationToken).ConfigureAwait(false);
 
-        return await ReadAsync<DiffResult>(response, cancellationToken).ConfigureAwait(false);
+        return await ReadAsync(response, RegistryJson.Default.DiffResult, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async Task<HttpResponseMessage> SendAsync(
-        HttpMethod method, string path, object? body, CancellationToken cancellationToken)
+        HttpMethod method, string path, HttpContent? body, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(method, path);
 
-        if (body is not null)
-        {
-            request.Content = JsonContent.Create(body, options: Json);
-        }
+        request.Content = body;
 
         try
         {
@@ -301,11 +301,14 @@ public sealed class RegistryApi(HttpClient http, string environment)
         }
     }
 
-    private static async Task<T> ReadAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)
+    private static async Task<T> ReadAsync<T>(
+        HttpResponseMessage response,
+        System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> typeInfo,
+        CancellationToken cancellationToken)
     {
         await EnsureAsync(response, cancellationToken).ConfigureAwait(false);
 
-        return await response.Content.ReadFromJsonAsync<T>(Json, cancellationToken).ConfigureAwait(false)
+        return await response.Content.ReadFromJsonAsync(typeInfo, cancellationToken).ConfigureAwait(false)
             ?? throw new RegistryException(
                 ExitCodes.RegistryUnavailable, "registry_response_empty", "The registry returned no body.");
     }

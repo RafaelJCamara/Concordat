@@ -226,7 +226,9 @@ public sealed partial class JsonSchemaInferrer
             var kind = concrete[0];
             var typeName = TypeName(kind, path, findings);
 
-            schema["type"] = nullable ? new JsonArray(typeName, "null") : typeName;
+            schema["type"] = nullable
+                ? new JsonArray(JsonValue.Create(typeName), JsonValue.Create("null"))
+                : JsonValue.Create(typeName);
 
             switch (kind)
             {
@@ -299,7 +301,7 @@ public sealed partial class JsonSchemaInferrer
 
                 if (child.Occurrences == Occurrences)
                 {
-                    required.Add(name);
+                    required.Add((JsonNode)JsonValue.Create(name));
 
                     // A key that is always present but always null is the weakest case of all:
                     // "required, of unknown type" is a combination almost nobody means, and it
@@ -395,7 +397,7 @@ public sealed partial class JsonSchemaInferrer
 
                 foreach (var value in _strings.Order(StringComparer.Ordinal))
                 {
-                    values.Add(value);
+                    values.Add((JsonNode)JsonValue.Create(value));
                 }
 
                 schema["enum"] = values;

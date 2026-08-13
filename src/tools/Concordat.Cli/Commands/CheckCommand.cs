@@ -94,13 +94,8 @@ public static class CheckCommand
 
         var broken = verdicts.Count(v => v.Status == "broken");
 
-        output.Document(new
-        {
-            ok = broken == 0,
-            checkedCount = verdicts.Count,
-            brokenCount = broken,
-            subjects = verdicts,
-        });
+        output.Document(
+            new CheckReport(broken == 0, verdicts.Count, broken, verdicts), CliJson.Default.CheckReport);
 
         if (broken == 0)
         {
@@ -135,7 +130,7 @@ public static class CheckCommand
 
         var canonicalizer = new JsonSchemaCanonicalizer();
         var problems = errors.ToList();
-        var linted = new List<object>();
+        var linted = new List<LintedSubject>();
 
         foreach (var contract in contracts)
         {
@@ -157,7 +152,7 @@ public static class CheckCommand
             // it locally, with no registry, is the proof that content addressing works offline.
             var schemaId = SchemaIdComputer.Compute(contract.Format, canonical.Value).Value;
 
-            linted.Add(new { subject = contract.Subject.Value, schemaId });
+            linted.Add(new LintedSubject(contract.Subject.Value, schemaId));
             output.Line($"  {contract.Subject.Value}  {schemaId}");
         }
 
@@ -166,7 +161,7 @@ public static class CheckCommand
             return ReportFileErrors(output, problems);
         }
 
-        output.Document(new { ok = true, lintedCount = linted.Count, subjects = linted });
+        output.Document(new LintReport(true, linted.Count, linted), CliJson.Default.LintReport);
         output.Line($"\n{linted.Count} contract(s) are well-formed.");
         return ExitCodes.Success;
     }
@@ -196,12 +191,12 @@ public static class CheckCommand
 
     private static int ReportFileErrors(Output output, IReadOnlyList<ContractFileError> errors)
     {
-        output.Document(new
-        {
-            ok = false,
-            concordatCode = "contract_file_invalid",
-            errors = errors.Select(e => new { path = e.Path, reason = e.Reason }),
-        });
+        output.Document(
+            new FileErrorReport(
+                false,
+                "contract_file_invalid",
+                [.. errors.Select(e => new FileErrorEntry(e.Path, e.Reason))]),
+            CliJson.Default.FileErrorReport);
 
         foreach (var error in errors)
         {

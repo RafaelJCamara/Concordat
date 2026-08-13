@@ -86,3 +86,45 @@ jobs:
           path: ./TestResults
           if-no-files-found: ignore
           retention-days: 14
+
+  cli-container:
+    name: CLI container
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Separate from build & test because it verifies something the test suite cannot:
+    # that the CLI survives NativeAOT. Trimming failures do not show up in a JIT build —
+    # a reflection-based serialiser compiles and tests green, then emits empty objects
+    # in the published binary. The only way to catch that is to publish and run it.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -f docker/cli.Dockerfile -t concordat/cli:ci .
+
+      - name: The image must carry no .NET runtime
+        run: |
+          if docker run --rm --entrypoint sh concordat/cli:ci \
+               -c 'command -v dotnet || ls /usr/share/dotnet' 2>/dev/null; then
+            echo "::error::a .NET runtime is present in the CLI image"
+            exit 1
+          fi
+
+      - name: The AOT binary must actually work
+        run: |
+          set +e
+          mkdir -p ws/contracts
+          echo '{"type":"object","properties":{"id":{"type":"integer"}}}' > ws/contracts/acme.Order.json
+
+          # --json under AOT is the assertion that matters: reflection-based serialisation
+          # compiles and tests fine, then silently emits {} once trimmed.
+          OUT=$(docker run --rm -v "$PWD/ws:/workspace" concordat/cli:ci lint --json)
+          echo "$OUT"
+          echo "$OUT" | grep -q '"schemaId"' || { echo "::error::--json lost its payload under AOT"; exit 1; }
+
+          docker run --rm -v "$PWD/ws:/workspace" concordat/cli:ci lint --jsno >/dev/null 2>&1
+          [ $? -eq 2 ] || { echo "::error::a usage error must exit 2, never 1"; exit 1; }
+
+          docker run --rm -v "$PWD/ws:/workspace" concordat/cli:ci \
+            check --registry http://127.0.0.1:9 >/dev/null 2>&1
+          [ $? -eq 3 ] || { echo "::error::an unreachable registry must exit 3, never 1"; exit 1; }

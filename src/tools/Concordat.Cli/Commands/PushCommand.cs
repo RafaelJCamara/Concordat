@@ -61,12 +61,12 @@ public static class PushCommand
                 output.Diagnostic($"error: {error.Path}: {error.Reason}");
             }
 
-            output.Document(new
-            {
-                ok = false,
-                concordatCode = "contract_file_invalid",
-                errors = errors.Select(e => new { path = e.Path, reason = e.Reason }),
-            });
+            output.Document(
+                new FileErrorReport(
+                    false,
+                    "contract_file_invalid",
+                    [.. errors.Select(e => new FileErrorEntry(e.Path, e.Reason))]),
+                CliJson.Default.FileErrorReport);
 
             return ExitCodes.LocalFileError;
         }
@@ -126,7 +126,8 @@ public static class PushCommand
 
         var awaiting = outcomes.Count(o => o.Status == "awaiting-approval");
 
-        output.Document(new { ok = true, dryRun, pushedCount = outcomes.Count, awaiting, subjects = outcomes });
+        output.Document(
+            new PushReport(true, dryRun, outcomes.Count, awaiting, outcomes), CliJson.Default.PushReport);
 
         if (awaiting > 0)
         {
@@ -219,16 +220,11 @@ public static class PushCommand
                 "environments are canonicalising differently.");
         }
 
-        output.Document(new
-        {
-            ok = true,
-            subject,
-            schemaId = result.SchemaId,
-            sourceOrdinal = version.Ordinal,
-            targetOrdinal = result.Ordinal,
-            status = result.Status,
-            created = result.Created,
-        });
+        output.Document(
+            new PromoteReport(
+                true, subject, result.SchemaId, version.Ordinal, result.Ordinal,
+                result.Status, result.Created),
+            CliJson.Default.PromoteReport);
 
         output.Line(
             $"{subject}  v{version.Ordinal} → v{result.Ordinal}  {result.SchemaId}  {result.Status}");

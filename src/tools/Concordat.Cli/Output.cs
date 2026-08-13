@@ -1,5 +1,5 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace Concordat.Cli;
 
@@ -20,12 +20,6 @@ namespace Concordat.Cli;
 /// </remarks>
 public sealed class Output(bool json, TextWriter stdout, TextWriter stderr)
 {
-    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
     /// <summary>Whether machine-readable output was asked for.</summary>
     public bool IsJson { get; } = json;
 
@@ -49,11 +43,16 @@ public sealed class Output(bool json, TextWriter stdout, TextWriter stderr)
     /// <summary>The single JSON document, written only under <c>--json</c>.</summary>
     /// <typeparam name="T">The payload type.</typeparam>
     /// <param name="payload">What to write.</param>
-    public void Document<T>(T payload)
+    /// <param name="typeInfo">
+    /// Ahead-of-time metadata from <see cref="CliJson"/>. Required rather than convenient: the
+    /// reflection-based overload cannot survive NativeAOT and would emit empty objects in a
+    /// published binary rather than failing loudly.
+    /// </param>
+    public void Document<T>(T payload, JsonTypeInfo<T> typeInfo)
     {
         if (IsJson)
         {
-            stdout.WriteLine(JsonSerializer.Serialize(payload, Options));
+            stdout.WriteLine(JsonSerializer.Serialize(payload, typeInfo));
         }
     }
 
@@ -66,7 +65,7 @@ public sealed class Output(bool json, TextWriter stdout, TextWriter stderr)
     {
         if (IsJson)
         {
-            Document(new { ok = false, concordatCode, message });
+            Document(new ErrorReport(false, concordatCode, message), CliJson.Default.ErrorReport);
         }
         else
         {

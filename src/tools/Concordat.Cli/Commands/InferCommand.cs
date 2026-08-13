@@ -181,20 +181,15 @@ public static class InferCommand
         var path = ContractDirectory.FileFor(outputDirectory, name.Value.Value, SchemaFormat.Json);
         await File.WriteAllTextAsync(path, result.Schema, cancellationToken).ConfigureAwait(false);
 
-        output.Document(new
-        {
-            ok = true,
-            subject = name.Value.Value,
-            path,
-            sampleCount = result.SampleCount,
-            findings = result.Findings.Select(f => new
-            {
-                path = f.Path,
-                confidence = f.Confidence.ToString().ToUpperInvariant(),
-                kind = f.Kind,
-                message = f.Message,
-            }),
-        });
+        output.Document(
+            new InferReport(
+                true,
+                name.Value.Value,
+                path,
+                result.SampleCount,
+                [.. result.Findings.Select(f => new FindingEntry(
+                    f.Path, f.Confidence.ToString().ToUpperInvariant(), f.Kind, f.Message))]),
+            CliJson.Default.InferReport);
 
         output.Line($"Draft written to {path}");
         output.Line(string.Empty);

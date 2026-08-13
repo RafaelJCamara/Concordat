@@ -250,7 +250,12 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | Whole numbers narrow to `integer` rather than staying `number` | M3.2 | Low, and reported on every occurrence |
 | `format` is inferred (uuid, date-time, date, email); `additionalProperties` never is | M3.2 | Low |
 | Inference is **not** corpus-pinned, unlike canonicalisation and compatibility | M3.2 | Low. It is a drafting aid a human edits, not protocol |
-| `RabbitMQ.Client` is now a CLI dependency, for queue mode | M3.2 | **Possible M3.3 NativeAOT problem.** Fallback is AOT-without-queue-mode |
+| `RabbitMQ.Client` is now a CLI dependency, for queue mode | M3.2 | ~~Possible NativeAOT problem~~ — **resolved in M3.3: it produced no AOT warnings at all.** The warnings were all from our own JSON usage |
+| Every `--json` shape has a concrete type and source-generated serialisation | [M3.3](plan/M3-cli.md) | Low, and forced by AOT. Reflection-based output would silently emit `{}` from a trimmed binary |
+| The container base is `runtime-deps` (native prerequisites, no .NET runtime) | M3.3 | Low |
+| One release runner per architecture instead of cross-compiling | M3.3 | Low; four jobs, but a mis-linked AOT binary builds cleanly and refuses to start |
+| The GitHub Action passes config as environment variables, not `args` | M3.3 | Low, and required: a fixed `args` list turns an empty optional input into a parse error |
+| The Action wraps `check`/`lint`/`push` only; other commands run the container directly | M3.3 | Low |
 
 ---
 

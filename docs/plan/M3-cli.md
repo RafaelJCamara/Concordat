@@ -155,15 +155,64 @@ NativeAOT target** and is called out there.
 
 ## M3.3 Distribution
 
-- [ ] NativeAOT binaries: win-x64, linux-x64, linux-arm64, osx-arm64
-      — **check `RabbitMQ.Client` first.** M3.2 added it for queue mode, and it is the one
-      dependency likely to resist trimming. If it does: publish AOT without queue mode and
-      ship queue mode in the JIT/Docker build, rather than dropping AOT for everything
-- [ ] **One binary name, `concordat`** ([settled](../DECISIONS-PENDING.md#settled)) — document a
-      shell alias rather than shipping a second name into every packaging manifest
-- [ ] Docker image
-- [ ] GitHub Action wrapping the container
-- [ ] Verify: a Python or Go shop can gate CI with **zero .NET installed**
+**Done 2026-08-13 · AOT verified by a real Linux build**
+
+- [x] NativeAOT binaries: win-x64, linux-x64, linux-arm64, osx-arm64 — one runner per target
+- [x] **One binary name, `concordat`** ([settled](../DECISIONS-PENDING.md#settled))
+- [x] Docker image — `docker/cli.Dockerfile`, **8.8 MB**, no .NET runtime
+- [x] GitHub Action wrapping the container — `action.yml`
+- [x] Verify: a Python or Go shop can gate CI with **zero .NET installed**
+
+### `RabbitMQ.Client` was not the AOT problem. My own code was.
+
+M3.2 flagged RabbitMQ.Client as the likely blocker. **That was wrong, and worth correcting
+plainly:** it produced no AOT warnings at all. Every one of the dozen `IL2026`/`IL3050`
+warnings came from this project's JSON usage — anonymous types in `--json` output,
+reflection-based `JsonContent.Create` and `ReadFromJsonAsync`, and generic `JsonArray.Add<T>`
+in the inferrer.
+
+That matters beyond bookkeeping: **the failure would have been silent.** Reflection-based
+serialisation compiles, passes every JIT test, and then emits `{}` from a trimmed binary. A
+pipeline parsing `--json` would have got an empty object and no error.
+
+The fix was `JsonSerializerContext` source generation, which meant giving every `--json` shape
+a real type. That is what the shape deserved anyway: it is a published interface under ADR-019
+that other languages' pipelines parse, and it had been defined only by whichever anonymous
+object happened to sit at the call site.
+
+### The claims are asserted in CI, not stated
+
+A `cli-container` job builds the image on every pull request and then checks three things a
+JIT test cannot:
+
+- **No .NET runtime in the image** — `command -v dotnet` must fail.
+- **`--json` still has a payload under AOT** — the exact regression trimming would cause.
+- **Exit codes survive containerisation** — 2 for a usage error and 3 for an unreachable
+  registry, never 1.
+
+### Content addressing holds across platform and compilation mode
+
+The Linux AOT binary computes `f90f434be8410abb8d9c9e54e7aacc92` for the same schema the
+Windows JIT build did. ADR-015 claims an id is reproducible offline in any implementation;
+this is the first evidence across two platforms and two compilation modes.
+
+### One runner per target, and every binary is executed
+
+NativeAOT cross-compilation needs a matching cross-linker and sysroot, and getting it wrong
+produces a binary that builds cleanly and refuses to start. A runner per architecture costs
+four jobs and removes the failure mode entirely — and the release workflow runs `--help` on
+each artifact before uploading it, because argument parsing is where a trimmed-away type
+shows up.
+
+### The Action passes configuration as environment, not arguments
+
+A Docker action's `args` list is fixed: every entry is always passed. An empty optional input
+would arrive as an empty-string argument and be rejected as an unknown token — exit 2 on a
+step the user thought they had left unconfigured. Environment variables simply go unset, and
+the CLI already reads `CONCORDAT_REGISTRY`, `CONCORDAT_ENV` and `CONCORDAT_API_KEY` natively.
+
+It is a Docker action rather than a composite one because a composite would have to install a
+.NET SDK on the runner — the exact dependency this milestone exists to remove.
 
 ## M3.4 Build-time packages
 

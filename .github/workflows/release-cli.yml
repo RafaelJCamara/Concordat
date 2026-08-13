@@ -1,0 +1,118 @@
+name: Release CLI
+
+# Manual for now, and tag-driven once the first release is cut. Deliberately separate
+# from CI: this one needs write permissions, and CI must not.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to stamp, for example 0.1.0'
+        required: true
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  binaries:
+    name: ${{ matrix.rid }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+
+    # Every target builds on its own architecture. NativeAOT cross-compilation needs a
+    # matching cross-linker and sysroot, and getting that wrong produces a binary that
+    # builds cleanly and refuses to start — so it is worth a runner per target instead.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-latest
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+          - rid: win-x64
+            runner: windows-latest
+          - rid: osx-arm64
+            runner: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # The AOT toolchain is the one prerequisite the SDK does not carry.
+      - name: Install the native toolchain
+        if: startsWith(matrix.rid, 'linux')
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang zlib1g-dev
+
+      - name: Publish
+        run: >
+          dotnet publish src/tools/Concordat.Cli
+          -c Release
+          -r ${{ matrix.rid }}
+          /p:PublishAot=true
+          -o publish/${{ matrix.rid }}
+
+      # A binary that builds but will not start is the failure mode this whole matrix
+      # exists to avoid, so every target is executed before it is published. --help
+      # exercises argument parsing, which is where a trimmed-away type would surface.
+      - name: Smoke test
+        shell: bash
+        run: |
+          BIN="publish/${{ matrix.rid }}/concordat"
+          [ -f "$BIN.exe" ] && BIN="$BIN.exe"
+          "$BIN" --help
+          "$BIN" --version || true
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: concordat-${{ matrix.rid }}
+          path: publish/${{ matrix.rid }}/concordat*
+          if-no-files-found: error
+          retention-days: 14
+
+  container:
+    name: container image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: docker build -f docker/cli.Dockerfile -t concordat/cli:${{ github.sha }} .
+
+      # The claim M3.3 makes is that a shop with no .NET can gate CI. Asserting it here
+      # keeps it true: if a future change reintroduced a runtime dependency, this fails.
+      - name: Assert the image carries no .NET runtime
+        run: |
+          if docker run --rm --entrypoint sh concordat/cli:${{ github.sha }} \
+               -c 'command -v dotnet || ls /usr/share/dotnet' 2>/dev/null; then
+            echo "::error::a .NET runtime is present in the CLI image"
+            exit 1
+          fi
+
+      - name: Assert the exit codes survive containerisation
+        run: |
+          set +e
+          mkdir -p ws/contracts
+          echo '{"type":"object","properties":{"id":{"type":"integer"}}}' > ws/contracts/acme.Order.json
+
+          docker run --rm -v "$PWD/ws:/workspace" concordat/cli:${{ github.sha }} lint
+          [ $? -eq 0 ] || { echo "::error::lint should exit 0"; exit 1; }
+
+          docker run --rm -v "$PWD/ws:/workspace" concordat/cli:${{ github.sha }} lint --jsno >/dev/null 2>&1
+          [ $? -eq 2 ] || { echo "::error::a usage error must exit 2, never 1"; exit 1; }
+
+          docker run --rm -v "$PWD/ws:/workspace" concordat/cli:${{ github.sha }} \
+            check --registry http://127.0.0.1:9 >/dev/null 2>&1
+          [ $? -eq 3 ] || { echo "::error::an unreachable registry must exit 3, never 1"; exit 1; }
