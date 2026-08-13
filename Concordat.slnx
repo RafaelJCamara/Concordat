@@ -34,6 +34,7 @@
     <Project Path="tests/Concordat.Conformance/Concordat.Conformance.csproj" />
     <Project Path="tests/Concordat.Contracts.Tests/Concordat.Contracts.Tests.csproj" />
     <Project Path="tests/Concordat.Domain.Tests/Concordat.Domain.Tests.csproj" />
+    <Project Path="tests/Concordat.EndToEnd/Concordat.EndToEnd.csproj" />
     <Project Path="tests/Concordat.Formats.Avro.Tests/Concordat.Formats.Avro.Tests.csproj" />
     <Project Path="tests/Concordat.Formats.Json.Tests/Concordat.Formats.Json.Tests.csproj" />
     <Project Path="tests/Concordat.Formats.Protobuf.Tests/Concordat.Formats.Protobuf.Tests.csproj" />
