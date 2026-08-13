@@ -1,0 +1,12 @@
+{
+  "/v1": {
+    "target": "http://localhost:5062",
+    "secure": false,
+    "changeOrigin": false
+  },
+  "/health": {
+    "target": "http://localhost:5062",
+    "secure": false,
+    "changeOrigin": false
+  }
+}

@@ -1,0 +1,208 @@
+/* =============================================================================
+ * PLACEHOLDER TOKENS — pending the prototype's real `index.css`.
+ * =============================================================================
+ *
+ * ADR-006 says to port the React prototype's token set verbatim. The prototype is
+ * maintained in a separate repository and was not available when this scaffold was
+ * built, so what follows is a stand-in: a palette designed to the same token contract
+ * (shadcn/spartan names, OKLCH values) and checked for contrast, but not the intended
+ * one. Replacing it is meant to be a values-only edit to this one file — nothing else
+ * in the app names a colour.
+ *
+ * When the real tokens arrive:
+ *   - The prototype ships `:root { ... }` and `.dark { ... }` blocks in exactly this
+ *     shape, so the swap is a paste, not a translation.
+ *   - It is dark-only. The light block below is the addition DESIGN §9 asks for and has
+ *     no counterpart to copy from; keep it and re-derive it from the new dark values.
+ *   - Anything the prototype does not define — `--success`, `--warning`, `--chart-*` —
+ *     still needs a value, so do not delete those lines wholesale.
+ *
+ * Structure. `:root` is light and `.dark` is dark, because that is the switch Spartan's
+ * preset compiles against: `@custom-variant dark (&:is(.dark *))`. The generated helm
+ * components use `dark:` utilities (`dark:bg-input/30`, `dark:hover:bg-muted/50`), so
+ * driving the tokens from `prefers-color-scheme` instead would leave those utilities
+ * keyed to the OS while the tokens followed the user's choice — a page half in each
+ * theme. `ThemeStore` puts `.dark` on `<html>`; `main.ts` does it before bootstrap so
+ * there is no flash.
+ *
+ * Contrast. Every text-on-surface pair below meets WCAG 2.1 AA (4.5:1), verified by
+ * converting the OKLCH values to sRGB and computing the ratio. The pairs that were
+ * tightest, and are worth re-checking after any edit: `warning-foreground` on
+ * `warning` in light (4.8:1) and `destructive-foreground` on `destructive` in dark
+ * (5.1:1).
+ * ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Schema documents are read here constantly. A monospace stack is load-bearing, not decoration. */
+  --font-mono:
+    ui-monospace, 'JetBrains Mono', 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+
+  --radius: 0.5rem;
+
+  --background: oklch(0.995 0.002 265);
+  --foreground: oklch(0.2 0.02 265);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.02 265);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.02 265);
+
+  --primary: oklch(0.5 0.17 262);
+  --primary-foreground: oklch(0.99 0 0);
+
+  --secondary: oklch(0.965 0.008 265);
+  --secondary-foreground: oklch(0.25 0.02 265);
+
+  --muted: oklch(0.965 0.008 265);
+  --muted-foreground: oklch(0.5 0.02 265);
+
+  --accent: oklch(0.945 0.012 265);
+  --accent-foreground: oklch(0.22 0.02 265);
+
+  --destructive: oklch(0.55 0.21 27);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  /*
+   * Not in the shadcn contract, and added deliberately. This is a registry UI: nearly
+   * every row carries a status — ACTIVE, AWAITING_APPROVAL, REJECTED, DEPRECATED,
+   * compatible / breaking. Without tokens for "fine" and "needs a look", those states
+   * get expressed as ad-hoc Tailwind palette classes and drift from screen to screen,
+   * which is exactly the coherence a token set exists to protect.
+   */
+  --success: oklch(0.51 0.115 155);
+  --success-foreground: oklch(0.99 0 0);
+  --warning: oklch(0.55 0.112 72);
+  --warning-foreground: oklch(0.99 0 0);
+
+  /*
+   * `--border` is decorative — card edges, table rules, dividers — and is deliberately
+   * low-contrast. `--input` is not: it is the only thing marking where a text field
+   * begins, so it meets the 3:1 that WCAG 1.4.11 requires of a control's boundary. They
+   * look like the same kind of token and are not, which is why most design systems ship
+   * an input border nobody can see.
+   */
+  --border: oklch(0.9 0.01 265);
+  --input: oklch(0.62 0.018 265);
+  --ring: oklch(0.5 0.17 262);
+
+  /* Ordered so the first three carry the common three-series chart without collision. */
+  --chart-1: oklch(0.5 0.17 262);
+  --chart-2: oklch(0.51 0.115 155);
+  --chart-3: oklch(0.55 0.112 72);
+  --chart-4: oklch(0.55 0.21 27);
+  --chart-5: oklch(0.52 0.16 310);
+
+  --sidebar: oklch(0.98 0.005 265);
+  --sidebar-foreground: oklch(0.2 0.02 265);
+  --sidebar-primary: oklch(0.5 0.17 262);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.945 0.012 265);
+  --sidebar-accent-foreground: oklch(0.22 0.02 265);
+  --sidebar-border: oklch(0.9 0.01 265);
+  --sidebar-ring: oklch(0.5 0.17 262);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: oklch(0.145 0.012 265);
+  --foreground: oklch(0.968 0.004 265);
+
+  --card: oklch(0.196 0.014 265);
+  --card-foreground: oklch(0.968 0.004 265);
+
+  --popover: oklch(0.196 0.014 265);
+  --popover-foreground: oklch(0.968 0.004 265);
+
+  --primary: oklch(0.68 0.155 258);
+  --primary-foreground: oklch(0.16 0.03 258);
+
+  --secondary: oklch(0.27 0.018 265);
+  --secondary-foreground: oklch(0.968 0.004 265);
+
+  --muted: oklch(0.27 0.018 265);
+  --muted-foreground: oklch(0.72 0.02 265);
+
+  --accent: oklch(0.3 0.02 265);
+  --accent-foreground: oklch(0.968 0.004 265);
+
+  --destructive: oklch(0.63 0.2 25);
+  --destructive-foreground: oklch(0.15 0.04 25);
+
+  --success: oklch(0.72 0.16 155);
+  --success-foreground: oklch(0.16 0.04 155);
+  --warning: oklch(0.8 0.15 85);
+  --warning-foreground: oklch(0.2 0.03 85);
+
+  --border: oklch(0.34 0.018 265);
+  --input: oklch(0.5 0.02 265);
+  --ring: oklch(0.68 0.155 258);
+
+  --chart-1: oklch(0.68 0.155 258);
+  --chart-2: oklch(0.72 0.16 155);
+  --chart-3: oklch(0.8 0.15 85);
+  --chart-4: oklch(0.63 0.2 25);
+  --chart-5: oklch(0.7 0.14 310);
+
+  --sidebar: oklch(0.17 0.013 265);
+  --sidebar-foreground: oklch(0.968 0.004 265);
+  --sidebar-primary: oklch(0.68 0.155 258);
+  --sidebar-primary-foreground: oklch(0.16 0.03 258);
+  --sidebar-accent: oklch(0.3 0.02 265);
+  --sidebar-accent-foreground: oklch(0.968 0.004 265);
+  --sidebar-border: oklch(0.34 0.018 265);
+  --sidebar-ring: oklch(0.68 0.155 258);
+}
+
+/*
+ * Spartan's preset already bridges the shadcn tokens onto Tailwind's `--color-*` scale.
+ * These are the ones it does not know about, so `bg-success`, `text-warning` and
+ * `fill-chart-2` resolve the same way `bg-primary` does.
+ */
+@theme inline {
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    /* Kerning and ligatures on a UI font, but never on schema text — see `.font-mono`. */
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /*
+   * Respect a reduced-motion preference globally rather than per component. Spartan's
+   * primitives animate overlays and accordions by default, and remembering to opt each
+   * one out is the kind of thing that gets missed on the twentieth component.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

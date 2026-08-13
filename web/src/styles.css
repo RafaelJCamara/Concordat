@@ -1,0 +1,17 @@
+/*
+ * The global stylesheet. Three imports and nothing else — every value lives in
+ * `styles/tokens.css`, which is the only file to touch when the design system changes.
+ */
+
+@import 'tailwindcss';
+
+/*
+ * Spartan's preset. It supplies the `@theme inline` bridge that maps `--background` and
+ * friends onto Tailwind's `--color-*` scale, the `dark` variant (`&:is(.dark *))`, the
+ * `data-*` state variants the brain primitives set, and the CDK overlay stylesheet. The
+ * helm components are source in this repo but they compile against these, so the import is
+ * not optional.
+ */
+@import '@spartan-ng/brain/hlm-tailwind-preset.css';
+
+@import './styles/tokens.css';

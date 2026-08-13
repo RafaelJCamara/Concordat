@@ -1,0 +1,10 @@
+# Build output and dependencies.
+dist
+.angular
+node_modules
+package-lock.json
+
+# Generated, not authored. Formatting them produces a diff that the next
+# `ng g @spartan-ng/cli:ui` throws away, and a `format:check` failure nobody caused.
+src/app/shared/ui/*/src
+src/app/core/http/concordat-codes.generated.ts
