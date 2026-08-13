@@ -1,0 +1,7 @@
+{
+  "name": "leading-dot-is-refused",
+  "why": "An empty leading segment, which a naive concatenation of an empty namespace with a type name produces. The grammar has no empty segments, and a permissive SDK that dropped the leading dot would resolve to a subject that a strict SDK refuses.",
+  "messageType": ".OrderCreated",
+  "outcome": "unusable",
+  "error": "subject_name_invalid"
+}

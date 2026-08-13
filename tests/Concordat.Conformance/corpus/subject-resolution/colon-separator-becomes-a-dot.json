@@ -1,0 +1,7 @@
+{
+  "name": "colon-separator-becomes-a-dot",
+  "why": "Several brokers and code generators use ':' as a scope separator. DESIGN §3 names it alongside '+' as a separator that normalises. Pinned so an SDK author does not have to guess whether the list was exhaustive: it is.",
+  "messageType": "acme:orders:OrderCreated",
+  "outcome": "resolved",
+  "subject": "acme.orders.OrderCreated"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "case-is-preserved-not-folded",
+  "why": "The tempting rule nobody should implement. Folding case would make 'Acme.Orders' and 'acme.orders' one subject, which sounds helpful until it is a second lossy rewrite four SDKs must agree on, and until it mangles names meant to be read. Case-sensitive matches the ordinal treatment of every other wire value. The consequence is accepted: two teams spelling the same type differently get two subjects, which the registry's subject list makes visible.",
+  "messageType": "Acme.Orders.OrderCreated",
+  "outcome": "resolved",
+  "subject": "Acme.Orders.OrderCreated"
+}

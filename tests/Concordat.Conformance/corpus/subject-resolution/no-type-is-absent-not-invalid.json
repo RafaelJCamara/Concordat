@@ -1,0 +1,6 @@
+{
+  "name": "no-type-is-absent-not-invalid",
+  "why": "properties.type is optional in AMQP, and ADR-011 records the consequence plainly: a publisher that sets no type gets no subject. That is the ordinary state of an un-instrumented brownfield publisher, not a bug. An SDK that reported this as an error would nag on every message of every legacy publisher, which is how enforcement gets switched off wholesale.",
+  "messageType": null,
+  "outcome": "absent"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "nested-type-separator-becomes-a-dot",
+  "why": "typeof(T).FullName spells a nested type with '+', which is not in the subject grammar, so without this rule every nested message type is unusable. Note the cost, which is real and accepted: 'Acme.Orders+OrderCreated' and a top-level 'Acme.Orders.OrderCreated' collapse to the SAME subject and become indistinguishable. Refusing nested types outright was the alternative; DESIGN §3 chose the rewrite.",
+  "messageType": "Acme.Orders+OrderCreated",
+  "outcome": "resolved",
+  "subject": "Acme.Orders.OrderCreated"
+}

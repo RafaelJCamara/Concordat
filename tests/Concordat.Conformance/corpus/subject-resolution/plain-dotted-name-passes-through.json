@@ -1,0 +1,7 @@
+{
+  "name": "plain-dotted-name-passes-through",
+  "why": "The baseline, and the case every non-.NET SDK hits. A Python or Go publisher writing 'acme.orders.OrderCreated' into properties.type is a first-class citizen (ADR-019), not a translation of a .NET concept: the string is already canonical and nothing rewrites it.",
+  "messageType": "acme.orders.OrderCreated",
+  "outcome": "resolved",
+  "subject": "acme.orders.OrderCreated"
+}

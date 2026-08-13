@@ -1,0 +1,8 @@
+{
+  "name": "routing-data-is-never-a-fallback",
+  "why": "The most valuable negative in this category. With no type but a perfectly good exchange and routing key available, an implementer will be tempted to fall back to them. ADR-011 rejects exactly that: routing keys are high-cardinality and dynamic, alternate and dead-letter bindings rewrite them in flight, and the consumer cannot see them. An SDK that quietly falls back produces subjects no other SDK produces.",
+  "messageType": null,
+  "exchange": "orders",
+  "routingKey": "order.created.v2",
+  "outcome": "absent"
+}

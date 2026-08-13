@@ -1,0 +1,7 @@
+{
+  "name": "surrounding-whitespace-is-trimmed",
+  "why": "Deliberately the OPPOSITE of the envelope rule, and the two are not in conflict. Resolution runs on the publish side and PRODUCES the canonical value, so trimming here means the wire only ever carries clean text. Envelope decoding must not trim, because canonicalising on READ is what lets a padded and an unpadded value become two spellings that different SDKs disagree about. Produce canonically, read literally.",
+  "messageType": "  acme.orders.OrderCreated  ",
+  "outcome": "resolved",
+  "subject": "acme.orders.OrderCreated"
+}

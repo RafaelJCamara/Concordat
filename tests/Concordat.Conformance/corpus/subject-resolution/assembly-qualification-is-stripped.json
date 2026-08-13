@@ -1,0 +1,7 @@
+{
+  "name": "assembly-qualification-is-stripped",
+  "why": "A .NET publisher reaching for typeof(T).AssemblyQualifiedName gets all of this. Without the strip the subject changes on every assembly version bump, so a routine release would silently register a new subject and orphan the old contract. DESIGN §3 enumerates assembly, version, culture and public-key-token; all four sit after the first comma, so one rule covers the list and there is nothing for another SDK to get subtly wrong.",
+  "messageType": "Acme.Orders.OrderCreated, Acme.Contracts, Version=2.4.0.0, Culture=neutral, PublicKeyToken=1a2b3c4d5e6f7a8b",
+  "outcome": "resolved",
+  "subject": "Acme.Orders.OrderCreated"
+}

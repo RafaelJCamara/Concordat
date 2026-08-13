@@ -39,6 +39,58 @@ public class CorpusTests
     public static IEnumerable<object[]> EnvelopeDecode() =>
         Corpus.Load<EnvelopeDecodeFixture>("envelope-decode");
 
+    public static IEnumerable<object[]> SubjectResolution() =>
+        Corpus.Load<SubjectResolutionFixture>("subject-resolution");
+
+    [Theory]
+    [MemberData(nameof(SubjectResolution))]
+    public void SubjectResolutionMatchesTheCorpus(string file, SubjectResolutionFixture fixture)
+    {
+        var resolution = MessageTypeSubjectResolver.Instance.Resolve(new PublishContext
+        {
+            MessageType = fixture.MessageType,
+            Exchange = fixture.Exchange,
+            RoutingKey = fixture.RoutingKey,
+        });
+
+        switch (fixture.Outcome)
+        {
+            case "resolved":
+                Assert.True(
+                    resolution.IsResolved,
+                    $"{file}: expected '{fixture.Subject}'. {fixture.Why}\n" +
+                    $"  got: {Describe(resolution)}");
+                Assert.Equal(fixture.Subject, resolution.Subject!.Value);
+                break;
+
+            case "absent":
+                // Asserted separately from "unusable" on purpose. An SDK that reports absent as
+                // an error passes a looser check and fails real brownfield estates.
+                Assert.True(
+                    !resolution.IsResolved && !resolution.IsUnusable,
+                    $"{file}: expected no subject and no error. {fixture.Why}\n" +
+                    $"  got: {Describe(resolution)}");
+                break;
+
+            case "unusable":
+                Assert.True(
+                    resolution.IsUnusable,
+                    $"{file}: expected refusal with '{fixture.Error}'. {fixture.Why}\n" +
+                    $"  got: {Describe(resolution)}");
+                Assert.Equal(fixture.Error, resolution.Error!.Code);
+                break;
+
+            default:
+                Assert.Fail($"{file}: unknown outcome '{fixture.Outcome}'.");
+                break;
+        }
+    }
+
+    private static string Describe(Concordat.Domain.Messaging.SubjectResolution resolution) =>
+        resolution.IsResolved ? $"resolved '{resolution.Subject!.Value}'"
+        : resolution.IsUnusable ? $"unusable ({resolution.Error!.Code})"
+        : "absent";
+
     [Theory]
     [MemberData(nameof(EnvelopeEncode))]
     public void EnvelopeEncodingMatchesTheCorpus(string file, EnvelopeEncodeFixture fixture)

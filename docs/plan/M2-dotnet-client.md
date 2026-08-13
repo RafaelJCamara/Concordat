@@ -127,9 +127,78 @@ subject indistinguishable from an absent one.
 
 ## M2.3 Subject resolution
 
-- [ ] `ISubjectResolver` seam
-- [ ] RabbitMQ.Client resolver — `properties.type`, as-is
-- [ ] Canonical-form validation `^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$`
+**Done 2026-08-13 · DESIGN §3 · ADR-011 · 14 corpus fixtures + 10 tests**
+
+- [x] `ISubjectResolver` seam, with `PublishContext` and a three-outcome `SubjectResolution`
+- [x] `MessageTypeSubjectResolver` — `properties.type`, as-is
+- [x] Canonical-form validation `^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$`, via `SubjectNormalizer`
+- [x] `corpus/subject-resolution` — 14 normative fixtures
+- [ ] Binding it to `IReadOnlyBasicProperties` — **M2.4**, where RabbitMQ.Client is a
+      dependency anyway
+
+### Transport-neutral, following the M2.2 precedent
+
+The seam takes a `PublishContext` of plain strings rather than RabbitMQ's types, for the same
+reason `EnvelopeReader` takes a plain header dictionary: testable without a broker, shared by
+every transport adapter. So it lives in the Domain and M2.3 takes no broker dependency at all.
+
+There is deliberately **no `System.Type` on the context.** The moment a CLR type reaches the
+seam, .NET's type system starts leaking into subject names that four other SDKs have to
+reproduce. Turning `typeof(T).FullName` into a string is the caller's job, one layer up, where
+it is obviously a .NET concern.
+
+### "As-is" and normalisation are not in conflict
+
+DESIGN §3 says the subject is `properties.type` **as-is**, and also that separators normalise
+and assembly qualification is stripped. *As-is* means the subject is not **derived** from the
+exchange or routing key — the things ADR-011 rejects. The declared type still needs rewriting,
+or a publisher using `typeof(T).AssemblyQualifiedName` would register a new subject on every
+assembly version bump.
+
+Two rules, both mechanical:
+
+- **Everything from the first comma is dropped.** DESIGN §3 enumerates assembly, version,
+  culture and public-key-token; all four sit after that comma, so one rule covers the list and
+  leaves nothing for another SDK to get subtly wrong.
+- **`+` and `:` become `.`** — and the list is **closed**. A fixture pins that `/` does not
+  normalise, because the natural reading of §3 is that its examples were illustrative, and one
+  SDK adding `/` would split the same publisher's name across two subjects.
+
+### Every normalisation rule is a cross-language liability
+
+That is the whole reason this is corpus-pinned rather than merely tested. A rule here is a rule
+five SDKs must apply identically or one message type becomes two subjects, so the set is small
+and refusals are preferred to inventions:
+
+- **Generic type names are refused, not mangled.** Any spelling for
+  `` List`1[[Acme.Order]] `` would be an invention every SDK must reproduce character for
+  character — and Go and Python have no CLR generic syntax to reproduce it *from*. Refusing is
+  honest and actionable.
+- **Hyphens are refused, not rewritten to underscores.** Everyone arrives from routing keys
+  where `order-created` is idiomatic. Rewriting would be another shared invention, and a
+  subject silently differing from what the publisher wrote is worse than a clear refusal.
+- **Case is preserved, not folded.** Folding sounds helpful until it is a second lossy rewrite
+  four SDKs must agree on. Consequence accepted: two teams spelling a type differently get two
+  subjects, which the registry's subject list makes visible.
+
+### One accepted collision, recorded so it is not a surprise
+
+`+` → `.` means `Acme.Orders+OrderCreated` and a top-level `Acme.Orders.OrderCreated` become
+**the same subject**, indistinguishable. Refusing nested types outright was the alternative;
+DESIGN §3 chose the rewrite. The fixture says so in its `why` rather than leaving it to be
+discovered.
+
+### Absent is not invalid
+
+Three outcomes again, for the same reason the envelope reader has three. `properties.type` is
+optional in AMQP and ADR-011 records the consequence plainly: a publisher that sets no type
+gets no subject. That is the ordinary state of an un-instrumented brownfield publisher. An SDK
+reporting it as an error would nag on every message of every legacy publisher — which is how
+enforcement gets switched off wholesale.
+
+The most valuable fixture in the set is a negative: with no type but a perfectly good exchange
+and routing key present, the resolver still returns **absent**. An implementer will be tempted
+to fall back, and ADR-011 rejects exactly that.
 
 ## M2.0 Payload validation
 

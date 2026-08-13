@@ -1,0 +1,7 @@
+{
+  "name": "trailing-comma-leaves-a-usable-name",
+  "why": "Degenerate assembly qualification: a comma with nothing after it. The strip must leave 'Acme.Order' rather than 'Acme.Order' plus trailing space, which would then be trimmed anyway — pinned so an SDK that strips without trimming is caught here rather than by a mismatched subject in production.",
+  "messageType": "Acme.Order,",
+  "outcome": "resolved",
+  "subject": "Acme.Order"
+}

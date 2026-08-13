@@ -1,0 +1,7 @@
+{
+  "name": "slash-is-not-a-separator",
+  "why": "Pins the separator list as CLOSED. '+' and ':' normalise; '/' does not, however much it looks like a scope separator. Without this fixture the natural reading of DESIGN §3 is that the list was illustrative, and one SDK would add '/' — after which the same publisher name yields two subjects depending on which language sent it.",
+  "messageType": "acme/orders/OrderCreated",
+  "outcome": "unusable",
+  "error": "subject_name_invalid"
+}

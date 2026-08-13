@@ -86,7 +86,31 @@ That is a real hole for anyone using composition keywords, which is common in ma
 Decide whether v1 ships with it, closes it, or rejects schemas using unsupported keywords
 outright rather than silently under-reporting.
 
-### 10. Hard-delete semantics — before v1 ships
+### 10. Generic message types are unsupported — before v1 ships
+
+M2.3 **refuses** a generic type name rather than inventing a spelling for it, because any
+spelling becomes a rule five SDKs must reproduce character for character, and Go and Python
+have no CLR generic syntax to reproduce it from.
+
+That is right for the protocol and a hard stop for anyone whose publishers send
+`Envelope<OrderCreated>`. Raw RabbitMQ.Client publishers rarely do, which is why this is a
+gap rather than a blocker under ADR-020 — but if **your** code does, it moves up.
+
+> **Options:** ship refusing them; require an explicit subject for generic types; or define a
+> normative spelling in the corpus and make every SDK implement it.
+
+### 11. Nested and top-level types collide — confirm the trade
+
+`+` → `.` (DESIGN §3) makes `Acme.Orders+OrderCreated` and a top-level
+`Acme.Orders.OrderCreated` **the same subject**, silently. The alternative was refusing nested
+types outright.
+
+This follows the design as written, and the consequence may not have been visible when it was
+written. **Recommendation:** keep it. The collision needs two types whose names collide *after*
+the rewrite, which is rare and immediately visible in the registry's subject list; refusing all
+nested types would hurt far more publishers.
+
+### 12. Hard-delete semantics — before v1 ships
 
 M1.5 implements soft delete (`Subject.Retire()`) and never deletes schemas, which is what
 ADR-015 requires. **Hard delete is not implemented**: DESIGN §4 wants "no registered
@@ -158,6 +182,11 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | Fail-closed throws `ConcordatException`; quarantine behaviour is M2.4's, not the client's | M2.1 | Low |
 | `SchemaUnresolvable` added to `ConcordatCodes` — a client-raised code in a domain catalogue, because ADR-019 makes the strings normative for every SDK | M2.1 | Low |
 | `ConcordatClient` does not dispose the `HttpClient` it is handed | M2.1 | Low |
+| `ISubjectResolver` is transport-neutral and lives in the Domain; no `System.Type` on the context | [M2.3](plan/M2-dotnet-client.md) | Low, and it is what keeps .NET's type system out of subject names |
+| The separator list is **closed** — `+` and `:` normalise, `/` does not | M2.3 | Low now, **breaks existing subjects** once anyone publishes |
+| Subject case is preserved, never folded | M2.3 | **Would merge existing subjects** |
+| Hyphens are refused rather than rewritten to underscores | M2.3 | Low |
+| The publish side trims surrounding whitespace; envelope reading still does not | M2.3 | Low |
 
 ---
 

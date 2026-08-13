@@ -1,0 +1,6 @@
+{
+  "name": "blank-type-is-absent",
+  "why": "A whitespace-only type is the same condition as no type: a publisher that set nothing meaningful. Distinct from the envelope rule, where a present-but-empty HEADER is malformed — there, the key's presence proves a Concordat writer ran and produced something unusable. Here nothing proves anything ran at all.",
+  "messageType": "   ",
+  "outcome": "absent"
+}

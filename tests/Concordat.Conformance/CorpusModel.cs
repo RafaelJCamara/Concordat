@@ -279,11 +279,38 @@ public sealed record EnvelopeDecodeFixture : FixtureBase
     public string? Error { get; init; }
 }
 
+/// <summary>A subject-resolution case: what a publisher declared, and the subject it becomes.</summary>
+/// <remarks>
+/// Resolution is client-side and publish-side only (ADR-011), so the registry never runs any
+/// of this. The fixtures are normative all the same, and arguably more so than most: every
+/// normalisation rule is a rule five SDKs must apply identically, or one publisher's message
+/// type becomes two subjects depending on which language sent it.
+/// </remarks>
+public sealed record SubjectResolutionFixture : FixtureBase
+{
+    /// <summary>AMQP <c>properties.type</c> as the publisher set it, or null if unset.</summary>
+    public string? MessageType { get; init; }
+
+    /// <summary>The exchange, present only to prove it is never used as a fallback.</summary>
+    public string? Exchange { get; init; }
+
+    /// <summary>The routing key, present only to prove it is never used as a fallback.</summary>
+    public string? RoutingKey { get; init; }
+
+    /// <summary><c>resolved</c>, <c>absent</c>, or <c>unusable</c>.</summary>
+    public string Outcome { get; init; } = "";
+
+    /// <summary>The subject that must be produced, when the outcome is <c>resolved</c>.</summary>
+    public string? Subject { get; init; }
+
+    /// <summary>The <c>concordatCode</c> that must be returned, when the outcome is <c>unusable</c>.</summary>
+    public string? Error { get; init; }
+}
+
 /// <summary>A payload-validation case.</summary>
 /// <remarks>
-/// Not executed yet: Concordat has no validator of its own, because validation is client-side
-/// and uses a different third-party library in every language. M2 wires the first, M6.1 makes
-/// every SDK run these.
+/// Executed since M2.0, against <c>NJsonSchemaPayloadValidator</c> behind the
+/// <c>IPayloadValidator</c> port. M6.1 makes every SDK run the same fixtures.
 /// </remarks>
 public sealed record PayloadValidationFixture : FixtureBase
 {

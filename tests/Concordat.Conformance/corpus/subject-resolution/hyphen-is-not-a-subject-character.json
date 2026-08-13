@@ -1,0 +1,7 @@
+{
+  "name": "hyphen-is-not-a-subject-character",
+  "why": "Everyone arrives from routing keys, where 'order-created' is idiomatic, and assumes subjects work the same way. They do not: the grammar is letters, digits, underscores and dots. Refused rather than rewritten to an underscore, because that rewrite is another invention four SDKs would have to share, and because a subject silently differing from what the publisher wrote is worse than a clear refusal at publish time.",
+  "messageType": "acme.orders.order-created",
+  "outcome": "unusable",
+  "error": "subject_name_invalid"
+}
