@@ -1,2 +1,67 @@
 # Signet
-A RabbitMQ Schema Registry.
+
+A schema registry and contract-enforcement platform for RabbitMQ — what Confluent Schema
+Registry is to Kafka, but built for AMQP 0-9-1 and usable from any language.
+
+> **Status: design phase.** No implementation yet. The architecture and the reasoning
+> behind it live in **[docs/DESIGN.md](docs/DESIGN.md)**.
+
+## The problem
+
+Kafka teams get schema governance for free: producers and consumers agree on a versioned
+contract, and incompatible changes are rejected before they reach production. RabbitMQ
+has no equivalent. Teams ship untyped JSON, find out about breaking changes at runtime,
+and have no central answer to *"what flows through this broker, and who owns it?"*
+
+Nothing on the market fills this gap. Every product doing real payload enforcement is
+Kafka-protocol-only, and the two vendors owning commercial RabbitMQ ship no payload
+governance at all.
+
+## What Signet does
+
+- **Registry** — versioned schemas (JSON Schema, Avro, Protobuf) with content-addressed,
+  environment-portable IDs.
+- **Compatibility** — two axes rather than one: *who breaks* (backward/forward/full) and
+  *what breaks* (wire/JSON/source), with exact JSON-Pointer paths on every finding.
+- **Contracts** — bind subjects to RabbitMQ topology: `(vhost, exchange, routing key)` on
+  publish, `(vhost, queue)` on consume. This is the part Kafka has no equivalent for.
+- **Enforcement** — validate on publish and consume via RabbitMQ.Client middleware.
+  Service-bus adapters (MassTransit, NServiceBus, EasyNetQ, Rebus, Wolverine) are
+  deferred past v1.
+- **CI gate** — a `signet` CLI that fails the build when a change would break a
+  registered consumer, shipped as a single native binary, a Docker image and a GitHub
+  Action so non-.NET teams need no .NET installed.
+- **Governance** — impact analysis ("who breaks if I change this?"), environment
+  promotion, and an approval gate that lets a breaking schema register for review without
+  moving the `latest` pointer.
+
+Payloads are not mutated. Schema identity travels in AMQP headers, so a consumer without
+a Signet client still reads plain JSON and adoption can be incremental.
+
+## Any language
+
+The registry is a plain HTTP service with a committed OpenAPI 3.1 document; the server
+being .NET is an implementation detail that the protocol never exposes. SDKs are ordinary
+clients of that protocol with no privileged access — C# is simply the first, followed by
+TypeScript/JavaScript, Python, Go and Java, all verified against one language-neutral
+conformance corpus. The `signet` CLI ships as a native binary, a Docker image and a
+GitHub Action, so a non-.NET team needs no .NET installed at any point.
+
+## Deployment
+
+- **Self-hosted** — one container plus PostgreSQL; `docker compose up`.
+- **Signet Cloud** — the same image in multi-tenant mode, managed and subscription-billed.
+
+Everything is Apache-2.0, including the Cloud code.
+
+## Documentation
+
+| | |
+|---|---|
+| [docs/DESIGN.md](docs/DESIGN.md) | Full architecture: domain model, envelope spec, API surface, SDK bindings, decisions |
+| [docs/PLAN.md](docs/PLAN.md) | Delivery plan: milestones M0–M9 broken into numbered work packages with exit criteria |
+| `docs/adr/` | Architecture decision records (to be written — the 21 decisions are tabulated in DESIGN.md) |
+
+## License
+
+Apache-2.0.
