@@ -1,0 +1,70 @@
+using Concordat.Application.Abstractions;
+using Concordat.Application.Registry;
+using Concordat.Domain.Registry;
+using Concordat.Formats.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Concordat.Application;
+
+/// <summary>
+/// Resolves per-format services from whatever implementations are registered.
+/// </summary>
+/// <remarks>
+/// Formats are registered at the composition root, so the Application layer never references
+/// a concrete format. Asking for one that is not registered fails loudly rather than falling
+/// back to JSON — a silent fallback would produce a confidently wrong verdict for an Avro
+/// schema.
+/// </remarks>
+public sealed class SchemaFormatRegistry(
+    IEnumerable<ISchemaCanonicalizer> canonicalizers,
+    IEnumerable<ICompatibilityChecker> checkers,
+    IEnumerable<ISchemaReferenceExtractor> extractors) : ISchemaFormatRegistry
+{
+    /// <inheritdoc />
+    public ISchemaCanonicalizer Canonicalizer(SchemaFormat format) =>
+        canonicalizers.FirstOrDefault(c => c.Format == format)
+        ?? throw new NotSupportedException($"No canonicaliser registered for {format}.");
+
+    /// <inheritdoc />
+    public ICompatibilityChecker Checker(SchemaFormat format) =>
+        checkers.FirstOrDefault(c => c.Format == format)
+        ?? throw new NotSupportedException($"No compatibility checker registered for {format}.");
+
+    /// <inheritdoc />
+    public ISchemaReferenceExtractor ReferenceExtractor(SchemaFormat format) =>
+        extractors.FirstOrDefault(e => e.Format == format)
+        ?? throw new NotSupportedException($"No reference extractor registered for {format}.");
+}
+
+/// <summary>Registration helpers for the application layer.</summary>
+public static class DependencyInjection
+{
+    /// <summary>Registers the dispatcher, the evaluator and every handler.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The same collection, for chaining.</returns>
+    public static IServiceCollection AddConcordatApplication(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton(TimeProvider.System);
+        services.AddScoped<IDispatcher, Dispatcher>();
+        services.AddScoped<ISchemaFormatRegistry, SchemaFormatRegistry>();
+        services.AddScoped<ICompatibilityEvaluator, CompatibilityEvaluator>();
+
+        services.AddScoped<
+            ICommandHandler<RegisterVersionCommand, RegisterVersionResult>, RegisterVersionHandler>();
+        services.AddScoped<ICommandHandler<CreateSubjectCommand, Subject>, CreateSubjectHandler>();
+        services.AddScoped<ICommandHandler<DecideVersionCommand, Subject>, DecideVersionHandler>();
+
+        services.AddScoped<IQueryHandler<GetSubjectQuery, Subject>, GetSubjectHandler>();
+        services.AddScoped<
+            IQueryHandler<ListSubjectsQuery, IReadOnlyList<Subject>>, ListSubjectsHandler>();
+        services.AddScoped<
+            IQueryHandler<CheckCompatibilityQuery, CompatibilityCheckResult>, CheckCompatibilityHandler>();
+        services.AddScoped<IQueryHandler<GetSchemaQuery, Schema>, GetSchemaHandler>();
+        services.AddScoped<
+            IQueryHandler<GetSchemaUsagesQuery, IReadOnlyList<SchemaUsage>>, GetSchemaUsagesHandler>();
+
+        return services;
+    }
+}

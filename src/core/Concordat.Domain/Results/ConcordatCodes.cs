@@ -69,6 +69,15 @@ public static class ConcordatCodes
     /// <summary>No version with the given ordinal exists on the subject.</summary>
     public const string VersionNotFound = "version_not_found";
 
+    /// <summary>No subject with the given name exists in the environment.</summary>
+    public const string SubjectNotFound = "subject_not_found";
+
+    /// <summary>A subject with that name already exists in the environment.</summary>
+    public const string SubjectAlreadyExists = "subject_already_exists";
+
+    /// <summary>No schema with the given id is visible to the caller.</summary>
+    public const string SchemaNotFound = "schema_not_found";
+
     /// <summary>The version is not awaiting approval, so it cannot be approved or rejected.</summary>
     public const string VersionNotAwaitingApproval = "version_not_awaiting_approval";
 

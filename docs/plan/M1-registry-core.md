@@ -287,7 +287,47 @@ Registered consumers and the audit log are both M7. Soft delete works today —
 
 ## M1.6 REST API
 
-**DESIGN §5**
+**DESIGN §5 · application layer done 2026-08-13, HTTP surface outstanding**
+
+Split into two passes because it is the largest package in M1. **Pass A — the application
+layer — is complete.** Pass B is the HTTP surface.
+
+### Pass A, done
+
+- [x] Hand-rolled CQRS dispatcher (`ICommand`/`IQuery` + handlers), **not MediatR** (ADR-009)
+- [x] Handlers: create subject, get subject, list subjects, register version, check
+      compatibility (dry run, never writes), approve/reject, get schema, get schema usages
+- [x] Repository ports in Application, EF implementations in Infrastructure
+- [x] `suggestedSemver` derived from the tip label and the engine's bump
+- [x] 10 new tests; 213 across the solution
+
+**Two carried commitments discharged.**
+
+`ICompatibilityEvaluator` is now **the only type that constructs a `CompatibilityVerdict`**,
+and it cannot produce one without calling the checker.
+`EvaluatorTests.Evaluate_AlwaysConsultsTheChecker` uses a recording fake and fails if a future
+fast path ever fabricates one. This closes the hole M1.1 recorded: the aggregate trusts the
+verdict it is handed.
+
+`GetSchemaHandler` **authorises by reachability**, expressed as a query over `Subjects` so it
+inherits the tenant filter the schema table cannot have. Four integration tests against real
+PostgreSQL: the owner reads it, a foreign tenant is refused, a stored-but-unreferenced schema
+is refused *even to the tenant that stored it*, and refusal is byte-identical to absence — a
+distinct "forbidden" would confirm another tenant's schema exists.
+
+### Pass B, outstanding
+
+- [ ] Minimal-API endpoints at `/v1`
+- [ ] RFC 9457 Problem Details + the `concordatCode` catalogue, mapped from `Result<T>`
+- [ ] `POST /environments/{env}/bootstrap`
+- [ ] Bundling, deferred from M1.4
+- [ ] `GET …/versions/{a}/diff/{b}`
+- [ ] Subject patch and delete; `GET|PUT …/registration-policy`; `GET|PUT …/compatibility-policy`
+- [ ] Negative-lookup caching semantics
+- [ ] `/health/live`, `/health/ready`
+- [ ] OpenAPI 3.1 generated, committed, and drift-gated in CI
+- [ ] Subject prefix search — needs a `ComplexProperty` mapping or a shadow column, because
+      value converters do not translate `StartsWith` (recorded in M1.5)
 
 - [ ] Minimal-API endpoints at `/v1`, CQRS dispatcher (hand-rolled, **not** MediatR — ADR-009)
 - [ ] `Result<T>` → Problem Details mapping

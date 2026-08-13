@@ -5,6 +5,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      The repositories are internal on purpose: they are resolved through DI inside this
+      assembly and nothing above should construct them. The integration tests do, so they can
+      exercise a handler against a real database without standing up a host.
+    -->
+    <InternalsVisibleTo Include="Concordat.Api.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>

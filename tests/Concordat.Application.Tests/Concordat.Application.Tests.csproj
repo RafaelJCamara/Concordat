@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\core\Concordat.Application\Concordat.Application.csproj" />
+    <ProjectReference Include="..\..\src\formats\Concordat.Formats.Json\Concordat.Formats.Json.csproj" />
   </ItemGroup>
 
 </Project>

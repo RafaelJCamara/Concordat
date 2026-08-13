@@ -102,8 +102,8 @@ into the milestone that owes it, and collected here because they are the ones th
 
 | Owed by | Commitment | Why it matters |
 |---|---|---|
-| **M1.6** | Authorise `GET /schemas/{id}` by **reachability** | The schema table is global with no tenant column. The naive implementation leaks any schema to anyone who can guess a 128-bit hash |
-| **M1.6** | Exactly one handler may construct a `CompatibilityVerdict`, sourced from the engine, proven by a recording-fake test | The aggregate trusts the verdict. A handler passing `Compatible` for a breaking change still moves the pointer |
+| ~~M1.6~~ ✅ | ~~Authorise `GET /schemas/{id}` by reachability~~ | **Discharged.** `GetSchemaHandler`, four integration tests including refusal-equals-absence |
+| ~~M1.6~~ ✅ | ~~One constructor for `CompatibilityVerdict`, proven by a recording fake~~ | **Discharged.** `ICompatibilityEvaluator` + `Evaluate_AlwaysConsultsTheChecker` |
 | **M1.6** | Bundling, deferred from M1.4 | Cannot live at registration: it would make canonicalisation depend on registry state and stop any SDK reproducing an id offline |
 | **M1.6** | Subject prefix search needs a `ComplexProperty` mapping or a shadow column | Value converters do not translate `StartsWith` |
 | **M1.7** | The corpus must pin the schema-id **preimage bytes**, not just ids | `BuildPreimage` is public precisely so it can |
@@ -140,6 +140,9 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | Enums stored as text via `WireTokens`, never `Enum.ToString()` | M1.5 | Low |
 | `SSH.NET` pinned forward past a security advisory | M1.5 | Low |
 | PostgreSQL image pinned to `17-alpine` in tests | M1.5 | Low |
+| Rejected versions are excluded from the compatibility history | [M1.6](plan/M1-registry-core.md) | Low |
+| A subject must exist before a version can be registered — no implicit creation | M1.6 | Low, but it is user-visible REST behaviour |
+| Schema refusal returns `schema_not_found`, never a distinct "forbidden" | M1.6 | Low |
 
 ---
 

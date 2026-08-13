@@ -35,6 +35,10 @@ public static class DependencyInjection
         services.AddSingleton<ITenantContext, SingleTenantContext>();
         services.AddDbContext<ConcordatDbContext>(options => options.UseNpgsql(connectionString));
 
+        services.AddScoped<ISubjectRepository, SubjectRepository>();
+        services.AddScoped<ISchemaRepository, SchemaRepository>();
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+
         return services;
     }
 }
