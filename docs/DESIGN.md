@@ -154,6 +154,10 @@ a credible post-v1 standardisation play.
 
 > **Verify empirically in M2:** whether custom headers survive dead-lettering, shovel,
 > federation and the STOMP/MQTT adapters. That sets the documented Mode A vs Mode B guidance.
+> **Also verify the AMQP 1.0 conversion itself** — that `signet-*` headers surface as
+> application-properties rather than message-annotations to a 1.0 client. ADR-013's
+> "designed to survive 1.0 conversion" rests entirely on that behaviour and is otherwise
+> an untested assertion.
 
 ---
 

@@ -272,7 +272,7 @@ DESIGN §2, ADR-010.
 
 - [ ] Mode A writer/reader - `signet-v`, `signet-schema-id`, `signet-subject`, `signet-version`, `signet-semver`, `signet-format`
 - [ ] All values UTF-8 strings; **decode `byte[]` on read** (RabbitMQ.Client writes `S`, reads back `byte[]`)
-- [ ] No `x-` prefix; avoid `ulong`, `bool false`, values > 64 KiB
+- [ ] No `x-` prefix (ADR-013 - RabbitMQ turns `x-` headers into AMQP 1.0 message-annotations; keeping clear of it is what makes the "1.0-safe" claim real); avoid `ulong`, `bool false`, values > 64 KiB
 - [ ] Mode B: `content-type: application/json+signet.v1.<hex-id>`
 - [ ] Mode B: `0x01 | <16-byte id> | payload`, opt-in
 - [ ] Legacy `0x00 | <int32 BE>` - **read-only**, for Kafka-bridge ingestion
@@ -301,6 +301,7 @@ Empirical work with **no code deliverable**. The result *is* the documented Mode
 - [ ] Shovel
 - [ ] Federation
 - [ ] STOMP and MQTT adapters
+- [ ] **AMQP 1.0 conversion (ADR-013)** - confirm `signet-*` headers arrive as application-properties, not message-annotations, when the same message is read by a 1.0 client. This is the only check that turns ADR-013 "designed to survive 1.0 conversion" from an assertion into a verified property.
 - [ ] Write findings back into DESIGN §2
 '@
 
