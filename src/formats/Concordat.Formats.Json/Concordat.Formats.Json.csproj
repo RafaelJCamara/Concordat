@@ -4,4 +4,9 @@
     <ProjectReference Include="..\Concordat.Formats.Abstractions\Concordat.Formats.Abstractions.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The $defs key rendering is an implementation detail, but a directly testable one. -->
+    <InternalsVisibleTo Include="Concordat.Formats.Json.Tests" />
+  </ItemGroup>
+
 </Project>

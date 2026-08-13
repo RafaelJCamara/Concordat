@@ -111,8 +111,8 @@ format, build, test — all exit 0 and produce `test-results.trx` plus five
 
 ### Later additions, noted not built
 
-- OpenAPI drift check (M1.6) — CI must fail when the generated spec differs from the
-  committed one
+- ~~OpenAPI drift check~~ — **added in M1.6.** The build emits
+  `docs/api/openapi.v1.json`; CI fails if it differs from what is committed
 - Testcontainers services for PostgreSQL and RabbitMQ (M1.5, M2.6)
 - Dependabot for `nuget` and `github-actions`
 - A markdown link check — the docs already carry ~60 cross-references

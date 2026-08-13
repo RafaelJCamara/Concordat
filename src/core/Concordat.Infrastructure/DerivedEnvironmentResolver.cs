@@ -1,17 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
+using Concordat.Application.Abstractions;
 using Concordat.Domain.Registry;
 
-namespace Concordat.Api;
-
-/// <summary>Maps an environment name in a URL to the identifier subjects are scoped by.</summary>
-public interface IEnvironmentResolver
-{
-    /// <summary>Resolves an environment name.</summary>
-    /// <param name="name">The name from the route, for example <c>prod</c>.</param>
-    /// <returns>The identifier.</returns>
-    EnvironmentId Resolve(string name);
-}
+namespace Concordat.Infrastructure;
 
 /// <summary>
 /// Derives an environment id deterministically from its name.
@@ -24,13 +16,12 @@ public interface IEnvironmentResolver
 /// </para>
 /// <para>
 /// Deriving rather than auto-creating keeps the shim honest: it holds no state, so it cannot
-/// drift, and two processes agree without coordination. It also means <c>prod</c> and
-/// <c>PROD</c> are different environments, which is why the name is lower-cased first.
+/// drift, and two processes agree without coordination. Names are lower-cased first, so
+/// <c>prod</c> and <c>PROD</c> are the same environment.
 /// </para>
 /// <para>
-/// <b>M7 obligation:</b> when real environments arrive they must either adopt these derived
-/// ids or migrate existing <c>subject.environment_id</c> values. Recorded in
-/// DECISIONS-PENDING.md.
+/// <b>M7 obligation:</b> real environments must either adopt these derived ids or migrate the
+/// existing <c>subject.environment_id</c> values.
 /// </para>
 /// </remarks>
 public sealed class DerivedEnvironmentResolver : IEnvironmentResolver

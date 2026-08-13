@@ -322,14 +322,38 @@ distinct "forbidden" would confirm another tenant's schema exists.
 - [x] RFC 9457 Problem Details with a stable `concordatCode` extension on every failure
 - [x] `/health/live` and `/health/ready`, separated
 - [x] 17 end-to-end tests over real HTTP against real PostgreSQL; 230 across the solution
+- [x] **Bundling**, deferred from M1.4 — `GET /v1/schemas/{id}/bundled`
+- [x] **OpenAPI 3.1 generated, committed and drift-gated** — `docs/api/openapi.v1.json`,
+      12 paths, emitted on every build; CI fails when it differs from what is committed
 - [ ] `POST /environments/{env}/bootstrap`
-- [ ] Bundling, deferred from M1.4
 - [ ] `GET …/versions/{a}/diff/{b}`
 - [ ] Subject patch and delete
 - [ ] `GET|PUT …/registration-policy` → **blocked on M7**, see below
 - [ ] Negative-lookup caching semantics
-- [ ] OpenAPI 3.1 generated, committed, and drift-gated in CI
 - [ ] Subject prefix search — needs a `ComplexProperty` mapping or a shadow column
+
+### Bundling stayed out of storage, deliberately
+
+`GET /v1/schemas/{id}/bundled` inlines every reference transitively into `$defs` and rewrites
+the refs as local pointers, so the result validates without further fetches. The **stored**
+body keeps its `concordat://` references — an integration test asserts exactly that, because
+bundling at registration would make canonicalisation depend on registry state and no SDK
+could then reproduce a schema id offline (ADR-019).
+
+Resolution is breadth-first with a visited set, so a reference graph that somehow contains a
+cycle terminates. Cycles are rejected at registration, but a read path that trusts that
+assumption is one bug away from hanging. A missing reference is a failure rather than a
+bundle that still contains a `concordat://` ref — a half-bundled document is not
+self-contained, and the client would only discover that at consume time.
+
+### The OpenAPI document is now enforced
+
+Generated on every build into `docs/api/openapi.v1.json` and committed. CI runs
+`git diff --exit-code` against it, so the published protocol cannot drift from the code. A
+spec refreshed by hand only ever documents what someone remembered to update.
+
+Health endpoints do not appear in it — health checks are not API-described. Acceptable, and
+worth knowing before someone generates a client and wonders where they went.
 
 ### The end-to-end tests are the M1 exit criterion
 

@@ -1,0 +1,670 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Concordat.Api | v1",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/v1/environments/{env}/subjects": {
+      "post": {
+        "tags": [
+          "Subjects"
+        ],
+        "summary": "Create a subject",
+        "description": "A subject must exist before any version can be registered. Creation is explicit rather than implicit so a typo in a subject name fails loudly instead of silently starting a second contract.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSubjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Subjects"
+        ],
+        "summary": "List subjects in an environment",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/subjects/{subject}": {
+      "get": {
+        "tags": [
+          "Subjects"
+        ],
+        "summary": "Get a subject and its versions",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/subjects/{subject}/versions": {
+      "get": {
+        "tags": [
+          "Subjects"
+        ],
+        "summary": "List versions",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Subjects"
+        ],
+        "summary": "Register a version",
+        "description": "A breaking change succeeds with status AWAITING_APPROVAL and does not move the latest pointer, so CI never wedges and the proposal stays reviewable.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/subjects/{subject}/versions/{ordinal}": {
+      "get": {
+        "tags": [
+          "Subjects"
+        ],
+        "summary": "Get one version",
+        "description": "The ordinal may be an integer or the literal 'latest'. 'latest' resolves the gated pointer (ADR-017), not the highest ordinal, so a version awaiting approval is never returned.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ordinal",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/subjects/{subject}/versions/{ordinal}/approve": {
+      "post": {
+        "tags": [
+          "Subjects"
+        ],
+        "summary": "Approve a pending version",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ordinal",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/subjects/{subject}/versions/{ordinal}/reject": {
+      "post": {
+        "tags": [
+          "Subjects"
+        ],
+        "summary": "Reject a pending version",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ordinal",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/subjects/{subject}/compatibility": {
+      "post": {
+        "tags": [
+          "Subjects"
+        ],
+        "summary": "Check a schema without registering it",
+        "description": "A dry run. Never writes.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckCompatibilityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/subjects/{subject}/compatibility-policy": {
+      "get": {
+        "tags": [
+          "Subjects"
+        ],
+        "summary": "Get the compatibility policy",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Subjects"
+        ],
+        "summary": "Set the compatibility policy",
+        "description": "Send nulls to clear it and inherit the environment default.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetCompatibilityPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/v1/schemas/{id}": {
+      "get": {
+        "tags": [
+          "Schemas"
+        ],
+        "summary": "Get a schema by its content-addressed id",
+        "description": "Schemas are stored globally and deduplicated by content (ADR-015), so there is no tenant column to filter on. Access is authorised by reachability: a caller may read a schema only if some subject in their tenant references it. An unreachable id returns 404, identical to one that does not exist — a distinct 403 would confirm another tenant's schema exists.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/v1/schemas/{id}/subjects": {
+      "get": {
+        "tags": [
+          "Schemas"
+        ],
+        "summary": "List the subjects and versions using a schema",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/v1/schemas/{id}/bundled": {
+      "get": {
+        "tags": [
+          "Schemas"
+        ],
+        "summary": "Get a schema as one self-contained document",
+        "description": "Inlines every Concordat reference, transitively, into $defs and rewrites the refs as local pointers, so the result validates without further fetches. Bundling happens here rather than at registration: doing it at registration would make canonicalisation depend on registry state, and no SDK could then reproduce a schema id offline.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/v1/schemas/lookup": {
+      "post": {
+        "tags": [
+          "Schemas"
+        ],
+        "summary": "Find the id a schema document would receive",
+        "description": "Canonicalises the document and returns its content-addressed id, plus whether it is already known. Never writes.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupSchemaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CheckCompatibilityRequest": {
+        "required": [
+          "schema"
+        ],
+        "type": "object",
+        "properties": {
+          "schema": {
+            "type": "string",
+            "description": "The proposed schema document."
+          }
+        },
+        "description": "Request to check a schema without registering it."
+      },
+      "CreateSubjectRequest": {
+        "required": [
+          "name",
+          "format",
+          "owner"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The subject name."
+          },
+          "format": {
+            "type": "string",
+            "description": "One of `json`, `avro`, `protobuf`."
+          },
+          "owner": {
+            "type": "string",
+            "description": "Who owns the contract."
+          },
+          "compatibilityMode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional; omit to inherit the environment default."
+          },
+          "compatibilitySurface": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional; required when a mode is given."
+          },
+          "contentModel": {
+            "type": "string",
+            "description": "`open` or `closed`. Defaults to `open`, matching JSON Schema's own default.",
+            "default": "open"
+          }
+        },
+        "description": "Request to create a subject."
+      },
+      "DecideVersionRequest": {
+        "required": [
+          "decidedBy"
+        ],
+        "type": "object",
+        "properties": {
+          "decidedBy": {
+            "type": "string",
+            "description": "Who is deciding."
+          }
+        },
+        "description": "Request to decide a pending version."
+      },
+      "LookupSchemaRequest": {
+        "required": [
+          "format",
+          "schema"
+        ],
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "description": "One of `json`, `avro`, `protobuf`."
+          },
+          "schema": {
+            "type": "string",
+            "description": "The schema document."
+          }
+        },
+        "description": "Request to look a schema up by its content."
+      },
+      "RegisterVersionRequest": {
+        "required": [
+          "schema"
+        ],
+        "type": "object",
+        "properties": {
+          "schema": {
+            "type": "string",
+            "description": "The schema document, as authored."
+          },
+          "semanticVersion": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional intent label; verified against the verdict."
+          },
+          "changelog": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional note."
+          },
+          "registeredBy": {
+            "type": "string",
+            "description": "Who is registering.",
+            "default": "unknown"
+          }
+        },
+        "description": "Request to register a version."
+      },
+      "SetCompatibilityPolicyRequest": {
+        "required": [
+          "mode",
+          "surface"
+        ],
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Who must keep working, or `null` to inherit."
+          },
+          "surface": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "How much must keep working."
+          }
+        },
+        "description": "Request to change a subject's compatibility policy."
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Subjects"
+    },
+    {
+      "name": "Schemas"
+    }
+  ]
+}

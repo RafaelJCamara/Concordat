@@ -1,5 +1,6 @@
 using Concordat.Api;
 using Concordat.Application;
+using Concordat.Application.Abstractions;
 using Concordat.Formats.Abstractions;
 using Concordat.Formats.Json;
 using Concordat.Infrastructure;
@@ -21,6 +22,7 @@ builder.Services.AddConcordatPersistence(connectionString);
 builder.Services.AddSingleton<ISchemaCanonicalizer, JsonSchemaCanonicalizer>();
 builder.Services.AddSingleton<ICompatibilityChecker, JsonSchemaCompatibilityChecker>();
 builder.Services.AddSingleton<ISchemaReferenceExtractor, JsonSchemaReferenceExtractor>();
+builder.Services.AddSingleton<ISchemaBundler, JsonSchemaBundler>();
 
 builder.Services.AddSingleton<IEnvironmentResolver, DerivedEnvironmentResolver>();
 

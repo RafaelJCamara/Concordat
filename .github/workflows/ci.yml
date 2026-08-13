@@ -56,6 +56,16 @@ jobs:
       - name: Build
         run: dotnet build Concordat.slnx --configuration Release --no-restore
 
+      # The build regenerates docs/api/openapi.v1.json. If it differs from what is committed,
+      # the published protocol no longer matches the code, and every generated client is
+      # working from a stale spec (ADR-019).
+      - name: Verify the committed OpenAPI document is current
+        run: |
+          if ! git diff --exit-code -- docs/api/openapi.v1.json; then
+            echo "::error::docs/api/openapi.v1.json is stale. Run 'dotnet build' and commit the result."
+            exit 1
+          fi
+
       - name: Test
         run: >
           dotnet test Concordat.slnx

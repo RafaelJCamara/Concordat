@@ -1,13 +1,40 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <PropertyGroup Label="OpenAPI">
+    <!--
+      The OpenAPI document is a normative artifact (ADR-019): non-.NET clients are generated
+      from it, so it is committed and CI fails when the build regenerates something different.
+      Emitting it on every build is what makes the drift gate meaningful - a spec refreshed by
+      hand only ever documents what someone remembered to update.
+    -->
+    <OpenApiGenerateDocuments>true</OpenApiGenerateDocuments>
+    <OpenApiGenerateDocumentsOnBuild>true</OpenApiGenerateDocumentsOnBuild>
+    <OpenApiDocumentsDirectory>$(MSBuildProjectDirectory)\..\..\..\docs\api</OpenApiDocumentsDirectory>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\core\Concordat.Application\Concordat.Application.csproj" />
     <ProjectReference Include="..\..\core\Concordat.Infrastructure\Concordat.Infrastructure.csproj" />
     <ProjectReference Include="..\..\formats\Concordat.Formats.Json\Concordat.Formats.Json.csproj" />
   </ItemGroup>
 
+  <Target Name="NameOpenApiDocumentForTheProtocol" AfterTargets="Build"
+          Condition="Exists('$(OpenApiDocumentsDirectory)\$(AssemblyName).json')">
+    <!--
+      The generator names the file after the assembly. The protocol is versioned by its API
+      version, not by which host emitted it, so it is renamed to match DESIGN §5 and the path
+      every SDK generator will be pointed at.
+    -->
+    <Move SourceFiles="$(OpenApiDocumentsDirectory)\$(AssemblyName).json"
+          DestinationFiles="$(OpenApiDocumentsDirectory)\openapi.v1.json" />
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
   </ItemGroup>
 

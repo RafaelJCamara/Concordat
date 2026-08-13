@@ -36,6 +36,17 @@ public sealed class SchemaFormatRegistry(
         ?? throw new NotSupportedException($"No reference extractor registered for {format}.");
 }
 
+/// <summary>Resolves bundlers from whatever implementations are registered.</summary>
+/// <param name="bundlers">The registered bundlers.</param>
+public sealed class SchemaBundlerRegistry(IEnumerable<ISchemaBundler> bundlers)
+    : ISchemaBundlerRegistry
+{
+    /// <inheritdoc />
+    public ISchemaBundler Bundler(SchemaFormat format) =>
+        bundlers.FirstOrDefault(b => b.Format == format)
+        ?? throw new NotSupportedException($"No bundler registered for {format}.");
+}
+
 /// <summary>Registration helpers for the application layer.</summary>
 public static class DependencyInjection
 {
@@ -49,6 +60,7 @@ public static class DependencyInjection
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<IDispatcher, Dispatcher>();
         services.AddScoped<ISchemaFormatRegistry, SchemaFormatRegistry>();
+        services.AddScoped<ISchemaBundlerRegistry, SchemaBundlerRegistry>();
         services.AddScoped<ICompatibilityEvaluator, CompatibilityEvaluator>();
 
         services.AddScoped<
@@ -62,6 +74,8 @@ public static class DependencyInjection
         services.AddScoped<
             IQueryHandler<CheckCompatibilityQuery, CompatibilityCheckResult>, CheckCompatibilityHandler>();
         services.AddScoped<IQueryHandler<GetSchemaQuery, Schema>, GetSchemaHandler>();
+        services.AddScoped<
+            IQueryHandler<GetBundledSchemaQuery, BundledSchema>, GetBundledSchemaHandler>();
         services.AddScoped<
             IQueryHandler<GetSchemaUsagesQuery, IReadOnlyList<SchemaUsage>>, GetSchemaUsagesHandler>();
 

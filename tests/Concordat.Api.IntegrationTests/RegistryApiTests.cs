@@ -310,6 +310,43 @@ public class RegistryApiTests(ApiFactory factory)
     }
 
     [Fact]
+    public async Task ReferencedSchemasAreBundledIntoOneSelfContainedDocument()
+    {
+        // The end-to-end shape of the M1.4 deferral: edges are derived from the document at
+        // registration, resolved transitively at read time, and inlined on demand.
+        var client = Client();
+
+        var address = await NewSubjectAsync(client);
+        await RegisterAsync(
+            client, address, """{"type":"object","properties":{"city":{"type":"string"}}}""");
+
+        var order = await NewSubjectAsync(client);
+        var reference = $"concordat://{Env}/{address}/1";
+        var registered = await RegisterAsync(
+            client, order,
+            """{"type":"object","properties":{"addr":{"$ref":"REF"}}}""".Replace(
+                "REF", reference, StringComparison.Ordinal));
+
+        Assert.Equal(HttpStatusCode.Created, registered.StatusCode);
+        var id = (await ApiFactory.ReadAsync<RegisterVersionResponse>(registered)).SchemaId;
+
+        // The stored body keeps the reference: bundling must not have leaked into storage,
+        // or canonicalisation would depend on registry state.
+        var stored = await ApiFactory.ReadAsync<SchemaResponse>(
+            await client.GetAsync($"/v1/schemas/{id}"));
+        Assert.Contains("concordat://", stored.Schema, StringComparison.Ordinal);
+        Assert.Single(stored.References);
+
+        var bundled = await ApiFactory.ReadAsync<BundledSchemaResponse>(
+            await client.GetAsync($"/v1/schemas/{id}/bundled"));
+
+        Assert.DoesNotContain("concordat://", bundled.Bundled, StringComparison.Ordinal);
+        Assert.Contains($"#/$defs/{address}__1", bundled.Bundled, StringComparison.Ordinal);
+        Assert.Contains("\"city\"", bundled.Bundled, StringComparison.Ordinal);
+        Assert.Single(bundled.Inlined);
+    }
+
+    [Fact]
     public async Task AnUnreachableSchemaId_Is404()
     {
         var client = Client();
