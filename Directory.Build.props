@@ -1,0 +1,55 @@
+<Project>
+
+  <!--
+    Shared build settings for every project. Individual .csproj files should carry
+    almost nothing beyond their references.
+  -->
+
+  <PropertyGroup Label="Language">
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Correctness">
+    <!--
+      Warnings are errors from the first commit. Turning this on later means
+      triaging hundreds at once, which nobody does, so the warnings just stay.
+    -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Reproducibility">
+    <!--
+      Deterministic output so the same source produces byte-identical assemblies.
+      ContinuousIntegrationBuild normalises embedded paths and is set by CI only —
+      switching it on locally breaks debugger source lookup.
+    -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Packaging">
+    <Product>Concordat</Product>
+    <Authors>Rafael Camara</Authors>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/RafaelJCamara/Signet</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/RafaelJCamara/Signet</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <!-- Nothing publishes until M2 at the earliest; opt in per project. -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Tests" Condition="$(MSBuildProjectName.EndsWith('Tests')) or '$(MSBuildProjectName)' == 'Concordat.Conformance'">
+    <IsTestProject>true</IsTestProject>
+    <!-- Public XML docs on test projects are noise. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>

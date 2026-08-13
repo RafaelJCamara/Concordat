@@ -40,14 +40,36 @@ Free today, claimed by someone else tomorrow. These are cheap and worth doing be
 - [ ] Create the `@concordat` npm org
 - [ ] Note that NuGet/PyPI/Maven ids are only claimed on first publish (M2, M3, M6)
 
-## M0.2 Repository skeleton
+## M0.2 Repository skeleton — **DONE 2026-08-13**
 
-- [ ] `Concordat.slnx`, `global.json` pinning .NET SDK 10 (`net10.0`)
-- [ ] `Directory.Build.props` — shared TFM, nullable, warnings-as-errors, deterministic builds
-- [ ] `Directory.Packages.props` — central package management
-- [ ] `.editorconfig`, analyzer ruleset
-- [ ] Folder structure per DESIGN §8 (`src/core`, `src/formats`, `src/hosts`, `src/clients`, `tools`, `clients`, `web`, `deploy`, `tests`)
-- [ ] `LICENSE` (Apache-2.0), `NOTICE`, license headers
+- [x] `Concordat.slnx` (12 projects), `global.json` pinning .NET 10 — `10.0.100` + `rollForward: latestFeature`, so any 10.0.x SDK works rather than only the one on this machine
+- [x] `Directory.Build.props` — `net10.0`, nullable, implicit usings, **warnings-as-errors**, analyzers at `latest-recommended`, `EnforceCodeStyleInBuild`, deterministic output
+- [x] `Directory.Packages.props` — central package management, transitive pinning on
+- [x] `.editorconfig` — LF, file-scoped namespaces, `I`-prefixed interfaces, two analyzer rules explicitly downgraded with reasons
+- [x] Folder structure per DESIGN §8 — see [`src/README.md`](../../src/README.md)
+- [x] `LICENSE` (Apache-2.0 verbatim) and `NOTICE`
+
+**Verified:** `dotnet build` 0 warnings 0 errors · `dotnet format --verify-no-changes` clean ·
+`dotnet test` exit 0.
+
+### Three deviations, each deliberate
+
+1. **Only M1's 12 projects exist.** Creating `Cloud.Billing` or `Formats.Avro` now would
+   add empty projects that build in CI for eight milestones before anyone opens them.
+   Each is created by the milestone that first has something to put in it; the full
+   intended layout is tabulated in `src/README.md` so nothing is lost.
+2. **No per-file licence headers.** `LICENSE` + `NOTICE` satisfy Apache-2.0. Headers on
+   every `.cs` are a maintenance tax most .NET OSS projects skip. Revisit only if a
+   downstream consumer's compliance process requires them.
+3. **`UnitTest1.cs` placeholders deleted.** `dotnet test` therefore prints "no test is
+   available" per project until M1 adds real ones — it still **exits 0**, so CI is not
+   affected. Committing tests named `Test1` that assert nothing is worse than the noise.
+
+### Enforcement gap worth knowing
+
+The DESIGN §8 dependency rule (Domain ← Application ← Infrastructure/Api) is wired
+correctly in the project references but **enforced only by review**. If it drifts, add
+NetArchTest assertions to `Concordat.Domain.Tests` — noted in `src/README.md`.
 
 ## M0.3 CI
 

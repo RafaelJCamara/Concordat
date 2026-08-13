@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Concordat.Domain\Concordat.Domain.csproj" />
+    <ProjectReference Include="..\..\formats\Concordat.Formats.Abstractions\Concordat.Formats.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

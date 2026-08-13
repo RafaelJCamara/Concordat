@@ -1,0 +1,23 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/core/">
+    <Project Path="src/core/Concordat.Application/Concordat.Application.csproj" />
+    <Project Path="src/core/Concordat.Domain/Concordat.Domain.csproj" />
+    <Project Path="src/core/Concordat.Infrastructure/Concordat.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/formats/">
+    <Project Path="src/formats/Concordat.Formats.Abstractions/Concordat.Formats.Abstractions.csproj" />
+    <Project Path="src/formats/Concordat.Formats.Json/Concordat.Formats.Json.csproj" />
+  </Folder>
+  <Folder Name="/src/hosts/">
+    <Project Path="src/hosts/Concordat.Api/Concordat.Api.csproj" />
+    <Project Path="src/hosts/Concordat.Migrator/Concordat.Migrator.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Concordat.Api.IntegrationTests/Concordat.Api.IntegrationTests.csproj" />
+    <Project Path="tests/Concordat.Application.Tests/Concordat.Application.Tests.csproj" />
+    <Project Path="tests/Concordat.Conformance/Concordat.Conformance.csproj" />
+    <Project Path="tests/Concordat.Domain.Tests/Concordat.Domain.Tests.csproj" />
+    <Project Path="tests/Concordat.Formats.Json.Tests/Concordat.Formats.Json.Tests.csproj" />
+  </Folder>
+</Solution>

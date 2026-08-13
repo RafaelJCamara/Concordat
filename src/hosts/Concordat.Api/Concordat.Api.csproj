@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\core\Concordat.Application\Concordat.Application.csproj" />
+    <ProjectReference Include="..\..\core\Concordat.Infrastructure\Concordat.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\formats\Concordat.Formats.Json\Concordat.Formats.Json.csproj" />
+  </ItemGroup>
+
+</Project>
