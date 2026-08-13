@@ -70,4 +70,4 @@ changes one value. The constant lives in the domain as `CompatibilityPolicy.Defa
 ## References
 
 - [DESIGN §7](../DESIGN.md#7-contract-checks--cli-and-build-time)
-- [M1.3 — Compatibility engine](../plan/M1-registry-core.md#m13-compatibility-engine--adr-016-design-7)
+- [M1.3 — Compatibility engine](../plan/M1-registry-core.md#m13-compatibility-engine---done-2026-08-13)

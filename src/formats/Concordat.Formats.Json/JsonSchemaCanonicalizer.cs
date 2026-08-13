@@ -18,13 +18,13 @@ namespace Concordat.Formats.Json;
 ///   <item><description>array order preserved — it is significant in JSON Schema.</description></item>
 /// </list>
 /// <para>
-/// <b>Not yet done: <c>$id</c> and <c>$ref</c> normalisation.</b> ADR-015 lists "<c>$id</c>
-/// resolved" as part of the canonical form. It is deferred to M1.4 rather than half-built
-/// here, because normalising <c>$id</c> without also resolving the <c>$ref</c> values that
-/// point at it is incoherent — it would change the base a reference resolves against while
-/// leaving the reference alone. Until then two documents differing only in the spelling of an
-/// equivalent <c>$id</c> URI produce different ids, which is a missed deduplication rather
-/// than a correctness bug.
+/// <b><c>$id</c> and <c>$ref</c> URI normalisation</b> (added in M1.4, deferred from M1.2 so
+/// that it landed together with reference handling rather than half-built). Absolute URIs in
+/// those two keywords are normalised — scheme and host lower-cased, default ports dropped,
+/// dot segments resolved — so <c>CONCORDAT://Prod/acme.Common/1</c> and
+/// <c>concordat://prod/acme.Common/1</c> canonicalise identically. Relative and fragment-only
+/// refs such as <c>#/$defs/Address</c> are left untouched, because resolving them requires a
+/// base document the registry does not have.
 /// </para>
 /// <para>
 /// <b>Number literals are preserved verbatim</b>, so <c>1.0</c> and <c>1</c> yield different
@@ -91,7 +91,7 @@ public sealed class JsonSchemaCanonicalizer : ISchemaCanonicalizer
             using var stream = new MemoryStream();
             using (var writer = new Utf8JsonWriter(stream, WriterOptions))
             {
-                WriteCanonical(document.RootElement, writer);
+                WriteCanonical(document.RootElement, writer, propertyName: null);
             }
 
             return Result<string>.Success(
@@ -99,7 +99,8 @@ public sealed class JsonSchemaCanonicalizer : ISchemaCanonicalizer
         }
     }
 
-    private static void WriteCanonical(JsonElement element, Utf8JsonWriter writer)
+    private static void WriteCanonical(
+        JsonElement element, Utf8JsonWriter writer, string? propertyName)
     {
         switch (element.ValueKind)
         {
@@ -109,7 +110,7 @@ public sealed class JsonSchemaCanonicalizer : ISchemaCanonicalizer
                              .OrderBy(p => p.Name, StringComparer.Ordinal))
                 {
                     writer.WritePropertyName(property.Name);
-                    WriteCanonical(property.Value, writer);
+                    WriteCanonical(property.Value, writer, property.Name);
                 }
 
                 writer.WriteEndObject();
@@ -121,7 +122,7 @@ public sealed class JsonSchemaCanonicalizer : ISchemaCanonicalizer
                 writer.WriteStartArray();
                 foreach (var item in element.EnumerateArray())
                 {
-                    WriteCanonical(item, writer);
+                    WriteCanonical(item, writer, propertyName: null);
                 }
 
                 writer.WriteEndArray();
@@ -129,7 +130,7 @@ public sealed class JsonSchemaCanonicalizer : ISchemaCanonicalizer
 
             case JsonValueKind.String:
                 // Round-tripping through the writer normalises escaping: "A" becomes "A".
-                writer.WriteStringValue(element.GetString());
+                writer.WriteStringValue(NormalizeIfUri(propertyName, element.GetString()));
                 break;
 
             case JsonValueKind.Number:
@@ -151,6 +152,26 @@ public sealed class JsonSchemaCanonicalizer : ISchemaCanonicalizer
                 throw new InvalidOperationException(
                     $"Unexpected JSON value kind '{element.ValueKind}'.");
         }
+    }
+
+    /// <summary>
+    /// Normalises the value of <c>$id</c> and <c>$ref</c> when it is an absolute URI.
+    /// </summary>
+    /// <remarks>
+    /// Only those two keywords, and only absolute URIs. A relative or fragment-only reference
+    /// such as <c>#/$defs/Address</c> cannot be normalised without a base document, and
+    /// touching any other string keyword would rewrite ordinary schema content.
+    /// </remarks>
+    private static string? NormalizeIfUri(string? propertyName, string? value)
+    {
+        if (value is null ||
+            propertyName is not ("$id" or "$ref") ||
+            !Uri.TryCreate(value, UriKind.Absolute, out var uri))
+        {
+            return value;
+        }
+
+        return uri.AbsoluteUri;
     }
 
     private static string? FindDuplicateKey(JsonElement element)

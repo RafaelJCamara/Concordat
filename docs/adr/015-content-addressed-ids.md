@@ -68,4 +68,4 @@ Subjects and versions remain tenant-scoped as normal; only the immutable content
 ## References
 
 - [DESIGN §4, Context A](../DESIGN.md#context-a--registry-core)
-- [M1.2 — Canonicalisation and identity](../plan/M1-registry-core.md#m12-canonicalisation-and-identity--adr-015)
+- [M1.2 — Canonicalisation and identity](../plan/M1-registry-core.md#m12-canonicalisation-and-identity---done-2026-08-13)

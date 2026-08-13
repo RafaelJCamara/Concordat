@@ -175,17 +175,55 @@ and the correction is noted inline.
 - **Property renames read as a remove plus an add**, not a rename. Under an open content model
   that is compatible, which is correct by the validation rules but may surprise.
 
-## M1.4 Schema references
+## M1.4 Schema references — **DONE 2026-08-13**
 
-- [ ] `Reference = (name, subject, version)`; `concordat://<env>/<subject>/<version>` resolution
-- [ ] **`$id` and `$ref` normalisation, deferred from M1.2** — ADR-015 requires "`$id`
-      resolved"; it lands here because normalising `$id` without resolving the `$ref` values
-      pointing at it would change the base a reference resolves against. Changing the
-      canonical form after M1.2 means bumping the preimage version and migrating stored ids
-- [ ] Registration resolves into a bundled canonical form **and** retains the edges
-- [ ] Cycle detection, rejected at registration
-- [ ] Transitive compatibility — a referenced subject's new version re-checks every referrer
-- [ ] Reference tests
+- [x] `ConcordatRef` — parses and renders `concordat://<env>/<subject>/<version>`
+- [x] **`$id` and `$ref` normalisation**, deferred from M1.2 and landed here with the rest of
+      reference handling
+- [x] Edges are **derived from the document**, not supplied alongside it
+- [x] Cycle detection over the version-level graph
+- [x] Referrer queries — direct and transitive, for re-checking on a referenced subject's change
+- [x] 41 reference tests; 191 across the solution
+- [ ] Bundled canonical form → **deferred to M1.6**, see below
+
+### Edges are derived, never supplied
+
+`ISchemaReferenceExtractor` reads `$ref` values out of the document. A client-supplied edge
+list can disagree with what the schema actually points at, and the disagreement surfaces much
+later as a resolution failure or a missed transitive check.
+
+Local (`#/$defs/Address`) and HTTP refs are ignored — the validator resolves those, not the
+registry. A **malformed `concordat://` ref is reported rather than skipped**: a typo in our own
+scheme would otherwise register a schema with no edges that fails to resolve later.
+
+### The graph is keyed by version, not by subject
+
+`A@2 → B@1 → A@1` is a perfectly good DAG: A@1 existed before B@1 referenced it, and A@2 came
+afterwards. A subject-level graph would reject it. Only genuine version-level cycles fail, plus
+self-reference, which registration order does not prevent.
+
+### Bundling is deferred to M1.6, and this is a real decision
+
+The plan said registration should resolve references "into a bundled canonical form". It should
+not, for one decisive reason: **bundling would make canonicalisation depend on registry state.**
+The same authored document would canonicalise differently depending on which schemas happened to
+be registered, so canonicalisation would stop being a pure function of the document — and every
+SDK would need registry access to reproduce an id, which the M1.7 conformance corpus and
+ADR-019 both rule out.
+
+It also duplicates work: ADR-015 hashes body **plus references**, which presumes the body is not
+bundled, or the references would already be baked into it.
+
+Bundling is a *serving* concern — a client wants one self-contained document — so it belongs
+with `/bootstrap` and `GET /schemas/{id}` in M1.6. The stored body stays as authored and
+canonicalised; the edges stay authoritative.
+
+### Note for after M1.5
+
+Adding `$id`/`$ref` normalisation changed the canonical form, and therefore the ids of documents
+using those keywords. That is free today because nothing is persisted. Once M1.5 stores schemas,
+**any change to canonicalisation requires a preimage version bump and a migration** — the golden
+id test exists to make such a change impossible to miss.
 
 ## M1.5 Persistence
 
@@ -216,6 +254,11 @@ and the correction is noted inline.
 - [ ] `POST …/compatibility` dry run — never writes; returns `compatible`, `breakingChanges[]`, `suggestedSemver`, `impactedConsumers[]`
 - [ ] `GET|PUT …/compatibility-policy`; `GET …/versions/{a}/diff/{b}`
 - [ ] `POST /environments/{env}/bootstrap` — every schema a client needs in **one** request
+- [ ] **Bundling, deferred from M1.4** — assemble a self-contained document by inlining
+      referenced schemas into `$defs` and rewriting `concordat://` refs to local pointers. A
+      serving concern, deliberately not part of the stored canonical form: bundling at
+      registration would make canonicalisation depend on registry state and stop any SDK from
+      reproducing an id offline
 - [ ] **RFC 9457 Problem Details + stable string `concordatCode`**; catalogue documented
 - [ ] Negative-lookup caching semantics so a missing subject cannot retry-storm
 - [ ] `/health/live`, `/health/ready`

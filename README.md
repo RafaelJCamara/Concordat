@@ -60,6 +60,7 @@ Everything is Apache-2.0, including the Cloud code.
 |---|---|
 | [docs/DESIGN.md](docs/DESIGN.md) | Full architecture: domain model, envelope spec, API surface, SDK bindings, decisions |
 | [docs/PLAN.md](docs/PLAN.md) | Delivery plan: milestones M0–M9 broken into numbered work packages with exit criteria |
+| [docs/DECISIONS-PENDING.md](docs/DECISIONS-PENDING.md) | Open decisions, decisions taken on the owner's behalf, and a log of what is settled |
 | `docs/adr/` | Architecture decision records (to be written — the 22 decisions are tabulated in DESIGN.md) |
 
 ## License

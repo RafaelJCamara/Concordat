@@ -25,6 +25,10 @@ a plan edit.
 product — register a JSON Schema, block a breaking change in CI, enforce it at runtime
 from .NET. M4 (web) and M5 (formats) can slip without invalidating it.
 
+> **Anything waiting on a decision from you is collected in
+> [DECISIONS-PENDING.md](DECISIONS-PENDING.md)** — including the ones taken on your behalf,
+> so none of them is a surprise later.
+
 ## Where work is tracked
 
 Once seeded, **GitHub issues are the live tracker** — one issue per work package, one
@@ -54,8 +58,8 @@ Where the risk concentrates. If any of these is going badly, the milestone is go
 | Package | Why |
 |---|---|
 | [M0.1](plan/M0-foundations.md#m01-name-availability--blocking--done-2026-08-13) Name availability ✅ | **Done, and it paid for itself** — "Signet" collided with an active project publishing the same package names; renamed to Concordat (ADR-022) before a line of code existed |
-| [M1.2](plan/M1-registry-core.md#m12-canonicalisation-and-identity--adr-015) Canonicalisation | Get the hash envelope wrong and schemas collide across reference sets |
-| [M1.3](plan/M1-registry-core.md#m13-compatibility-engine--adr-016-design-7) Compatibility engine 🔴🔴 | The correctness heart. A wrong verdict blocks safe changes or waves breaking ones through |
+| [M1.2](plan/M1-registry-core.md#m12-canonicalisation-and-identity---done-2026-08-13) Canonicalisation | Get the hash envelope wrong and schemas collide across reference sets |
+| [M1.3](plan/M1-registry-core.md#m13-compatibility-engine---done-2026-08-13) Compatibility engine 🔴🔴 | The correctness heart. A wrong verdict blocks safe changes or waves breaking ones through |
 | [M1.7](plan/M1-registry-core.md#m17-conformance-corpus-v0--adr-019) Conformance corpus | Written late, it only ratifies whatever .NET already did |
 | [M2.5](plan/M2-dotnet-client.md#m25-header-survival-experiments--design-2) Header survival | Empirical, no code deliverable; the result *is* the Mode A vs Mode B guidance |
 | [M6.1](plan/M6-sdks.md#m61-protocol-freeze-and-interop-prerequisites-) Protocol freeze | Five JSON Schema validators disagree at the edges; this is where that becomes a CI failure instead of a support ticket |

@@ -25,6 +25,9 @@ public static class ConcordatCodes
     /// <summary>Two references in one schema shared a name.</summary>
     public const string DuplicateReferenceName = "duplicate_reference_name";
 
+    /// <summary>The reference graph contains a cycle.</summary>
+    public const string ReferenceCycle = "reference_cycle";
+
     /// <summary>A schema body was empty or whitespace.</summary>
     public const string SchemaBodyEmpty = "schema_body_empty";
 

@@ -96,7 +96,7 @@ format, build, test — all exit 0 and produce `test-results.trx` plus five
   code. **Add `windows-latest` at M2**, where Testcontainers and the RabbitMQ integration
   tests are the first things that can genuinely differ by platform.
 - **No external coverage service.** Codecov means an account and a token to rotate before
-  there is any coverage worth reading. Revisit at [M1.3](M1-registry-core.md#m13-compatibility-engine--adr-016-design-7),
+  there is any coverage worth reading. Revisit at [M1.3](M1-registry-core.md#m13-compatibility-engine---done-2026-08-13),
   where the compatibility corpus makes the number meaningful.
 
 > **Not yet observed running on GitHub.** With these triggers, pushing a feature branch
