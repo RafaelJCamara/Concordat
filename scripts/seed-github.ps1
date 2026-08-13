@@ -10,25 +10,36 @@
     Requires the GitHub CLI, authenticated:  gh auth login
 
 .PARAMETER DryRun
-    Print what would be created without calling GitHub.
+    Print what would be created without calling GitHub. Works without gh installed
+    or authenticated, provided -Repo is supplied.
+
+.PARAMETER Repo
+    Target repository as owner/name. Defaults to whatever gh resolves for the current
+    directory, which requires gh to be authenticated.
 
 .EXAMPLE
-    ./scripts/seed-github.ps1 -DryRun
+    ./scripts/seed-github.ps1 -DryRun -Repo owner/name
     ./scripts/seed-github.ps1
 #>
 [CmdletBinding()]
 param(
-    [switch]$DryRun
+    [switch]$DryRun,
+    [string]$Repo
 )
 
 $ErrorActionPreference = 'Stop'
 
-if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+$hasGh = [bool](Get-Command gh -ErrorAction SilentlyContinue)
+if (-not $hasGh -and -not $DryRun) {
     throw "GitHub CLI not found. Install with: winget install --id GitHub.cli"
 }
 
-$repo = (gh repo view --json nameWithOwner --jq .nameWithOwner)
-if (-not $repo) { throw "Could not resolve repository. Run 'gh auth login' first." }
+if ($Repo) {
+    $repo = $Repo
+} elseif ($hasGh) {
+    $repo = (gh repo view --json nameWithOwner --jq .nameWithOwner)
+}
+if (-not $repo) { throw "Could not resolve repository. Pass -Repo owner/name, or run 'gh auth login'." }
 Write-Host "Repository: $repo" -ForegroundColor Cyan
 if ($DryRun) { Write-Host "DRY RUN - nothing will be created`n" -ForegroundColor Yellow }
 

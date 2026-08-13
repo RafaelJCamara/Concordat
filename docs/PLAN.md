@@ -25,6 +25,19 @@ a plan edit.
 product — register a JSON Schema, block a breaking change in CI, enforce it at runtime
 from .NET. M4 (web) and M5 (formats) can slip without invalidating it.
 
+## Where work is tracked
+
+Once seeded, **GitHub issues are the live tracker** — one issue per work package, one
+GitHub milestone per M. Tick boxes there, not here. These files stay the *reference*: why
+a package exists, what it must satisfy, and which decision it implements.
+
+`scripts/seed-github.ps1` creates the milestones, labels and 48 issues, and is idempotent
+— re-run it after adding a package here and it creates only what is missing.
+
+> Accept a little duplication between these files and the issue bodies. The alternative —
+> issues that only link here — makes the GitHub board useless at a glance, which is the
+> one thing a tracker has to be.
+
 ## Conventions
 
 - Work packages are numbered `M<milestone>.<package>` and items within them are
