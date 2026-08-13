@@ -31,6 +31,23 @@ Schema content is never deleted and IDs are never reallocated.
 - **Full 256-bit hash.** Rejected: 128 bits is ample against collision for this population
   and halves the bytes on every message header.
 
+## Storage: the schema table is global
+
+**Schemas are stored once, globally, keyed by `SchemaId` alone — not per tenant** (decided
+during M1.1, before M1.5 writes a migration).
+
+This is the storage-layer expression of the decision itself. "Same content ⇒ same ID
+everywhere" is only literally true if the same content is also *one row* everywhere;
+tenant-scoping the table would make `SchemaId` a partial key and reintroduce, per tenant, the
+duplication content addressing exists to remove.
+
+The cost is an authorisation obligation on M1.6: `GET /schemas/{id}` must be authorised by
+**reachability** — the caller may fetch a schema only if some subject in their tenant
+references it — rather than by a tenant column on the row. That work is real and must not be
+forgotten, because the naive implementation leaks any schema to anyone who can guess a hash.
+
+Subjects and versions remain tenant-scoped as normal; only the immutable content is shared.
+
 ## Consequences
 
 - **Positive:** the same schema yields the same ID in every environment and every

@@ -59,17 +59,14 @@ pointer. M1.6 must guarantee exactly one handler constructs a verdict and that i
 from the engine, with a recording-fake test asserting the handler cannot complete without
 invoking the checker.
 
-### Needs a product decision before M1.6
+### Product decisions settled 2026-08-13
 
-- **The default `CompatibilityPolicy` pair for new environments.** DESIGN §7 gives the who-axis
-  default (`Backward`) and is silent on the surface. The domain deliberately ships no default.
-  Suggested `Backward × WireJson`: `Backward × Source` would block `int32 → int64`, the exact
-  change ADR-016 celebrates permitting, while `Backward × Wire` is a no-op for JSON Schema and
-  becomes surprisingly permissive once Avro and Protobuf land.
-- **Is the `Schema` table tenant-scoped?** Recommend global and deduplicated, keyed by
-  `SchemaId` alone, preserving ADR-015's "same content ⇒ same id everywhere" at the storage
-  layer. Cost: M1.6 must authorise `GET /schemas/{id}` by reachability from a subject in the
-  caller's tenant. Decide before M1.5 writes a migration.
+- **Default policy for a new environment is `Backward × WireJson`**, shipped as
+  `CompatibilityPolicy.Default`. Recorded in [ADR-016](../adr/016-two-axis-compatibility.md)
+  and DESIGN §7.
+- **The `Schema` table is global**, keyed by `SchemaId` alone, not tenant-scoped. Recorded in
+  [ADR-015](../adr/015-content-addressed-ids.md). Carries an authorisation obligation into
+  M1.6 — see below.
 
 ## M1.2 Canonicalisation and identity 🔴 (ADR-015)
 
@@ -112,6 +109,9 @@ invoking the checker.
 - [ ] Migrations; `Concordat.Migrator` host; auto-migrate on startup, toggleable
 - [ ] Unique constraint backing M1.2 idempotency
 - [ ] `ITenantContext` + EF global query filters — wired now with a single implicit tenant, so M9 is not a retrofit
+- [ ] **`Schema` is a global table keyed by `SchemaId` alone** (ADR-015) — deliberately *not*
+      tenant-scoped and therefore **excluded from the global query filter**. Subjects and
+      versions stay tenant-scoped as normal; only the immutable content is shared
 - [ ] Deletion semantics: schemas never deleted; subjects soft-delete to `Retired`; hard delete requires no registered consumers + force flag + audit entry
 - [ ] Testcontainers PostgreSQL integration tests
 
@@ -120,6 +120,11 @@ invoking the checker.
 - [ ] Minimal-API endpoints at `/v1`, CQRS dispatcher (hand-rolled, **not** MediatR — ADR-009)
 - [ ] `Result<T>` → Problem Details mapping
 - [ ] Schemas: `GET /schemas/{id}`, `GET /schemas/{id}/subjects`, `POST /schemas/lookup`
+- [ ] 🔴 **Authorise `GET /schemas/{id}` by reachability** — the schema table is global
+      (ADR-015), so there is no tenant column to filter on. A caller may fetch a schema only
+      if some subject in their tenant references it. The naive implementation leaks any
+      schema to anyone who can guess a 128-bit hash; needs a test that asserts a foreign
+      tenant's schema id returns 404, not 200
 - [ ] Subjects: list, create, get, patch, delete
 - [ ] Versions: list, register, get by `{ordinal|latest}`
 - [ ] Approval gate: `POST …/versions/{n}/approve`, `…/reject` (ADR-017)

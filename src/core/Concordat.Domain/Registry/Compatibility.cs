@@ -64,6 +64,24 @@ public readonly record struct CompatibilityPolicy(
     CompatibilityMode Mode,
     CompatibilitySurface Surface)
 {
+    /// <summary>
+    /// The policy a new environment starts with: <c>Backward × WireJson</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the <em>environment</em> seed, not a subject fallback. A subject with no
+    /// explicit policy inherits whatever its environment is configured with — see
+    /// <see cref="Subject.EffectivePolicy(CompatibilityPolicy)"/>.
+    /// </para>
+    /// <para>
+    /// <c>Backward × Source</c> would block <c>int32 → int64</c>, the exact change ADR-016
+    /// exists to permit. <c>Backward × Wire</c> is a no-op for JSON Schema and becomes
+    /// surprisingly permissive once Avro and Protobuf land.
+    /// </para>
+    /// </remarks>
+    public static CompatibilityPolicy Default { get; } =
+        new(CompatibilityMode.Backward, CompatibilitySurface.WireJson);
+
     /// <summary>Whether this policy performs any checking at all.</summary>
     public bool IsChecked => Mode != CompatibilityMode.None;
 

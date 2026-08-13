@@ -40,6 +40,20 @@ the same change is reported as allowed under one policy and blocked under anothe
 - **A per-change allowlist.** Rejected: unprincipled, unexplainable, and it would grow
   without bound.
 
+## The default pair
+
+**A new environment starts at `Backward × WireJson`** (decided during M1.1; DESIGN §7 had
+stated only the who-axis).
+
+`Backward × Source` would block `int32 → int64` — the exact change this ADR exists to permit —
+so shipping it as the default would undercut the decision. `Backward × Wire` is a no-op for
+JSON Schema, the only format in M1, and becomes surprisingly permissive once Avro and Protobuf
+arrive in M5. `WireJson` is the only value that is meaningful on day one and still meaningful
+after M5.
+
+It is per-environment and overridable per subject, so a team wanting source-level guarantees
+changes one value. The constant lives in the domain as `CompatibilityPolicy.Default`.
+
 ## Consequences
 
 - **Positive:** the registry can state precisely why a change is or is not allowed, and

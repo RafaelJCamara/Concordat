@@ -548,6 +548,13 @@ Upgrade order matters: BACKWARD ⇒ consumers first, FORWARD ⇒ producers first
 since a chain of individually-backward-compatible changes can still leave you unable to
 read the oldest data.
 
+> **The default policy for a new environment is `BACKWARD × WIRE_JSON`.** Both axes need a
+> value and only the first was previously stated. `BACKWARD × SOURCE` would block
+> `int32 → int64` — the exact change ADR-016 exists to permit — while `BACKWARD × WIRE` is a
+> no-op for JSON Schema and becomes surprisingly permissive once Avro and Protobuf land in M5.
+> It is a per-environment setting, so a team wanting stricter source guarantees changes one
+> value.
+
 **Axis 2 — what breaks.** `WIRE` (bytes still decode) ⊂ `WIRE_JSON` (JSON mapping holds)
 ⊂ `SOURCE` (generated code still compiles). Every finding in `breakingChanges[]` is
 tagged with the narrowest axis it violates, so the same change can be reported as
