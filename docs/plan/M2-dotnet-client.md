@@ -240,12 +240,71 @@ exists.
 
 ## M2.4 Middleware
 
-- [ ] Publish: decorator over `IChannel.BasicPublishAsync`; a throw blocks the publish
-- [ ] Consume: `IAsyncBasicConsumer` decorator — **nack, never throw** (throws surface via `CallbackExceptionAsync`)
-- [ ] Payload validation **on by default**
-- [ ] Reject to a `concordat.quarantine` exchange with failure-reason headers
-- [ ] **No retry on schema violation** — deterministic, so redelivery is pure waste
-- [ ] `EnforcementMode` honoured: `Off | Monitor | Enforce`
+**Done 2026-08-13 · `Concordat.RabbitMq` · 15 unit + 9 end-to-end tests**
+
+- [x] Publish: decorator over `IChannel.BasicPublishAsync`; a throw blocks the publish
+- [x] Consume: `IAsyncBasicConsumer` decorator — **nack, never throw** (throws surface via `CallbackExceptionAsync`)
+- [x] Payload validation **on by default**
+- [x] Reject to a `concordat.quarantine` exchange with failure-reason headers
+- [x] **No retry on schema violation** — deterministic, so redelivery is pure waste
+- [x] `EnforcementMode` honoured: `Off | Monitor | Enforce`
+
+### The full `IChannel` decorator is the point, not an accident
+
+63 members, 61 of which forward untouched. The alternative — an opt-in
+`PublishWithConcordatAsync` extension — is far less code and quietly useless: every ordinary
+`BasicPublishAsync` still in the codebase would publish unchecked, including the ones added
+next quarter by someone who has never heard of Concordat.
+
+**Enforcement you can bypass by forgetting is the failure mode this product exists to
+prevent.** So the only publish path is the enforced one.
+
+### Publish refuses; consume never throws
+
+The asymmetry is the heart of M2.4, and it is not a style preference.
+
+A throw from `HandleBasicDeliverAsync` does not reach the application. RabbitMQ.Client routes
+it to `CallbackExceptionAsync` — an event most codebases never subscribe to — and leaves the
+delivery unacknowledged. The visible symptom is a queue that stops draining for no stated
+reason.
+
+A publisher has none of those problems: it is in-process, holding the message, able to fix it
+and retry. So publish refuses loudly and consume always resolves to a nack or a delivery.
+
+### The envelope is stamped even when the payload is invalid
+
+Provided identity was resolvable. In Monitor mode a violating message goes out anyway, and it
+must go out carrying correct identity — that is what lets consumers start reading schema ids
+before every publisher is clean. Withholding the envelope from exactly the messages someone is
+trying to diagnose would be backwards.
+
+### Three failure paths that are easy to get silently wrong
+
+- **Quarantine publishes bypass the decorator.** A quarantined message is by definition one
+  that fails its schema, so publishing it through an *enforcing* channel would refuse it — and
+  the refusal would be swallowed by the surrounding catch, leaving quarantine silently broken
+  in the only mode that uses it. `ConcordatConsumer` unwraps a `ConcordatChannel` to its inner
+  channel. Quarantine is plumbing, not traffic.
+- **When quarantine itself fails, the message is delivered.** The three options are drop,
+  requeue, or deliver. Dropping loses data silently; requeuing makes a poison loop out of a
+  deterministic failure. Delivering is the only one that is both visible and recoverable, so
+  the application gets an invalid message and the observer is told exactly that
+  (`QuarantineFailed`).
+- **A bug in the middleware fails open.** Any unexpected exception during inspection is
+  reported and the delivery proceeds. Concordat breaking must never eat somebody's message.
+
+### `Off` really is off
+
+No resolution, no validation, no properties copy — asserted end to end. It is the switch an
+operator reaches for at 3am, and it must cost nothing and touch nothing.
+
+`Monitor` is the default. Defaulting to `Enforce` would mean adding a package reference could
+start rejecting production traffic, which is not a decision a dependency gets to make.
+
+### A format with no validator is not a violation
+
+Avro and Protobuf have no validator yet. Reporting those messages as invalid would be a
+fleet-wide false positive on the day the first Avro subject is registered.
 
 ## M2.5 Header survival experiments
 
@@ -306,9 +365,32 @@ The suite takes ~15 s, dominated by federation's two brokers.
 
 ## M2.6 Tests
 
-- [ ] Testcontainers RabbitMQ: publish conforming + non-conforming; assert the latter lands in `concordat.quarantine` with reason headers
-- [ ] Header round-trip: `string → byte[]` holds; no collision with `MT-`, `NServiceBus.`, `rbs2-`, `rabbitmq-`, `x-`
-- [ ] Conformance corpus runs against the client
+**Done 2026-08-13 · 24 tests in `Concordat.RabbitMq.Tests`**
+
+- [x] Testcontainers RabbitMQ: publish conforming + non-conforming; assert the latter lands in `concordat.quarantine` with reason headers
+- [x] No collision with `MT-`, `NServiceBus.`, `rbs2-`, `rabbitmq-`, `x-` — all five carried through untouched alongside the envelope
+- [x] Header round-trip `string → byte[]` — **measured in M2.5** against a real broker
+- [ ] Conformance corpus against the middleware — **deliberately not added.** The middleware
+      validates through `IPayloadValidator`, and the corpus already runs against that
+      implementation in M2.0. Re-running the same fixtures one layer up would exercise the
+      corpus loader, not the middleware
+
+### The split: rules unit-tested, wiring broker-tested
+
+Enforcement *rules* are unit-tested against `SchemaEnforcer` with a fake registry — fast, and
+the whole decision matrix is covered. The wiring gets a real broker, because wiring is exactly
+what a mock cannot check:
+
+- **"Threw" is not "published nothing."** The difference is a message the application believes
+  it never sent, so the test asserts the queue depth is zero after a blocked publish.
+- **Quarantine really lands elsewhere and really is not redelivered**, with the original
+  envelope still attached — a quarantined message stripped of the identity that condemned it
+  would be useless for diagnosis.
+- **An un-enveloped delivery reaches the application even under `Enforce`.** Incremental
+  adoption, asserted end to end: if switching enforcement on diverted every legacy publisher's
+  traffic to quarantine, nobody would ever switch it on.
+- **Stamping does not mutate the caller's properties**, so a reused properties object cannot
+  accumulate a stale schema id from a previous message.
 
 ---
 

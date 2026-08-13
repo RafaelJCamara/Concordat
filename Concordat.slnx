@@ -2,6 +2,7 @@
   <Folder Name="/src/" />
   <Folder Name="/src/clients/">
     <Project Path="src/clients/Concordat.Client/Concordat.Client.csproj" />
+    <Project Path="src/clients/Concordat.RabbitMq/Concordat.RabbitMq.csproj" />
   </Folder>
   <Folder Name="/src/core/">
     <Project Path="src/core/Concordat.Application/Concordat.Application.csproj" />
@@ -24,5 +25,6 @@
     <Project Path="tests/Concordat.Domain.Tests/Concordat.Domain.Tests.csproj" />
     <Project Path="tests/Concordat.Formats.Json.Tests/Concordat.Formats.Json.Tests.csproj" />
     <Project Path="tests/Concordat.HeaderSurvival/Concordat.HeaderSurvival.csproj" />
+    <Project Path="tests/Concordat.RabbitMq.Tests/Concordat.RabbitMq.Tests.csproj" />
   </Folder>
 </Solution>

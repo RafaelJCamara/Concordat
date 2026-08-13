@@ -124,7 +124,21 @@ written. **Recommendation:** keep it. The collision needs two types whose names 
 the rewrite, which is rare and immediately visible in the registry's subject list; refusing all
 nested types would hurt far more publishers.
 
-### 12. Hard-delete semantics — before v1 ships
+### 12. The quarantine exchange is declared by the application — confirm
+
+`ConcordatRabbitMqOptions.DeclareQuarantineExchange` defaults to **on**, so the middleware
+declares `concordat.quarantine` itself the first time it needs it. The alternative is that the
+first quarantine in production fails on a missing exchange — the worst possible moment to
+discover a topology gap.
+
+That assumes applications hold `exchange.declare` rights. In estates where topology is owned by
+infrastructure-as-code and applications deliberately cannot declare, this must be turned off
+and the exchange provisioned ahead of time.
+
+> **Which is your estate?** It changes the recommended default in the deployment docs, not the
+> code.
+
+### 13. Hard-delete semantics — before v1 ships
 
 M1.5 implements soft delete (`Subject.Retire()`) and never deletes schemas, which is what
 ADR-015 requires. **Hard delete is not implemented**: DESIGN §4 wants "no registered
@@ -204,6 +218,14 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | M2.5 ships a **code** deliverable — findings as assertions — against a brief that said there would be none | [M2.5](plan/M2-dotnet-client.md) | Low. A written report is true on the day it is written and silently becomes fiction at the next broker upgrade |
 | The broker image is pinned to `rabbitmq:4.1-management`; findings are stated as true *of that version* | M2.5 | Low, but the pin must be bumped deliberately, not floated |
 | Four test-only dependencies added (RabbitMQ.Client, Testcontainers, AMQPNetLite, MQTTnet) | M2.5 | Low; all licence-checked, none reaches a shipped package |
+| `ConcordatChannel` is a **full 63-member `IChannel` decorator**, not an extension method | [M2.4](plan/M2-dotnet-client.md) | Low, but the whole point: an opt-in publish method leaves every other `BasicPublishAsync` unenforced |
+| `EnforcementMode.Monitor` is the **default**, not `Enforce` | M2.4 | Low, but user-visible. Defaulting to Enforce would let a package reference start rejecting production traffic |
+| The envelope is stamped even when the payload is invalid, provided identity resolved | M2.4 | Low. It is what lets consumers read schema ids before publishers are clean |
+| When quarantine itself fails, the message is **delivered** to the application, not dropped or requeued | M2.4 | Low, but it means an application can receive a message Concordat knows is invalid |
+| An unexpected middleware exception fails **open** | M2.4 | Low |
+| Quarantine keeps the original routing key, so operators can bind selectively | M2.4 | Low |
+| A format with no registered validator is treated as valid, not invalid | M2.4 | Low, until Avro/Protobuf validators land |
+| Quarantine detail is truncated at 4 KiB | M2.4 | Low |
 
 ---
 
