@@ -78,6 +78,59 @@ public static class ConcordatCodes
     /// <summary>No schema with the given id is visible to the caller.</summary>
     public const string SchemaNotFound = "schema_not_found";
 
+    // ---------------------------------------------------------------- envelope
+    //
+    // Read-side codes (ADR-010). Split deliberately between codes that REJECT a message and
+    // codes that only WARN: quarantining a structurally valid payload because someone
+    // mistyped a semantic version label would be a self-inflicted outage.
+
+    /// <summary>The envelope version header is present but empty or unparseable. Rejects.</summary>
+    public const string EnvelopeMalformed = "envelope_malformed";
+
+    /// <summary>
+    /// The envelope declares a version this client does not implement. Rejects, and the
+    /// reader must not interpret any other <c>concordat-*</c> header: a later version may
+    /// have redefined them.
+    /// </summary>
+    public const string EnvelopeVersionUnsupported = "envelope_version_unsupported";
+
+    /// <summary>The envelope is present but carries no schema id. Rejects.</summary>
+    public const string EnvelopeSchemaIdMissing = "envelope_schema_id_missing";
+
+    /// <summary>
+    /// A header value was neither a string nor a byte array. Rejects rather than calling
+    /// <c>ToString()</c>, which would invent a plausible-looking wrong value.
+    /// </summary>
+    public const string EnvelopeHeaderTypeInvalid = "envelope_header_type_invalid";
+
+    /// <summary>
+    /// A header value was not well-formed UTF-8. Rejects — decoding leniently would
+    /// substitute U+FFFD and turn a corrupt id into a valid-looking wrong one.
+    /// </summary>
+    public const string EnvelopeHeaderEncodingInvalid = "envelope_header_encoding_invalid";
+
+    /// <summary>The subject could not be determined from the envelope, properties or registry. Rejects.</summary>
+    public const string EnvelopeSubjectUnresolvable = "envelope_subject_unresolvable";
+
+    /// <summary>The declared format disagrees with the format the registry holds for that id. Rejects.</summary>
+    public const string EnvelopeFormatMismatch = "envelope_format_mismatch";
+
+    /// <summary>The declared format is not a known token. Rejects.</summary>
+    public const string EnvelopeFormatUnknown = "envelope_format_unknown";
+
+    /// <summary>
+    /// <c>concordat-subject</c> and <c>properties.type</c> disagree. Warns; the header wins.
+    /// </summary>
+    public const string EnvelopeSubjectTypeMismatch = "envelope_subject_type_mismatch";
+
+    /// <summary>
+    /// The version ordinal was unparseable. Warns only — the schema id already pins the schema.
+    /// </summary>
+    public const string EnvelopeOrdinalMalformed = "envelope_ordinal_malformed";
+
+    /// <summary>The payload did not validate against its declared schema.</summary>
+    public const string PayloadInvalid = "payload_invalid";
+
     /// <summary>The version is not awaiting approval, so it cannot be approved or rejected.</summary>
     public const string VersionNotAwaitingApproval = "version_not_awaiting_approval";
 

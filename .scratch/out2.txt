@@ -1,0 +1,543 @@
+C:\Users\rafae\Documents\Projects\Signet\.scratch\probe\Extra.cs(160,81): warning CS0618: 'IChannel.CloseAsync(ShutdownEventArgs, bool, CancellationToken)' is obsolete: '7.2.0 - cancellationToken is ignored' [C:\Users\rafae\Documents\Projects\Signet\.scratch\probe\probe.csproj]
+C:\Users\rafae\Documents\Projects\Signet\.scratch\probe\Live.cs(279,81): warning CS0618: 'IChannel.CloseAsync(ShutdownEventArgs, bool, CancellationToken)' is obsolete: '7.2.0 - cancellationToken is ignored' [C:\Users\rafae\Documents\Projects\Signet\.scratch\probe\probe.csproj]
+C:\Users\rafae\Documents\Projects\Signet\.scratch\probe\Live.cs(18,28): warning CS8602: Dereference of a possibly null reference. [C:\Users\rafae\Documents\Projects\Signet\.scratch\probe\probe.csproj]
+=== ASSEMBLY ===
+RabbitMQ.Client, Version=7.0.0.0, Culture=neutral, PublicKeyToken=89e7d7c5feba84ce
+Location: C:\Users\rafae\Documents\Projects\Signet\.scratch\probe\bin\Debug\net10.0\RabbitMQ.Client.dll
+InformationalVersion: 7.2.2+740faf07f04ade7d35d3539e20613c6ac6b9b46f
+FileVersion: 7.2.2.0
+
+=== RabbitMQ.Client.IChannel ===
+  kind=interface public=True sealed=False abstract=True
+  implements: IAsyncDisposable, IDisposable
+  prop int ChannelNumber { get; }
+  prop ShutdownEventArgs CloseReason { get; }   [Nullable(2)]
+  prop TimeSpan ContinuationTimeout { get; set; }
+  prop string CurrentQueue { get; }   [Nullable(2)]
+  prop IAsyncBasicConsumer DefaultConsumer { get; set; }   [Nullable(2)]
+  prop bool IsClosed { get; }
+  prop bool IsOpen { get; }
+  event AsyncEventHandler<BasicAckEventArgs> BasicAcksAsync
+  event AsyncEventHandler<BasicNackEventArgs> BasicNacksAsync
+  event AsyncEventHandler<BasicReturnEventArgs> BasicReturnAsync
+  event AsyncEventHandler<CallbackExceptionEventArgs> CallbackExceptionAsync
+  event AsyncEventHandler<ShutdownEventArgs> ChannelShutdownAsync
+  event AsyncEventHandler<FlowControlEventArgs> FlowControlAsync
+  ValueTask BasicAckAsync(ulong deliveryTag, bool multiple, CancellationToken cancellationToken = default)
+  Task BasicCancelAsync(string consumerTag, bool noWait = False, CancellationToken cancellationToken = default)
+  Task<string> BasicConsumeAsync(string queue, bool autoAck, string consumerTag, bool noLocal, bool exclusive, IDictionary<string, object> arguments, IAsyncBasicConsumer consumer, CancellationToken cancellationToken = default)
+  Task<BasicGetResult> BasicGetAsync(string queue, bool autoAck, CancellationToken cancellationToken = default)
+  ValueTask BasicNackAsync(ulong deliveryTag, bool multiple, bool requeue, CancellationToken cancellationToken = default)
+  ValueTask BasicPublishAsync<TProperties>(string exchange, string routingKey, bool mandatory, TProperties basicProperties, ReadOnlyMemory<byte> body, CancellationToken cancellationToken = default) where TProperties : IReadOnlyBasicProperties, IAmqpHeader
+  ValueTask BasicPublishAsync<TProperties>(CachedString exchange, CachedString routingKey, bool mandatory, TProperties basicProperties, ReadOnlyMemory<byte> body, CancellationToken cancellationToken = default) where TProperties : IReadOnlyBasicProperties, IAmqpHeader
+  Task BasicQosAsync(uint prefetchSize, ushort prefetchCount, bool global, CancellationToken cancellationToken = default)
+  ValueTask BasicRejectAsync(ulong deliveryTag, bool requeue, CancellationToken cancellationToken = default)
+  Task CloseAsync(ushort replyCode, string replyText, bool abort, CancellationToken cancellationToken = default)
+  Task CloseAsync(ShutdownEventArgs reason, bool abort)
+  Task CloseAsync(ShutdownEventArgs reason, bool abort, CancellationToken cancellationToken = default)
+  Task<uint> ConsumerCountAsync(string queue, CancellationToken cancellationToken = default)
+  Task ExchangeBindAsync(string destination, string source, string routingKey, IDictionary<string, object> arguments = default, bool noWait = False, CancellationToken cancellationToken = default)
+  Task ExchangeDeclareAsync(string exchange, string type, bool durable, bool autoDelete, IDictionary<string, object> arguments = default, bool passive = False, bool noWait = False, CancellationToken cancellationToken = default)
+  Task ExchangeDeclarePassiveAsync(string exchange, CancellationToken cancellationToken = default)
+  Task ExchangeDeleteAsync(string exchange, bool ifUnused = False, bool noWait = False, CancellationToken cancellationToken = default)
+  Task ExchangeUnbindAsync(string destination, string source, string routingKey, IDictionary<string, object> arguments = default, bool noWait = False, CancellationToken cancellationToken = default)
+  ValueTask<ulong> GetNextPublishSequenceNumberAsync(CancellationToken cancellationToken = default)
+  Task<uint> MessageCountAsync(string queue, CancellationToken cancellationToken = default)
+  Task QueueBindAsync(string queue, string exchange, string routingKey, IDictionary<string, object> arguments = default, bool noWait = False, CancellationToken cancellationToken = default)
+  Task<QueueDeclareOk> QueueDeclareAsync(string queue, bool durable, bool exclusive, bool autoDelete, IDictionary<string, object> arguments = default, bool passive = False, bool noWait = False, CancellationToken cancellationToken = default)
+  Task<QueueDeclareOk> QueueDeclarePassiveAsync(string queue, CancellationToken cancellationToken = default)
+  Task<uint> QueueDeleteAsync(string queue, bool ifUnused, bool ifEmpty, bool noWait = False, CancellationToken cancellationToken = default)
+  Task<uint> QueuePurgeAsync(string queue, CancellationToken cancellationToken = default)
+  Task QueueUnbindAsync(string queue, string exchange, string routingKey, IDictionary<string, object> arguments = default, CancellationToken cancellationToken = default)
+  Task TxCommitAsync(CancellationToken cancellationToken = default)
+  Task TxRollbackAsync(CancellationToken cancellationToken = default)
+  Task TxSelectAsync(CancellationToken cancellationToken = default)
+
+=== RabbitMQ.Client.IChannelExtensions ===
+  kind=class public=True sealed=True abstract=True
+  static Task AbortAsync(IChannel channel, CancellationToken cancellationToken = default)
+  static Task<string> BasicConsumeAsync(IChannel channel, string queue, bool autoAck, IAsyncBasicConsumer consumer, CancellationToken cancellationToken = default)
+  static Task<string> BasicConsumeAsync(IChannel channel, string queue, bool autoAck, string consumerTag, IAsyncBasicConsumer consumer, CancellationToken cancellationToken = default)
+  static Task<string> BasicConsumeAsync(IChannel channel, string queue, bool autoAck, string consumerTag, IDictionary<string, object> arguments, IAsyncBasicConsumer consumer, CancellationToken cancellationToken = default)
+  static ValueTask BasicPublishAsync<T>(IChannel channel, PublicationAddress addr, T basicProperties, ReadOnlyMemory<byte> body, CancellationToken cancellationToken = default) where T : IReadOnlyBasicProperties, IAmqpHeader
+  static ValueTask BasicPublishAsync(IChannel channel, string exchange, string routingKey, ReadOnlyMemory<byte> body, CancellationToken cancellationToken = default)
+  static ValueTask BasicPublishAsync(IChannel channel, CachedString exchange, CachedString routingKey, ReadOnlyMemory<byte> body, CancellationToken cancellationToken = default)
+  static ValueTask BasicPublishAsync(IChannel channel, string exchange, string routingKey, bool mandatory, ReadOnlyMemory<byte> body, CancellationToken cancellationToken = default)
+  static ValueTask BasicPublishAsync(IChannel channel, CachedString exchange, CachedString routingKey, bool mandatory, ReadOnlyMemory<byte> body, CancellationToken cancellationToken = default)
+  static Task CloseAsync(IChannel channel, CancellationToken cancellationToken = default)
+  static Task CloseAsync(IChannel channel, ushort replyCode, string replyText, CancellationToken cancellationToken = default)
+  static Task ExchangeDeclareAsync(IChannel channel, string exchange, string type, bool durable = False, bool autoDelete = False, IDictionary<string, object> arguments = default, bool noWait = False, CancellationToken cancellationToken = default)
+  static Task<QueueDeclareOk> QueueDeclareAsync(IChannel channel, string queue = , bool durable = False, bool exclusive = True, bool autoDelete = True, IDictionary<string, object> arguments = default, bool noWait = False, CancellationToken cancellationToken = default)
+  static Task<uint> QueueDeleteAsync(IChannel channel, string queue, bool ifUnused = False, bool ifEmpty = False, CancellationToken cancellationToken = default)
+  static Task QueueUnbindAsync(IChannel channel, string queue, string exchange, string routingKey, IDictionary<string, object> arguments = default, CancellationToken cancellationToken = default)
+
+=== RabbitMQ.Client.IAsyncBasicConsumer ===
+  kind=interface public=True sealed=False abstract=True
+  prop IChannel Channel { get; }   [Nullable(2)]
+  Task HandleBasicCancelAsync(string consumerTag, CancellationToken cancellationToken = default)
+  Task HandleBasicCancelOkAsync(string consumerTag, CancellationToken cancellationToken = default)
+  Task HandleBasicConsumeOkAsync(string consumerTag, CancellationToken cancellationToken = default)
+  Task HandleBasicDeliverAsync(string consumerTag, ulong deliveryTag, bool redelivered, string exchange, string routingKey, IReadOnlyBasicProperties properties, ReadOnlyMemory<byte> body, CancellationToken cancellationToken = default)
+  Task HandleChannelShutdownAsync(object channel, ShutdownEventArgs reason)
+
+=== RabbitMQ.Client.AsyncDefaultBasicConsumer ===
+  kind=class public=True sealed=False abstract=False
+  implements: IAsyncBasicConsumer
+  prop IChannel Channel { get; }
+  prop string[] ConsumerTags { get; }
+  prop bool IsRunning { get; set; }
+  prop ShutdownEventArgs ShutdownReason { get; set; }   [Nullable(2)]
+  virtual Task HandleBasicCancelAsync(string consumerTag, CancellationToken cancellationToken = default)
+  virtual Task HandleBasicCancelOkAsync(string consumerTag, CancellationToken cancellationToken = default)
+  virtual Task HandleBasicConsumeOkAsync(string consumerTag, CancellationToken cancellationToken = default)
+  virtual Task HandleBasicDeliverAsync(string consumerTag, ulong deliveryTag, bool redelivered, string exchange, string routingKey, IReadOnlyBasicProperties properties, ReadOnlyMemory<byte> body, CancellationToken cancellationToken = default)
+  virtual Task HandleChannelShutdownAsync(object channel, ShutdownEventArgs reason)
+  protected virtual Task OnCancelAsync(string[] consumerTags, CancellationToken cancellationToken = default)
+
+=== RabbitMQ.Client.Events.AsyncEventingBasicConsumer ===
+  kind=class public=True sealed=False abstract=False
+  implements: IAsyncBasicConsumer
+  base: AsyncDefaultBasicConsumer
+  event AsyncEventHandler<BasicDeliverEventArgs> ReceivedAsync
+  event AsyncEventHandler<ConsumerEventArgs> RegisteredAsync
+  event AsyncEventHandler<ShutdownEventArgs> ShutdownAsync
+  event AsyncEventHandler<ConsumerEventArgs> UnregisteredAsync
+  virtual Task HandleBasicConsumeOkAsync(string consumerTag, CancellationToken cancellationToken = default)
+  virtual Task HandleBasicDeliverAsync(string consumerTag, ulong deliveryTag, bool redelivered, string exchange, string routingKey, IReadOnlyBasicProperties properties, ReadOnlyMemory<byte> body, CancellationToken cancellationToken = default)
+  virtual Task HandleChannelShutdownAsync(object channel, ShutdownEventArgs reason)
+  protected virtual Task OnCancelAsync(string[] consumerTags, CancellationToken cancellationToken = default)
+
+=== RabbitMQ.Client.IReadOnlyBasicProperties ===
+  kind=interface public=True sealed=False abstract=True
+  prop string AppId { get; }
+  prop string ClusterId { get; }
+  prop string ContentEncoding { get; }
+  prop string ContentType { get; }
+  prop string CorrelationId { get; }
+  prop DeliveryModes DeliveryMode { get; }
+  prop string Expiration { get; }
+  prop IDictionary<string, object> Headers { get; }   [Nullable(...)]
+  prop string MessageId { get; }
+  prop bool Persistent { get; }
+  prop byte Priority { get; }
+  prop string ReplyTo { get; }
+  prop PublicationAddress ReplyToAddress { get; }
+  prop AmqpTimestamp Timestamp { get; }
+  prop string Type { get; }
+  prop string UserId { get; }
+  bool IsAppIdPresent()
+  bool IsClusterIdPresent()
+  bool IsContentEncodingPresent()
+  bool IsContentTypePresent()
+  bool IsCorrelationIdPresent()
+  bool IsDeliveryModePresent()
+  bool IsExpirationPresent()
+  bool IsHeadersPresent()
+  bool IsMessageIdPresent()
+  bool IsPriorityPresent()
+  bool IsReplyToPresent()
+  bool IsTimestampPresent()
+  bool IsTypePresent()
+  bool IsUserIdPresent()
+
+=== RabbitMQ.Client.IBasicProperties ===
+  kind=interface public=True sealed=False abstract=True
+  implements: IReadOnlyBasicProperties
+  prop string AppId { get; set; }
+  prop string ClusterId { get; set; }
+  prop string ContentEncoding { get; set; }
+  prop string ContentType { get; set; }
+  prop string CorrelationId { get; set; }
+  prop DeliveryModes DeliveryMode { get; set; }
+  prop string Expiration { get; set; }
+  prop IDictionary<string, object> Headers { get; set; }   [Nullable(...)]
+  prop string MessageId { get; set; }
+  prop bool Persistent { get; set; }
+  prop byte Priority { get; set; }
+  prop string ReplyTo { get; set; }
+  prop PublicationAddress ReplyToAddress { get; set; }
+  prop AmqpTimestamp Timestamp { get; set; }
+  prop string Type { get; set; }
+  prop string UserId { get; set; }
+  void ClearAppId()
+  void ClearClusterId()
+  void ClearContentEncoding()
+  void ClearContentType()
+  void ClearCorrelationId()
+  void ClearDeliveryMode()
+  void ClearExpiration()
+  void ClearHeaders()
+  void ClearMessageId()
+  void ClearPriority()
+  void ClearReplyTo()
+  void ClearTimestamp()
+  void ClearType()
+  void ClearUserId()
+
+=== RabbitMQ.Client.BasicProperties ===
+  kind=class public=True sealed=True abstract=False
+  implements: IBasicProperties, IReadOnlyBasicProperties, IAmqpHeader, IAmqpWriteable
+  prop string AppId { get; set; }
+  prop string ClusterId { get; set; }
+  prop string ContentEncoding { get; set; }
+  prop string ContentType { get; set; }
+  prop string CorrelationId { get; set; }
+  prop DeliveryModes DeliveryMode { get; set; }
+  prop string Expiration { get; set; }
+  prop IDictionary<string, object> Headers { get; set; }   [Nullable(...)]
+  prop string MessageId { get; set; }
+  prop bool Persistent { get; set; }
+  prop byte Priority { get; set; }
+  prop string ReplyTo { get; set; }
+  prop PublicationAddress ReplyToAddress { get; set; }
+  prop AmqpTimestamp Timestamp { get; set; }
+  prop string Type { get; set; }
+  prop string UserId { get; set; }
+  virtual void ClearAppId()
+  virtual void ClearClusterId()
+  virtual void ClearContentEncoding()
+  virtual void ClearContentType()
+  virtual void ClearCorrelationId()
+  virtual void ClearDeliveryMode()
+  virtual void ClearExpiration()
+  virtual void ClearHeaders()
+  virtual void ClearMessageId()
+  virtual void ClearPriority()
+  virtual void ClearReplyTo()
+  virtual void ClearTimestamp()
+  virtual void ClearType()
+  virtual void ClearUserId()
+  virtual bool IsAppIdPresent()
+  virtual bool IsClusterIdPresent()
+  virtual bool IsContentEncodingPresent()
+  virtual bool IsContentTypePresent()
+  virtual bool IsCorrelationIdPresent()
+  virtual bool IsDeliveryModePresent()
+  virtual bool IsExpirationPresent()
+  virtual bool IsHeadersPresent()
+  virtual bool IsMessageIdPresent()
+  virtual bool IsPriorityPresent()
+  virtual bool IsReplyToPresent()
+  virtual bool IsTimestampPresent()
+  virtual bool IsTypePresent()
+  virtual bool IsUserIdPresent()
+
+=== RabbitMQ.Client.ReadOnlyBasicProperties ===
+  kind=class public=True sealed=True abstract=False
+  implements: IReadOnlyBasicProperties
+  prop string AppId { get; }
+  prop string ClusterId { get; }
+  prop string ContentEncoding { get; }
+  prop string ContentType { get; }
+  prop string CorrelationId { get; }
+  prop DeliveryModes DeliveryMode { get; }
+  prop string Expiration { get; }
+  prop IDictionary<string, object> Headers { get; }   [Nullable(...)]
+  prop string MessageId { get; }
+  prop bool Persistent { get; }
+  prop byte Priority { get; }
+  prop string ReplyTo { get; }
+  prop PublicationAddress ReplyToAddress { get; }
+  prop AmqpTimestamp Timestamp { get; }
+  prop string Type { get; }
+  prop string UserId { get; }
+  virtual bool IsAppIdPresent()
+  virtual bool IsClusterIdPresent()
+  virtual bool IsContentEncodingPresent()
+  virtual bool IsContentTypePresent()
+  virtual bool IsCorrelationIdPresent()
+  virtual bool IsDeliveryModePresent()
+  virtual bool IsExpirationPresent()
+  virtual bool IsHeadersPresent()
+  virtual bool IsMessageIdPresent()
+  virtual bool IsPriorityPresent()
+  virtual bool IsReplyToPresent()
+  virtual bool IsTimestampPresent()
+  virtual bool IsTypePresent()
+  virtual bool IsUserIdPresent()
+
+=== RabbitMQ.Client.IAmqpHeader ===
+  kind=interface public=True sealed=False abstract=True
+  implements: IAmqpWriteable
+  prop ushort ProtocolClassId { get; }
+
+=== RabbitMQ.Client.IAmqpWriteable ===
+  kind=interface public=True sealed=False abstract=True
+  int GetRequiredBufferSize()
+  int WriteTo(Span<byte> span)
+
+=== RabbitMQ.Client.CachedString ===
+  kind=class public=True sealed=True abstract=False
+
+=== RabbitMQ.Client.Events.BasicDeliverEventArgs ===
+  kind=class public=True sealed=False abstract=False
+  base: AsyncEventArgs
+
+=== RabbitMQ.Client.Events.CallbackExceptionEventArgs ===
+  kind=class public=True sealed=False abstract=False
+  base: BaseExceptionEventArgs
+  static CallbackExceptionEventArgs Build(Exception e, string context, CancellationToken cancellationToken = default)
+  static CallbackExceptionEventArgs Build(Exception e, string context, object consumer, CancellationToken cancellationToken = default)
+
+=== RabbitMQ.Client.BasicGetResult ===
+  kind=class public=True sealed=True abstract=False
+
+=== RabbitMQ.Client.DeliveryModes ===
+  kind=struct public=True sealed=True abstract=False
+  implements: IComparable, ISpanFormattable, IFormattable, IConvertible
+  base: Enum
+
+=== IChannel: ALL members (flat, incl. inherited interfaces) ===
+  IChannel implements: IAsyncDisposable, IDisposable
+  ValueTask BasicAckAsync(ulong deliveryTag, bool multiple, CancellationToken cancellationToken = default)
+  Task BasicCancelAsync(string consumerTag, bool noWait = False, CancellationToken cancellationToken = default)
+  Task<string> BasicConsumeAsync(string queue, bool autoAck, string consumerTag, bool noLocal, bool exclusive, IDictionary<string, object> arguments, IAsyncBasicConsumer consumer, CancellationToken cancellationToken = default)
+  Task<BasicGetResult> BasicGetAsync(string queue, bool autoAck, CancellationToken cancellationToken = default)
+  ValueTask BasicNackAsync(ulong deliveryTag, bool multiple, bool requeue, CancellationToken cancellationToken = default)
+  ValueTask BasicPublishAsync<TProperties>(string exchange, string routingKey, bool mandatory, TProperties basicProperties, ReadOnlyMemory<byte> body, CancellationToken cancellationToken = default) where TProperties : IReadOnlyBasicProperties, IAmqpHeader
+  ValueTask BasicPublishAsync<TProperties>(CachedString exchange, CachedString routingKey, bool mandatory, TProperties basicProperties, ReadOnlyMemory<byte> body, CancellationToken cancellationToken = default) where TProperties : IReadOnlyBasicProperties, IAmqpHeader
+  Task BasicQosAsync(uint prefetchSize, ushort prefetchCount, bool global, CancellationToken cancellationToken = default)
+  ValueTask BasicRejectAsync(ulong deliveryTag, bool requeue, CancellationToken cancellationToken = default)
+  Task CloseAsync(ushort replyCode, string replyText, bool abort, CancellationToken cancellationToken = default)
+  Task CloseAsync(ShutdownEventArgs reason, bool abort)
+  Task CloseAsync(ShutdownEventArgs reason, bool abort, CancellationToken cancellationToken = default)
+  Task<uint> ConsumerCountAsync(string queue, CancellationToken cancellationToken = default)
+  Task ExchangeBindAsync(string destination, string source, string routingKey, IDictionary<string, object> arguments = default, bool noWait = False, CancellationToken cancellationToken = default)
+  Task ExchangeDeclareAsync(string exchange, string type, bool durable, bool autoDelete, IDictionary<string, object> arguments = default, bool passive = False, bool noWait = False, CancellationToken cancellationToken = default)
+  Task ExchangeDeclarePassiveAsync(string exchange, CancellationToken cancellationToken = default)
+  Task ExchangeDeleteAsync(string exchange, bool ifUnused = False, bool noWait = False, CancellationToken cancellationToken = default)
+  Task ExchangeUnbindAsync(string destination, string source, string routingKey, IDictionary<string, object> arguments = default, bool noWait = False, CancellationToken cancellationToken = default)
+  ValueTask<ulong> GetNextPublishSequenceNumberAsync(CancellationToken cancellationToken = default)
+  Task<uint> MessageCountAsync(string queue, CancellationToken cancellationToken = default)
+  Task QueueBindAsync(string queue, string exchange, string routingKey, IDictionary<string, object> arguments = default, bool noWait = False, CancellationToken cancellationToken = default)
+  Task<QueueDeclareOk> QueueDeclareAsync(string queue, bool durable, bool exclusive, bool autoDelete, IDictionary<string, object> arguments = default, bool passive = False, bool noWait = False, CancellationToken cancellationToken = default)
+  Task<QueueDeclareOk> QueueDeclarePassiveAsync(string queue, CancellationToken cancellationToken = default)
+  Task<uint> QueueDeleteAsync(string queue, bool ifUnused, bool ifEmpty, bool noWait = False, CancellationToken cancellationToken = default)
+  Task<uint> QueuePurgeAsync(string queue, CancellationToken cancellationToken = default)
+  Task QueueUnbindAsync(string queue, string exchange, string routingKey, IDictionary<string, object> arguments = default, CancellationToken cancellationToken = default)
+  Task TxCommitAsync(CancellationToken cancellationToken = default)
+  Task TxRollbackAsync(CancellationToken cancellationToken = default)
+  Task TxSelectAsync(CancellationToken cancellationToken = default)
+  prop int ChannelNumber
+  prop ShutdownEventArgs CloseReason
+  prop TimeSpan ContinuationTimeout
+  prop string CurrentQueue
+  prop IAsyncBasicConsumer DefaultConsumer
+  prop bool IsClosed
+  prop bool IsOpen
+  event AsyncEventHandler<BasicAckEventArgs> BasicAcksAsync
+  event AsyncEventHandler<BasicNackEventArgs> BasicNacksAsync
+  event AsyncEventHandler<BasicReturnEventArgs> BasicReturnAsync
+  event AsyncEventHandler<CallbackExceptionEventArgs> CallbackExceptionAsync
+  event AsyncEventHandler<ShutdownEventArgs> ChannelShutdownAsync
+  event AsyncEventHandler<FlowControlEventArgs> FlowControlAsync
+
+=== EmptyBasicProperty ===
+  found=RabbitMQ.Client.Impl.EmptyBasicProperty isPublic=False isValueType=False
+  implements: IReadOnlyBasicProperties, IAmqpHeader, IAmqpWriteable
+
+=== Public types: Consumer / Properties / Exception ===
+  RabbitMQ.Client.AsyncDefaultBasicConsumer
+  RabbitMQ.Client.BasicProperties
+  RabbitMQ.Client.Events.AsyncEventingBasicConsumer
+  RabbitMQ.Client.Events.BaseExceptionEventArgs
+  RabbitMQ.Client.Events.CallbackExceptionEventArgs
+  RabbitMQ.Client.Events.ConsumerEventArgs
+  RabbitMQ.Client.Events.ConsumerTagChangedAfterRecoveryEventArgs
+  RabbitMQ.Client.Events.RecoveringConsumerEventArgs
+  RabbitMQ.Client.Exceptions.AlreadyClosedException
+  RabbitMQ.Client.Exceptions.AuthenticationFailureException
+  RabbitMQ.Client.Exceptions.BrokerUnreachableException
+  RabbitMQ.Client.Exceptions.ChannelAllocationException
+  RabbitMQ.Client.Exceptions.ConnectFailureException
+  RabbitMQ.Client.Exceptions.HardProtocolException
+  RabbitMQ.Client.Exceptions.MalformedFrameException
+  RabbitMQ.Client.Exceptions.OperationInterruptedException
+  RabbitMQ.Client.Exceptions.PacketNotRecognizedException
+  RabbitMQ.Client.Exceptions.PossibleAuthenticationFailureException
+  RabbitMQ.Client.Exceptions.ProtocolException
+  RabbitMQ.Client.Exceptions.ProtocolVersionMismatchException
+  RabbitMQ.Client.Exceptions.ProtocolViolationException
+  RabbitMQ.Client.Exceptions.PublishException
+  RabbitMQ.Client.Exceptions.PublishReturnException
+  RabbitMQ.Client.Exceptions.RabbitMQClientException
+  RabbitMQ.Client.Exceptions.SyntaxErrorException
+  RabbitMQ.Client.Exceptions.TopologyRecoveryException
+  RabbitMQ.Client.Exceptions.UnexpectedFrameException
+  RabbitMQ.Client.Exceptions.UnexpectedMethodException
+  RabbitMQ.Client.Exceptions.UnknownClassOrMethodException
+  RabbitMQ.Client.Exceptions.WireFormattingException
+  RabbitMQ.Client.IAsyncBasicConsumer
+  RabbitMQ.Client.IBasicProperties
+  RabbitMQ.Client.IReadOnlyBasicProperties
+  RabbitMQ.Client.IRecordedConsumer
+  RabbitMQ.Client.Logging.RabbitMqExceptionDetail
+  RabbitMQ.Client.ReadOnlyBasicProperties
+  RabbitMQ.Client.TopologyRecoveryExceptionHandler
+
+=== WireFormatting field-table entry points (internal) ===
+  int GetTableByteCount(IDictionary val)
+  int GetTableByteCount(IDictionary<string, object> val)
+  int ReadDictionary(ReadOnlySpan<byte> span, out ref Dictionary<string, object> valueDictionary)
+  object ReadFieldValue(ReadOnlySpan<byte> span, out ref int bytesRead)
+  int WriteFieldValue(ref ref byte destination, object value)
+  int WriteTable(ref ref byte destination, IDictionary val)
+  int WriteTable(ref ref byte destination, IDictionary<string, object> val)
+
+=== BasicProperties.Type / ContentType / Headers set+read via copy ctor ===
+  Type=acme.orders.OrderCreated  ContentType=application/json  Headers[concordat-v]=1 (String)
+  as IReadOnlyBasicProperties: Type=acme.orders.OrderCreated ContentType=application/json
+  copy ctor works; copy.Type=changed; original.Type=acme.orders.OrderCreated; Headers reference-shared=True
+
+=== Can a decorator construct BasicProperties from EmptyBasicProperty? ===
+  EmptyBasicProperty.Empty = RabbitMQ.Client.Impl.EmptyBasicProperty
+  -> new BasicProperties(empty) OK; Headers now settable. Type=<null>
+
+=== IAmqpWriteable members (does a custom TProperties have to serialise itself?) ===
+  isPublic=True
+    int GetRequiredBufferSize()
+    int WriteTo(Span<byte> span)
+
+=== ReadOnlyBasicProperties (what a consumer actually receives) ===
+  RabbitMQ.Client.ReadOnlyBasicProperties isValueType=False isPublic=True
+
+=== LIVE BROKER: connected. ServerProperties product/version ===
+  platform = Erlang/OTP 27.3.4.16  (CLR Byte[])
+  product = RabbitMQ  (CLR Byte[])
+  version = 4.3.4  (CLR Byte[])
+
+  queue = concordat-probe
+
+=== 1. HEADER ROUND TRIP THROUGH REAL BROKER ===
+  properties.Type        = "acme.orders.OrderCreated"        CLR=String
+  properties.ContentType = "application/json" CLR=String
+  properties CLR type    = RabbitMQ.Client.ReadOnlyBasicProperties
+  Headers CLR type       = System.Collections.Generic.Dictionary`2[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]
+  --- header values as received ---
+    concordat-schema-id    -> CLR Byte[]                 value byte[32] utf8="7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4"
+    concordat-v            -> CLR Byte[]                 value byte[1] utf8="1"
+    h-bool-false           -> CLR Boolean                value False
+    h-bool-true            -> CLR Boolean                value True
+    h-byte                 -> CLR Byte                   value 42
+    h-bytes                -> CLR Byte[]                 value byte[2] utf8="AB"
+    h-decimal              -> CLR Decimal                value 4.5
+    h-double               -> CLR Double                 value 4.5
+    h-empty-string         -> CLR Byte[]                 value byte[0] utf8=""
+    h-float                -> CLR Single                 value 4.5
+    h-int                  -> CLR Int32                  value 42
+    h-list                 -> CLR List`1                 value IList(count=2)
+    h-long                 -> CLR Int64                  value 42
+    h-nested               -> CLR Dictionary`2           value IDictionary(count=1)
+    h-null                 -> CLR null                   value null
+    h-sbyte                -> CLR SByte                  value 42
+    h-short                -> CLR Int16                  value 42
+    h-timestamp            -> CLR AmqpTimestamp          value ((time_t)1700000000)
+    h-uint                 -> CLR UInt32                 value 42
+    h-ushort               -> CLR UInt16                 value 42
+
+=== 2. ILLEGAL HEADER CLR TYPES (client-side) ===
+  UInt64       -> WireFormattingException: Value of type 'UInt64' cannot appear as table value
+  DateTime     -> WireFormattingException: Value of type 'DateTime' cannot appear as table value
+  Guid         -> WireFormattingException: Value of type 'Guid' cannot appear as table value
+  Char         -> WireFormattingException: Value of type 'Char' cannot appear as table value
+  TimeSpan     -> WireFormattingException: Value of type 'TimeSpan' cannot appear as table value
+  Uri          -> WireFormattingException: Value of type 'Uri' cannot appear as table value
+  channel still open after illegal-type attempts: True
+
+=== 3. EXCEPTION THROWN FROM CONSUMER CALLBACK ===
+  consumerTag = amq.ctag-qh-Tgqw61ZjHhogGMQ-pfw
+    delivery #1 tag=1 body=one
+    delivery #2 tag=2 body=two
+  deliveries seen after 2 throws: 2   (dispatch loop continued? True)
+  channel IsOpen after throws: True
+  CallbackExceptionAsync fired 2 time(s)
+    Exception: InvalidOperationException: schema violation on delivery #1
+      Detail[context] = String Deliver
+      Detail[consumer] = AsyncEventingBasicConsumer RabbitMQ.Client.Events.AsyncEventingBasicConsumer
+    Exception: InvalidOperationException: schema violation on delivery #2
+      Detail[context] = String Deliver
+      Detail[consumer] = AsyncEventingBasicConsumer RabbitMQ.Client.Events.AsyncEventingBasicConsumer
+  consumer.IsRunning = True
+  messages still unacked (MessageCountAsync counts only ready): ready=0, consumers=1
+  -> the two deliveries were neither acked nor nacked; they stay unacked until channel/connection close.
+
+=== 4. NACK FROM INSIDE THE CONSUMER CALLBACK ===
+    nacked tag=1 requeue:false
+  ready after nack(requeue:false) = 0 (0 => dropped/dead-lettered, not requeued)
+  BasicDeliverEventArgs exposes: Channel=AutorecoveringChannel, and ea.Channel exists? see dump below
+
+=== 5. DECORATOR: rewriting TProperties on the way through ===
+      [decorator] TProperties = RabbitMQ.Client.Impl.EmptyBasicProperty (public=False)
+  (a) via extension overload, TProperties=EmptyBasicProperty
+      Type="unresolved" ContentType="" headers: concordat-schema-id="7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4", concordat-v="1"
+      [decorator] TProperties = RabbitMQ.Client.BasicProperties (public=True)
+  (b) caller-supplied BasicProperties
+      Type="acme.orders.OrderCreated" ContentType="application/json" headers: concordat-schema-id="7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4", concordat-v="1"
+      [decorator] TProperties = RabbitMQ.Client.BasicProperties (public=True)
+  (c) re-wrapped ReadOnlyBasicProperties
+      Type="acme.orders.OrderCreated" ContentType="application/json" headers: concordat-schema-id="7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4", concordat-v="1"
+
+=== FIELDS (these types expose data as public fields, not properties) ===
+  RabbitMQ.Client.Events.BasicDeliverEventArgs
+      field  IReadOnlyBasicProperties BasicProperties (readonly)
+      field  ReadOnlyMemory`1 Body (readonly)
+      field  String ConsumerTag (readonly)
+      field  UInt64 DeliveryTag (readonly)
+      field  String Exchange (readonly)
+      field  Boolean Redelivered (readonly)
+      field  String RoutingKey (readonly)
+      prop   CancellationToken CancellationToken
+      ctor   (String consumerTag, UInt64 deliveryTag, Boolean redelivered, String exchange, String routingKey, IReadOnlyBasicProperties properties, ReadOnlyMemory`1 body, CancellationToken cancellationToken)
+  RabbitMQ.Client.CachedString
+      field  ReadOnlyMemory`1 Bytes (readonly)
+      field  String Value (readonly)
+      ctor   (String value)
+      ctor   (ReadOnlyMemory`1 bytes)
+      ctor   (String value, ReadOnlyMemory`1 bytes)
+  RabbitMQ.Client.BasicGetResult
+      field  IReadOnlyBasicProperties BasicProperties (readonly)
+      field  ReadOnlyMemory`1 Body (readonly)
+      field  UInt64 DeliveryTag (readonly)
+      field  String Exchange (readonly)
+      field  UInt32 MessageCount (readonly)
+      field  Boolean Redelivered (readonly)
+      field  String RoutingKey (readonly)
+      ctor   (UInt64 deliveryTag, Boolean redelivered, String exchange, String routingKey, UInt32 messageCount, IReadOnlyBasicProperties basicProperties, ReadOnlyMemory`1 body)
+  RabbitMQ.Client.Events.AsyncEventArgs
+      prop   CancellationToken CancellationToken
+      ctor   (CancellationToken cancellationToken)
+  RabbitMQ.Client.Events.BaseExceptionEventArgs
+      field  IDictionary`2 Detail (readonly)
+      field  Exception Exception (readonly)
+      prop   CancellationToken CancellationToken
+  RabbitMQ.Client.Events.CallbackExceptionEventArgs
+      field  IDictionary`2 Detail (readonly)
+      field  Exception Exception (readonly)
+      prop   CancellationToken CancellationToken
+      ctor   (IDictionary`2 detail, Exception exception, CancellationToken cancellationToken)
+
+=== IConnection.CallbackExceptionAsync present? ===
+  CallbackExceptionAsync, ConnectionShutdownAsync, RecoverySucceededAsync, ConnectionRecoveryErrorAsync, ConsumerTagChangeAfterRecoveryAsync, QueueNameChangedAfterRecoveryAsync, RecoveringConsumerAsync, ConnectionBlockedAsync, ConnectionUnblockedAsync
+
+=== CreateChannelOptions (publisher confirms) ===
+  ctor (Boolean publisherConfirmationsEnabled, Boolean publisherConfirmationTrackingEnabled, RateLimiter outstandingPublisherConfirmationsRateLimiter = , Nullable`1 consumerDispatchConcurrency = 1)
+
+=== 6. A THROW IN THE PUBLISH DECORATOR BLOCKS THE PUBLISH ===
+  caller observed InvalidOperationException: schema validation failed: payload does not match acme.orders.OrderCreated@3
+  messages in queue = 0  (0 => the publish never reached the broker)
+
+=== 7. PUBLISHER CONFIRMS: does BasicPublishAsync throw on nack/return? ===
+  mandatory unroutable publish -> RabbitMQ.Client.Exceptions.PublishReturnException: 312 NO_ROUTE Exchange:  Routing Key: no-such-queue-xyz
+
+=== 8. DOES THE COPY CTOR ALIAS THE CALLER'S HEADERS DICTIONARY? ===
+  after decorator wrote into copy.Headers, caller's dictionary contains: mine, concordat-v
+  -> ALIASED. A decorator MUST clone the dictionary or it mutates the caller's object.
+
+=== 9. HEADER KEY LENGTH / VALUE SIZE LIMITS (client-side) ===
+  255-char key   -> OK, read back byte[1]
+  256-char key   -> ArgumentException: The output byte buffer is too small to contain the encoded data, encoding codepage '65001' and fallback 'System.Text.EncoderReplacementFallback'. (Parameter 'bytes')
+  64 KiB value   -> OK, read back byte[65536]
+  1 MiB value    -> OperationInterruptedException: The AMQP operation was interrupted: AMQP close-reason, initiated by Peer, code=501, text='FRAME_ERROR - type 2, all octets = <<>>: {frame_too_large,1048603,131064}', classId=0, methodId=0
+     channel closed
+
+
