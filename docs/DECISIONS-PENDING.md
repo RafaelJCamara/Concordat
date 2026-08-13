@@ -108,6 +108,7 @@ into the milestone that owes it, and collected here because they are the ones th
 | **M1.6** | Subject prefix search needs a `ComplexProperty` mapping or a shadow column | Value converters do not translate `StartsWith` |
 | ~~M1.7~~ ✅ | ~~Pin the schema-id preimage bytes, not just ids~~ | **Discharged.** 4 fixtures pin the exact framing; all matched hand-written expectations first run |
 | ~~M2~~ ✅ | ~~Run the payload-validation fixtures against a real validator~~ | **Discharged.** NJsonSchema behind `IPayloadValidator`; the corpus caught a real draft-conformance gap on its first run |
+| **M7** | Contract-resolution caching, deferred from M2.1 | The 60 s TTL was specified before contracts existed; there is no endpoint to cache until M7 ships one |
 | **M2.5** | Verify the AMQP 1.0 header conversion | ADR-013's "designed to survive 1.0" is an assertion until a 1.0 client reads a Concordat message |
 | **M7** | Hard delete: no registered consumers + force flag + audit entry | Soft delete is all that exists today |
 | **M7** | Adopt the derived environment ids, or migrate `subject.environment_id` | `DerivedEnvironmentResolver` hashes the name to a stable id so `/environments/{env}/…` works before environments exist. Real rows will generate their own |
@@ -152,6 +153,11 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | `/health/live` and `/health/ready` are separate, and liveness ignores the database | M1.6 | Low |
 | Environment ids are derived by hashing the name until M7 exists | M1.6 | **Needs an M7 migration** |
 | With no prior semver label, a breaking change suggests `1.0.0` — an unlabelled history reads as pre-1.0 | M1.6 | Low |
+| A 4xx sets `LastFailure` but **not** `IsDegraded`; only 5xx/408/429 count as unreachable | [M2.1](plan/M2-dotnet-client.md) | Low, but it changes what an alert fires on |
+| `ResolutionFailures` counts every unenforced *operation*, not distinct causes | M2.1 | Low, but it changes the shape of the metric |
+| Fail-closed throws `ConcordatException`; quarantine behaviour is M2.4's, not the client's | M2.1 | Low |
+| `SchemaUnresolvable` added to `ConcordatCodes` — a client-raised code in a domain catalogue, because ADR-019 makes the strings normative for every SDK | M2.1 | Low |
+| `ConcordatClient` does not dispose the `HttpClient` it is handed | M2.1 | Low |
 
 ---
 

@@ -136,4 +136,14 @@ public static class ConcordatCodes
 
     /// <summary>A changelog exceeded the permitted length.</summary>
     public const string ChangelogTooLong = "changelog_too_long";
+
+    /// <summary>
+    /// A client could not resolve a schema, so the operation could not be enforced.
+    /// </summary>
+    /// <remarks>
+    /// Raised by clients rather than the registry, but catalogued here because ADR-019 makes
+    /// these strings normative for every SDK. A Go consumer and a .NET consumer must report the
+    /// same condition with the same token, or an operator cannot alert across the fleet.
+    /// </remarks>
+    public const string SchemaUnresolvable = "schema_unresolvable";
 }

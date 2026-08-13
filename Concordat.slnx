@@ -1,5 +1,8 @@
 <Solution>
   <Folder Name="/src/" />
+  <Folder Name="/src/clients/">
+    <Project Path="src/clients/Concordat.Client/Concordat.Client.csproj" />
+  </Folder>
   <Folder Name="/src/core/">
     <Project Path="src/core/Concordat.Application/Concordat.Application.csproj" />
     <Project Path="src/core/Concordat.Domain/Concordat.Domain.csproj" />
@@ -16,6 +19,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/Concordat.Api.IntegrationTests/Concordat.Api.IntegrationTests.csproj" />
     <Project Path="tests/Concordat.Application.Tests/Concordat.Application.Tests.csproj" />
+    <Project Path="tests/Concordat.Client.Tests/Concordat.Client.Tests.csproj" />
     <Project Path="tests/Concordat.Conformance/Concordat.Conformance.csproj" />
     <Project Path="tests/Concordat.Domain.Tests/Concordat.Domain.Tests.csproj" />
     <Project Path="tests/Concordat.Formats.Json.Tests/Concordat.Formats.Json.Tests.csproj" />

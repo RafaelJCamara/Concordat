@@ -8,16 +8,61 @@ Scope is RabbitMQ.Client only (ADR-020). Service-bus adapters are [Appendix A](.
 
 ## M2.1 `Concordat.Client`
 
-- [ ] Typed HTTP client over the `/v1` surface; API-key auth
-- [ ] Problem Details → typed exceptions, `concordatCode` preserved
-- [ ] Cache: `schema-id → schema` and `subject+version → schema-id` **immutable, cached forever** (guaranteed by content-addressing, not assumed)
-- [ ] Cache: `subject → latest` 30 s TTL; contract resolution 60 s TTL; negative lookups cached
-- [ ] **Negative-lookup caching, deferred from M1.6** — it belongs on the client, not as a
+**Done 2026-08-13 · DESIGN §5 · 22 tests**
+
+- [x] Typed HTTP client over the `/v1` surface; API-key auth
+- [x] Problem Details → typed exceptions, `concordatCode` preserved
+- [x] Cache: `schema-id → schema` **immutable, cached forever** (guaranteed by content-addressing, not assumed)
+- [x] Cache: `subject → latest` 30 s TTL; negative lookups cached with doubling backoff
+- [x] **Negative-lookup caching, deferred from M1.6** — it belongs on the client, not as a
       server cache header. The failure it prevents is a missing subject retry-storming the
       registry during a cold start, and only the client can decline to retry
-- [ ] Warm-up via `POST /bootstrap`, **with jitter** — a fleet-wide rolling restart must not stampede
-- [ ] `fail-open | fail-closed` configuration
-- [ ] **Hard rule enforced by test: after warm-up the registry is never in the delivery path**
+- [x] Warm-up via `POST /bootstrap`, **with jitter** — a fleet-wide rolling restart must not stampede
+- [x] `fail-open | fail-closed` configuration
+- [x] **Hard rule enforced by test: after warm-up the registry is never in the delivery path**
+- [ ] Contract-resolution TTL — **deferred to M7**, which is where contracts first exist. There
+      is no endpoint to cache
+
+### The hard rule needs a caveat
+
+DESIGN §5 says the registry is never in the critical path after warm-up. That is true of cache
+hits, and cache hits are the overwhelming majority — but `/bootstrap` ships each subject's
+**latest** schema only. A consumer handed a message pinned to an *older* schema id has never
+seen it and must fetch it once, after which content addressing guarantees it never fetches it
+again.
+
+Better stated here than discovered in production. The client is honest about three states, not
+two: served from cache, fetched once, unresolvable.
+
+### A 4xx is not an outage
+
+An expired API key answers every request with 401. The first implementation reported that as
+`DEGRADED, registry unreachable` — which sends whoever is paged to go and stare at a perfectly
+healthy registry while enforcement is off fleet-wide.
+
+So `IsDegraded` now means only that the registry **failed to answer**: 5xx, 408, 429, dead
+socket. A 4xx is the registry answering, with a refusal, and surfaces through `LastFailure` as
+`401 auth_invalid_key`. Same mis-attribution as absent-vs-unreachable, one layer up.
+
+### Three defects the tests caught
+
+- **The negative cache reset its own backoff.** Expired entries were deleted on read, so the
+  next miss took the add path and went back to 5 s instead of doubling. A subject missing
+  because of a typo would have been asked about at a fixed rate forever. Expired entries are
+  now retained; only the *answer* expires, not the accounting.
+- **Degradation was invisible on a cold client.** `ToString()` reported it only inside the warm
+  branch, so a client that never warmed *and* could not reach the registry printed just
+  `cold` — read by any operator as "still starting up".
+- **`fail-open | fail-closed` was declared and never read.** Every path fail-opened regardless
+  of the setting. Worse, the negative cache short-circuited before the mode was consulted, so
+  even once fixed a fail-closed consumer would have thrown on the first message and silently
+  proceeded on every one after.
+
+### `ResolutionFailures` counts operations, not causes
+
+The number to alert on. A subject that stays unregistered keeps producing unenforced messages,
+so each one counts; recording it once would report a standing enforcement hole as a single
+historic blip.
 
 ## M2.2 Envelope
 
