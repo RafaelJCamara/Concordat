@@ -2,6 +2,7 @@ using Concordat.Api;
 using Concordat.Application;
 using Concordat.Application.Abstractions;
 using Concordat.Formats.Abstractions;
+using Concordat.Formats.Avro;
 using Concordat.Formats.Json;
 using Concordat.Infrastructure;
 using Concordat.Infrastructure.Persistence;
@@ -23,6 +24,13 @@ builder.Services.AddSingleton<ISchemaCanonicalizer, JsonSchemaCanonicalizer>();
 builder.Services.AddSingleton<ICompatibilityChecker, JsonSchemaCompatibilityChecker>();
 builder.Services.AddSingleton<ISchemaReferenceExtractor, JsonSchemaReferenceExtractor>();
 builder.Services.AddSingleton<ISchemaBundler, JsonSchemaBundler>();
+
+// Avro canonicalisation and compatibility (M5.2, in progress). Reference extraction and
+// bundling are not implemented: Avro references are bare fullnames with nowhere to pin a
+// version, which is DECISIONS-PENDING #16. They resolve lazily through ISchemaFormatRegistry
+// and fail loudly (NotSupportedException) rather than silently doing the wrong thing.
+builder.Services.AddSingleton<ISchemaCanonicalizer, AvroSchemaCanonicalizer>();
+builder.Services.AddSingleton<ICompatibilityChecker, AvroSchemaCompatibilityChecker>();
 
 builder.Services.AddSingleton<IEnvironmentResolver, DerivedEnvironmentResolver>();
 

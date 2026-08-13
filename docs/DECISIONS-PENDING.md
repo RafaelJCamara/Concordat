@@ -1,9 +1,101 @@
 # Decisions pending
 
-Everything waiting on you, in one place. Ordered by when it starts to hurt.
+Everything waiting on you, in one place. Sections are ordered by when the decision starts to
+hurt; the numbers are stable labels, not positions, so a later-numbered item can appear first.
 
 Once a decision is made it moves to **[Settled](#settled)** at the bottom and, if it is
 architectural, becomes an ADR in [`adr/`](adr/README.md).
+
+---
+
+## Proceeded on my judgement — confirm or overturn
+
+### 17. Avro's Parsing Canonical Form is lossy, and the architecture stores the canonical form
+
+**Option (B) below is implemented and shipped.** M5.2 was blocked on this and you were not
+available to decide, so I took the call rather than stall the milestone — and this entry stays
+open because it is yours, not mine. **Overturning it is free until the first Avro schema is
+stored**, and costs a preimage version bump plus a migration afterwards. It is an ADR-015
+amendment if you keep it.
+
+Avro's Parsing Canonical Form is defined by the specification's `[STRIP]` rule: keep only
+`type`, `name`, `fields`, `symbols`, `items`, `values` and `size`, and drop everything else.
+That deliberately discards **`default` and `aliases`** (and `doc`). DESIGN §4 names PCF as
+Avro's canonical form, and `Concordat.Formats.Avro` implements it exactly.
+
+The architecture, settled in M1 when JSON Schema was the only format, stores *the canonical
+form*: `CompatibilityEvaluator` canonicalises, then hands the canonical text to
+`Schema.Create` as the stored body **and** to `ICompatibilityChecker.Check`, and
+`RegisterVersionHandler` builds each `PriorSchema` from that same stored body. The authored
+body is never persisted.
+
+For JSON Schema this was invisible, because its canonicalisation is lossless — sort keys,
+strip whitespace, normalise `$id`/`$ref`. **Avro is the first format whose canonicalisation is
+lossy by design**, and the two attributes it drops are exactly the ones Avro's schema
+resolution runs on:
+
+- a reader whose schema has a field the writer lacks **uses that field's `default`**, and
+  **signals an error if there is none** — this is what makes "add a field" the safe, ordinary
+  Avro change;
+- `aliases` on the reader's schema are what let a renamed record or field still resolve.
+
+Two consequences, and the second is worse than the first:
+
+1. **The remaining M5.2 checklist cannot be built correctly.** "Resolution rules: defaults,
+   aliases, union widening, enum symbols" — two of those four inputs are gone before the
+   checker is ever called. A checker working from PCF has to report every added field as
+   backward-breaking, including the ones carrying a default, which is precisely the
+   unusable-under-its-own-defaults behaviour Concordat exists to beat Confluent at.
+2. **The registry cannot serve a usable Avro schema.** A consumer fetching a schema by id gets
+   a body with no defaults, so it cannot read data written under an older version — the one
+   job an Avro reader schema exists to do. That is data loss at registration time, not a
+   reporting gap.
+
+Underneath both sits an identity question: under PCF a schema **with** a field default and the
+same schema **without** one hash to the same id, yet they resolve differently against the same
+bytes. Content addressing is supposed to mean *same id ⇒ same meaning*, and for Avro under PCF
+it does not.
+
+> **Options:**
+>
+> - **(A) Store the authored body; canonicalise only to compute the id.** What Confluent does.
+>   Fixes serving and checking together, and Avro ids stay exactly as they are today. It does
+>   **not** fix the identity question: two bodies differing only in a default still collide on
+>   one id, so the registry has to pick one and can hand back defaults the author never wrote.
+>   Changes the meaning of `Schema.Body` and the contract of `PriorSchema`, both shared with
+>   JSON, and needs a migration.
+>
+> - **(B) Make Avro canonicalisation lossless-enough — normalise (sort, resolve fullnames,
+>   strip whitespace and `doc`) but keep `default` and `aliases`.** One transformation, one
+>   stored body, no second column, no collision rule, and the checker gets what it needs.
+>   Schemas that resolve differently get different ids, which is what content addressing should
+>   mean. The cost is that Concordat's Avro canonical form is no longer the spec's PCF — but
+>   Concordat ids were never Avro fingerprints anyway (128-bit truncated SHA-256 over a
+>   versioned preimage, versus Avro's 64-bit CRC), so nothing that interoperates today stops.
+>
+> - **(C) Keep PCF and refuse Avro schemas that use `default` or `aliases`.** Nothing
+>   architectural changes; registration rejects them with a clear error, the way M2.3 refused
+>   generic type names rather than invent a spelling. But it rules out the ordinary Avro
+>   evolution pattern, which leaves Avro support close to decorative.
+>
+> **Chosen: (B), and built.** It is the only option that makes all three things true at once —
+> the checker implements the real resolution rules, the registry serves a schema consumers can
+> actually read with, and equal ids mean equal meaning. It was also far cheapest to do
+> immediately: no Avro schema has been registered yet (registration still throws
+> `NotSupportedException` for Avro, since the reference extractor does not exist), so there was
+> no migration and no id churn.
+>
+> **What shipped:** `doc` is the only attribute stripped. `default`, `aliases`, `logicalType`,
+> `order` and any future attribute survive, normalised. For a schema that uses none of the
+> attributes PCF would have stripped, the output is byte-identical to PCF, and
+> `MatchesParsingCanonicalForm_WhenNothingSemanticWouldBeStripped` pins that so the deviation
+> stays confined to where PCF loses information.
+>
+> **What to weigh if you overturn it:** the cost of (B) is that Concordat's Avro canonical form
+> is not the spec's PCF, so anyone comparing Concordat's canonical text against another tool's
+> PCF output sees a difference for schemas using defaults or aliases. Schema *ids* were never
+> comparable across tools anyway — Concordat uses a 128-bit truncated SHA-256 over a versioned
+> preimage, Avro uses a 64-bit CRC — so nothing that interoperates today is affected.
 
 ---
 
@@ -173,6 +265,43 @@ ADR-015 requires. **Hard delete is not implemented**: DESIGN §4 wants "no regis
 consumers, an explicit force flag, and an audit entry", and both registered consumers and the
 audit log are M7. Confirm that v1 can ship with retire-only, or pull the pieces forward.
 
+### 16. Avro cross-subject references carry no version
+
+Found while scoping M5.2. JSON Schema's `$ref` resolves through an explicit
+`concordat://<env>/<subject>/<version>` URI (ADR terms already settled), and Protobuf's
+`import` filename will need its own answer in M5.3. Avro has neither: a cross-subject
+reference is just a bare named-type FQN string, e.g. `"acme.orders.Address"`, with no
+syntactic room to attach a version — or, in the common case of a reference buried inside a
+union or a field's `"type"`, no room to attach *anything*, since it is a plain JSON string,
+not an object.
+
+This is not an implementation gap that more effort closes; it is a real hole in what DESIGN §4
+specifies ("Avro named-type FQN → subject reference resolution") with no mechanism attached.
+`Concordat.Formats.Avro` today canonicalises and identifies Avro schemas but does not yet
+implement `ISchemaReferenceExtractor`, so no Avro schema can be registered with cross-subject
+references until this is settled.
+
+> **Options:**
+> - **Resolve to whichever version is currently `latest`.** Cheap, but reintroduces exactly the
+>   silent-behaviour-change problem ADR-017's gated `LatestPointer` exists to prevent — just one
+>   layer down, in the reference graph instead of the subject itself.
+> - **An object-wrapped reference carrying a Concordat-specific property**, e.g.
+>   `{"type": "acme.orders.Address", "concordat.refVersion": 3}`. The Avro specification's
+>   object form of a type (`{"type": "typeName", ...attributes}`) is documented for attaching
+>   extra attributes to any type, including a named-type reference, and unclaimed properties are
+>   preserved-but-ignored by conformant parsers — but this reading has not been verified against
+>   a second independent Avro implementation, and ADR-019 needs it to hold in every SDK, not just
+>   .NET's parser of its own convention.
+> - **Refuse cross-subject references in Avro for v1**, the way M2.3 refused to invent a
+>   spelling for generic message types rather than guess. A schema with an unresolvable external
+>   FQN fails registration with a clear error; self-contained (fully inlined) Avro schemas keep
+>   working today.
+>
+> **Recommendation:** the third option for now — it ships something correct rather than
+> something guessed, and is the same call already made for generic types (#10). If Avro
+> references turn out to matter for your schemas, the object-wrapped-property option is worth a
+> real spec check (or a message to the Avro mailing list) before it becomes an ADR.
+
 ---
 
 ## Commitments that must not be forgotten
@@ -281,6 +410,15 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | Diagnostic ids `CDT001`–`CDT005` are public surface, with release tracking | M3.4 | Low, but a consumer will put them in `<NoWarn>` |
 | The generator pins Roslyn **4.14** while the repo resolves 5.x | M3.4 | Low. An analyzer built against a newer Roslyn than the host fails to load |
 | `samples/ContractDrift` lives outside the solution | M3.4 | Low; the solution build must not depend on a sample |
+| Avro canonicalisation is hand-written against the spec, not delegated to a schema library | [M5.2](plan/M5-formats.md) | Low. Same reasoning as the JSON canonicaliser: ADR-019 needs it reproduced byte-for-byte in every SDK, and a library's own "canonical" output cannot be audited for that |
+| `Concordat.Formats.Avro` is registered in DI for canonicalisation and compatibility only, not references or bundling | M5.2 | Low, and deliberate: `ISchemaFormatRegistry` fails loudly for the unimplemented ones rather than silently guessing, so Avro registration is refused rather than half-working while [#16](#16-avro-cross-subject-references-carry-no-version) is open |
+| `doc` is the only Avro attribute stripped by canonicalisation | M5.2, and it is [#17](#17-avros-parsing-canonical-form-is-lossy-and-the-architecture-stores-the-canonical-form) | **Free today, needs a preimage bump and a migration once an Avro schema is stored** |
+| Four tokens added to `BreakingChangeKinds`: `name_changed`, `fixed_size_changed`, `type_promoted`, `enum_value_defaulted` | M5.2 | Low, and additive — but normative under ADR-019 once published, so a client may branch on them |
+| Avro compatibility runs resolution twice with the roles swapped, rather than deriving direction from one comparison | M5.2 | Low, and required: Avro resolution is asymmetric, so `int → long` is genuinely backward-compatible and forward-breaking at once |
+| An enum symbol absorbed by the reader's `default` is reported at `WireJson`, not `Wire` | M5.2 | Low. The bytes decode, so it is not a wire break — but the value read is not the value written, which is exactly a broken JSON mapping |
+| Numeric **and** `string`↔`bytes` promotions are all reported at `Source` | M5.2 | Low. `string`↔`bytes` is the arguable one: Avro's JSON encoding escapes bytes differently, so a case could be made for `WireJson`. Revisit if it bites |
+| Avro paths are name-based (`#/fields/note`), not RFC 6901 index-based like the JSON engine's | M5.2 | Low, but **user-visible in every finding**. Avro matches fields by name, so an index is not a stable identifier — reordering fields is compatible and would renumber every path |
+| `ContentModel` is ignored by the Avro checker | M5.2 | Low. Avro records are closed by construction; there is no `additionalProperties` equivalent to honour |
 
 ---
 

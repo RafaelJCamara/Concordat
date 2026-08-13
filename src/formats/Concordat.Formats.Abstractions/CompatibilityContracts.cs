@@ -78,6 +78,35 @@ public static class BreakingChangeKinds
     /// generated code changes from an integral type to a floating-point one.
     /// </summary>
     public const string IntegerWidenedToNumber = "integer_widened_to_number";
+
+    // ------------------------------------------------------------------------- Avro
+    //
+    // Added in M5.2. Additive to the catalogue, but still normative protocol under ADR-019:
+    // once published, a client may branch on them.
+
+    /// <summary>
+    /// A named type's fullname changed and no reader alias covers it. Avro resolves named
+    /// types by fullname, so the bytes do not decode.
+    /// </summary>
+    public const string NameChanged = "name_changed";
+
+    /// <summary>
+    /// A <c>fixed</c> type's width changed. The width is schema-declared rather than carried in
+    /// the data, so a change misaligns everything after it.
+    /// </summary>
+    public const string FixedSizeChanged = "fixed_size_changed";
+
+    /// <summary>
+    /// One primitive is promoted to a wider one on read — Avro's <c>int</c> → <c>long</c>.
+    /// Values still decode; the generated type changes. The second-axis case of ADR-016.
+    /// </summary>
+    public const string TypePromoted = "type_promoted";
+
+    /// <summary>
+    /// An enum symbol is absent from the reader and absorbed by its declared <c>default</c>.
+    /// Decoding succeeds, but the value read is not the value written.
+    /// </summary>
+    public const string EnumValueDefaulted = "enum_value_defaulted";
 }
 
 /// <summary>
