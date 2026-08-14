@@ -59,6 +59,7 @@ public sealed record ListApiKeysQuery : IQuery<IReadOnlyList<ApiKey>>;
 /// <summary>Handles <see cref="BootstrapOwnerCommand"/>.</summary>
 public sealed class BootstrapOwnerHandler(
     IUserRepository users,
+    ITenantRepository tenants,
     IPasswordHasher passwords,
     IAuditLog audit,
     IUnitOfWork unitOfWork,
@@ -98,6 +99,24 @@ public sealed class BootstrapOwnerHandler(
         if (created.IsFailure)
         {
             return created;
+        }
+
+        // The tenant row exists in both flavours (M9.1). Self-hosted has had a tenant *id*
+        // since M1.5 and no row to go with it, which left every membership pointing at
+        // nothing — harmless while the id was a constant, and a foreign key waiting to fail
+        // the moment Cloud made the table real.
+        if (await tenants.FindAsync(tenant.Current, cancellationToken).ConfigureAwait(false)
+            is null)
+        {
+            var organisation = Tenant.Create(
+                "Self-hosted", "self-hosted", clock.GetUtcNow(), tenant.Current);
+
+            if (organisation.IsFailure)
+            {
+                return Result<User>.Failure(organisation.Error!);
+            }
+
+            tenants.Add(organisation.Value);
         }
 
         users.Add(created.Value);

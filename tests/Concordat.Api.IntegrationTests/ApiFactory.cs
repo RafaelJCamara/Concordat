@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using Concordat.Infrastructure;
 using Concordat.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,6 +28,17 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public static JsonSerializerOptions Json { get; } =
         new(JsonSerializerDefaults.Web);
 
+    /// <summary>
+    /// Which deployment flavour to host as.
+    /// </summary>
+    /// <remarks>
+    /// Overridden by <c>CloudApiFactory</c>. It is a configuration value rather than a service
+    /// override on purpose: the point of M9.1 is that the profile is read once at the
+    /// composition root, so a test that reached in and replaced <c>ITenantContext</c> directly
+    /// would be proving something weaker than the thing that ships.
+    /// </remarks>
+    protected virtual ConcordatProfile Profile => ConcordatProfile.SelfHosted;
+
     async Task IAsyncLifetime.InitializeAsync()
     {
         await _container.StartAsync().ConfigureAwait(false);
@@ -39,6 +52,23 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         await _container.DisposeAsync().ConfigureAwait(false);
         await base.DisposeAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Applies settings the app reads before any service is registered.</summary>
+    /// <param name="builder">The web host builder.</param>
+    /// <remarks>
+    /// <b><c>UseSetting</c>, not <c>ConfigureAppConfiguration</c>.</b> Under minimal hosting
+    /// the app's top-level statements read <c>builder.Configuration</c> and build the host
+    /// before any <c>ConfigureAppConfiguration</c> callback this factory registers has run — so
+    /// a value added that way is present in configuration and was never seen by the code that
+    /// needed it. It fails silently, as a profile that stayed self-hosted while the test
+    /// believed it was Cloud.
+    /// </remarks>
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.UseSetting("Concordat:Profile", Profile.ToString());
     }
 
     /// <inheritdoc />

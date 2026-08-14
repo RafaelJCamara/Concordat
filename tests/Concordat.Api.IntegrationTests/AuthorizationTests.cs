@@ -382,15 +382,17 @@ public class AuthorizationTests(AuthApiFactory factory)
     /// Routes that mutate nothing despite their verb, or that authenticate rather than assume.
     /// </summary>
     /// <remarks>
-    /// Every entry is a decision, not an oversight. <c>/bootstrap</c> and <c>/signin</c> are how
-    /// a caller acquires a credential in the first place. <c>/resolve</c>, <c>/impact</c> and
-    /// <c>/lookup</c> are POSTs because their question does not fit in a URL, and they write
-    /// nothing. <c>/services</c> is reported by every SDK at startup and gating it would make
-    /// declaring intent a privileged act nobody performs.
+    /// Every entry is a decision, not an oversight. <c>/bootstrap</c>, <c>/signup</c> and
+    /// <c>/signin</c> are how a caller acquires a credential in the first place — requiring one
+    /// would make them unreachable. <c>/resolve</c>, <c>/impact</c> and <c>/lookup</c> are POSTs
+    /// because their question does not fit in a URL, and they write nothing. <c>/services</c> is
+    /// reported by every SDK at startup and gating it would make declaring intent a privileged
+    /// act nobody performs.
     /// </remarks>
     private static readonly string[] Exempt =
     [
         "/v1/auth/bootstrap",
+        "/v1/auth/signup",
         "/v1/auth/signin",
         "/contracts/resolve",
         "/subjects/{subject}/impact",

@@ -36,6 +36,15 @@ public static class IdentityEndpoints
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status409Conflict);
 
+        auth.MapPost("/signup", SignUp)
+            .WithSummary("Create an organisation and its first owner")
+            .WithDescription(
+                "Cloud's equivalent of first-run bootstrap. On a self-hosted deployment there " +
+                "is one organisation and this is not the way to get it — use /bootstrap.")
+            .Produces<SignedUpResponse>(StatusCodes.Status201Created)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
         auth.MapPost("/signin", SignIn)
             .WithSummary("Exchange an email and password for a credential")
             .WithDescription(
@@ -119,12 +128,36 @@ public static class IdentityEndpoints
                 "/v1/members", MemberResponse.From(result.Value, Role.Owner));
     }
 
+    private static async Task<IResult> SignUp(
+        SignUpRequest request, IDispatcher dispatcher, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var result = await dispatcher.SendAsync(
+            new SignUpCommand(
+                request.OrganisationName,
+                request.Slug,
+                request.Email,
+                request.DisplayName,
+                request.Password),
+            cancellationToken).ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Created(
+                "/v1/members",
+                new SignedUpResponse(
+                    result.Value.Tenant.Id.Value,
+                    result.Value.Tenant.Name,
+                    result.Value.Tenant.Slug,
+                    MemberResponse.From(result.Value.Owner, Role.Owner)));
+    }
+
     private static async Task<IResult> SignIn(
         SignInRequest request,
         Authenticator authenticator,
         IApiKeyRepository apiKeys,
         IUnitOfWork unitOfWork,
-        ITenantContext tenant,
         IOptions<AuthenticationOptions> options,
         TimeProvider clock,
         CancellationToken cancellationToken)
@@ -134,7 +167,7 @@ public static class IdentityEndpoints
         ArgumentNullException.ThrowIfNull(options);
 
         var caller = await authenticator.FromPasswordAsync(
-            request.Email, request.Password, tenant.Current, cancellationToken)
+            request.Email, request.Password, request.Organisation, cancellationToken)
             .ConfigureAwait(false);
 
         if (!caller.IsAuthenticated)
@@ -280,10 +313,35 @@ public static class IdentityEndpoints
 public sealed record BootstrapRequest(
     string Email, string Password, string? DisplayName = null);
 
+/// <summary>Request to create an organisation and its first owner.</summary>
+/// <param name="OrganisationName">What the organisation calls itself.</param>
+/// <param name="Email">The owner's login.</param>
+/// <param name="Password">At least 12 characters.</param>
+/// <param name="Slug">A URL-safe handle, or omit to derive one from the name.</param>
+/// <param name="DisplayName">What to show for the owner.</param>
+public sealed record SignUpRequest(
+    string OrganisationName,
+    string Email,
+    string Password,
+    string? Slug = null,
+    string? DisplayName = null);
+
+/// <summary>A newly created organisation and its owner.</summary>
+/// <param name="TenantId">The organisation's identity.</param>
+/// <param name="Name">What it calls itself.</param>
+/// <param name="Slug">Its URL-safe handle.</param>
+/// <param name="Owner">The first owner.</param>
+public sealed record SignedUpResponse(
+    Guid TenantId, string Name, string Slug, MemberResponse Owner);
+
 /// <summary>Request to sign in.</summary>
 /// <param name="Email">The login.</param>
 /// <param name="Password">The password.</param>
-public sealed record SignInRequest(string Email, string Password);
+/// <param name="Organisation">
+/// Which organisation to sign in to, by slug. Only needed by someone who belongs to more than
+/// one — which is nobody on a self-hosted deployment.
+/// </param>
+public sealed record SignInRequest(string Email, string Password, string? Organisation = null);
 
 /// <summary>Request to add a member.</summary>
 /// <param name="Email">Their login.</param>

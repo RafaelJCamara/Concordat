@@ -47,6 +47,10 @@ token and an operator can alert across a fleet.
 | `subscription_invalid` | A subscription named a channel or event token that is not known. |
 | `subscription_not_found` | No subscription with the given id exists in the environment. |
 | `scope_invalid` | A scope token is not one this build knows. |
+| `tenant_name_invalid` | An organisation name was empty or too long. |
+| `tenant_slug_invalid` | An organisation slug was not a usable DNS label. |
+| `tenant_already_exists` | An organisation with that slug already exists. |
+| `tenant_not_found` | No organisation matched the request. |
 | `role_invalid` | A role token is not one this build knows. |
 | `email_invalid` | An email address was empty, too long, or not an address. |
 | `password_invalid` | A password did not meet the minimum requirements. |
@@ -93,7 +97,7 @@ token and an operator can alert across a fleet.
 | `changelog_too_long` | A changelog exceeded the permitted length. |
 | `schema_unresolvable` | A client could not resolve a schema, so the operation could not be enforced. |
 
-**69 codes.**
+**73 codes.**
 
 ## Rules for implementers
 

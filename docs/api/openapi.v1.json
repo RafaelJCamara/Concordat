@@ -1688,6 +1688,57 @@
         }
       }
     },
+    "/v1/auth/signup": {
+      "post": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Create an organisation and its first owner",
+        "description": "Cloud's equivalent of first-run bootstrap. On a self-hosted deployment there is one organisation and this is not the way to get it — use /bootstrap.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignUpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedUpResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/auth/signin": {
       "post": {
         "tags": [
@@ -4903,6 +4954,35 @@
         },
         "description": "Request to mute or unmute a subscription."
       },
+      "SignedUpResponse": {
+        "required": [
+          "tenantId",
+          "name",
+          "slug",
+          "owner"
+        ],
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "description": "The organisation's identity.",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "description": "What it calls itself."
+          },
+          "slug": {
+            "type": "string",
+            "description": "Its URL-safe handle."
+          },
+          "owner": {
+            "description": "The first owner.",
+            "$ref": "#/components/schemas/MemberResponse"
+          }
+        },
+        "description": "A newly created organisation and its owner."
+      },
       "SignInRequest": {
         "required": [
           "email",
@@ -4917,6 +4997,13 @@
           "password": {
             "type": "string",
             "description": "The password."
+          },
+          "organisation": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Which organisation to sign in to, by slug. Only needed by someone who belongs to more than\r\none — which is nobody on a self-hosted deployment."
           }
         },
         "description": "Request to sign in."
@@ -4952,6 +5039,43 @@
           }
         },
         "description": "A credential and what it grants."
+      },
+      "SignUpRequest": {
+        "required": [
+          "organisationName",
+          "email",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "organisationName": {
+            "type": "string",
+            "description": "What the organisation calls itself."
+          },
+          "email": {
+            "type": "string",
+            "description": "The owner's login."
+          },
+          "password": {
+            "type": "string",
+            "description": "At least 12 characters."
+          },
+          "slug": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "A URL-safe handle, or omit to derive one from the name."
+          },
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "What to show for the owner."
+          }
+        },
+        "description": "Request to create an organisation and its first owner."
       },
       "SubjectRefInput": {
         "required": [

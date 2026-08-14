@@ -8,33 +8,41 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Concordat.Infrastructure;
 
-/// <summary>
-/// Binds a fixed tenant for every operation.
-/// </summary>
-/// <remarks>
-/// The self-hosted implementation of <see cref="ITenantContext"/>. Cloud swaps this at the
-/// composition root for one that resolves per request (DESIGN §8) — no code above this line
-/// changes, which is the point of wiring the seam from M1.5.
-/// </remarks>
-public sealed class SingleTenantContext : ITenantContext
-{
-    /// <inheritdoc />
-    public TenantId Current => TenantId.SelfHosted;
-}
-
 /// <summary>Registration helpers for the infrastructure layer.</summary>
 public static class DependencyInjection
 {
-    /// <summary>Registers the database context and the self-hosted tenant binding.</summary>
+    /// <summary>Registers the database context and everything the chosen profile implies.</summary>
     /// <param name="services">The service collection.</param>
     /// <param name="connectionString">A PostgreSQL connection string.</param>
+    /// <param name="profile">Which deployment flavour this process is (M9.1).</param>
     /// <returns>The same collection, for chaining.</returns>
+    /// <remarks>
+    /// <b>The profile is read here and nowhere else.</b> DESIGN §10 asks for one image serving
+    /// both flavours, and the way that stays true is that the difference is a registration
+    /// rather than a branch — query code that tested a flag would eventually test it wrongly,
+    /// and the failure mode of getting tenancy wrong is silently serving another organisation's
+    /// data.
+    /// </remarks>
     public static IServiceCollection AddConcordatPersistence(
-        this IServiceCollection services, string connectionString)
+        this IServiceCollection services,
+        string connectionString,
+        ConcordatProfile profile = ConcordatProfile.SelfHosted)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddSingleton<ITenantContext, SingleTenantContext>();
+        // Scoped in both flavours, even though the self-hosted answer never changes: a
+        // singleton here would be a lifetime that has to be revisited the day Cloud is
+        // switched on, and revisiting a lifetime under time pressure is how a request ends up
+        // holding another request's tenant.
+        if (profile is ConcordatProfile.Cloud)
+        {
+            services.AddScoped<ITenantContext, CallerTenantContext>();
+        }
+        else
+        {
+            services.AddScoped<ITenantContext, SingleTenantContext>();
+        }
+
         services.AddDbContext<ConcordatDbContext>(options => options.UseNpgsql(connectionString));
 
         services.AddScoped<ISubjectRepository, SubjectRepository>();
@@ -46,6 +54,7 @@ public static class DependencyInjection
         services.AddScoped<IOutbox, Outbox>();
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<ITenantRepository, TenantRepository>();
         services.AddScoped<IApiKeyRepository, ApiKeyRepository>();
 
         // Singleton: it holds no state beyond the derived dummy hash, and that is exactly the
@@ -54,6 +63,10 @@ public static class DependencyInjection
         services.AddScoped<ICredentialStore, DataProtectionCredentialStore>();
         services.AddScoped<IBrokerHealthProbe, RabbitMqBrokerHealthProbe>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        // Scoped, not singleton: it reads the current tenant, and a singleton would answer with
+        // whichever organisation happened to be in scope when it was first resolved.
+        services.AddScoped<IEnvironmentResolver, DerivedEnvironmentResolver>();
 
         return services;
     }

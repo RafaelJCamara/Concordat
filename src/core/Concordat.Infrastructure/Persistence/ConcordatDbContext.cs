@@ -92,6 +92,12 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
     /// </summary>
     public DbSet<User> Users => Set<User>();
 
+    /// <summary>
+    /// Organisations (M9.1). Global by necessity — this table is what everything else is
+    /// filtered <em>by</em>, so a filter here would stop an organisation reading its own row.
+    /// </summary>
+    public DbSet<Tenant> Tenants => Set<Tenant>();
+
     /// <summary>Which tenants a user belongs to, and as what (M8.1).</summary>
     public DbSet<Membership> Memberships => Set<Membership>();
 
@@ -118,6 +124,7 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.ApplyConfiguration(new AuditEntryConfiguration());
         modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
         modelBuilder.ApplyConfiguration(new NotificationSubscriptionConfiguration());
+        modelBuilder.ApplyConfiguration(new TenantConfiguration());
         modelBuilder.ApplyConfiguration(new UserConfiguration());
         modelBuilder.ApplyConfiguration(new MembershipConfiguration());
         modelBuilder.ApplyConfiguration(new ApiKeyConfiguration());

@@ -41,6 +41,15 @@ internal sealed class UserRepository(ConcordatDbContext context) : IUserReposito
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<Membership>> ListMembershipsAsync(
+        UserId userId, CancellationToken cancellationToken) =>
+        await context.Memberships
+            .Where(m => m.UserId == userId)
+            .OrderBy(m => m.CreatedAt)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
     public Task<Membership?> FindMembershipAsync(
         TenantId tenantId, UserId userId, CancellationToken cancellationToken) =>
         context.Memberships.SingleOrDefaultAsync(
@@ -86,4 +95,19 @@ internal sealed class ApiKeyRepository(ConcordatDbContext context) : IApiKeyRepo
 
     /// <inheritdoc />
     public void Add(ApiKey key) => context.ApiKeys.Add(key);
+}
+
+/// <inheritdoc />
+internal sealed class TenantRepository(ConcordatDbContext context) : ITenantRepository
+{
+    /// <inheritdoc />
+    public Task<Tenant?> FindAsync(TenantId id, CancellationToken cancellationToken) =>
+        context.Tenants.SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<Tenant?> FindBySlugAsync(string slug, CancellationToken cancellationToken) =>
+        context.Tenants.SingleOrDefaultAsync(t => t.Slug == slug, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(Tenant tenant) => context.Tenants.Add(tenant);
 }

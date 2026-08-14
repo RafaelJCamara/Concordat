@@ -165,6 +165,7 @@ public static class DependencyInjection
         // M8 identity.
         services.AddScoped<Authenticator>();
         services.AddScoped<ICommandHandler<BootstrapOwnerCommand, User>, BootstrapOwnerHandler>();
+        services.AddScoped<ICommandHandler<SignUpCommand, SignedUp>, SignUpHandler>();
         services.AddScoped<ICommandHandler<CreateMemberCommand, User>, CreateMemberHandler>();
         services.AddScoped<
             ICommandHandler<ChangeMemberRoleCommand, Membership>, ChangeMemberRoleHandler>();

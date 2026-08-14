@@ -110,6 +110,18 @@ public static class ConcordatCodes
     /// <summary>A scope token is not one this build knows.</summary>
     public const string ScopeInvalid = "scope_invalid";
 
+    /// <summary>An organisation name was empty or too long.</summary>
+    public const string TenantNameInvalid = "tenant_name_invalid";
+
+    /// <summary>An organisation slug was not a usable DNS label.</summary>
+    public const string TenantSlugInvalid = "tenant_slug_invalid";
+
+    /// <summary>An organisation with that slug already exists.</summary>
+    public const string TenantAlreadyExists = "tenant_already_exists";
+
+    /// <summary>No organisation matched the request.</summary>
+    public const string TenantNotFound = "tenant_not_found";
+
     /// <summary>A role token is not one this build knows.</summary>
     public const string RoleInvalid = "role_invalid";
 

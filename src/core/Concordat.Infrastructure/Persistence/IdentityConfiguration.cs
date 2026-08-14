@@ -58,6 +58,44 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
     }
 }
 
+/// <summary>
+/// Maps <see cref="Tenant"/> (M9.1).
+/// </summary>
+/// <remarks>
+/// No query filter: the tenant table <em>is</em> the thing being filtered by, so a filter here
+/// would make an organisation unable to read its own row.
+/// </remarks>
+internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
+{
+    public void Configure(EntityTypeBuilder<Tenant> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("tenant");
+        builder.HasKey(x => x.Id);
+
+        builder.Property(x => x.Id)
+            .HasColumnName("tenant_id")
+            .HasConversion(id => id.Value, value => new TenantId(value))
+            .ValueGeneratedNever();
+
+        builder.Property(x => x.Name)
+            .HasColumnName("name")
+            .HasMaxLength(Tenant.MaxNameLength)
+            .IsRequired();
+
+        builder.Property(x => x.Slug)
+            .HasColumnName("slug")
+            .HasMaxLength(Tenant.MaxSlugLength)
+            .IsRequired();
+
+        builder.Property(x => x.CreatedAt).HasColumnName("created_at");
+
+        // A slug is a DNS label in Cloud, so two organisations cannot share one.
+        builder.HasIndex(x => x.Slug).IsUnique().HasDatabaseName("ux_tenant_slug");
+    }
+}
+
 /// <summary>Maps <see cref="Membership"/> (M8.1).</summary>
 internal sealed class MembershipConfiguration : IEntityTypeConfiguration<Membership>
 {

@@ -16,8 +16,13 @@ var connectionString =
     builder.Configuration.GetConnectionString("Concordat")
     ?? "Host=localhost;Database=concordat;Username=postgres;Password=postgres";
 
+// M9.1: the one place the deployment flavour is read. Everything it implies — how the tenant
+// is resolved, and therefore what every global query filter sees — is a registration below
+// this line rather than a branch anywhere above it.
+var profile = builder.Configuration.GetValue("Concordat:Profile", ConcordatProfile.SelfHosted);
+
 builder.Services.AddConcordatApplication();
-builder.Services.AddConcordatPersistence(connectionString);
+builder.Services.AddConcordatPersistence(connectionString, profile);
 
 // M7.5: both channels are registered whether or not SMTP is configured. A channel is only
 // reached when a subscription names it, and an unconfigured one fails loudly with the reason
@@ -68,8 +73,6 @@ builder.Services.AddSingleton<ISchemaCanonicalizer, ProtoSchemaCanonicalizer>();
 builder.Services.AddSingleton<ICompatibilityChecker, ProtoSchemaCompatibilityChecker>();
 builder.Services.AddSingleton<ISchemaReferenceExtractor, ProtoSchemaReferenceExtractor>();
 builder.Services.AddSingleton<ISchemaBundler, ProtoSchemaBundler>();
-
-builder.Services.AddSingleton<IEnvironmentResolver, DerivedEnvironmentResolver>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi("v1");

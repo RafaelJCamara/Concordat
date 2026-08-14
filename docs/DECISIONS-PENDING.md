@@ -429,6 +429,46 @@ it, and nothing says so.
 > **Recommendation:** (a) plus a banner in the web app. (c) is tempting but wrong: the common
 > evaluation path is a container, where nothing is loopback.
 
+### 28. Cloud needs credentials and accounts that only you can create
+
+M9.1 is done and its exit criterion is met. **Everything remaining in M9 is blocked on things
+that are yours, not mine**, and it is worth naming them together rather than discovering them
+one at a time:
+
+| Needed for | What | Why it cannot be faked |
+|---|---|---|
+| M9.1 | A KMS (AWS KMS, GCP KMS, Azure Key Vault) | The Data Protection key ring is already an abstraction; pointing it at a KMS is a provider choice plus credentials. A test would be mocking the cloud, which proves the mock works |
+| M9.2 | Google and GitHub OAuth client registrations | Redirect URIs have to be registered against a real domain, which is #3 |
+| M9.3 | A Stripe account and API keys | Metering can be built and tested without one; the adapter that ships money cannot |
+| M9.4 | A Kubernetes cluster to install into | A Helm chart can be written and linted without one, but "the same image serves both profiles" is only shown by running it |
+
+> **Recommendation:** decide the cloud provider first, because it settles the KMS and probably
+> the cluster. Until then M9.3's *metering* is the part with no external dependency — counting
+> subjects, versions, requests, environments and seats needs nothing from Stripe, and the
+> billing adapter is a thin layer on top of numbers that have to be right anyway.
+
+### 29. A signup writes no audit entry
+
+Audit rows are stamped with the tenant in scope, and at signup nobody has authenticated — so
+the scope is whatever an anonymous caller resolves to, which is not the organisation being
+created. Writing one anyway would put a row in a *different* organisation's trail, which is
+worse than no row at all.
+
+The record of a signup today is the tenant's `CreatedAt` and its owner's membership, both
+queryable. That is enough to answer "when did this organisation start", and not enough to
+answer "who created it, from where".
+
+> **Options:** (a) let `IAuditLog.Append` take an explicit tenant, and have `StampTenant` fill
+> in only what is unset — small, and it makes cross-tenant writes possible everywhere, which is
+> a capability worth being deliberate about; (b) a separate signup log that is not tenant-scoped
+> at all, which is honest about it being deployment-level rather than organisation-level; (c)
+> leave it.
+>
+> **Recommendation:** (b). Signup, tenant suspension and billing events are things the
+> *operator* did, not things an organisation did, and they want a different retention and a
+> different reader. Bending the tenant-scoped trail to hold them is how it stops being
+> trustworthy.
+
 ### 15. Hard-delete semantics — before v1 ships
 
 M1.5 implements soft delete (`Subject.Retire()`) and never deletes schemas, which is what
@@ -629,6 +669,13 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | Sign-out drops the credential locally and does not revoke the session key | M8.2 | Low. It expires on its own; revoking would mean one row deleted per tab closed. A user who needs it gone sooner revokes it from the keys screen |
 | `*cdIfScope` and `scopeGuard` live in `core/auth`, not `shared/ui` | M8.2 | Low, and forced by the boundary lint: `shared` may not depend on `core`, and both read the session store |
 | An unrecognised scope from a newer server is dropped client-side | M8.2, `AuthApi` | Low, and the safe direction: it hides an affordance rather than showing one. The server remains the authority |
+| The tenant is in the derived environment-id preimage, except for `TenantId.SelfHosted` | [M9.1](plan/M9-cloud.md) | **Cannot be changed for Cloud once an organisation exists.** The self-hosted exception is what makes it a zero-migration upgrade: existing ids were computed without a tenant segment, and changing them would point every subject at an environment that no longer exists |
+| `ITenantContext` is scoped in **both** profiles | M9.1 | Low. A singleton for self-hosted would be a lifetime somebody has to revisit the day Cloud is switched on, under time pressure, and getting it wrong means a request holding another request's tenant |
+| `IEnvironmentResolver` is now scoped, not singleton | M9.1 | Low, and forced: it reads the current tenant, and a singleton would answer with whichever organisation was in scope when it was first resolved |
+| Sign-in takes an optional organisation slug and refuses an ambiguous one | M9.1 | Low, and user-visible only for someone in several organisations. Choosing for them would drop somebody into the wrong one silently |
+| An anonymous Cloud caller resolves to `TenantId.SelfHosted` — an organisation nobody belongs to | M9.1 | Low, and deliberate: an empty view beats a full one. It is not a real organisation in a Cloud deployment |
+| `Tenant` has an immutable slug and a mutable name | M9.1 | Low. The slug is a DNS label and appears in URLs; renaming it breaks links somebody has already sent |
+| The Cloud test fixture sets the profile with `UseSetting`, not `ConfigureAppConfiguration` | M9.1, `ApiFactory` | Low, and a trap worth knowing: under minimal hosting the app reads configuration and builds before any `ConfigureAppConfiguration` callback runs, so the value is present and was never seen. It failed silently as a profile that stayed self-hosted while the test believed it was Cloud |
 
 ---
 

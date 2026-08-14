@@ -25,6 +25,7 @@ namespace Concordat.Application.Identity;
 public sealed class Authenticator(
     IApiKeyRepository apiKeys,
     IUserRepository users,
+    ITenantRepository tenants,
     IPasswordHasher passwords,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
@@ -71,11 +72,20 @@ public sealed class Authenticator(
     /// <summary>Resolves an email and password.</summary>
     /// <param name="email">The login.</param>
     /// <param name="password">The plaintext.</param>
-    /// <param name="tenantId">Which tenant to resolve membership in.</param>
+    /// <param name="organisation">
+    /// Which organisation to sign in to, by slug. Optional, and unnecessary for anyone who
+    /// belongs to exactly one — which is everybody on a self-hosted deployment.
+    /// </param>
     /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>The caller, or <see cref="Caller.Anonymous"/>.</returns>
+    /// <remarks>
+    /// <b>The organisation is discovered, not assumed.</b> An earlier version took the ambient
+    /// tenant, which is fine when there is one and wrong the moment there are two: at sign-in
+    /// nobody has authenticated yet, so the ambient tenant is whatever an anonymous caller
+    /// resolves to — never the one the user actually belongs to.
+    /// </remarks>
     public async Task<Caller> FromPasswordAsync(
-        string? email, string? password, TenantId tenantId, CancellationToken cancellationToken)
+        string? email, string? password, string? organisation, CancellationToken cancellationToken)
     {
         var address = EmailAddress.Create(email);
 
@@ -99,8 +109,8 @@ public sealed class Authenticator(
             return Caller.Anonymous;
         }
 
-        var membership = await users
-            .FindMembershipAsync(tenantId, user.Id, cancellationToken).ConfigureAwait(false);
+        var membership = await ResolveMembershipAsync(user, organisation, cancellationToken)
+            .ConfigureAwait(false);
 
         if (membership is null)
         {
@@ -122,9 +132,36 @@ public sealed class Authenticator(
 
         return new Caller(
             CredentialKind.User,
-            tenantId,
+            membership.TenantId,
             Roles.SetFor(membership.Role),
             user.Actor(),
             user.Id);
+    }
+
+    /// <summary>Works out which organisation a verified user is signing in to.</summary>
+    /// <remarks>
+    /// An ambiguous sign-in — several memberships and no organisation named — fails rather than
+    /// picking one. Choosing for them would silently drop somebody into the wrong organisation,
+    /// and the first sign they were in the wrong place would be data they did not expect.
+    /// </remarks>
+    private async Task<Membership?> ResolveMembershipAsync(
+        User user, string? organisation, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(organisation))
+        {
+            var tenant = await tenants
+                .FindBySlugAsync(organisation.Trim().ToLowerInvariant(), cancellationToken)
+                .ConfigureAwait(false);
+
+            return tenant is null
+                ? null
+                : await users.FindMembershipAsync(tenant.Id, user.Id, cancellationToken)
+                    .ConfigureAwait(false);
+        }
+
+        var memberships = await users.ListMembershipsAsync(user.Id, cancellationToken)
+            .ConfigureAwait(false);
+
+        return memberships.Count is 1 ? memberships[0] : null;
     }
 }

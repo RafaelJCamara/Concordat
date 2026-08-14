@@ -394,6 +394,37 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                     b.ToTable("membership", (string)null);
                 });
 
+            modelBuilder.Entity("Concordat.Domain.Identity.Tenant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(63)
+                        .HasColumnType("character varying(63)")
+                        .HasColumnName("slug");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Slug")
+                        .IsUnique()
+                        .HasDatabaseName("ux_tenant_slug");
+
+                    b.ToTable("tenant", (string)null);
+                });
+
             modelBuilder.Entity("Concordat.Domain.Identity.User", b =>
                 {
                     b.Property<Guid>("Id")

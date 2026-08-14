@@ -62,6 +62,17 @@ public interface IUserRepository
     Task<IReadOnlyList<(User User, Membership Membership)>> ListMembersAsync(
         TenantId tenantId, CancellationToken cancellationToken);
 
+    /// <summary>Lists every organisation a user belongs to.</summary>
+    /// <param name="userId">The user.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>Their memberships.</returns>
+    /// <remarks>
+    /// Sign-in needs this because the organisation is not known until the password verifies —
+    /// self-hosted has exactly one, and Cloud may have several.
+    /// </remarks>
+    Task<IReadOnlyList<Membership>> ListMembershipsAsync(
+        UserId userId, CancellationToken cancellationToken);
+
     /// <summary>Finds a user's membership in a tenant.</summary>
     /// <param name="tenantId">The tenant.</param>
     /// <param name="userId">The user.</param>
