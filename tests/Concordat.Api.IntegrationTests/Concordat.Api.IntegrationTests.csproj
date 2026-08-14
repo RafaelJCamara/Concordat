@@ -26,6 +26,30 @@
       the thing most likely to be wrong and least likely to be caught by either side's own tests.
     -->
     <ProjectReference Include="..\..\src\clients\Concordat.Client\Concordat.Client.csproj" />
+
+    <!--
+      The contract-testing package, checked against the real API rather than a fake. What could
+      go wrong here is the two disagreeing about the compatibility endpoint's response shape,
+      and only a test that uses both would ever notice.
+    -->
+    <ProjectReference Include="..\..\src\contracts\Concordat.Contracts.Testing\Concordat.Contracts.Testing.csproj" />
+
+    <!--
+      Analyzers do not flow across a ProjectReference, so the generator is asked for explicitly.
+      Without it the marked type below produces no assembly attribute and the tests would pass by
+      asserting on nothing.
+    -->
+    <ProjectReference Include="..\..\src\contracts\Concordat.Contracts.Generators\Concordat.Contracts.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
+
+  <!--
+    Hands the checked-in contract to the generator, exactly as the NuGet package does for a
+    consumer. Without it the generator finds no AdditionalFiles and refuses the marked type,
+    which is the CDT004 diagnostic doing its job: a drift check with nothing to check against
+    would pass on a project whose contracts were never compared.
+  -->
+  <Import Project="..\..\src\contracts\Concordat.Contracts\build\Concordat.Contracts.props" />
 
 </Project>

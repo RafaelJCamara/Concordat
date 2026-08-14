@@ -319,22 +319,40 @@ disappoints, because a human reading it wants to know what changed, not only wha
 > **Recommendation:** leave it for v1. The CLI says so explicitly, and widening
 > `allDivergences[]` risks the corpus for a reporting nicety.
 
-### 13. `Concordat.Contracts.Testing` — deferred out of M3.4, decide whether v1 needs it
+### 13. ~~`Concordat.Contracts.Testing`~~ — built
 
-`await ConcordatAssert.CompatibleAsync<OrderCreated>(env: "prod")` was in the M3.4 list and is
-not built. The reason is not effort: the obvious implementation reflects over the runtime type
-to produce a schema, which would be **a second implementation of the C#-to-JSON-Schema
-mapping** alongside the generator's, and the two would drift — the exact failure this milestone
-exists to prevent.
+**Resolved 2026-08-14: built, before v1, as recommended.** `ConcordatAssert.CompatibleAsync<T>`
+and `AllCompatibleAsync(assembly)` ask a live registry whether a contract type still fits what
+that environment is serving.
 
-The groundwork is done. The generator emits
-`[assembly: ConcordatGeneratedSchema(subject, clrType, schema)]`, so the package can read the
-compile-time schema instead of recomputing it, and only needs to POST it to the compatibility
-endpoint.
+**It answers a question the build-time check cannot.** `concordat check` and the M3.4 analyser
+compare a type against the schema file beside it — they catch drift from the *file*, in the pull
+request that caused it, and neither knows what is deployed. This catches drift from what is
+running in `prod`, which is the failure that pages somebody. A test pins exactly that case: the
+type is unchanged and its file is unchanged, so both build-time checks are green, and the
+assertion still fails because the registry moved underneath them.
 
-> **Recommendation:** build it, small, before v1 — the compile-time check catches drift from
-> the *file*, but only a call to the registry catches drift from what is deployed in `prod`.
-> Those are different questions and a team needs both.
+**It reads the generator's emitted schema and never derives one.** The reason this was deferred
+in the first place stands: reflecting over the runtime type would be a second implementation of
+the C#-to-JSON-Schema mapping, the two would drift, and *a drift detector that drifts* is worse
+than none — it reports failures nobody can reproduce and, far worse, passes while the real
+mapping has changed. The only source is `ConcordatGeneratedSchemaAttribute`.
+
+Four defaults chosen so the check does not get deleted by whoever is waiting for the build:
+
+- **An unknown subject is compatible**, by default. A team adding a new type has not broken
+  anything, and a red test between writing the type and CI first pushing it teaches them the
+  check cries wolf. Turn it off in a suite whose job is to prove every contract is registered.
+- **An unreachable registry is not an incompatibility.** A test that fails identically either way
+  trains a team to rerun it rather than read it.
+- **A ten-second timeout**, not the hundred-second default.
+- **No test-framework dependency.** It throws, and xunit, NUnit and MSTest all report that as a
+  failure; inheriting from one framework's assertion base would make the package unusable in the
+  other two.
+
+Tested against the real API rather than a fake handler, which is what the `Handler` option on
+`ConcordatTestOptions` is for — and it doubles as the seam a corporate proxy or a self-signed
+registry certificate needs.
 
 ### 14. The quarantine exchange is declared by the application — confirm
 

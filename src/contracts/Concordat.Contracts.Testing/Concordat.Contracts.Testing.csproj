@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <Description>
+      Asserts in a test that a contract type is still compatible with what a live registry holds.
+    </Description>
+    <PackageTags>concordat;schema-registry;contract-testing</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The attribute package only. This deliberately does NOT reference the SDK: everything here
+      is one HTTP call, and pulling Concordat.Client in would put a caching schema client into
+      every test project in order to make one request.
+    -->
+    <ProjectReference Include="..\Concordat.Contracts\Concordat.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

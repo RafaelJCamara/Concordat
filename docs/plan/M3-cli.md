@@ -221,7 +221,8 @@ It is a Docker action rather than a composite one because a composite would have
 - [x] `Concordat.Contracts` — `[ConcordatContract("acme.orders.OrderCreated")]`
 - [x] Roslyn generator: a schema per attributed type, diffed against checked-in `contracts/`, **error on drift**
 - [x] `samples/ContractDrift` — the feature as a runnable example, gated in CI
-- [ ] `Concordat.Contracts.Testing` — **deferred**, and the reason is below
+- [x] `Concordat.Contracts.Testing` — built 2026-08-14 (decision 13). The deferral's reason
+      stands and shaped it: it reads the generator's emitted schema and never derives one
 
 ### No MSBuild task. A generator instead.
 

@@ -7,6 +7,7 @@
   <Folder Name="/src/contracts/">
     <Project Path="src/contracts/Concordat.Contracts.Generators/Concordat.Contracts.Generators.csproj" />
     <Project Path="src/contracts/Concordat.Contracts/Concordat.Contracts.csproj" />
+    <Project Path="src/contracts/Concordat.Contracts.Testing/Concordat.Contracts.Testing.csproj" />
   </Folder>
   <Folder Name="/src/core/">
     <Project Path="src/core/Concordat.Application/Concordat.Application.csproj" />
