@@ -13,5 +13,10 @@ docs/
 scripts/
 artifacts/
 
+# The CLI image needs nothing from the Angular app, and node_modules is tens of thousands of
+# files — by far the largest thing that would otherwise be uploaded as build context on every
+# CI run.
+web/
+
 *.user
 *.suo

@@ -204,7 +204,7 @@ public sealed class ProtoSchemaCompatibilityChecker : ICompatibilityChecker
 
             // The message is gone under this name. Splitting a .proto across files leaves the
             // definition reachable through an import, which this engine cannot follow yet
-            // (DECISIONS-PENDING #16), so it is reported as a rename rather than a deletion.
+            // (ADR-023), so it is reported as a rename rather than a deletion.
             Both(found,
                 fullName,
                 BreakingChangeKinds.NameChanged,

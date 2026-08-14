@@ -248,6 +248,51 @@ and the exchange provisioned ahead of time.
 > **Which is your estate?** It changes the recommended default in the deployment docs, not the
 > code.
 
+### 19. The envelope spec describes payload framing that does not exist
+
+Found while writing [`docs/protocol/envelope.md`](protocol/envelope.md) — the first time anyone
+tried to write the envelope down completely enough to implement from.
+
+ADR-010 and DESIGN §2 both describe **payload framing** as part of the envelope: a
+`0x01 | <16-byte id>` prefix Concordat writes, and a read-only `0x00 | <int32 big-endian>`
+Confluent-compatible form. **Nothing in `src/` implements either.** The same is true of the
+CloudEvents read support DESIGN §2 describes.
+
+The spec now says plainly that they are unimplemented, so nobody builds an SDK from the prose
+and finds nothing to interoperate with. But that leaves a normative document and an ADR
+describing behaviour the product does not have.
+
+> **Options:** implement framing in v1 — it is the only way to carry identity where headers do
+> not survive, which is the whole Mode A/Mode B distinction; or amend ADR-010 to scope it out
+> and say what the answer is for brokers that drop headers.
+>
+> **Recommendation:** amend for now. Every transport measured in M2.5 preserved
+> `concordat-*` headers, so framing has no demonstrated need yet — and an unimplemented
+> paragraph in a normative document is worse than an honest gap.
+
+### 20. Mode A and Mode B disagree about whitespace and invalid types
+
+Also found writing the envelope spec, and it reads as an implementation inconsistency rather
+than a rule anyone chose:
+
+- A padded `properties.type` (`"  acme.X  "`) is **warned about and ignored** on the Mode A
+  path, but **trimmed and accepted** on the Mode B path, because `SubjectName.Create` trims.
+- An invalid `properties.type` is **warned about** under Mode A and **silently dropped** under
+  Mode B.
+- A padded `concordat-semver` is accepted for the same reason, which contradicts the reader's
+  own stated no-trim rule.
+
+Two paths reaching different verdicts on the same bytes is exactly the class of divergence the
+conformance corpus exists to prevent, and no fixture covers it — which is why it survived.
+
+> **Recommendation:** make Mode B match Mode A (warn, do not trim). Trimming is the more
+> forgiving behaviour, but it means a subject name's identity depends on which envelope mode a
+> publisher happened to use. Whichever wins, it needs corpus fixtures in the same change.
+
+> **Related and smaller:** `envelope_format_mismatch` is in the published `concordatCode`
+> catalogue and **nothing emits it**. Either the check it was written for is missing, or the
+> code should go.
+
 ### 15. Hard-delete semantics — before v1 ships
 
 M1.5 implements soft delete (`Subject.Retire()`) and never deletes schemas, which is what

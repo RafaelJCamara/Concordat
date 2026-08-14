@@ -58,10 +58,16 @@ Everything is Apache-2.0, including the Cloud code.
 
 | | |
 |---|---|
+| [docs/QUICKSTART.md](docs/QUICKSTART.md) | Run the stack locally and publish through it, ending with a message refused for breaking its contract |
+| [**docs/protocol/**](docs/protocol/README.md) | **The protocol.** The five normative artifacts, and everything needed to write a client in any language |
 | [docs/DESIGN.md](docs/DESIGN.md) | Full architecture: domain model, envelope spec, API surface, SDK bindings, decisions |
 | [docs/PLAN.md](docs/PLAN.md) | Delivery plan: milestones M0–M9 broken into numbered work packages with exit criteria |
 | [docs/DECISIONS-PENDING.md](docs/DECISIONS-PENDING.md) | Open decisions, decisions taken on the owner's behalf, and a log of what is settled |
-| `docs/adr/` | Architecture decision records (to be written — the 22 decisions are tabulated in DESIGN.md) |
+| [docs/adr/](docs/adr/README.md) | The 23 architecture decision records. Canonical — the table in DESIGN.md is a digest of them |
+
+> **Writing a client?** Start at [docs/protocol/](docs/protocol/README.md), not DESIGN.md.
+> ADR-019's acceptance test is that you never need to read a line of this repository's C#; if
+> you do, that is a bug in those documents and worth an issue.
 
 ## License
 

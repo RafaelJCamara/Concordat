@@ -26,7 +26,7 @@ namespace Concordat.Formats.Protobuf;
 ///   <item><description><b>type references resolved</b> to leading-dot fullnames wherever the
 ///     document defines them, so <c>Item</c>, <c>Order.Item</c> and <c>.acme.Order.Item</c>
 ///     canonicalise identically. A reference reached through an <c>import</c> is left as
-///     written — resolving it needs the imported file (DECISIONS-PENDING #16);</description></item>
+///     written — resolving it needs the imported file, which ADR-023 refuses for v1;</description></item>
 ///   <item><description>imports sorted; DESIGN §12 requires import order not to affect the
 ///     schema id;</description></item>
 ///   <item><description>definitions sorted by name, fields by <b>number</b>, enum values by

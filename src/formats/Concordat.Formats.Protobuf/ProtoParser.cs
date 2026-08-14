@@ -447,7 +447,7 @@ internal static class ProtoParser
     /// leading-dot fullname, so <c>Item</c>, <c>Order.Item</c> and <c>.acme.Order.Item</c>
     /// canonicalise identically. A reference this document does not define — anything reached
     /// through an <c>import</c> — is left exactly as written, because resolving it needs the
-    /// imported file, which is DECISIONS-PENDING #16.
+    /// imported file, which ADR-023 refuses for v1.
     /// </remarks>
     private static void CollectDefined(PendingMessage message, string scope, HashSet<string> into)
     {

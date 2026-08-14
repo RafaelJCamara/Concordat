@@ -23,9 +23,35 @@ Do this before the first SDK, not during it.
       leakage. See below
 - [x] Expand the payload-validation corpus — **4 fixtures to 12, and every one of the 8 new
       cases failed on first run.** See below
-- [ ] Publish the five normative artifacts as a coherent set (OpenAPI, envelope spec, canonicalisation rules, `concordatCode` catalogue, conformance corpus)
+- [x] Publish the five normative artifacts as a coherent set — [`docs/protocol/`](../protocol/README.md),
+      ~1,400 lines. See below
 - [ ] Surface portability findings in `concordat lint` — the offline path, and the one a
-      pre-commit hook can afford
+      pre-commit hook can afford. **Deferred to M6.2**, where the first non-.NET SDK makes the
+      offline path matter; nothing about it is blocking
+
+### Writing the protocol down found what reading it never did
+
+The five artifacts existed; they were not a *set*. Two were unreadable to the audience ADR-019
+names — the `concordatCode` catalogue was a C# file, and the envelope and canonicalisation
+rules were prose scattered through DESIGN.md. An SDK author had nowhere to start.
+
+`docs/protocol/` is now that entry point, and it states the authority order plainly: **prose
+explains, the corpus decides.** The catalogue is *generated* from `ConcordatCodes.cs` and gated
+in CI, joining the OpenAPI document — both were quietly wrong at some point precisely because
+nothing compared the artifact to the thing it described.
+
+**The exercise found a schema-id divergence that would have broken content addressing across
+languages.** Canonicalisation escapes characters outside the Basic Multilingual Plane as
+UTF-16 surrogate pairs with uppercase hex, while accented Latin and CJK pass through raw. A Go
+or Python implementation emits the supplementary character raw as UTF-8, computes different
+canonical bytes, and therefore a **different schema id for the same schema**. ADR-015 claims an
+id is reproducible offline in any implementation; nothing pinned this, and every other fixture
+in the corpus would still have passed. Two fixtures now pin it.
+
+Three further gaps are recorded rather than papered over: payload framing that ADR-010 describes
+and no code implements ([#19](../DECISIONS-PENDING.md)), Mode A and Mode B disagreeing about
+whitespace ([#20](../DECISIONS-PENDING.md)), and `envelope_format_mismatch` published but never
+emitted.
 
 ### The payload corpus found four real divergences, all in our own validator
 

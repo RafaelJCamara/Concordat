@@ -1,0 +1,7 @@
+{
+  "name": "control-characters-and-quotes-use-the-shortest-standard-escape",
+  "why": "Two implementations can both emit valid JSON and still differ: a tab may be written \\t or \\u0009 and either round-trips through any parser. Canonicalisation cannot tolerate the choice, because the bytes are hashed. This pins the short forms for the characters that have one, \\uXXXX for the controls that do not, and that markup is NOT escaped — .NET's default encoder escapes < > and & for HTML safety, which would make the canonical form depend on where the text might later be displayed rather than on what the schema says.",
+  "format": "json",
+  "input": "{\"t\":\"tab\\there\\nnewline \\\"quoted\\\" back\\\\slash bell\\u0007\"}",
+  "canonical": "{\"t\":\"tab\\there\\nnewline \\\"quoted\\\" back\\\\slash bell\\u0007\"}"
+}

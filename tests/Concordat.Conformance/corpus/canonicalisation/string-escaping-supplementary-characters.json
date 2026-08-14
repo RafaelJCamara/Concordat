@@ -1,0 +1,7 @@
+{
+  "name": "supplementary-characters-are-escaped-as-surrogate-pairs",
+  "why": "The sharpest cross-language hazard in canonicalisation, and it was unpinned until M6.1 went looking. A character outside the Basic Multilingual Plane is emitted as an escaped UTF-16 surrogate pair with UPPERCASE hex, while BMP characters such as e-acute and CJK pass through raw, and markup characters are deliberately left raw too. The natural implementation in Go or Python emits the supplementary character raw as UTF-8, producing different canonical bytes and therefore a DIFFERENT SCHEMA ID for the same schema. That breaks ADR-015's claim that an id is reproducible offline in any implementation, and it breaks it silently: every other fixture in this corpus would still pass.",
+  "format": "json",
+  "input": "{\"title\":\"grinning 😀 face\",\"description\":\"café 中文 <&>\"}",
+  "canonical": "{\"description\":\"café 中文 <&>\",\"title\":\"grinning \\uD83D\\uDE00 face\"}"
+}

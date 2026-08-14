@@ -102,7 +102,7 @@ internal sealed record AvroDocument(AvroType Root, IReadOnlyDictionary<string, A
     /// <remarks>
     /// An unresolvable reference is returned as-is rather than throwing. Cross-document
     /// references are a real Avro pattern and are unresolved here by design — see
-    /// DECISIONS-PENDING #16, which is why they cannot be registered yet.
+    /// ADR-023, which is why they cannot be registered yet.
     /// </remarks>
     public AvroType Deref(AvroType type) =>
         type is AvroNamedRef reference && Named.TryGetValue(reference.FullName, out var target)
