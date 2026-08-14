@@ -42,18 +42,28 @@ sign-in screen that lets someone pass it, which is recorded as
 - [ ] `ContractsPage` — bindings, enforcement mode, version selectors
 - [ ] `CompatibilityDiffPage`, `ImpactAnalysisPage`
 - [ ] `ApprovalsPage` — pending breaking changes with diff and impact; approve/reject (admin only)
-- [ ] `AuditLogPage`, `LoginPage`
+- [ ] `AuditLogPage` — `LoginPage` shipped with [M8.2](M8-identity.md) as `sign-in-page.ts`
 - [ ] Settings split: `EnvironmentSettings`, `Brokers`, `ApiKeys`, `Members`
 - [ ] Notifications as reactive forms that actually persist
 
 ## M4.4 Port corrections
 
-- [ ] **Monaco replaces the regex highlighter** — the prototype's `dangerouslySetInnerHTML` is an XSS hole and is not ported
-- [ ] Collapse the two competing HTTP paths into one typed data-access layer
-- [ ] Uncontrolled `defaultValue` forms → reactive forms
-- [ ] Drop the unused dependency surface (React Query, react-hook-form, zod, recharts, next-themes, cmdk, vaul, embla, input-otp)
+**Three of these were moot and are struck through**, audited 2026-08-14. They were written
+against a React prototype on the assumption it would be ported file by file. It was not — the
+Angular app was written fresh — so the defects they describe were never introduced. Struck
+rather than deleted, because "why is there no zod here?" is a question worth answering once.
+
+- [ ] **Monaco for the schema editor.** Listed here as replacing the prototype's
+      `dangerouslySetInnerHTML` regex highlighter, which was also never ported — so the XSS
+      framing has expired. Monaco is still wanted, on its own merits
 - [ ] `ajv` for client-side validation and sample-payload checking
 - [ ] Preserve: immutable-id confirmation, auto-slugged id with a touched flag, semver auto-increment seeded from latest, clone-previous-version JSON, compatibility tooltips, "No versions yet" empty state, Format/Validate buttons
+- [x] ~~Collapse the two competing HTTP paths into one typed data-access layer~~ — **moot.**
+      There is one: `HttpClient` plus three interceptors, and a typed data-access file per feature
+- [x] ~~Uncontrolled `defaultValue` forms → reactive forms~~ — **moot.** A React idiom; no such
+      forms exist. New pages still use reactive forms, which is a convention, not a correction
+- [x] ~~Drop the unused dependency surface (React Query, react-hook-form, zod, recharts, next-themes, cmdk, vaul, embla, input-otp)~~
+      — **moot.** None of them are in `package.json`; the Angular app never took them
 
 ## M4.5 Tests
 

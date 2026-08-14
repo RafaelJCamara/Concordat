@@ -118,6 +118,13 @@ subject indistinguishable from an absent one.
 
 **DESIGN §2 · ADR-010**
 
+> **This is an archived scope list, not a to-do list.** The boxes are unchecked because they
+> record what M2.2 set out to do, and the section above records what it did. Most of it shipped
+> — Mode A headers and the Mode B content-type are exercised by `samples/Quickstart` on every
+> run. **The exception is the Mode B binary framing**, which is specified here and implemented
+> nowhere; that one is a real gap and is tracked as decision #19, not as this checkbox.
+> Counting these as outstanding work overstates what is left by seven items.
+
 - [ ] Mode A writer/reader — `concordat-v`, `concordat-schema-id`, `concordat-subject`, `concordat-version`, `concordat-semver`, `concordat-format`
 - [ ] All values UTF-8 strings; **decode `byte[]` on read** (RabbitMQ.Client writes `S`, reads back `byte[]`)
 - [ ] No `x-` prefix (ADR-013 — RabbitMQ turns `x-` headers into AMQP 1.0 message-annotations; keeping clear of it is what makes the "1.0-safe" claim real); avoid `ulong`, `bool false`, values > 64 KiB

@@ -6,6 +6,11 @@ rarely; the per-milestone files change often. **DESIGN.md should not change at a
 work progresses — if delivery reveals a decision was wrong, that is an ADR amendment, not
 a plan edit.
 
+> **For what is *not* built, read [STATUS.md](STATUS.md).** This plan records work as it is
+> completed, which makes it a poor way to see what remains: unchecked boxes here include
+> archived scope lists, cross-references and items that turned out to be moot. STATUS.md is the
+> audited version, and it also records what was last verified actually running.
+
 ## Milestones
 
 | M | Theme | Depends on |
