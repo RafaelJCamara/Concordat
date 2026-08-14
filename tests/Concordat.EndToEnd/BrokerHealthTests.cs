@@ -15,7 +15,23 @@ namespace Concordat.EndToEnd;
 [Collection(StackCollection.Name)]
 public sealed class BrokerHealthTests(StackFixture stack)
 {
-    private readonly RabbitMqBrokerHealthProbe _probe = new();
+    // No stored credentials in this suite: it tests that a real handshake happens, and the
+    // brokers here carry their credentials in the URI. M7.2's storage is proven separately.
+    private readonly RabbitMqBrokerHealthProbe _probe = new(new NoStoredCredentials());
+
+    private sealed class NoStoredCredentials : ICredentialStore
+    {
+        public Task<string> StoreAsync(
+            BrokerCredential credential, string? existingRef, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<BrokerCredential?> ResolveAsync(
+            string credentialRef, CancellationToken cancellationToken) =>
+            Task.FromResult<BrokerCredential?>(null);
+
+        public Task RemoveAsync(string credentialRef, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+    }
 
     private BrokerConnection Broker(string? virtualHost = null) =>
         BrokerConnection.Create(

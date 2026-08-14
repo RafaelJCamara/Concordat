@@ -86,6 +86,12 @@ public static class DependencyInjection
         services.AddScoped<
             ICommandHandler<CheckBrokerCommand, Domain.Registry.Environment>, CheckBrokerHandler>();
         services.AddScoped<
+            ICommandHandler<SetBrokerCredentialCommand, Domain.Registry.Environment>,
+            SetBrokerCredentialHandler>();
+        services.AddScoped<
+            ICommandHandler<RemoveBrokerCredentialCommand, Domain.Registry.Environment>,
+            RemoveBrokerCredentialHandler>();
+        services.AddScoped<
             IQueryHandler<GetEnvironmentQuery, Domain.Registry.Environment>, GetEnvironmentHandler>();
         services.AddScoped<
             IQueryHandler<ListEnvironmentsQuery, IReadOnlyList<Domain.Registry.Environment>>,

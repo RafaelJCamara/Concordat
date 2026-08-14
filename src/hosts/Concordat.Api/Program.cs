@@ -7,6 +7,7 @@ using Concordat.Formats.Json;
 using Concordat.Formats.Protobuf;
 using Concordat.Infrastructure;
 using Concordat.Infrastructure.Persistence;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,6 +18,14 @@ var connectionString =
 
 builder.Services.AddConcordatApplication();
 builder.Services.AddConcordatPersistence(connectionString);
+
+// M7.2: broker credentials are encrypted at rest with Data Protection, and the key ring lives
+// in the database so a second API instance can decrypt what the first one wrote. Persisting to
+// disk is the framework default and would silently destroy every stored credential the first
+// time a container restarted without a mounted volume.
+builder.Services.AddDataProtection()
+    .SetApplicationName("Concordat")
+    .PersistKeysToDbContext<ConcordatDbContext>();
 
 // Concrete formats are registered here and nowhere else. The Application layer resolves them
 // through ISchemaFormatRegistry and never names one, which is what keeps a second format an

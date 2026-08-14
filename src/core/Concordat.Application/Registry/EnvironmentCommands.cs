@@ -424,3 +424,114 @@ public sealed class CheckBrokerHandler(
         return Result<Environment>.Success(found.Value);
     }
 }
+
+/// <summary>Sets or replaces a broker's credentials (M7.2).</summary>
+/// <param name="EnvironmentName">Which environment.</param>
+/// <param name="BrokerId">Which broker.</param>
+/// <param name="Username">The AMQP user.</param>
+/// <param name="Password">Its password.</param>
+public sealed record SetBrokerCredentialCommand(
+    string? EnvironmentName,
+    Guid BrokerId,
+    string? Username,
+    string? Password) : ICommand<Environment>;
+
+/// <summary>Removes a broker's stored credentials.</summary>
+/// <param name="EnvironmentName">Which environment.</param>
+/// <param name="BrokerId">Which broker.</param>
+public sealed record RemoveBrokerCredentialCommand(string? EnvironmentName, Guid BrokerId)
+    : ICommand<Environment>;
+
+/// <summary>Handles <see cref="SetBrokerCredentialCommand"/>.</summary>
+/// <remarks>
+/// The secret goes straight from the command into the store and is never assigned to the
+/// aggregate. What the broker records is the reference, which is what makes returning the
+/// updated environment from a write endpoint safe.
+/// </remarks>
+public sealed class SetBrokerCredentialHandler(
+    IEnvironmentRepository environments,
+    ICredentialStore credentials,
+    IUnitOfWork unitOfWork)
+    : ICommandHandler<SetBrokerCredentialCommand, Environment>
+{
+    /// <inheritdoc />
+    public async Task<Result<Environment>> HandleAsync(
+        SetBrokerCredentialCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        if (string.IsNullOrWhiteSpace(command.Username) ||
+            string.IsNullOrWhiteSpace(command.Password))
+        {
+            return Result<Environment>.Failure(
+                ConcordatCodes.CredentialInvalid,
+                "A broker credential needs both a username and a password.");
+        }
+
+        var found = await EnvironmentPolicies.RequireAsync(
+            environments, command.EnvironmentName, cancellationToken).ConfigureAwait(false);
+
+        if (found.IsFailure)
+        {
+            return found;
+        }
+
+        var broker = found.Value.Broker(command.BrokerId);
+        if (broker is null)
+        {
+            return Result<Environment>.Failure(
+                ConcordatCodes.BrokerNotFound, "No broker with that id in this environment.");
+        }
+
+        var reference = await credentials.StoreAsync(
+            new BrokerCredential(command.Username, command.Password),
+            broker.CredentialRef,
+            cancellationToken).ConfigureAwait(false);
+
+        broker.SetCredentialRef(reference);
+
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return Result<Environment>.Success(found.Value);
+    }
+}
+
+/// <summary>Handles <see cref="RemoveBrokerCredentialCommand"/>.</summary>
+public sealed class RemoveBrokerCredentialHandler(
+    IEnvironmentRepository environments,
+    ICredentialStore credentials,
+    IUnitOfWork unitOfWork)
+    : ICommandHandler<RemoveBrokerCredentialCommand, Environment>
+{
+    /// <inheritdoc />
+    public async Task<Result<Environment>> HandleAsync(
+        RemoveBrokerCredentialCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var found = await EnvironmentPolicies.RequireAsync(
+            environments, command.EnvironmentName, cancellationToken).ConfigureAwait(false);
+
+        if (found.IsFailure)
+        {
+            return found;
+        }
+
+        var broker = found.Value.Broker(command.BrokerId);
+        if (broker is null)
+        {
+            return Result<Environment>.Failure(
+                ConcordatCodes.BrokerNotFound, "No broker with that id in this environment.");
+        }
+
+        if (broker.CredentialRef is { } reference)
+        {
+            // The stored secret goes first. Clearing the reference alone would leave an
+            // unreachable ciphertext row behind for as long as the database lives.
+            await credentials.RemoveAsync(reference, cancellationToken).ConfigureAwait(false);
+            broker.SetCredentialRef(null);
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return Result<Environment>.Success(found.Value);
+    }
+}

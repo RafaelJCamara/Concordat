@@ -70,6 +70,21 @@ public static class EnvironmentEndpoints
             .Produces<EnvironmentResponse>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
+        group.MapPut("/{env}/brokers/{brokerId:guid}/credentials", SetBrokerCredential)
+            .WithSummary("Set or replace a broker's credentials")
+            .WithDescription(
+                "Write-only (ADR-012). There is no endpoint that returns a credential and no " +
+                "field on any response that could carry one — reads report only whether one " +
+                "exists. Replacing rotates in place, so the previous secret is not left behind.")
+            .Produces<EnvironmentResponse>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapDelete("/{env}/brokers/{brokerId:guid}/credentials", RemoveBrokerCredential)
+            .WithSummary("Remove a broker's stored credentials")
+            .Produces<EnvironmentResponse>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
         group.MapDelete("/{env}/brokers/{brokerId:guid}", RemoveBroker)
             .WithSummary("Remove a broker")
             .Produces<EnvironmentResponse>()
@@ -177,6 +192,39 @@ public static class EnvironmentEndpoints
             : TypedResults.Ok(EnvironmentResponse.From(result.Value));
     }
 
+    private static async Task<IResult> SetBrokerCredential(
+        string env,
+        Guid brokerId,
+        SetBrokerCredentialRequest request,
+        IDispatcher dispatcher,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var result = await dispatcher.SendAsync(
+            new SetBrokerCredentialCommand(env, brokerId, request.Username, request.Password),
+            cancellationToken).ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(EnvironmentResponse.From(result.Value));
+    }
+
+    private static async Task<IResult> RemoveBrokerCredential(
+        string env,
+        Guid brokerId,
+        IDispatcher dispatcher,
+        CancellationToken cancellationToken)
+    {
+        var result = await dispatcher.SendAsync(
+            new RemoveBrokerCredentialCommand(env, brokerId), cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(EnvironmentResponse.From(result.Value));
+    }
+
     private static async Task<IResult> RemoveBroker(
         string env,
         Guid brokerId,
@@ -215,6 +263,11 @@ public sealed record UpdateEnvironmentRequest(
     string? CompatibilityMode = null,
     string? CompatibilitySurface = null,
     string? RegistrationPolicy = null);
+
+/// <summary>Request to set a broker's credentials.</summary>
+/// <param name="Username">The AMQP user.</param>
+/// <param name="Password">Its password. Encrypted at rest and never returned.</param>
+public sealed record SetBrokerCredentialRequest(string Username, string Password);
 
 /// <summary>Request to register a broker.</summary>
 /// <param name="DisplayName">A human label, unique in the environment.</param>

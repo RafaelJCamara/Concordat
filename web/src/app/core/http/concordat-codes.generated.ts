@@ -17,6 +17,7 @@ export const DOMAIN_CONCORDAT_CODES = [
   'broker_uri_invalid',
   'broker_already_exists',
   'broker_not_found',
+  'credential_invalid',
   'actor_id_invalid',
   'reference_invalid',
   'duplicate_reference_name',

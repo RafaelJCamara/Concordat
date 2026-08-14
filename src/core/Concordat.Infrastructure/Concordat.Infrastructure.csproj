@@ -21,6 +21,7 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <!-- M7.1: the broker health check completes a real AMQP handshake. -->
     <PackageReference Include="RabbitMQ.Client" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" />
   </ItemGroup>
 
 </Project>

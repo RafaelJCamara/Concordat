@@ -1,5 +1,6 @@
 using Concordat.Application.Abstractions;
 using Concordat.Domain.Registry;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 using Environment = Concordat.Domain.Registry.Environment;
@@ -22,7 +23,7 @@ namespace Concordat.Infrastructure.Persistence;
 /// deduplicated by content (ADR-015).
 /// </para>
 /// </remarks>
-public sealed class ConcordatDbContext : DbContext
+public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
 {
     private readonly ITenantContext _tenantContext;
 
@@ -52,6 +53,18 @@ public sealed class ConcordatDbContext : DbContext
     /// <summary>Environments and their brokers, scoped to the current tenant (M7.1).</summary>
     public DbSet<Environment> Environments => Set<Environment>();
 
+    /// <summary>
+    /// The Data Protection key ring (M7.2).
+    /// </summary>
+    /// <remarks>
+    /// In the database rather than on disk, so a second API instance can decrypt what the
+    /// first one wrote. A disk ring is the framework default and would be the wrong default
+    /// here: a containerised registry restarting without a mounted volume would generate a
+    /// fresh key, and every stored broker credential would become permanently unreadable with
+    /// nothing to say why.
+    /// </remarks>
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
+
     /// <summary>The tenant this context instance is bound to.</summary>
     internal TenantId CurrentTenant => _tenantContext.Current;
 
@@ -63,6 +76,7 @@ public sealed class ConcordatDbContext : DbContext
         modelBuilder.ApplyConfiguration(new SchemaConfiguration());
         modelBuilder.ApplyConfiguration(new SubjectConfiguration());
         modelBuilder.ApplyConfiguration(new EnvironmentConfiguration());
+        modelBuilder.ApplyConfiguration(new StoredCredentialConfiguration());
 
         // Isolation by construction rather than by remembering a predicate. Every query
         // against Subjects is filtered whether or not the author thought about tenancy, which
@@ -75,6 +89,9 @@ public sealed class ConcordatDbContext : DbContext
 
         modelBuilder.Entity<Environment>().HasQueryFilter(
             e => EF.Property<Guid>(e, EnvironmentConfiguration.TenantIdProperty) == CurrentTenant.Value);
+
+        modelBuilder.Entity<StoredCredential>().HasQueryFilter(
+            c => EF.Property<Guid>(c, SubjectConfiguration.TenantIdProperty) == CurrentTenant.Value);
 
         base.OnModelCreating(modelBuilder);
     }

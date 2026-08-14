@@ -27,6 +27,12 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <!--
+      M7.2: the Data Protection key ring is persisted to the database rather than to disk, so
+      a second API instance can decrypt what the first one encrypted. A disk ring would make
+      broker credentials unreadable after a container restart without a mounted volume.
+    -->
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.11" />
   </ItemGroup>
   <ItemGroup Label="Analyzers">
     <!--

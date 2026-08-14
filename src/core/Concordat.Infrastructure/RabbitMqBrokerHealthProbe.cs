@@ -22,12 +22,13 @@ namespace Concordat.Infrastructure;
 /// answer to that question.
 /// </para>
 /// <para>
-/// <b>Credentials come from the URI for now.</b> A URI may embed them
-/// (<c>amqp://user:pass@host</c>), which is what the quickstart uses. Stored, encrypted
-/// credentials arrive in M7.2, and this is where they will be resolved.
+/// <b>A stored credential wins over one embedded in the URI.</b> The URI appears in every
+/// listing and log line, so once a broker has been given a real secret it should stop
+/// depending on whatever an operator typed into a connection string. The URI form still works,
+/// because the quickstart uses it and a local broker is not worth a key ring.
 /// </para>
 /// </remarks>
-public sealed class RabbitMqBrokerHealthProbe : IBrokerHealthProbe
+public sealed class RabbitMqBrokerHealthProbe(ICredentialStore credentials) : IBrokerHealthProbe
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
@@ -52,9 +53,19 @@ public sealed class RabbitMqBrokerHealthProbe : IBrokerHealthProbe
             SocketWriteTimeout = Timeout,
         };
 
-        // Credentials embedded in the URI, which is what the quickstart uses. Stored,
-        // encrypted credentials arrive in M7.2 and are resolved here.
-        if (broker.Uri.UserInfo is { Length: > 0 } userInfo)
+        // A stored credential wins over anything embedded in the URI. The URI is visible in
+        // every listing and log line, so a broker that has been given a real secret should stop
+        // depending on the one an operator typed into a connection string.
+        var stored = broker.CredentialRef is { Length: > 0 } reference
+            ? await credentials.ResolveAsync(reference, cancellationToken).ConfigureAwait(false)
+            : null;
+
+        if (stored is not null)
+        {
+            factory.UserName = stored.Username;
+            factory.Password = stored.Password;
+        }
+        else if (broker.Uri.UserInfo is { Length: > 0 } userInfo)
         {
             var parts = userInfo.Split(':', 2);
             factory.UserName = Uri.UnescapeDataString(parts[0]);

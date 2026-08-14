@@ -38,6 +38,9 @@ public static class ConcordatCodes
     /// <summary>No broker with the given id exists in the environment.</summary>
     public const string BrokerNotFound = "broker_not_found";
 
+    /// <summary>A broker credential was missing a username or a password.</summary>
+    public const string CredentialInvalid = "credential_invalid";
+
     /// <summary>An actor identifier was empty or too long.</summary>
     public const string ActorIdInvalid = "actor_id_invalid";
 

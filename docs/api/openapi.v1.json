@@ -338,6 +338,123 @@
         }
       }
     },
+    "/v1/environments/{env}/brokers/{brokerId}/credentials": {
+      "put": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Set or replace a broker's credentials",
+        "description": "Write-only (ADR-012). There is no endpoint that returns a credential and no field on any response that could carry one — reads report only whether one exists. Replacing rotates in place, so the previous secret is not left behind.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "brokerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetBrokerCredentialRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Remove a broker's stored credentials",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "brokerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/environments/{env}/brokers/{brokerId}": {
       "delete": {
         "tags": [
@@ -2198,6 +2315,24 @@
           }
         },
         "description": "One place a schema is in use."
+      },
+      "SetBrokerCredentialRequest": {
+        "required": [
+          "username",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "The AMQP user."
+          },
+          "password": {
+            "type": "string",
+            "description": "Its password. Encrypted at rest and never returned."
+          }
+        },
+        "description": "Request to set a broker's credentials."
       },
       "SetCompatibilityPolicyRequest": {
         "required": [

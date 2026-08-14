@@ -31,6 +31,7 @@ token and an operator can alert across a fleet.
 | `broker_uri_invalid` | A broker URI was absent, not absolute, or not an AMQP 0-9-1 scheme. |
 | `broker_already_exists` | A broker with that endpoint or display name is already registered in the environment. |
 | `broker_not_found` | No broker with the given id exists in the environment. |
+| `credential_invalid` | A broker credential was missing a username or a password. |
 | `actor_id_invalid` | An actor identifier was empty or too long. |
 | `reference_invalid` | A schema reference was malformed. |
 | `duplicate_reference_name` | Two references in one schema shared a name. |
@@ -68,7 +69,7 @@ token and an operator can alert across a fleet.
 | `changelog_too_long` | A changelog exceeded the permitted length. |
 | `schema_unresolvable` | A client could not resolve a schema, so the operation could not be enforced. |
 
-**44 codes.**
+**45 codes.**
 
 ## Rules for implementers
 
