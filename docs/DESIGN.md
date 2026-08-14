@@ -142,13 +142,16 @@ version byte plus a `secondaryDeserializer` hook and can evolve; Azure's unversi
   version defect fixed*. No payload mutation, so the body stays readable by any tool.
   AMQP 0-9-1 `content_type` is a `shortstr` (255 bytes); a version token plus a 32-char
   hex id fits easily. **The better default of the two.**
-- `0x01 | <16-byte content-addressed id> | payload` — matches the shape Confluent
-  adopted in CP 8.1+. Opt-in interop only; it mutates the payload and so breaks every
-  brownfield consumer. The legacy `0x00 | <int32 BE>` layout is **read-only** support,
-  for ingesting messages from a Kafka bridge.
+- ~~`0x01 | <16-byte content-addressed id> | payload`, matching Confluent CP 8.1+, with
+  read-only support for the legacy `0x00 | <int32 BE>` layout from a Kafka bridge.~~
+  **Scoped out of v1 by the [ADR-010 amendment](adr/010-header-envelope.md) of 2026-08-14,
+  and not implemented.** Framing exists to carry identity where headers do not survive, and
+  M2.5 measured every transport it could raise — direct publish, dead-lettering, shovel,
+  federation, the AMQP 1.0 conversion — and found `concordat-*` headers survived all of them.
+  The content-type token above is the answer for anything that does drop a header table.
 
-**CloudEvents interop (read-only, v1).** Two incompatible conventions exist and Concordat
-must read both: `cloudEvents_` / `cloudEvents:` (official CNCF, **AMQP 1.0 only**,
+**CloudEvents interop (read-only).** **Not implemented in v1** — same amendment. Two
+incompatible conventions exist and Concordat would have to read both: `cloudEvents_` / `cloudEvents:` (official CNCF, **AMQP 1.0 only**,
 `datacontenttype` mapping to `content-type` as the sole exception) and `ce-` (Knative's
 `eventing-rabbitmq` working draft, **AMQP 0-9-1**, shipping in real clusters, never
 merged upstream). `cloudEvents_dataschema` is typed `URI` (absolute) and the primer is

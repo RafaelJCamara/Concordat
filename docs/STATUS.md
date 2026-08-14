@@ -139,7 +139,7 @@ These matter more than the two lists above, because the surface exists and looks
 
 | Gap | Where it bites |
 |---|---|
-| **Mode B binary framing (`0x01 \| 16-byte id \| payload`) is specified and not implemented** | The envelope spec describes a wire format nothing writes or reads. Recorded as decision #19. The content-type form of Mode B does work. |
+| ~~Mode B binary framing is specified and not implemented~~ | **Closed 2026-08-14** by decision 19 — amended out of v1 rather than built. M2.5 measured every transport it could raise and `concordat-*` headers survived all of them, so framing had no demonstrated need. ADR-010 carries the amendment and says what would bring it back. |
 | ~~`ENFORCEMENT_VIOLATION` is a notification event nothing emits~~ | **Closed 2026-08-14** by decision 25 — `POST …/violations`, aggregated and reported by the SDK, upserted by fingerprint, notification on first sight only. **Nothing schedules the flush yet**: a host opts in by wrapping its observer and calling `FlushViolationsAsync` on a timer. |
 | ~~An environment with no row has no registration policy~~ | **Closed 2026-08-14** by decision 23. The first write creates the row with the derived id, so the policy applies from the first request rather than from whenever somebody thought to create the environment. |
 | **Approval reviewers do not exist** | Anyone with `subject:admin` can approve anything. A reviewer *set* was deferred to M8 and M8 did not build it. |
@@ -172,15 +172,20 @@ Nothing here can be done from inside the repository.
 
 ## Decisions
 
-**30 open**, 16 settled. Three whose cost is actively rising:
+**15 open**, and every one of them is now either waiting on a fact only the owner has, a
+judgement call of mine to confirm, or an account somebody has to open. The whole of the
+"say yes and I go fix it" group was worked through on 2026-08-14.
 
-- **#17 — Avro's canonical form.** Free to overturn until the first Avro schema is stored, then
-  it is a preimage bump and a migration.
-- **#33 — `ci` is a marker scope and no role grants it.** New today. A human cannot register
-  into a `CI_ONLY` environment however senior, and neither can an unclaimed instance. Both are
+Three worth reading first:
+
+- **#17 — Avro's canonical form.** The only one with a closing window: free to overturn until
+  the first Avro schema is stored, then it is a preimage bump and a migration.
+- **#33 — `ci` is a marker scope and no role grants it.** A human cannot register into a
+  `CI_ONLY` environment however senior, and neither can an unclaimed instance. Both are
   intentional and both will read as bugs the first time they are hit.
-- **#26 — a reload signs you out.** Every page added to M4 makes the session model more
-  expensive to change.
+- **#14, #10, #8** — one-liners about the owner's own estate (does it let applications declare
+  exchanges, do its publishers send generic types, does its pipeline emit `-rc` labels) that
+  nobody else can answer and that each unblock a documented gap.
 
 ---
 

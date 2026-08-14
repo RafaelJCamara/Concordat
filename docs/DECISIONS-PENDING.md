@@ -3,8 +3,15 @@
 Everything waiting on you, in one place. Sections are ordered by when the decision starts to
 hurt; the numbers are stable labels, not positions, so a later-numbered item can appear first.
 
-Once a decision is made it moves to **[Settled](#settled)** at the bottom and, if it is
-architectural, becomes an ADR in [`adr/`](adr/README.md).
+**A settled decision is struck through in place, not moved.** Its heading gets `~~strikethrough~~`
+and the body is rewritten to say what was decided and why. Keeping the reasoning next to the
+decision is the point: a one-line row in a table at the bottom loses exactly the part somebody
+needs when they come back in six months asking why. Scan for a heading without strikethrough to
+see what is still open.
+
+The **[Settled](#settled)** table at the bottom holds the older entries, from before that
+convention, plus decisions that were answered by an ADR rather than by an edit here. Anything
+architectural still becomes an ADR in [`adr/`](adr/README.md) either way.
 
 ---
 
@@ -221,14 +228,14 @@ Two things the rename does **not** touch, recorded so neither looks like an over
 > record *why the name was rejected* — an active `bytepunx/signet-proto` publishing the exact
 > package ids ADR-021 depends on. That history is the reason the ADR exists. It stays.
 
-### 2. What to do with the `docs/design-and-plan` branch
+### 2. ~~What to do with the `docs/design-and-plan` branch~~ — merged
 
-It now carries the entire solution, so the name is inaccurate, and `main` is still the initial
-commit. **CI has never run** — with the triggers you chose it fires on pull requests and on
-`main`, not on feature-branch pushes.
+**Resolved 2026-08-14: it had already resolved itself.** By the time this was actioned the branch
+was fully merged into `main` and 33 commits behind it — work had been landing on `main` for some
+time. The branch is deleted, locally and on the remote.
 
-**Recommendation:** merge to `main`. You are one person; the branch buys nothing and it is the
-only thing standing between you and a green CI badge.
+CI has been running on `main` throughout, so the concern behind this entry — "CI has never run" —
+no longer applies either.
 
 ### 3. Reserve the names that are still unreserved
 
@@ -242,35 +249,29 @@ Availability is not reservation. From M0.1:
 
 ## Needed before a specific milestone
 
-### 4. External coverage reporting — now live
+### 4. ~~External coverage reporting~~ — kept as an artifact
 
-M0.3 deferred this to "when M1.3 makes the number meaningful". **M1.3 is done**, so it is
-decidable: wire up Codecov (needs an account and a token to rotate), or keep the current
-coverage artifact and look at it manually.
+**Confirmed 2026-08-14.** No Codecov. The coverage artifact stays and is read by hand when
+somebody wants it. A percentage on a solo project mostly generates noise, and the signal that
+matters here is whether the conformance corpus grows — which no coverage number captures.
+Revisit if a second contributor arrives: the number is worth more as a conversation between
+people than as a gate.
 
-**Recommendation:** keep the artifact for now. A coverage percentage on a solo project mostly
-generates noise; the useful signal is whether the compatibility corpus grows, which a number
-does not capture.
+### 5. ~~Windows in the CI matrix~~ — Ubuntu only
 
-### 5. Windows in the CI matrix — now decidable, and now cheaper to skip
+**Confirmed 2026-08-14.** The suite raises up to three Linux broker containers and GitHub's
+Windows runners do not provide Linux-container support, so the container suites cannot follow
+there whatever the matrix says. A Windows *build-and-unit-test-only* job stays available if the
+platform signal is ever wanted; it is not today.
 
-M0.3 shipped Ubuntu-only with a note to reconsider at M2, where Testcontainers and the RabbitMQ
-tests first make platform differences real. **M2.5 is that point**, and it changed the sum:
-the suite raises up to three Linux broker containers, which on `windows-latest` needs
-Linux-container support that GitHub's Windows runners do not provide.
+### 6. ~~When should the header-survival suite run?~~ — on pull requests
 
-**Recommendation:** stay Ubuntu-only. Add Windows later as a *build-and-unit-test-only* job if
-you want the platform signal — the container suites cannot follow it there regardless.
-
-### 6. When should the header-survival suite run?
-
-It raises three brokers (two of them for federation alone) and takes ~15 s locally, more on a
-cold runner pulling `rabbitmq:4.1-management`. It also almost never changes: it re-measures
-broker behaviour, not our code.
-
-**Recommendation:** run it on pull requests anyway, at least until v1. It is the only thing
-standing between DESIGN §2 and quiet fiction, and a broker upgrade landing unnoticed is exactly
-the scenario it exists to catch. Revisit if CI time becomes a real cost.
+**Confirmed 2026-08-14, and decision 19 is why it earned its place.** It raises three brokers and
+almost never changes, because it measures broker behaviour rather than our code — which is
+exactly the argument for running it. A broker upgrade that quietly stopped preserving
+`concordat-*` headers is the scenario it exists to catch, and that upgrade will not arrive with a
+code change to trigger it. Its measurements are now load-bearing on a decision, too: they are
+what scoped binary framing out of v1.
 
 ### 8. Semver pre-release support
 
@@ -291,33 +292,26 @@ gap rather than a blocker under ADR-020 — but if **your** code does, it moves 
 > **Options:** ship refusing them; require an explicit subject for generic types; or define a
 > normative spelling in the corpus and make every SDK implement it.
 
-### 11. Nested and top-level types collide — confirm the trade
+### 11. ~~Nested and top-level types collide~~ — kept
 
-`+` → `.` (DESIGN §3) makes `Acme.Orders+OrderCreated` and a top-level
-`Acme.Orders.OrderCreated` **the same subject**, silently. The alternative was refusing nested
-types outright.
+**Confirmed 2026-08-14, unchanged.** `+` → `.` (DESIGN §3) means `Acme.Orders+OrderCreated` and a
+top-level `Acme.Orders.OrderCreated` are the same subject.
 
-This follows the design as written, and the consequence may not have been visible when it was
-written. **Recommendation:** keep it. The collision needs two types whose names collide *after*
-the rewrite, which is rare and immediately visible in the registry's subject list; refusing all
-nested types would hurt far more publishers.
+Kept because the collision needs two types whose names match *after* the rewrite — rare, and
+immediately visible in the registry's subject list — while refusing all nested types would hurt
+far more publishers, every day, for a case most estates never hit.
 
-### 12. `diff` is blind to added properties under an open content model
+### 12. ~~`diff` is blind to added properties under an open content model~~ — left
 
-Found while building M3.1. The compatibility engine records a divergence only where one could
-affect compatibility. Under an **open** content model — the default — adding or removing a
-property cannot, so it produces no finding. `concordat diff v1 v2` therefore shows two
-different schema ids and an empty list for the single most common schema change there is.
+**Confirmed 2026-08-14: left as is for v1.** Under an open content model — the default — adding
+or removing a property cannot affect compatibility, so the engine records no divergence and
+`concordat diff v1 v2` shows two different schema ids and an empty list for the most common
+schema change there is.
 
-`check` is unaffected and correct: the change genuinely is compatible. It is `diff` that
-disappoints, because a human reading it wants to know what changed, not only what broke.
-
-> **Options:** leave it and rely on `git diff` of the schema files (what the CLI now tells you
-> to do); or have the engine record informational divergences with no surface, which changes
-> the meaning of `allDivergences[]` and touches the M1.3 corpus.
->
-> **Recommendation:** leave it for v1. The CLI says so explicitly, and widening
-> `allDivergences[]` risks the corpus for a reporting nicety.
+`check` is unaffected and correct: the change genuinely *is* compatible. It is `diff` that
+disappoints, and the CLI already says so and points at `git diff` of the schema files. Widening
+`allDivergences[]` to carry informational findings would change what that field means and touch
+the M1.3 corpus — a protocol change bought for a reporting nicety.
 
 ### 13. ~~`Concordat.Contracts.Testing`~~ — built
 
@@ -368,50 +362,39 @@ and the exchange provisioned ahead of time.
 > **Which is your estate?** It changes the recommended default in the deployment docs, not the
 > code.
 
-### 19. The envelope spec describes payload framing that does not exist
+### 19. ~~The envelope spec describes payload framing that does not exist~~ — amended
 
-Found while writing [`docs/protocol/envelope.md`](protocol/envelope.md) — the first time anyone
-tried to write the envelope down completely enough to implement from.
+**Resolved 2026-08-14: amended, not built.** The [ADR-010 amendment](adr/010-header-envelope.md)
+scopes both binary forms and the CloudEvents read support out of v1, and DESIGN §2 now strikes
+them through and points at it.
 
-ADR-010 and DESIGN §2 both describe **payload framing** as part of the envelope: a
-`0x01 | <16-byte id>` prefix Concordat writes, and a read-only `0x00 | <int32 big-endian>`
-Confluent-compatible form. **Nothing in `src/` implements either.** The same is true of the
-CloudEvents read support DESIGN §2 describes.
+**The ADR listed the negative and M2.5 went and measured it.** "Headers may not survive every
+hop" was the recorded risk; the header-survival suite found `concordat-*` survived every
+transport it could raise — direct publish, dead-lettering, shovel, federation, the AMQP 1.0
+conversion. Framing exists to carry identity where headers do not, so building it now would ship
+a second wire format on a hypothesis the evidence contradicts.
 
-The spec now says plainly that they are unimplemented, so nobody builds an SDK from the prose
-and finds nothing to interoperate with. But that leaves a normative document and an ADR
-describing behaviour the product does not have.
+The answer for a broker that *does* drop headers is the content-type token, which is implemented
+and tested and needs only `content-type` to survive — a far weaker requirement than a header
+table. **What would bring framing back:** a transport that drops both. The `v1` token exists so
+that stays possible without breaking anyone.
 
-> **Options:** implement framing in v1 — it is the only way to carry identity where headers do
-> not survive, which is the whole Mode A/Mode B distinction; or amend ADR-010 to scope it out
-> and say what the answer is for brokers that drop headers.
->
-> **Recommendation:** amend for now. Every transport measured in M2.5 preserved
-> `concordat-*` headers, so framing has no demonstrated need yet — and an unimplemented
-> paragraph in a normative document is worse than an honest gap.
+### 20. ~~Mode A and Mode B disagree about whitespace and invalid types~~ — done
 
-### 20. Mode A and Mode B disagree about whitespace and invalid types
+**Resolved 2026-08-14 with the recommendation: Mode B matches Mode A — warn, do not trim.** Both
+paths now share `EnvelopeReader.ValidateSubject`, and a padded `concordat-semver` is refused for
+the same reason. A subject's identity must not depend on which envelope mode a publisher happened
+to use.
 
-Also found writing the envelope spec, and it reads as an implementation inconsistency rather
-than a rule anyone chose:
+Three corpus fixtures pin it, which is what was actually missing: no fixture covered the two
+paths against the same input, and that is exactly why the divergence survived to be found by
+reading the code rather than by running it.
 
-- A padded `properties.type` (`"  acme.X  "`) is **warned about and ignored** on the Mode A
-  path, but **trimmed and accepted** on the Mode B path, because `SubjectName.Create` trims.
-- An invalid `properties.type` is **warned about** under Mode A and **silently dropped** under
-  Mode B.
-- A padded `concordat-semver` is accepted for the same reason, which contradicts the reader's
-  own stated no-trim rule.
-
-Two paths reaching different verdicts on the same bytes is exactly the class of divergence the
-conformance corpus exists to prevent, and no fixture covers it — which is why it survived.
-
-> **Recommendation:** make Mode B match Mode A (warn, do not trim). Trimming is the more
-> forgiving behaviour, but it means a subject name's identity depends on which envelope mode a
-> publisher happened to use. Whichever wins, it needs corpus fixtures in the same change.
-
-> **Related and smaller:** `envelope_format_mismatch` is in the published `concordatCode`
-> catalogue and **nothing emits it**. Either the check it was written for is missing, or the
-> code should go.
+The related note is also closed — `envelope_format_mismatch` was a published code nothing
+emitted, and it turned out not to be dead but *unwritten*: a message declaring `json` for a
+schema the registry holds as `avro` means the producer and the registry disagree about what was
+sent. The schema id is content-addressed so the registry wins and validation is unaffected; what
+was missing was saying so rather than quietly validating past it.
 
 ### 21. ~~Two contracts in one environment can govern the same route~~ — done
 
@@ -440,19 +423,18 @@ nothing in the SDK can name one of a colliding pair as though it were the answer
 > answers "who breaks if I change this subject". It now has a list to work from; using it is not
 > done.
 
-### 22. Contract names take anything up to 128 characters
+### 22. ~~Contract names take anything up to 128 characters~~ — done
 
-`Subject`, `Environment` and broker names all validate against a grammar. `Contract.Create`
-checks only that the name is non-empty and ≤128 characters, so `my contract!! (draft/2)` is a
-legal contract name today. Contracts are addressed in URLs
-(`/v1/environments/{env}/contracts/{contract}`), which makes that a real interoperability
-question rather than a cosmetic one — a name with a `/` or a `%` in it is not reliably
-addressable.
+**Resolved 2026-08-14 with the recommendation.** Contract names now use the grammar environments
+use, widened by `_` and `.` because a contract is a governance artefact and `payments.eu_west` is
+a reasonable thing to want: lowercase letters, digits, `-`, `_`, `.`, starting and ending
+alphanumeric, no repeated separator.
 
-> **Recommendation:** apply the same grammar environments use (lowercase, digits, `-`, `_`,
-> `.`), before any contract exists to migrate. I did not do it unprompted because a contract is
-> a human-facing governance artefact where `Orders — EU` is a reasonable thing to want to
-> write, unlike a subject name, which is a wire identifier.
+Folded to lowercase, like an environment name and unlike a subject name — a subject comes from a
+message type where `OrderCreated` and `ordercreated` are genuinely different types, while a
+contract name is typed by a human into a URL. `my contract!! (draft/2)` was legal until this, and
+a name carrying `/` or `%` is not reliably addressable at
+`/v1/environments/{env}/contracts/{contract}`.
 
 ### 23. ~~A subject can be registered in an environment that does not exist~~ — done
 

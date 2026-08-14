@@ -54,6 +54,31 @@ form is a `content-type` token, `application/json+concordat.v1.<hex-id>`.
   in M2.5; the result determines the documented Mode A versus Mode B guidance.
 - **Negative:** string-only values mean version numbers are parsed on read.
 
+## Amendment, 2026-08-14: binary framing is out of v1
+
+**Both binary forms are scoped out, and the content-type token is the whole of Mode B.**
+Neither `0x01 | <16-byte id> | payload` nor read-only `0x00 | <int32 BE>` is implemented, and
+neither will be for v1. The same applies to the CloudEvents read support DESIGN §2 describes.
+
+The reason to amend rather than build: **this ADR listed the negative and M2.5 went and
+measured it.** "Headers may not survive every hop" was the recorded risk, and the header-survival
+suite found that `concordat-*` headers survived every transport it could raise — direct publish,
+dead-lettering, shovel, federation, and the AMQP 1.0 conversion. Framing exists to carry identity
+where headers do not, and no measured path drops them. Building it now would be shipping a second
+wire format on a hypothesis the evidence contradicts.
+
+**The answer for a broker that does drop headers is the content-type token**, which is
+implemented and tested: `application/json+concordat.v1.<hex-id>` survives anything that preserves
+`content-type`, which is a far weaker requirement than preserving a header table.
+
+**What would bring it back:** a transport that drops both the header table *and* `content-type`.
+If one is found, this amendment is reversed and the framing is built to the shape above — the
+`v1` token and `concordat-v` exist so that remains possible without breaking anyone.
+
+Until then a normative document describing behaviour the product does not have is worse than an
+honest gap, which is why [`protocol/envelope.md`](../protocol/envelope.md) states the absence
+plainly rather than leaving an implementer to discover it.
+
 ## References
 
 - [DESIGN §2](../DESIGN.md#2-the-concordat-envelope-adr-010)
