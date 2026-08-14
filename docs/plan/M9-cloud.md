@@ -69,12 +69,22 @@ the shape DESIGN §10 rejects.
 distinguishes "taken" from "invalid" is an account enumeration oracle, so it answers the
 same way for both.
 
-**A signup writes no audit entry, and that is a limitation rather than an omission.** Audit
-rows are stamped with the tenant in scope, and at signup nobody has authenticated — the
-scope is whatever an anonymous caller resolves to, which is not the organisation being
-created. A row in the wrong organisation's trail is worse than no row. The record of a
-signup is the tenant's own `CreatedAt` and its owner's membership, both queryable; see
-decisions-pending.
+**A signup is recorded on the deployment trail, not the organisation's** (decision 29). Audit
+rows are stamped with the tenant in scope, and at signup nobody has authenticated — the scope is
+whatever an anonymous caller resolves to, which is not the organisation being created, so a row
+there would land in someone else's trail.
+
+The fix is **not** a cross-tenant audit write. Creating an organisation is something the
+*operator's deployment* did, not something the organisation did to itself, and it wants a
+different retention and a different reader; bending the tenant-scoped trail to hold it is how
+that trail stops being the thing people trust. `DeploymentEvent` is the one table with no tenant
+filter, and `TenantId` on it is data — *which* organisation the event concerns — rather than
+scope. Staged on the same change tracker, so an organisation and the record of its creation
+commit together or not at all.
+
+**It has no HTTP reader, and that is deliberate rather than unfinished.** The rows span tenants
+and there is no operator role to gate an endpoint with: in self-hosted the instance owner is the
+operator, in Cloud they emphatically are not, so one gate cannot be correct in both profiles.
 
 ## M9.3 Billing
 

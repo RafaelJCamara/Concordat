@@ -66,3 +66,36 @@ public interface IAuditLog
     Task<IReadOnlyList<AuditEntry>> QueryAsync(
         AuditFilter filter, CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Appends to and reads the deployment-level trail (decision 29).
+/// </summary>
+/// <remarks>
+/// <b>Separate from <see cref="IAuditLog"/> because the rows are a different kind of record</b>,
+/// not because of a technical constraint. Signup happens before anyone has authenticated, so the
+/// ambient tenant is whatever an anonymous caller resolves to — but the reason for a second log
+/// rather than a cross-tenant write on the first is that operator events want a different
+/// retention and a different reader from "who changed this subject". See
+/// <see cref="DeploymentEvent"/>.
+/// </remarks>
+public interface IDeploymentLog
+{
+    /// <summary>
+    /// Stages an event, written by the same <see cref="IUnitOfWork.SaveChangesAsync"/> call as
+    /// the thing it records.
+    /// </summary>
+    /// <param name="entry">The event.</param>
+    void Append(DeploymentEvent entry);
+
+    /// <summary>Reads the trail, newest first.</summary>
+    /// <param name="limit">The most rows to return.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The events.</returns>
+    /// <remarks>
+    /// <b>Not reachable over HTTP.</b> These rows span tenants, and there is no operator role to
+    /// gate an endpoint with — in self-hosted the instance owner is the operator, in Cloud they
+    /// are not, so one gate cannot be right in both. The port exists so tests and an eventual
+    /// operator console read the same way.
+    /// </remarks>
+    Task<IReadOnlyList<DeploymentEvent>> ReadAsync(int limit, CancellationToken cancellationToken);
+}

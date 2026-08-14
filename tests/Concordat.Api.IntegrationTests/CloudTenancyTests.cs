@@ -1,8 +1,12 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Concordat.Domain.Governance;
 using Concordat.Domain.Identity;
 using Concordat.Infrastructure;
+using Concordat.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Hosting;
 
 namespace Concordat.Api.IntegrationTests;
@@ -314,5 +318,62 @@ public class CloudTenancyTests(CloudApiFactory factory)
             "/v1/environments", new CreateEnvironmentRequest("sneaky"), ApiFactory.Json);
 
         Assert.Equal(HttpStatusCode.Unauthorized, write.StatusCode);
+    }
+    [Fact]
+    public async Task ASignupIsRecordedOnTheDeploymentTrailAndNotInAnybodyElsesAudit()
+    {
+        // Decision 29. Audit rows are stamped with the tenant in scope, and at signup nobody has
+        // authenticated -- so a row there would land in whichever organisation an anonymous
+        // caller resolves to, which is not the one being created. The fix is not a cross-tenant
+        // audit write: creating an organisation is something the OPERATOR's deployment did, and
+        // it wants a different retention and a different reader.
+        var slug = UniqueSlug();
+        await factory.NewOrganisationAsync(slug);
+
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ConcordatDbContext>();
+
+        var events = await context.DeploymentEvents
+            .AsNoTracking()
+            .Where(e => e.Action == DeploymentAction.OrganisationCreated)
+            .ToListAsync();
+
+        var recorded = Assert.Single(events, e => e.Detail.Contains(slug, StringComparison.Ordinal));
+
+        Assert.Equal($"owner@{slug}.example.com", recorded.Actor);
+        Assert.NotNull(recorded.TenantId);
+
+        // And the table is readable without a tenant in scope, which is the property that makes
+        // it a deployment trail rather than a tenant one. Every other table here is filtered.
+        Assert.NotEmpty(await context.DeploymentEvents.AsNoTracking().ToListAsync());
+    }
+
+    [Fact]
+    public async Task TheDeploymentTrailCommitsWithTheOrganisationOrNotAtAll()
+    {
+        // Staged on the same change tracker, deliberately. A second transaction could leave an
+        // organisation that exists with nothing recording its creation -- the exact hole this
+        // closes -- so a refused signup must leave no event behind either.
+        var slug = UniqueSlug();
+        await factory.NewOrganisationAsync(slug);
+
+        using var client = factory.CreateClient();
+
+        var duplicate = await client.PostAsJsonAsync(
+            "/v1/auth/signup",
+            new SignUpRequest(slug, $"someone-else@{slug}.example.com", "correct horse battery", slug),
+            ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ConcordatDbContext>();
+
+        var forThisSlug = await context.DeploymentEvents
+            .AsNoTracking()
+            .Where(e => e.Detail.Contains(slug))
+            .ToListAsync();
+
+        Assert.Single(forThisSlug);
     }
 }

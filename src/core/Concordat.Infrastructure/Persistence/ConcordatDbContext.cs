@@ -79,6 +79,16 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
     /// <remarks>Append-only: nothing in the model or the repository issues an update or a delete.</remarks>
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
 
+    /// <summary>
+    /// The deployment-level trail, deliberately <b>not</b> scoped to a tenant (decision 29).
+    /// </summary>
+    /// <remarks>
+    /// The one table here with no tenant filter, because its rows record things that happened
+    /// above a tenant or before one existed — a signup has no authenticated caller to take a
+    /// scope from. Nothing in a request handler reads it; see <c>IDeploymentLog</c>.
+    /// </remarks>
+    public DbSet<DeploymentEvent> DeploymentEvents => Set<DeploymentEvent>();
+
     /// <summary>Notifications staged for delivery, scoped to the current tenant (M7.5).</summary>
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
 
@@ -130,6 +140,7 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.ApplyConfiguration(new ContractConfiguration());
         modelBuilder.ApplyConfiguration(new ServiceRegistrationConfiguration());
         modelBuilder.ApplyConfiguration(new AuditEntryConfiguration());
+        modelBuilder.ApplyConfiguration(new DeploymentEventConfiguration());
         modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
         modelBuilder.ApplyConfiguration(new NotificationSubscriptionConfiguration());
         modelBuilder.ApplyConfiguration(new TenantConfiguration());

@@ -83,3 +83,28 @@ internal sealed class AuditLog(ConcordatDbContext context) : IAuditLog
             .ConfigureAwait(false);
     }
 }
+
+/// <summary>
+/// The deployment-level trail (decision 29).
+/// </summary>
+/// <remarks>
+/// Stages onto the same change tracker as everything else, so an organisation and the record
+/// that it was created commit together or not at all. A second transaction could leave either
+/// one without the other, and "an organisation exists that nothing recorded the creation of" is
+/// the exact hole this closes.
+/// </remarks>
+internal sealed class DeploymentLog(ConcordatDbContext context) : IDeploymentLog
+{
+    /// <inheritdoc />
+    public void Append(DeploymentEvent entry) => context.DeploymentEvents.Add(entry);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DeploymentEvent>> ReadAsync(
+        int limit, CancellationToken cancellationToken) =>
+        await context.DeploymentEvents
+            .AsNoTracking()
+            .OrderByDescending(e => e.OccurredAt)
+            .Take(limit)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+}

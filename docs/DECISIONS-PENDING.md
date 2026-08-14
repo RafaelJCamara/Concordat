@@ -565,27 +565,26 @@ That resolves two of the four blockers and changes a third:
 > the resources on a first deployment. That is fine for an evaluation and not fine for
 > production, and the gap should close before anyone real depends on it.
 
-### 29. A signup writes no audit entry
+### 29. ~~A signup writes no audit entry~~ — done
 
-Audit rows are stamped with the tenant in scope, and at signup nobody has authenticated — so
-the scope is whatever an anonymous caller resolves to, which is not the organisation being
-created. Writing one anyway would put a row in a *different* organisation's trail, which is
-worse than no row at all.
+**Resolved 2026-08-14 with option (b).** A separate `DeploymentEvent` trail, not tenant-scoped
+and not tenant-filtered, holding what happened above the tenant line: `ORGANISATION_CREATED` and
+`INSTANCE_CLAIMED` today.
 
-The record of a signup today is the tenant's `CreatedAt` and its owner's membership, both
-queryable. That is enough to answer "when did this organisation start", and not enough to
-answer "who created it, from where".
+Option (a) — letting `IAuditLog.Append` take an explicit tenant — would have worked and was
+rejected for the reason recorded when the decision was written: it makes cross-tenant audit
+writes possible from anywhere, and these are not the same kind of record anyway. Operator events
+want a different retention and a different reader from "who changed this subject".
 
-> **Options:** (a) let `IAuditLog.Append` take an explicit tenant, and have `StampTenant` fill
-> in only what is unset — small, and it makes cross-tenant writes possible everywhere, which is
-> a capability worth being deliberate about; (b) a separate signup log that is not tenant-scoped
-> at all, which is honest about it being deployment-level rather than organisation-level; (c)
-> leave it.
->
-> **Recommendation:** (b). Signup, tenant suspension and billing events are things the
-> *operator* did, not things an organisation did, and they want a different retention and a
-> different reader. Bending the tenant-scoped trail to hold them is how it stops being
-> trustworthy.
+`TenantId` on the row is **data, not scope** — which organisation the event concerns — and the
+row is staged on the same change tracker as the organisation, so a refused signup leaves no event
+behind and a successful one cannot exist without its record.
+
+> **No HTTP reader, deliberately.** The rows span tenants and there is no operator role to gate
+> an endpoint with: in self-hosted the instance owner *is* the operator, in Cloud they are not,
+> so one gate cannot be right in both profiles. `IDeploymentLog.ReadAsync` exists so tests and an
+> eventual operator console read the same way. **Building that role is the follow-up**, and it is
+> also what tenant suspension and billing events will need.
 
 ### 15. Hard-delete semantics — before v1 ships
 

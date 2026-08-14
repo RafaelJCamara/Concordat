@@ -1,5 +1,6 @@
 using Concordat.Application.Abstractions;
 using Concordat.Domain.Billing;
+using Concordat.Domain.Governance;
 using Concordat.Domain.Identity;
 using Concordat.Domain.Results;
 
@@ -37,6 +38,7 @@ public sealed class SignUpHandler(
     IUserRepository users,
     IBillingSubscriptionRepository subscriptions,
     IPasswordHasher passwords,
+    IDeploymentLog deployments,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
     : ICommandHandler<SignUpCommand, SignedUp>
@@ -116,13 +118,23 @@ public sealed class SignUpHandler(
         users.Add(Membership.Grant(
             tenant.Value.Id, owner.Value.Id, Role.Owner, clock.GetUtcNow()));
 
-        // No audit entry, and that is a limitation rather than an omission. Audit rows are
-        // stamped with the tenant in scope, and at signup nobody has authenticated yet — the
-        // scope is whatever an anonymous caller resolves to, which is not the organisation
-        // being created. A row in the wrong organisation's trail is worse than no row, so the
-        // record of a signup is the tenant's own CreatedAt and its owner's membership, both
-        // queryable. Recorded in decisions-pending: Cloud eventually wants this audited, and
-        // that needs a way to write an entry for a tenant that is not the current one.
+        // Recorded on the DEPLOYMENT trail, not the tenant's own (decision 29). Audit rows are
+        // stamped with the tenant in scope, and at signup nobody has authenticated — the scope
+        // is whatever an anonymous caller resolves to, which is not the organisation being
+        // created, so a row there would land in someone else's trail.
+        //
+        // The fix is not a cross-tenant audit write. Creating an organisation is something the
+        // operator's deployment did, not something this organisation did to itself, and it wants
+        // a different retention and a different reader. Staged here so it commits in the same
+        // transaction: an organisation that exists with nothing recording its creation is the
+        // hole this closes, and a second transaction could reintroduce it.
+        deployments.Append(DeploymentEvent.Record(
+            DeploymentAction.OrganisationCreated,
+            address.Value.Value,
+            tenant.Value.Id,
+            $"Organisation '{tenant.Value.Name}' created with handle '{tenant.Value.Slug}'.",
+            clock.GetUtcNow()));
+
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return Result<SignedUp>.Success(new SignedUp(tenant.Value, owner.Value));

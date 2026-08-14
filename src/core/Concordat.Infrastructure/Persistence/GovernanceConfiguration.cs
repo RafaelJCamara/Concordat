@@ -137,3 +137,64 @@ internal sealed class AuditEntryConfiguration : IEntityTypeConfiguration<AuditEn
                 $"The audit trail contains action '{token}', which this build does not know.");
     }
 }
+
+/// <summary>
+/// Maps <see cref="DeploymentEvent"/> (decision 29).
+/// </summary>
+/// <remarks>
+/// <b>No tenant shadow property and no global query filter</b>, unlike every other table here.
+/// That is the point of the table: these rows describe things that happened above a tenant or
+/// before one existed, so scoping them to one would either hide them or file them under the
+/// wrong organisation. <c>TenantId</c> is a real, nullable column carrying <em>which</em>
+/// organisation the event concerns, as data.
+/// </remarks>
+internal sealed class DeploymentEventConfiguration : IEntityTypeConfiguration<DeploymentEvent>
+{
+    public void Configure(EntityTypeBuilder<DeploymentEvent> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("deployment_event");
+        builder.HasKey(e => e.Id);
+
+        builder.Property(e => e.Id).HasColumnName("deployment_event_id").ValueGeneratedNever();
+
+        builder.Property(e => e.Action)
+            .HasColumnName("action")
+            .HasConversion(action => DeploymentTokens.For(action), token => Parse(token))
+            .HasMaxLength(64)
+            .IsRequired();
+
+        builder.Property(e => e.Actor)
+            .HasColumnName("actor")
+            .HasMaxLength(DeploymentEvent.MaxActorLength)
+            .IsRequired();
+
+        // Declared over the non-nullable pair and lifted by EF, which is the only form that
+        // survives a null without a cast that throws on read -- the same shape AuditEntry uses
+        // for its nullable EnvironmentId.
+        builder.Property(e => e.TenantId)
+            .HasColumnName("tenant_id")
+            .HasConversion(
+                new ValueConverter<TenantId, Guid>(id => id.Value, value => new TenantId(value)));
+
+        builder.Property(e => e.Detail)
+            .HasColumnName("detail")
+            .HasMaxLength(DeploymentEvent.MaxDetailLength)
+            .IsRequired();
+
+        builder.Property(e => e.OccurredAt).HasColumnName("occurred_at");
+
+        builder.HasIndex(nameof(DeploymentEvent.OccurredAt))
+            .IsDescending(true)
+            .HasDatabaseName("ix_deployment_event_at");
+    }
+
+    private static DeploymentAction Parse(string token) => token switch
+    {
+        "ORGANISATION_CREATED" => DeploymentAction.OrganisationCreated,
+        "INSTANCE_CLAIMED" => DeploymentAction.InstanceClaimed,
+        _ => throw new InvalidOperationException(
+            $"'{token}' is not a deployment action this build knows."),
+    };
+}

@@ -62,6 +62,7 @@ public sealed class BootstrapOwnerHandler(
     ITenantRepository tenants,
     IPasswordHasher passwords,
     IAuditLog audit,
+    IDeploymentLog deployments,
     IUnitOfWork unitOfWork,
     ITenantContext tenant,
     TimeProvider clock)
@@ -130,6 +131,18 @@ public sealed class BootstrapOwnerHandler(
             created.Value.Email.Value,
             clock.GetUtcNow(),
             "OWNER, created by first-run bootstrap"));
+
+        // And on the deployment trail (decision 29). The audit entry above records that an
+        // owner joined this organisation; this records that the deployment stopped being
+        // unclaimed — which is when AllowAnonymousUntilClaimed stops answering every request as
+        // an owner. That is a fact about the instance, not about the organisation, and it is the
+        // one an operator wants a timestamp for.
+        deployments.Append(DeploymentEvent.Record(
+            DeploymentAction.InstanceClaimed,
+            created.Value.Email.Value,
+            tenant.Current,
+            "First owner created by bootstrap; the instance no longer answers anonymously.",
+            clock.GetUtcNow()));
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
