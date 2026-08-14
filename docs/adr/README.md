@@ -38,3 +38,4 @@ it; write a new one and mark the old **Superseded by**.
 | [021](021-tier-2-sdk-set.md) | Tier 2 SDKs: TypeScript/JavaScript, Python, Go, Java | Accepted |
 | [022](022-project-name-concordat.md) | The project is named Concordat | Accepted |
 | [023](023-no-cross-subject-references-avro-protobuf.md) | No cross-subject references for Avro and Protobuf in v1 | Accepted |
+| [024](024-v1-ships-dotnet-only.md) | v1 ships the .NET SDK only; Tier 2 SDKs are deferred | Accepted |

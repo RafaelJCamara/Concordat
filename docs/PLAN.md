@@ -16,7 +16,7 @@ a plan edit.
 | [M3](plan/M3-cli.md) | CLI, CI gate, build-time packages | M1 (M2 for runtime bits) |
 | [M4](plan/M4-web-app.md) | Angular web app | M1 |
 | [M5](plan/M5-formats.md) | Avro + Protobuf | M1 |
-| [M6](plan/M6-sdks.md) | Tier 2 SDKs — TS/JS → Python → Go → Java | M5 |
+| [M6](plan/M6-sdks.md) | Tier 2 SDKs — **M6.1 done; the four SDKs deferred past v1** ([ADR-024](adr/024-v1-ships-dotnet-only.md)) | M5 |
 | [M7](plan/M7-governance.md) | Environments, brokers, governance | M1 |
 | [M8](plan/M8-identity.md) | Identity, RBAC, API keys | M7 |
 | [M9](plan/M9-cloud.md) | Concordat Cloud | M8 |

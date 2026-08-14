@@ -6,6 +6,23 @@
 next. Java at the back is the natural stopping point if reality intervenes — no decision
 to revise, just a queue that stops advancing.
 
+> ## Closed for v1 with M6.1 only ([ADR-024](../adr/024-v1-ships-dotnet-only.md))
+>
+> **M6.1 is done. M6.2–M6.5 are deferred, not cancelled** — they resume once the .NET SDK has
+> been tested against a real workload. [ADR-021](../adr/021-tier-2-sdk-set.md) is untouched:
+> which four languages, and in what order, still stands.
+>
+> The reasoning is the queue this milestone already describes, applied one step earlier. Every
+> design decision the .NET SDK embodies — `Monitor` by default, fail-open resolution, quarantine
+> behaviour — is reasoned but unvalidated by use. Writing four more SDKs against it multiplies
+> whatever is wrong by five, across five public packages with their own users to migrate.
+>
+> **Nothing built for interoperability is wasted or re-argued.** M6.1's output already paid for
+> itself against a single implementation: the corpus caught four places the .NET validator
+> disagreed with draft 2020-12, and publishing the protocol caught a canonicalisation
+> divergence that would have given the same schema a different id in Go or Python — with no Go
+> or Python client in existence.
+
 ---
 
 ## M6.1 Protocol freeze and interop prerequisites

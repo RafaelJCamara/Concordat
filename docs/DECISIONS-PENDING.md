@@ -163,13 +163,6 @@ broker behaviour, not our code.
 standing between DESIGN §2 and quiet fiction, and a broker upgrade landing unnoticed is exactly
 the scenario it exists to catch. Revisit if CI time becomes a real cost.
 
-### 7. Milestone order: SDKs (M6) before governance (M7) and identity (M8)
-
-I moved polyglot SDKs ahead of governance and identity on ADR-019 grounds — a second-language
-client is the only real proof the protocol is language-neutral, and every milestone it waits
-behind is a chance for a .NET assumption to set. **You never confirmed this.** Reversible until
-M5 ends.
-
 ### 8. Semver pre-release support
 
 M1.1 rejects `2.0.0-rc.1` with a dedicated code. A team whose pipeline emits pre-release labels
@@ -442,6 +435,7 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 
 | Decision | Outcome | Recorded in |
 |---|---|---|
+| Milestone order: SDKs before governance (was #7) | **Moot, and answered better than the question asked.** v1 ships the .NET SDK only; M6.2–M6.5 are deferred until the .NET SDK has been tested against a real workload | [ADR-024](adr/024-v1-ships-dotnet-only.md). The original worry was that every milestone the SDKs waited behind was a chance for a .NET assumption to set. M6.1 addressed that directly instead: the protocol is published, the corpus is executable, and both already caught cross-language defects with no second SDK in existence. ADR-021's set and order are untouched |
 | The approval gate could be bypassed by resubmitting (was #18) | **Fixed.** Compatibility history is now approved (`Active`) versions only, in one place — `CompatibilityHistory.Of` — used by both registration and the dry-run check | Found by the M6-era test pass. The rule had been written out at both call sites and was wrong identically in both, so the preview agreed with the gate and neither contradicted the other. `AwaitingApproval` counting as history let a proposal justify itself: submit the same breaking schema twice and the second attempt was compared against the first, found no divergence, and registered `Active`, moving `latest` onto a schema incompatible with the last approved version. A retrying CI job did it unaided. The semver suggester deliberately still counts pending labels, because `Subject`'s own increasing-label check does — suggesting a label the aggregate would refuse would be a worse bug |
 | JSON Schema keyword coverage (was #9) | **Warn, do not refuse and do not stay silent.** `JsonSchemaPortabilityChecker` reports every keyword the compatibility engine does not compare, with a message saying what it costs — "a change confined to it is reported as compatible even when it is not". Findings ride on the registration response and on `concordat lint` | [M6.1](plan/M6-sdks.md) — this is the option M6.1 already prescribed ("warn at registration when a schema strays outside it"), so implementing it settles the question rather than reopening it. Refusing composition keywords would rule out most mature schemas; staying silent is the under-reporting the decision existed to stop |
 | JSON Schema dialect | **draft 2020-12 only, and other dialects are refused** with `schema_dialect_unsupported` | M6.1 — keywords changed meaning between drafts (`items` most visibly), so validating a draft-07 document under 2020-12 rules would apply rules its author never wrote against. The one error-severity portability finding; everything else warns |
