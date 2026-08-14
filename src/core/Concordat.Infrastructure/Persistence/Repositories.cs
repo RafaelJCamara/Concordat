@@ -1,4 +1,5 @@
 using Concordat.Application.Abstractions;
+using Concordat.Domain.Contracts;
 using Concordat.Domain.Registry;
 using Microsoft.EntityFrameworkCore;
 
@@ -113,4 +114,26 @@ internal sealed class EnvironmentRepository(ConcordatDbContext context) : IEnvir
 
     /// <inheritdoc />
     public void Add(Environment environment) => context.Environments.Add(environment);
+}
+
+/// <inheritdoc />
+internal sealed class ContractRepository(ConcordatDbContext context) : IContractRepository
+{
+    /// <inheritdoc />
+    public Task<Contract?> FindAsync(
+        EnvironmentId environmentId, string name, CancellationToken cancellationToken) =>
+        context.Contracts.SingleOrDefaultAsync(
+            c => c.EnvironmentId == environmentId && c.Name == name, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Contract>> ListAsync(
+        EnvironmentId environmentId, CancellationToken cancellationToken) =>
+        await context.Contracts
+            .Where(c => c.EnvironmentId == environmentId)
+            .OrderBy(c => c.Name)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public void Add(Contract contract) => context.Contracts.Add(contract);
 }

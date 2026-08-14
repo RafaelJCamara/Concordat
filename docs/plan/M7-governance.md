@@ -23,13 +23,33 @@ Contexts B, C and D of the domain model — the contract layer Kafka has no equi
 
 **DESIGN §4 Context B · the differentiator**
 
-- [ ] `Contract` aggregate, environment-scoped
-- [ ] `PublishBinding` — `TopologyScope + Exchange + RoutingKeyPattern → SubjectRef[]`
-- [ ] `ConsumeBinding` — `TopologyScope + Queue → SubjectRef[]`
-- [ ] `VersionSelector` — `Latest | Pinned(n) | Range(">=2")`
-- [ ] `EnforcementMode` — `Off | Monitor | Enforce`
-- [ ] Invariant: valid AMQP topic patterns; overlapping patterns cannot bind conflicting subjects without explicit precedence
-- [ ] `POST /contracts/resolve` for SDK startup
+- [x] `Contract` aggregate, environment-scoped
+- [x] `PublishBinding` — `TopologyScope + Exchange + RoutingKeyPattern → SubjectRef[]`
+- [x] `ConsumeBinding` — `TopologyScope + Queue → SubjectRef[]`
+- [x] `VersionSelector` — `Latest | Pinned(n) | Range(">=2")`
+- [x] `EnforcementMode` — `Off | Monitor | Enforce`
+- [x] Invariant: valid AMQP topic patterns; overlapping patterns cannot bind conflicting subjects without explicit precedence
+- [x] `POST /contracts/resolve` for SDK startup
+
+**Overlap is intersection, not text equality.** `orders.*` and `*.created` share no
+characters in common yet both match `orders.created`, so comparing the pattern strings
+would let a publisher be governed by two contracts at once with no way to know which.
+`RoutingKeyPattern.Overlaps` decides emptiness of the intersection of the two languages,
+and the refusal quotes a key both patterns match — otherwise the author is left to
+intersect two topic patterns by hand.
+
+**A new contract is MONITOR, never ENFORCE.** A contract that started blocking the moment
+it was written would have been authored by guessing about a live topology and then
+discovered in production.
+
+**An unmatched route is answered, not omitted.** `resolve` returns
+`{contract: null, enforcement: "OFF"}` for a route no contract governs, because the SDK
+has to tell "nothing governs this" (normal, brownfield) from "I forgot to ask" (a bug),
+and the answers are positional.
+
+**Subjects are one text column, not a child table** — a value-object list with no identity
+that is always read and written together. See `ContractConfiguration`; the value comparer
+there is load-bearing, not decoration.
 
 ## M7.4 Governance
 

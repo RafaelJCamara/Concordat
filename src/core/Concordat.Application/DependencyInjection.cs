@@ -1,5 +1,6 @@
 using Concordat.Application.Abstractions;
 using Concordat.Application.Registry;
+using Concordat.Domain.Contracts;
 using Concordat.Domain.Registry;
 using Concordat.Formats.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
@@ -96,6 +97,22 @@ public static class DependencyInjection
         services.AddScoped<
             IQueryHandler<ListEnvironmentsQuery, IReadOnlyList<Domain.Registry.Environment>>,
             ListEnvironmentsHandler>();
+        // M7.3 contracts.
+        services.AddScoped<
+            ICommandHandler<CreateContractCommand, Contract>, CreateContractHandler>();
+        services.AddScoped<
+            ICommandHandler<AddPublishBindingCommand, Contract>, AddPublishBindingHandler>();
+        services.AddScoped<
+            ICommandHandler<AddConsumeBindingCommand, Contract>, AddConsumeBindingHandler>();
+        services.AddScoped<
+            ICommandHandler<SetContractEnforcementCommand, Contract>,
+            SetContractEnforcementHandler>();
+        services.AddScoped<
+            IQueryHandler<ListContractsQuery, IReadOnlyList<Contract>>, ListContractsHandler>();
+        services.AddScoped<IQueryHandler<GetContractQuery, Contract>, GetContractHandler>();
+        services.AddScoped<
+            IQueryHandler<ResolveContractsQuery, ResolvedContracts>, ResolveContractsHandler>();
+
         services.AddScoped<ICommandHandler<DecideVersionCommand, Subject>, DecideVersionHandler>();
         services.AddScoped<ICommandHandler<UpdateSubjectCommand, Subject>, UpdateSubjectHandler>();
         services.AddScoped<ICommandHandler<RetireSubjectCommand, Subject>, RetireSubjectHandler>();

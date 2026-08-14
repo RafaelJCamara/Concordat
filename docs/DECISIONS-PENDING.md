@@ -286,6 +286,47 @@ conformance corpus exists to prevent, and no fixture covers it — which is why 
 > catalogue and **nothing emits it**. Either the check it was written for is missing, or the
 > code should go.
 
+### 21. Two contracts in one environment can govern the same route, and the first one wins
+
+M7.3 enforces the overlap invariant **within** a contract: two publish bindings that intersect
+and carry different subjects are refused unless precedence separates them. Across contracts
+there is no such check. Nothing stops `orders-v1` and `orders-legacy` in the same environment
+from both binding `orders.created` to different subjects, and `POST /contracts/resolve` answers
+with whichever contract sorts first by name.
+
+That is the arbitrary outcome the within-contract invariant exists to prevent, one level up.
+It is not a defect in what was built — cross-contract checking was never specified — but the
+guarantee is weaker than the DESIGN §4 wording suggests, and a publisher cannot tell.
+
+> **Options:** (a) extend the invariant across the environment, so adding a binding checks
+> every contract — correct, but makes contract authoring a global operation and needs a story
+> for concurrent writers; (b) keep it per-contract and make resolve return **all** matching
+> contracts, letting the SDK refuse on ambiguity — honest, and pushes the decision to where the
+> topology is actually known; (c) leave it, and document that overlapping contracts are the
+> author's problem.
+>
+> **Recommendation:** (b). It surfaces the ambiguity at the moment it matters without turning
+> every binding write into an environment-wide lock, and the response shape is a superset of
+> today's — the field is already `contract`, it would become `contracts`.
+
+**Until this is decided, M7.4's impact analysis inherits the ambiguity**: "who breaks if I
+change this subject" is answered from bindings, and a route governed twice will be attributed
+to one contract.
+
+### 22. Contract names take anything up to 128 characters
+
+`Subject`, `Environment` and broker names all validate against a grammar. `Contract.Create`
+checks only that the name is non-empty and ≤128 characters, so `my contract!! (draft/2)` is a
+legal contract name today. Contracts are addressed in URLs
+(`/v1/environments/{env}/contracts/{contract}`), which makes that a real interoperability
+question rather than a cosmetic one — a name with a `/` or a `%` in it is not reliably
+addressable.
+
+> **Recommendation:** apply the same grammar environments use (lowercase, digits, `-`, `_`,
+> `.`), before any contract exists to migrate. I did not do it unprompted because a contract is
+> a human-facing governance artefact where `Orders — EU` is a reasonable thing to want to
+> write, unlike a subject name, which is a wire identifier.
+
 ### 15. Hard-delete semantics — before v1 ships
 
 M1.5 implements soft delete (`Subject.Retire()`) and never deletes schemas, which is what
@@ -428,6 +469,18 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | The missed-violation walk covers `properties`, `items` and `prefixItems` only | M6.1 | Low, and the boundary is deliberate: it stops where `JsonSchemaPortabilityChecker` starts warning that a keyword is outside the interoperable subset, so there is one line to explain rather than two |
 | `Concordat.EndToEnd` hosts the registry in-process with `WebApplicationFactory` rather than against a container | Test coverage pass | Low. The HTTP round trip is real — routing, binding, serialisation and Problem Details all run — and the broker, where framing genuinely cannot be faked, *is* a container. Containerising the API too would add a build step per run for no assertion it enables |
 | `StackFixture` duplicates `ApiFactory`'s Postgres-plus-host setup instead of sharing it | Test coverage pass | **The trigger recorded at M3.1 has now effectively fired.** That note said to extract a shared test-support project "if a third consumer appears"; this is the third instance of the pattern. It was left duplicated because `StackFixture` also owns a broker and the shapes are only half the same — but the next one should extract rather than copy |
+| `Domain.Registry.Environment` deliberately shadows `System.Environment` | [M7.1](plan/M7-governance.md) | Low, but it costs a `using` alias or a qualified name at every use. Renaming it to avoid the clash would let the framework's type dictate the ubiquitous language, which is the wrong way round |
+| `prod`, `production` and `live` default to `CiOnly` registration; every other name defaults to `Open` | M7.1 | Low, and user-visible. A name-based guess is crude, but the alternative — every environment open until someone remembers — fails in exactly the environment where it matters |
+| A broker's identity is `(host, port, virtual host)`; TLS is derived from the scheme, not stored | M7.1 | Low. Two entries differing only by TLS would be one broker described twice |
+| Credentials are encrypted with ASP.NET Core Data Protection, key ring in the database | [M7.2](plan/M7-governance.md) | **Moderate.** The key ring must survive a redeploy or every stored credential is unreadable. Purpose string `Concordat.BrokerCredential.v1` is versioned so a scheme change can be migrated rather than guessed |
+| The `Environment` aggregate stores a `CredentialRef`, never a secret | M7.2 | Low, and it is what keeps secrets out of every list response by construction rather than by remembering to redact |
+| A new contract is `MONITOR`, never `ENFORCE` | [M7.3](plan/M7-governance.md) | Low, but user-visible. Consistent with M2.4's client-side default, and for the same reason: a contract is authored by guessing about a live topology |
+| Binding overlap is decided by pattern **intersection**, not string equality | M7.3, `RoutingKeyPattern.Overlaps` | Low, and it is the invariant. `orders.*` and `*.created` are textually unrelated and both match `orders.created` |
+| `Matches` and `Overlaps` share one implementation | M7.3 | Low, and deliberate: a concrete key is just a pattern with no wildcards, so two implementations would be two chances to disagree about `#` |
+| A binding must carry at least one subject | M7.3 | Low. An empty binding governs a route while saying nothing about it, which reads as enforcement and is not |
+| `resolve` answers an unmatched route with `{contract: null, enforcement: "OFF"}` rather than omitting it | M7.3 | Low, but it is the contract with the SDK: the answers are positional, and "ungoverned" must be distinguishable from "not asked" |
+| A binding's subjects are one `subject@selector` text column, not a child table | M7.3, `ContractConfiguration` | Low, needs a migration. The value comparer is load-bearing — without it EF compares by reference and an edited binding is silently never written |
+| `resolve` is `POST`, not `GET` with a query string | M7.3 | Low. A whole topology does not fit in a URL, and the request is a body-shaped question even though it is a read |
 
 ---
 

@@ -70,6 +70,7 @@ app.UseStatusCodePages();
 app.MapOpenApi();
 
 app.MapEnvironmentEndpoints();
+app.MapContractEndpoints();
 app.MapSubjectEndpoints();
 app.MapSchemaEndpoints();
 app.MapBootstrapEndpoint();

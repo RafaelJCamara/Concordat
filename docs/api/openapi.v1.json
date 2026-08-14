@@ -504,6 +504,442 @@
         }
       }
     },
+    "/v1/environments/{env}/contracts": {
+      "get": {
+        "tags": [
+          "Contracts"
+        ],
+        "summary": "List contracts",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ContractResponse"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Contracts"
+        ],
+        "summary": "Create a contract",
+        "description": "Defaults to MONITOR. A contract that started blocking the moment it was written would be authored by guessing and then discovered in production.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateContractRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/contracts/resolve": {
+      "post": {
+        "tags": [
+          "Contracts"
+        ],
+        "summary": "Resolve a topology against the environment's contracts",
+        "description": "What an SDK calls at startup: one request for its whole topology rather than one per route, because a fleet-wide restart is the real load pattern. A route nothing governs is answered with no contract and OFF, not omitted — the SDK needs to tell 'ungoverned' from 'I forgot to ask'.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveContractsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveContractsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/contracts/{contract}": {
+      "get": {
+        "tags": [
+          "Contracts"
+        ],
+        "summary": "Get a contract and its bindings",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contract",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/contracts/{contract}/publishes": {
+      "post": {
+        "tags": [
+          "Contracts"
+        ],
+        "summary": "Add a publish binding",
+        "description": "Refused when the pattern overlaps an existing binding that carries different subjects and neither declares precedence. Overlap is intersection, not text: 'orders.*' and '*.created' both match 'orders.created'.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contract",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddPublishBindingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/contracts/{contract}/consumes": {
+      "post": {
+        "tags": [
+          "Contracts"
+        ],
+        "summary": "Add a consume binding",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contract",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddConsumeBindingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/contracts/{contract}/enforcement": {
+      "put": {
+        "tags": [
+          "Contracts"
+        ],
+        "summary": "Change how much a contract may do",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contract",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetEnforcementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/environments/{env}/subjects": {
       "post": {
         "tags": [
@@ -1556,6 +1992,93 @@
         },
         "description": "Request to register a broker."
       },
+      "AddConsumeBindingRequest": {
+        "required": [
+          "queue",
+          "subjects"
+        ],
+        "type": "object",
+        "properties": {
+          "queue": {
+            "type": "string",
+            "description": "The queue."
+          },
+          "subjects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubjectRefInput"
+            },
+            "description": "The subjects expected."
+          },
+          "brokerId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "A specific broker, or omit for every broker in the environment.",
+            "format": "uuid"
+          },
+          "virtualHost": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The virtual host; defaults to `/`."
+          }
+        },
+        "description": "Request to add a consume binding."
+      },
+      "AddPublishBindingRequest": {
+        "required": [
+          "exchange",
+          "routingKeyPattern",
+          "subjects"
+        ],
+        "type": "object",
+        "properties": {
+          "exchange": {
+            "type": "string",
+            "description": "The exchange."
+          },
+          "routingKeyPattern": {
+            "type": "string",
+            "description": "An AMQP topic pattern."
+          },
+          "subjects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubjectRefInput"
+            },
+            "description": "The subjects permitted."
+          },
+          "brokerId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "A specific broker, or omit for every broker in the environment.",
+            "format": "uuid"
+          },
+          "virtualHost": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The virtual host; defaults to `/`."
+          },
+          "precedence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Which binding wins when two overlap.",
+            "format": "int32"
+          }
+        },
+        "description": "Request to add a publish binding."
+      },
       "BootstrapResponse": {
         "required": [
           "subjects",
@@ -1819,6 +2342,101 @@
           }
         },
         "description": "The result of a dry-run compatibility check."
+      },
+      "ConsumeBindingResponse": {
+        "required": [
+          "queue",
+          "brokerId",
+          "virtualHost",
+          "subjects"
+        ],
+        "type": "object",
+        "properties": {
+          "queue": {
+            "type": "string",
+            "description": "The queue."
+          },
+          "brokerId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The broker, or null for all of them.",
+            "format": "uuid"
+          },
+          "virtualHost": {
+            "type": "string",
+            "description": "The virtual host."
+          },
+          "subjects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubjectRefResponse"
+            },
+            "description": "The subjects expected."
+          }
+        },
+        "description": "A consume binding."
+      },
+      "ContractResponse": {
+        "required": [
+          "name",
+          "enforcement",
+          "createdAt",
+          "publishes",
+          "consumes"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The contract name."
+          },
+          "enforcement": {
+            "type": "string",
+            "description": "How much it may do."
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When it was created.",
+            "format": "date-time"
+          },
+          "publishes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublishBindingResponse"
+            },
+            "description": "The publish bindings."
+          },
+          "consumes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsumeBindingResponse"
+            },
+            "description": "The consume bindings."
+          }
+        },
+        "description": "A contract and its bindings."
+      },
+      "CreateContractRequest": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "A name unique within the environment."
+          },
+          "enforcement": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "`OFF`, `MONITOR` or `ENFORCE`; defaults to MONITOR."
+          }
+        },
+        "description": "Request to create a contract."
       },
       "CreateEnvironmentRequest": {
         "required": [
@@ -2148,6 +2766,75 @@
           }
         }
       },
+      "PublishBindingResponse": {
+        "required": [
+          "exchange",
+          "routingKeyPattern",
+          "brokerId",
+          "virtualHost",
+          "precedence",
+          "subjects"
+        ],
+        "type": "object",
+        "properties": {
+          "exchange": {
+            "type": "string",
+            "description": "The exchange."
+          },
+          "routingKeyPattern": {
+            "type": "string",
+            "description": "The pattern."
+          },
+          "brokerId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The broker, or null for all of them.",
+            "format": "uuid"
+          },
+          "virtualHost": {
+            "type": "string",
+            "description": "The virtual host."
+          },
+          "precedence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Which binding wins when two overlap.",
+            "format": "int32"
+          },
+          "subjects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubjectRefResponse"
+            },
+            "description": "The subjects permitted."
+          }
+        },
+        "description": "A publish binding."
+      },
+      "PublishTargetRequest": {
+        "required": [
+          "exchange",
+          "routingKey"
+        ],
+        "type": "object",
+        "properties": {
+          "exchange": {
+            "type": "string",
+            "description": "The exchange."
+          },
+          "routingKey": {
+            "type": "string",
+            "description": "A concrete routing key, not a pattern."
+          }
+        },
+        "description": "One route an SDK wants resolved."
+      },
       "ReferenceResponse": {
         "required": [
           "name",
@@ -2262,6 +2949,100 @@
         },
         "description": "The outcome of registering a version."
       },
+      "ResolveContractsRequest": {
+        "type": "object",
+        "properties": {
+          "brokerId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Which broker the caller is connected to.",
+            "format": "uuid"
+          },
+          "virtualHost": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Its virtual host; defaults to `/`."
+          },
+          "publishes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PublishTargetRequest"
+            },
+            "description": "The routes it publishes on."
+          },
+          "consumes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The queues it consumes from."
+          }
+        },
+        "description": "Request to resolve a topology."
+      },
+      "ResolveContractsResponse": {
+        "required": [
+          "publishes",
+          "consumes"
+        ],
+        "type": "object",
+        "properties": {
+          "publishes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResolvedBindingResponse"
+            },
+            "description": "One entry per requested route."
+          },
+          "consumes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResolvedBindingResponse"
+            },
+            "description": "One entry per requested queue."
+          }
+        },
+        "description": "Everything an SDK asked about, answered in request order."
+      },
+      "ResolvedBindingResponse": {
+        "required": [
+          "contract",
+          "enforcement",
+          "subjects"
+        ],
+        "type": "object",
+        "properties": {
+          "contract": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The contract that matched, or null when nothing governs it."
+          },
+          "enforcement": {
+            "type": "string",
+            "description": "How much that contract may do; `OFF` when nothing matched."
+          },
+          "subjects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubjectRefResponse"
+            },
+            "description": "The subjects permitted."
+          }
+        },
+        "description": "What a contract says about one route or queue."
+      },
       "SchemaResponse": {
         "required": [
           "schemaId",
@@ -2357,6 +3138,61 @@
           }
         },
         "description": "Request to change a subject's compatibility policy."
+      },
+      "SetEnforcementRequest": {
+        "required": [
+          "enforcement"
+        ],
+        "type": "object",
+        "properties": {
+          "enforcement": {
+            "type": "string",
+            "description": "`OFF`, `MONITOR` or `ENFORCE`."
+          }
+        },
+        "description": "Request to change enforcement."
+      },
+      "SubjectRefInput": {
+        "required": [
+          "subject",
+          "selector"
+        ],
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The subject name."
+          },
+          "selector": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "`latest`, an ordinal, or `&gt;=N`."
+          }
+        },
+        "description": "A subject and version selector, as supplied over the wire."
+      },
+      "SubjectRefResponse": {
+        "required": [
+          "subject",
+          "selector"
+        ],
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "The subject name."
+          },
+          "selector": {
+            "type": "string",
+            "description": "Which versions apply."
+          }
+        },
+        "description": "A subject a binding carries."
       },
       "SubjectResponse": {
         "required": [
@@ -2535,6 +3371,9 @@
     },
     {
       "name": "Environments"
+    },
+    {
+      "name": "Contracts"
     },
     {
       "name": "Subjects"

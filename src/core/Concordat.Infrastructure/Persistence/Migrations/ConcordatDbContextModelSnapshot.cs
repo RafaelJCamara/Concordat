@@ -23,6 +23,45 @@ namespace Concordat.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Concordat.Domain.Contracts.Contract", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contract_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Enforcement")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("enforcement");
+
+                    b.Property<Guid>("EnvironmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("environment_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "EnvironmentId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_contract_tenant_environment_name");
+
+                    b.ToTable("contract", (string)null);
+                });
+
             modelBuilder.Entity("Concordat.Domain.Registry.Environment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -246,6 +285,143 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("DataProtectionKeys");
+                });
+
+            modelBuilder.Entity("Concordat.Domain.Contracts.Contract", b =>
+                {
+                    b.OwnsMany("Concordat.Domain.Contracts.ConsumeBinding", "Consumes", b1 =>
+                        {
+                            b1.Property<Guid>("contract_id")
+                                .HasColumnType("uuid");
+
+                            b1.Property<int>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("integer");
+
+                            NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b1.Property<int>("Id"));
+
+                            b1.Property<string>("Queue")
+                                .IsRequired()
+                                .HasMaxLength(255)
+                                .HasColumnType("character varying(255)")
+                                .HasColumnName("queue");
+
+                            b1.Property<string>("Subjects")
+                                .IsRequired()
+                                .HasMaxLength(4096)
+                                .HasColumnType("character varying(4096)")
+                                .HasColumnName("subjects");
+
+                            b1.HasKey("contract_id", "Id");
+
+                            b1.ToTable("consume_binding", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("contract_id");
+
+                            b1.OwnsOne("Concordat.Domain.Contracts.TopologyScope", "Scope", b2 =>
+                                {
+                                    b2.Property<Guid>("ConsumeBindingcontract_id")
+                                        .HasColumnType("uuid");
+
+                                    b2.Property<int>("ConsumeBindingId")
+                                        .HasColumnType("integer");
+
+                                    b2.Property<Guid?>("BrokerId")
+                                        .HasColumnType("uuid")
+                                        .HasColumnName("broker_id");
+
+                                    b2.Property<string>("VirtualHost")
+                                        .IsRequired()
+                                        .HasMaxLength(256)
+                                        .HasColumnType("character varying(256)")
+                                        .HasColumnName("virtual_host");
+
+                                    b2.HasKey("ConsumeBindingcontract_id", "ConsumeBindingId");
+
+                                    b2.ToTable("consume_binding");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("ConsumeBindingcontract_id", "ConsumeBindingId");
+                                });
+
+                            b1.Navigation("Scope")
+                                .IsRequired();
+                        });
+
+                    b.OwnsMany("Concordat.Domain.Contracts.PublishBinding", "Publishes", b1 =>
+                        {
+                            b1.Property<Guid>("contract_id")
+                                .HasColumnType("uuid");
+
+                            b1.Property<int>("Id")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("integer");
+
+                            NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b1.Property<int>("Id"));
+
+                            b1.Property<string>("Exchange")
+                                .IsRequired()
+                                .HasMaxLength(255)
+                                .HasColumnType("character varying(255)")
+                                .HasColumnName("exchange");
+
+                            b1.Property<int?>("Precedence")
+                                .HasColumnType("integer")
+                                .HasColumnName("precedence");
+
+                            b1.Property<string>("RoutingKeyPattern")
+                                .IsRequired()
+                                .HasMaxLength(255)
+                                .HasColumnType("character varying(255)")
+                                .HasColumnName("routing_key_pattern");
+
+                            b1.Property<string>("Subjects")
+                                .IsRequired()
+                                .HasMaxLength(4096)
+                                .HasColumnType("character varying(4096)")
+                                .HasColumnName("subjects");
+
+                            b1.HasKey("contract_id", "Id");
+
+                            b1.ToTable("publish_binding", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("contract_id");
+
+                            b1.OwnsOne("Concordat.Domain.Contracts.TopologyScope", "Scope", b2 =>
+                                {
+                                    b2.Property<Guid>("PublishBindingcontract_id")
+                                        .HasColumnType("uuid");
+
+                                    b2.Property<int>("PublishBindingId")
+                                        .HasColumnType("integer");
+
+                                    b2.Property<Guid?>("BrokerId")
+                                        .HasColumnType("uuid")
+                                        .HasColumnName("broker_id");
+
+                                    b2.Property<string>("VirtualHost")
+                                        .IsRequired()
+                                        .HasMaxLength(256)
+                                        .HasColumnType("character varying(256)")
+                                        .HasColumnName("virtual_host");
+
+                                    b2.HasKey("PublishBindingcontract_id", "PublishBindingId");
+
+                                    b2.ToTable("publish_binding");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("PublishBindingcontract_id", "PublishBindingId");
+                                });
+
+                            b1.Navigation("Scope")
+                                .IsRequired();
+                        });
+
+                    b.Navigation("Consumes");
+
+                    b.Navigation("Publishes");
                 });
 
             modelBuilder.Entity("Concordat.Domain.Registry.Environment", b =>

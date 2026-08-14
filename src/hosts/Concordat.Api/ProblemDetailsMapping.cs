@@ -36,11 +36,16 @@ public static class ProblemDetailsMapping
         ConcordatCodes.SchemaNotFound => StatusCodes.Status404NotFound,
         ConcordatCodes.EnvironmentNotFound => StatusCodes.Status404NotFound,
         ConcordatCodes.BrokerNotFound => StatusCodes.Status404NotFound,
+        ConcordatCodes.ContractNotFound => StatusCodes.Status404NotFound,
 
         // State conflicts: the request was well-formed but the world says no.
         ConcordatCodes.SubjectAlreadyExists => StatusCodes.Status409Conflict,
         ConcordatCodes.EnvironmentAlreadyExists => StatusCodes.Status409Conflict,
         ConcordatCodes.BrokerAlreadyExists => StatusCodes.Status409Conflict,
+        ConcordatCodes.ContractAlreadyExists => StatusCodes.Status409Conflict,
+
+        // The request is well-formed; it is the existing bindings that refuse it.
+        ConcordatCodes.BindingConflict => StatusCodes.Status409Conflict,
         ConcordatCodes.SubjectRetired => StatusCodes.Status409Conflict,
         ConcordatCodes.LifecycleTransitionInvalid => StatusCodes.Status409Conflict,
         ConcordatCodes.VersionNotAwaitingApproval => StatusCodes.Status409Conflict,

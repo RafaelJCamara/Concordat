@@ -38,6 +38,7 @@ public static class DependencyInjection
         services.AddScoped<ISubjectRepository, SubjectRepository>();
         services.AddScoped<ISchemaRepository, SchemaRepository>();
         services.AddScoped<IEnvironmentRepository, EnvironmentRepository>();
+        services.AddScoped<IContractRepository, ContractRepository>();
         services.AddScoped<ICredentialStore, DataProtectionCredentialStore>();
         services.AddScoped<IBrokerHealthProbe, RabbitMqBrokerHealthProbe>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();

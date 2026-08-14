@@ -72,7 +72,19 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Assert.NotNull(body);
         return body;
     }
+
+    /// <summary>Reads an RFC 9457 problem body.</summary>
+    /// <param name="response">The response.</param>
+    /// <returns>The parts a test cares about.</returns>
+    public static Task<ApiProblem> ReadProblemAsync(HttpResponseMessage response) =>
+        ReadAsync<ApiProblem>(response);
 }
+
+/// <summary>The parts of a problem response tests assert on.</summary>
+/// <param name="ConcordatCode">The stable code clients branch on.</param>
+/// <param name="Detail">The human-readable explanation.</param>
+/// <param name="Title">The short summary.</param>
+public sealed record ApiProblem(string? ConcordatCode, string? Detail, string? Title);
 
 /// <summary>Marks a class as sharing one API host and database.</summary>
 [CollectionDefinition(Name)]

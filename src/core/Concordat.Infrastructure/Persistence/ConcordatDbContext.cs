@@ -1,4 +1,5 @@
 using Concordat.Application.Abstractions;
+using Concordat.Domain.Contracts;
 using Concordat.Domain.Registry;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -65,6 +66,9 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
     /// </remarks>
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
+    /// <summary>Contracts, scoped to the current tenant (M7.3).</summary>
+    public DbSet<Contract> Contracts => Set<Contract>();
+
     /// <summary>The tenant this context instance is bound to.</summary>
     internal TenantId CurrentTenant => _tenantContext.Current;
 
@@ -77,6 +81,7 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.ApplyConfiguration(new SubjectConfiguration());
         modelBuilder.ApplyConfiguration(new EnvironmentConfiguration());
         modelBuilder.ApplyConfiguration(new StoredCredentialConfiguration());
+        modelBuilder.ApplyConfiguration(new ContractConfiguration());
 
         // Isolation by construction rather than by remembering a predicate. Every query
         // against Subjects is filtered whether or not the author thought about tenancy, which
@@ -92,6 +97,9 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<StoredCredential>().HasQueryFilter(
             c => EF.Property<Guid>(c, SubjectConfiguration.TenantIdProperty) == CurrentTenant.Value);
+
+        modelBuilder.Entity<Contract>().HasQueryFilter(
+            c => EF.Property<Guid>(c, ContractConfiguration.TenantIdProperty) == CurrentTenant.Value);
 
         base.OnModelCreating(modelBuilder);
     }

@@ -39,29 +39,93 @@ public sealed record TopologyScope(Guid? BrokerId, string VirtualHost)
 }
 
 /// <summary>A publisher's contract: what may be sent to an exchange under a routing pattern.</summary>
-/// <param name="Scope">Where it applies.</param>
-/// <param name="Exchange">The exchange.</param>
-/// <param name="RoutingKeyPattern">Which routing keys it governs.</param>
-/// <param name="Subjects">The subjects permitted, and which versions.</param>
-/// <param name="Precedence">
-/// Which binding wins when two overlap. Null means "no precedence declared", which is what
-/// makes an overlap a conflict rather than a resolution.
-/// </param>
-public sealed record PublishBinding(
-    TopologyScope Scope,
-    string Exchange,
-    RoutingKeyPattern RoutingKeyPattern,
-    IReadOnlyList<SubjectRef> Subjects,
-    int? Precedence = null);
+/// <remarks>
+/// A class rather than a positional record, and not by preference: EF cannot bind an owned
+/// reference — <see cref="Scope"/> — through a constructor, so materialisation needs a
+/// parameterless one to set afterwards. The same shape as every other entity here.
+/// </remarks>
+public sealed class PublishBinding
+{
+    /// <summary>Creates a publish binding.</summary>
+    /// <param name="scope">Where it applies.</param>
+    /// <param name="exchange">The exchange.</param>
+    /// <param name="routingKeyPattern">Which routing keys it governs.</param>
+    /// <param name="subjects">The subjects permitted, and which versions.</param>
+    /// <param name="precedence">
+    /// Which binding wins when two overlap. Null means no precedence was declared, which is
+    /// what makes an overlap a conflict rather than a resolution.
+    /// </param>
+    public PublishBinding(
+        TopologyScope scope,
+        string exchange,
+        RoutingKeyPattern routingKeyPattern,
+        IReadOnlyList<SubjectRef> subjects,
+        int? precedence = null)
+    {
+        Scope = scope;
+        Exchange = exchange;
+        RoutingKeyPattern = routingKeyPattern;
+        Subjects = subjects;
+        Precedence = precedence;
+    }
+
+    // Materialisation only.
+    private PublishBinding()
+    {
+        Scope = null!;
+        Exchange = null!;
+        RoutingKeyPattern = null!;
+        Subjects = [];
+    }
+
+    /// <summary>Where the binding applies.</summary>
+    public TopologyScope Scope { get; private set; }
+
+    /// <summary>The exchange.</summary>
+    public string Exchange { get; private set; }
+
+    /// <summary>Which routing keys it governs.</summary>
+    public RoutingKeyPattern RoutingKeyPattern { get; private set; }
+
+    /// <summary>The subjects permitted, and which versions.</summary>
+    public IReadOnlyList<SubjectRef> Subjects { get; private set; }
+
+    /// <summary>Which binding wins when two overlap, or null when none was declared.</summary>
+    public int? Precedence { get; private set; }
+}
 
 /// <summary>A consumer's contract: what may arrive on a queue.</summary>
-/// <param name="Scope">Where it applies.</param>
-/// <param name="Queue">The queue.</param>
-/// <param name="Subjects">The subjects expected, and which versions.</param>
-public sealed record ConsumeBinding(
-    TopologyScope Scope,
-    string Queue,
-    IReadOnlyList<SubjectRef> Subjects);
+public sealed class ConsumeBinding
+{
+    /// <summary>Creates a consume binding.</summary>
+    /// <param name="scope">Where it applies.</param>
+    /// <param name="queue">The queue.</param>
+    /// <param name="subjects">The subjects expected, and which versions.</param>
+    public ConsumeBinding(
+        TopologyScope scope, string queue, IReadOnlyList<SubjectRef> subjects)
+    {
+        Scope = scope;
+        Queue = queue;
+        Subjects = subjects;
+    }
+
+    // Materialisation only.
+    private ConsumeBinding()
+    {
+        Scope = null!;
+        Queue = null!;
+        Subjects = [];
+    }
+
+    /// <summary>Where the binding applies.</summary>
+    public TopologyScope Scope { get; private set; }
+
+    /// <summary>The queue.</summary>
+    public string Queue { get; private set; }
+
+    /// <summary>The subjects expected, and which versions.</summary>
+    public IReadOnlyList<SubjectRef> Subjects { get; private set; }
+}
 
 /// <summary>
 /// What a topology is contracted to carry (DESIGN §4, Context B).
