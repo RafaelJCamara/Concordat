@@ -105,6 +105,46 @@ public static class ConcordatCodes
     /// <summary>No subscription with the given id exists in the environment.</summary>
     public const string SubscriptionNotFound = "subscription_not_found";
 
+    // ---------------------------------------------------------------- identity (M8)
+
+    /// <summary>A scope token is not one this build knows.</summary>
+    public const string ScopeInvalid = "scope_invalid";
+
+    /// <summary>A role token is not one this build knows.</summary>
+    public const string RoleInvalid = "role_invalid";
+
+    /// <summary>An email address was empty, too long, or not an address.</summary>
+    public const string EmailInvalid = "email_invalid";
+
+    /// <summary>A password did not meet the minimum requirements.</summary>
+    public const string PasswordInvalid = "password_invalid";
+
+    /// <summary>No user with the given identity exists.</summary>
+    public const string UserNotFound = "user_not_found";
+
+    /// <summary>A user with that email address already exists.</summary>
+    public const string UserAlreadyExists = "user_already_exists";
+
+    /// <summary>No API key with the given id exists.</summary>
+    public const string ApiKeyNotFound = "api_key_not_found";
+
+    /// <summary>An API key label was empty or too long.</summary>
+    public const string ApiKeyLabelInvalid = "api_key_label_invalid";
+
+    /// <summary>
+    /// The credential was missing, malformed, expired or revoked.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately one code for all four. Distinguishing "no such key" from "revoked key"
+    /// tells an attacker which of their guesses was once real.
+    /// </remarks>
+    public const string Unauthenticated = "unauthenticated";
+
+    /// <summary>
+    /// The caller is known but holds none of the scopes this endpoint requires (ADR-018).
+    /// </summary>
+    public const string InsufficientScope = "insufficient_scope";
+
     /// <summary>An actor identifier was empty or too long.</summary>
     public const string ActorIdInvalid = "actor_id_invalid";
 

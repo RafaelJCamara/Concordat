@@ -46,6 +46,16 @@ token and an operator can alert across a fleet.
 | `subscription_endpoint_invalid` | A subscription endpoint was not a usable address or https URL. |
 | `subscription_invalid` | A subscription named a channel or event token that is not known. |
 | `subscription_not_found` | No subscription with the given id exists in the environment. |
+| `scope_invalid` | A scope token is not one this build knows. |
+| `role_invalid` | A role token is not one this build knows. |
+| `email_invalid` | An email address was empty, too long, or not an address. |
+| `password_invalid` | A password did not meet the minimum requirements. |
+| `user_not_found` | No user with the given identity exists. |
+| `user_already_exists` | A user with that email address already exists. |
+| `api_key_not_found` | No API key with the given id exists. |
+| `api_key_label_invalid` | An API key label was empty or too long. |
+| `unauthenticated` | The credential was missing, malformed, expired or revoked. |
+| `insufficient_scope` | The caller is known but holds none of the scopes this endpoint requires (ADR-018). |
 | `actor_id_invalid` | An actor identifier was empty or too long. |
 | `reference_invalid` | A schema reference was malformed. |
 | `duplicate_reference_name` | Two references in one schema shared a name. |
@@ -83,7 +93,7 @@ token and an operator can alert across a fleet.
 | `changelog_too_long` | A changelog exceeded the permitted length. |
 | `schema_unresolvable` | A client could not resolve a schema, so the operation could not be enforced. |
 
-**59 codes.**
+**69 codes.**
 
 ## Rules for implementers
 
