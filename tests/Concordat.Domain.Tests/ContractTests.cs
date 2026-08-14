@@ -351,6 +351,50 @@ public class ContractTests
             ConcordatCodes.ContractNameInvalid,
             Contract.Create(Env, name, Now).Error!.Code);
 
+    // ------------------------------------------------------- the name grammar (decision 22)
+
+    [Theory]
+    [InlineData("orders")]
+    [InlineData("orders-v1")]
+    [InlineData("payments.eu")]
+    [InlineData("payments_eu_west")]
+    [InlineData("v2")]
+    public void AContractNameTakesTheSameShapeAnEnvironmentNameDoes(string name) =>
+        Assert.True(Contract.Create(Env, name, Now).IsSuccess, name);
+
+    [Theory]
+    [InlineData("my contract")]        // a space
+    [InlineData("orders/v1")]          // splits the path segment it is addressed by
+    [InlineData("orders%2Fv1")]        // and so does its escaped form
+    [InlineData("Orders — EU")]        // an em dash, which was legal until now
+    [InlineData("-orders")]            // leading separator
+    [InlineData("orders-")]            // trailing separator
+    [InlineData("orders--v1")]         // repeated separator
+    public void AContractNameOutsideTheGrammarIsRefused(string name)
+    {
+        // A contract is addressed at /v1/environments/{env}/contracts/{contract}, so a name
+        // carrying '/' or '%' is not reliably addressable. This was legal until decision 22.
+        var refused = Contract.Create(Env, name, Now);
+
+        Assert.Equal(ConcordatCodes.ContractNameInvalid, refused.Error!.Code);
+        Assert.Contains("lowercase", refused.Error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AContractNameIsFoldedNotPreserved()
+    {
+        // Folded like an environment name, unlike a subject name. A subject comes from a message
+        // type where OrderCreated and ordercreated are different types; a contract name is typed
+        // by a human into a URL.
+        Assert.Equal("orders-v1", Contract.Create(Env, "Orders-V1", Now).Value.Name);
+    }
+
+    [Fact]
+    public void AnOverlongContractNameIsRefused() =>
+        Assert.Equal(
+            ConcordatCodes.ContractNameInvalid,
+            Contract.Create(Env, new string('a', Contract.MaxNameLength + 1), Now).Error!.Code);
+
     [Fact]
     public void TheBindingListsCannotBeMutatedThroughTheProperties()
     {

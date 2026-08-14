@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 
@@ -151,8 +152,18 @@ public sealed class ConsumeBinding
 /// rejected before it rejects anything.
 /// </para>
 /// </remarks>
-public sealed class Contract
+public sealed partial class Contract
 {
+    /// <summary>The longest permitted contract name.</summary>
+    /// <remarks>
+    /// Twice <see cref="EnvironmentName.MaxLength"/>, because the two name different kinds of
+    /// thing: an environment is an operational label somebody types into a pipeline variable,
+    /// while a contract is a governance artefact whose name is meant to describe what it
+    /// governs. The ceiling exists so the column is bounded, not because anyone should
+    /// approach it.
+    /// </remarks>
+    public const int MaxNameLength = 128;
+
     private readonly List<PublishBinding> _publishes;
     private readonly List<ConsumeBinding> _consumes;
 
@@ -223,17 +234,32 @@ public sealed class Contract
                 ConcordatCodes.ContractNameInvalid, "A contract name is required.");
         }
 
-        if (trimmed.Length > 128)
+        if (trimmed.Length > MaxNameLength)
         {
             return Result<Contract>.Failure(
                 ConcordatCodes.ContractNameInvalid,
-                "A contract name may be at most 128 characters.");
+                $"A contract name may be at most {MaxNameLength} characters; got {trimmed.Length}.");
+        }
+
+        // Folded, like an environment name and unlike a subject name. A subject comes from a
+        // message type, where OrderCreated and ordercreated are genuinely different types; a
+        // contract name is typed by a human into a URL and a pipeline variable, and 'Orders'
+        // meaning something other than 'orders' is a trap with no upside.
+        var folded = trimmed.ToLowerInvariant();
+
+        if (!Grammar().IsMatch(folded))
+        {
+            return Result<Contract>.Failure(
+                ConcordatCodes.ContractNameInvalid,
+                $"'{trimmed}' is not a valid contract name. Use lowercase letters, digits, " +
+                "'-', '_' and '.', starting and ending with a letter or digit — for example " +
+                "'orders-v1' or 'payments.eu'.");
         }
 
         return Result<Contract>.Success(new Contract(
             Guid.CreateVersion7(),
             environmentId,
-            trimmed,
+            folded,
             enforcement ?? EnforcementMode.Monitor,
             createdAt.ToUniversalTime(),
             [],
@@ -412,4 +438,12 @@ public sealed class Contract
             return right is not "*" and not "#" ? right : "x";
         }
     }
+
+    // Wider than an environment name, which allows only hyphens: a contract name describes a
+    // governance boundary and 'payments.eu_west' is a reasonable thing to want. Still narrow
+    // enough to sit in a path segment without escaping, which is the point — a contract is
+    // addressed at /v1/environments/{env}/contracts/{contract}, so a name carrying '/' or '%'
+    // is not reliably addressable. Separators may not repeat or sit at either end.
+    [GeneratedRegex("^[a-z0-9]+([._-][a-z0-9]+)*$", RegexOptions.CultureInvariant)]
+    private static partial Regex Grammar();
 }

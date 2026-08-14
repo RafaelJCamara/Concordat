@@ -1,0 +1,15 @@
+{
+  "contentType": "application/json+concordat.v1.7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+  "expected": {
+    "schemaId": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+    "format": "json",
+    "warnings": [
+      "subject_name_invalid"
+    ],
+    "kind": "CONTENT_TYPE"
+  },
+  "headers": null,
+  "propertiesType": "acme..Order",
+  "why": "An invalid type was warned about under Mode A and dropped in silence under Mode B. Silence is the worse half: an unreadable subject became indistinguishable from an absent one, which is the same mis-attribution the reader fixes elsewhere.",
+  "name": "mode-b-invalid-subject-warns"
+}

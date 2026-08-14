@@ -316,6 +316,30 @@ public class SchemaEnforcerTests
         Assert.Equal(EnforcementOutcome.Valid, decision.Outcome);
     }
 
+    [Fact]
+    public async Task ADeclaredFormatThatContradictsTheRegistryIsAViolation()
+    {
+        // `envelope_format_mismatch` was in the published code catalogue with nothing emitting
+        // it — the check it names was specified and never written. The schema id is
+        // content-addressed so the registry wins and validation is unaffected; what this catches
+        // is a producer and a registry disagreeing about what was sent.
+        var envelope = new Dictionary<string, object?>(AsHeaders(
+            EnvelopeWriter.Headers(
+                SchemaId.Create(SchemaIdHex).Value,
+                SubjectName.Create(Subject).Value,
+                1,
+                null,
+                SchemaFormat.Avro)),
+            StringComparer.Ordinal);
+
+        var decision = await Build().InspectConsumeAsync(envelope, Subject, null, Conforming);
+
+        Assert.Equal(EnforcementOutcome.Observed, decision.Outcome);
+        Assert.Equal(ConcordatCodes.EnvelopeFormatMismatch, decision.Code);
+        Assert.Contains("'avro'", decision.Detail, StringComparison.Ordinal);
+        Assert.Contains("'json'", decision.Detail, StringComparison.Ordinal);
+    }
+
     // ------------------------------------------------------------- contracts (M7.3)
 
     [Fact]

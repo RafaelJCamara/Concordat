@@ -1,0 +1,15 @@
+{
+  "contentType": "application/json+concordat.v1.7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+  "expected": {
+    "schemaId": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+    "format": "json",
+    "warnings": [
+      "subject_name_invalid"
+    ],
+    "kind": "CONTENT_TYPE"
+  },
+  "headers": null,
+  "propertiesType": "  acme.Order  ",
+  "why": "Mode B must reach the same verdict as Mode A on the same bytes. It used to call SubjectName.Create directly, which trims - so this message resolved to acme.Order under Mode B and was refused under Mode A, and a subject's identity depended on which envelope mode the publisher happened to use.",
+  "name": "mode-b-padded-subject-warns"
+}

@@ -198,10 +198,45 @@ public static class EnvelopeReader
             return null;
         }
 
-        // Validated EXACTLY as it arrived. SubjectName.Create trims, which is right for a
-        // user typing into a form and wrong here: if the reader trims, "  acme.A  " and
-        // "acme.A" become two spellings of one wire value, and an SDK that does not trim
-        // disagrees with one that does. Rejecting the padded form makes that loud.
+        var subject = ValidateSubject(candidate, warnings);
+        if (subject is null)
+        {
+            return null;
+        }
+
+        if (raw.State is ValueState.Present &&
+            !string.IsNullOrEmpty(propertiesType) &&
+            !string.Equals(raw.Text, propertiesType, StringComparison.Ordinal))
+        {
+            // The header wins: it is the one Concordat wrote. Worth reporting, because a
+            // disagreement usually means two libraries are both setting identity.
+            warnings.Add(new EnvelopeWarning(
+                ConcordatCodes.EnvelopeSubjectTypeMismatch,
+                $"'{EnvelopeHeaders.Subject}' says '{raw.Text}' but properties.type says " +
+                $"'{propertiesType}'. Using the header."));
+        }
+
+        return subject;
+    }
+
+    /// <summary>
+    /// Turns a candidate subject on the wire into a name, or explains why not.
+    /// </summary>
+    /// <remarks>
+    /// <b>Shared by Mode A and Mode B deliberately, and it was not always.</b> Mode B used to
+    /// call <see cref="SubjectName.Create"/> directly, which trims — so <c>"  acme.A  "</c> was
+    /// rejected under Mode A and silently accepted as <c>acme.A</c> under Mode B, and an invalid
+    /// type was warned about under one and dropped without a word under the other. Two paths
+    /// reaching different verdicts on the same bytes is the exact divergence the conformance
+    /// corpus exists to prevent, and no fixture covered it.
+    /// <para>
+    /// Validated EXACTLY as it arrived. Trimming is the more forgiving behaviour and the wrong
+    /// one: it makes a subject's identity depend on which envelope mode a publisher happened to
+    /// use, and an SDK that does not trim then disagrees with one that does.
+    /// </para>
+    /// </remarks>
+    private static SubjectName? ValidateSubject(string candidate, List<EnvelopeWarning> warnings)
+    {
         if (candidate.Length != candidate.Trim().Length)
         {
             warnings.Add(new EnvelopeWarning(
@@ -216,18 +251,6 @@ public static class EnvelopeReader
         {
             warnings.Add(new EnvelopeWarning(subject.Error!.Code, subject.Error.Message));
             return null;
-        }
-
-        if (raw.State is ValueState.Present &&
-            !string.IsNullOrEmpty(propertiesType) &&
-            !string.Equals(raw.Text, propertiesType, StringComparison.Ordinal))
-        {
-            // The header wins: it is the one Concordat wrote. Worth reporting, because a
-            // disagreement usually means two libraries are both setting identity.
-            warnings.Add(new EnvelopeWarning(
-                ConcordatCodes.EnvelopeSubjectTypeMismatch,
-                $"'{EnvelopeHeaders.Subject}' says '{raw.Text}' but properties.type says " +
-                $"'{propertiesType}'. Using the header."));
         }
 
         return subject.Value;
@@ -268,6 +291,18 @@ public static class EnvelopeReader
 
         if (raw.State is ValueState.Present)
         {
+            // Padding is rejected here for the same reason it is on the subject: SemanticVersion
+            // .Create trims, and the reader's stated rule is that it does not. Accepting
+            // " 1.2.3 " would have made the no-trim rule true of one header and not another.
+            if (raw.Text.Length != raw.Text.Trim().Length)
+            {
+                warnings.Add(new EnvelopeWarning(
+                    ConcordatCodes.SemverInvalid,
+                    $"'{raw.Text}' has surrounding whitespace. A semantic version on the wire " +
+                    "must be exactly canonical; the reader does not trim."));
+                return null;
+            }
+
             var semver = SemanticVersion.Create(raw.Text);
             if (semver.IsSuccess)
             {
@@ -319,16 +354,18 @@ public static class EnvelopeReader
             return EnvelopeReadResult.NotEnveloped;
         }
 
-        SubjectName? subject = null;
-        if (!string.IsNullOrEmpty(propertiesType))
-        {
-            var parsed = SubjectName.Create(propertiesType);
-            subject = parsed.IsSuccess ? parsed.Value : null;
-        }
+        // Same rules as Mode A, and same warnings. Mode B carries no headers, so the subject is
+        // whatever properties.type says — but "whatever it says" has to mean the same thing on
+        // both paths or the schema id and the subject can disagree about the same message.
+        var warnings = new List<EnvelopeWarning>();
+
+        var subject = string.IsNullOrEmpty(propertiesType)
+            ? null
+            : ValidateSubject(propertiesType, warnings);
 
         return EnvelopeReadResult.Read(
             EnvelopeKind.ContentType,
-            new MessageEnvelope(schemaId!, subject, null, null, format, []));
+            new MessageEnvelope(schemaId!, subject, null, null, format, warnings));
     }
 
     // ------------------------------------------------------------------ values

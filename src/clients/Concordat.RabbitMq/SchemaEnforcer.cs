@@ -316,6 +316,23 @@ public sealed class SchemaEnforcer
                 envelope.SchemaId);
         }
 
+        // The declared format against the authoritative one. `concordat-format` is advisory and
+        // the schema id is content-addressed, so the registry wins and validation is unaffected
+        // — but a message claiming JSON for a schema the registry holds as Avro means the
+        // producer and the registry disagree about what was sent, and that is worth saying out
+        // loud rather than quietly validating past.
+        if (envelope.Format is { } declared && declared != schema.Format)
+        {
+            return decide.Build(
+                EnforcementOutcome.Observed,
+                ConcordatCodes.EnvelopeFormatMismatch,
+                $"The message declares format '{WireTokens.For(declared)}' but the registry " +
+                $"holds schema {envelope.SchemaId.Value} as " +
+                $"'{WireTokens.For(schema.Format)}'.",
+                envelope.Subject,
+                envelope.SchemaId);
+        }
+
         var verdict = Validate(schema, body);
 
         return verdict is null

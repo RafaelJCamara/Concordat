@@ -1,0 +1,22 @@
+{
+  "expected": {
+    "schemaId": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+    "warnings": [
+      "semver_invalid"
+    ],
+    "kind": "HEADERS"
+  },
+  "headers": {
+    "concordat-v": {
+      "string": "1"
+    },
+    "concordat-schema-id": {
+      "string": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4"
+    },
+    "concordat-semver": {
+      "string": " 1.2.3 "
+    }
+  },
+  "why": "The reader states that it does not trim, and SemanticVersion.Create does. Accepting a padded semver made the no-trim rule true of the subject header and false of this one.",
+  "name": "padded-semver-warns"
+}
