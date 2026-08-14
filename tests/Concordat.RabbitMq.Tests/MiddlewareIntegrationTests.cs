@@ -1,4 +1,5 @@
 using System.Text;
+using Concordat.Domain.Registry;
 using Concordat.Formats.Json;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;

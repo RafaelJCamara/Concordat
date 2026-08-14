@@ -41,6 +41,33 @@ public static class ConcordatCodes
     /// <summary>A broker credential was missing a username or a password.</summary>
     public const string CredentialInvalid = "credential_invalid";
 
+    // ---------------------------------------------------------------- contracts (M7.3)
+
+    /// <summary>A contract name was empty or too long.</summary>
+    public const string ContractNameInvalid = "contract_name_invalid";
+
+    /// <summary>No contract with the given name exists in the environment.</summary>
+    public const string ContractNotFound = "contract_not_found";
+
+    /// <summary>A contract with that name already exists in the environment.</summary>
+    public const string ContractAlreadyExists = "contract_already_exists";
+
+    /// <summary>A routing key pattern was not a valid AMQP topic pattern.</summary>
+    public const string RoutingKeyPatternInvalid = "routing_key_pattern_invalid";
+
+    /// <summary>A version selector was not <c>latest</c>, an ordinal, or <c>&gt;=N</c>.</summary>
+    public const string VersionSelectorInvalid = "version_selector_invalid";
+
+    /// <summary>
+    /// Two bindings overlap and carry different subjects with no precedence to separate them.
+    /// </summary>
+    /// <remarks>
+    /// Overlap is not textual: <c>orders.*</c> and <c>*.created</c> both match
+    /// <c>orders.created</c>. Without this, which contract a publisher is judged against would
+    /// depend on iteration order.
+    /// </remarks>
+    public const string BindingConflict = "binding_conflict";
+
     /// <summary>An actor identifier was empty or too long.</summary>
     public const string ActorIdInvalid = "actor_id_invalid";
 

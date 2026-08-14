@@ -32,6 +32,12 @@ token and an operator can alert across a fleet.
 | `broker_already_exists` | A broker with that endpoint or display name is already registered in the environment. |
 | `broker_not_found` | No broker with the given id exists in the environment. |
 | `credential_invalid` | A broker credential was missing a username or a password. |
+| `contract_name_invalid` | A contract name was empty or too long. |
+| `contract_not_found` | No contract with the given name exists in the environment. |
+| `contract_already_exists` | A contract with that name already exists in the environment. |
+| `routing_key_pattern_invalid` | A routing key pattern was not a valid AMQP topic pattern. |
+| `version_selector_invalid` | A version selector was not `latest`, an ordinal, or `>=N`. |
+| `binding_conflict` | Two bindings overlap and carry different subjects with no precedence to separate them. |
 | `actor_id_invalid` | An actor identifier was empty or too long. |
 | `reference_invalid` | A schema reference was malformed. |
 | `duplicate_reference_name` | Two references in one schema shared a name. |
@@ -69,7 +75,7 @@ token and an operator can alert across a fleet.
 | `changelog_too_long` | A changelog exceeded the permitted length. |
 | `schema_unresolvable` | A client could not resolve a schema, so the operation could not be enforced. |
 
-**45 codes.**
+**51 codes.**
 
 ## Rules for implementers
 

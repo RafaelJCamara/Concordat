@@ -1,4 +1,5 @@
 using Concordat.Domain.Messaging;
+using Concordat.Domain.Registry;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 

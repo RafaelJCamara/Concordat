@@ -1,4 +1,5 @@
 using Concordat.Domain.Messaging;
+using Concordat.Domain.Registry;
 
 namespace Concordat.RabbitMq;
 
