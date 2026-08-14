@@ -4,6 +4,7 @@ import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmSeparator } from '@spartan-ng/helm/separator';
 import { SessionStore } from './core/auth/session-store';
+import { SessionApi } from './core/auth/session-api';
 import { ActiveEnvironmentStore } from './core/config/active-environment-store';
 import { ThemeStore } from './core/config/theme-store';
 import { ThemeToggle } from './shared/ui/theme-toggle/theme-toggle';
@@ -98,19 +99,29 @@ import { ThemeToggle } from './shared/ui/theme-toggle/theme-toggle';
 })
 export class App {
   private readonly router = inject(Router);
+  private readonly sessions = inject(SessionApi);
 
   protected readonly theme = inject(ThemeStore);
   protected readonly environments = inject(ActiveEnvironmentStore);
   protected readonly session = inject(SessionStore);
 
   /**
-   * Drops the credential locally.
+   * Drops the credential locally and clears the session cookie.
    *
-   * There is nothing to call on the server: the credential is a short-lived API key, and
-   * revoking it on sign-out would mean one row deleted per browser tab closed. It expires on
-   * its own, and a user who needs it gone sooner revokes it from the keys screen.
+   * The API key itself is left to expire: revoking it on sign-out would mean one row deleted per
+   * browser tab closed, and a user who needs it gone sooner revokes it from the keys screen. The
+   * cookie does need a round trip, because script cannot delete an httpOnly one — and the local
+   * state is dropped either way, since a sign-out that failed because the network was down must
+   * still sign you out of the tab in front of you.
    */
   protected signOut(): void {
+    this.sessions.signOut().subscribe({
+      next: () => this.leave(),
+      error: () => this.leave(),
+    });
+  }
+
+  private leave(): void {
     this.session.expire();
     void this.router.navigateByUrl('/sign-in');
   }

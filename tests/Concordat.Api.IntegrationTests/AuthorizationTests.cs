@@ -384,16 +384,21 @@ public class AuthorizationTests(AuthApiFactory factory)
     /// <remarks>
     /// Every entry is a decision, not an oversight. <c>/bootstrap</c>, <c>/signup</c> and
     /// <c>/signin</c> are how a caller acquires a credential in the first place — requiring one
-    /// would make them unreachable. <c>/resolve</c>, <c>/impact</c> and <c>/lookup</c> are POSTs
-    /// because their question does not fit in a URL, and they write nothing. <c>/services</c> is
-    /// reported by every SDK at startup and gating it would make declaring intent a privileged
-    /// act nobody performs.
+    /// would make them unreachable. <c>/resume</c> is the same: it authenticates from the session
+    /// cookie, and it is the ONLY route that accepts one (decision 26). <c>/signout</c> deletes a
+    /// cookie and touches nothing else — requiring a scope to stop being signed in would be
+    /// backwards. <c>/resolve</c>, <c>/impact</c> and <c>/lookup</c> are POSTs because their
+    /// question does not fit in a URL, and they write nothing. <c>/services</c> is reported by
+    /// every SDK at startup and gating it would make declaring intent a privileged act nobody
+    /// performs.
     /// </remarks>
     private static readonly string[] Exempt =
     [
         "/v1/auth/bootstrap",
         "/v1/auth/signup",
         "/v1/auth/signin",
+        "/v1/auth/resume",
+        "/v1/auth/signout",
         "/contracts/resolve",
         "/subjects/{subject}/impact",
         "/schemas/lookup",

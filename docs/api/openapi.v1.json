@@ -1979,7 +1979,7 @@
           "Identity"
         ],
         "summary": "Exchange an email and password for a credential",
-        "description": "The credential is a short-lived API key, not a second token format: one thing to verify, one thing to revoke, and sign-in exercises the same path CI does.",
+        "description": "The credential is a short-lived API key, not a second token format: one thing to verify, one thing to revoke, and sign-in exercises the same path CI does. It is also set as an httpOnly cookie so a browser reload does not sign you out -- see POST /v1/auth/resume.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2010,6 +2010,51 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/v1/auth/resume": {
+      "post": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Recover the credential from the session cookie",
+        "description": "The only route that accepts the session cookie, and it accepts nothing else. Its whole power is handing back a credential the browser already holds, so every other route still needs an Authorization header -- which is what makes CSRF structurally impossible rather than merely mitigated.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignInResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/signout": {
+      "post": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Clear the session cookie",
+        "description": "Needed because script cannot delete an httpOnly cookie. The API key itself is left to expire: revoking it here would mean a row deleted per browser tab closed, and a user who needs it gone sooner revokes it from the keys screen.",
+        "responses": {
+          "204": {
+            "description": "No Content"
           }
         }
       }

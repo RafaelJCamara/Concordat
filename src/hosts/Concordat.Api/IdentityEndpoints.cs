@@ -1,4 +1,5 @@
 using Concordat.Application.Abstractions;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Concordat.Application.Identity;
 using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
@@ -49,9 +50,29 @@ public static class IdentityEndpoints
             .WithSummary("Exchange an email and password for a credential")
             .WithDescription(
                 "The credential is a short-lived API key, not a second token format: one thing " +
-                "to verify, one thing to revoke, and sign-in exercises the same path CI does.")
+                "to verify, one thing to revoke, and sign-in exercises the same path CI does. " +
+                "It is also set as an httpOnly cookie so a browser reload does not sign you " +
+                "out -- see POST /v1/auth/resume.")
             .Produces<SignInResponse>()
             .ProducesProblem(StatusCodes.Status401Unauthorized);
+
+        auth.MapPost("/resume", Resume)
+            .WithSummary("Recover the credential from the session cookie")
+            .WithDescription(
+                "The only route that accepts the session cookie, and it accepts nothing else. " +
+                "Its whole power is handing back a credential the browser already holds, so " +
+                "every other route still needs an Authorization header -- which is what makes " +
+                "CSRF structurally impossible rather than merely mitigated.")
+            .Produces<SignInResponse>()
+            .ProducesProblem(StatusCodes.Status401Unauthorized);
+
+        auth.MapPost("/signout", SignOut)
+            .WithSummary("Clear the session cookie")
+            .WithDescription(
+                "Needed because script cannot delete an httpOnly cookie. The API key itself is " +
+                "left to expire: revoking it here would mean a row deleted per browser tab " +
+                "closed, and a user who needs it gone sooner revokes it from the keys screen.")
+            .Produces(StatusCodes.Status204NoContent);
 
         var members = app.MapGroup("/v1/members").WithTags("Identity")
             .RequireScope(Scope.OrgAdmin);
@@ -155,6 +176,7 @@ public static class IdentityEndpoints
 
     private static async Task<IResult> SignIn(
         SignInRequest request,
+        HttpContext http,
         Authenticator authenticator,
         IApiKeyRepository apiKeys,
         IUnitOfWork unitOfWork,
@@ -162,6 +184,7 @@ public static class IdentityEndpoints
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(http);
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(authenticator);
         ArgumentNullException.ThrowIfNull(options);
@@ -203,11 +226,72 @@ public static class IdentityEndpoints
         apiKeys.Add(session.Value.Key);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        SessionCookie.Issue(http, session.Value.Secret, session.Value.Key.ExpiresAt!.Value);
+
         return TypedResults.Ok(new SignInResponse(
             session.Value.Secret,
             caller.Actor.Value,
             caller.Scopes.Granted,
             session.Value.Key.ExpiresAt!.Value));
+    }
+
+    /// <summary>
+    /// Hands back the credential the browser is already holding (decision 26).
+    /// </summary>
+    /// <remarks>
+    /// <b>The credential lives in memory in the SPA, deliberately</b> — a token in
+    /// <c>localStorage</c> is readable by any script that runs on the page, and this project has
+    /// already declined to ship one XSS hole (ADR-006). The cost was that F5 signed you out,
+    /// which is irritating enough that somebody would eventually have fixed it the wrong way.
+    /// </remarks>
+    private static async Task<IResult> Resume(
+        HttpContext http,
+        Authenticator authenticator,
+        TimeProvider clock,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(http);
+        ArgumentNullException.ThrowIfNull(authenticator);
+
+        var credential = http.Request.Cookies[SessionCookie.Name];
+
+        if (string.IsNullOrEmpty(credential))
+        {
+            return ProblemDetailsMapping.From(new DomainError(
+                ConcordatCodes.Unauthenticated, "There is no session to resume."));
+        }
+
+        var caller = await authenticator
+            .FromApiKeyAsync(credential, cancellationToken).ConfigureAwait(false);
+
+        if (!caller.IsAuthenticated)
+        {
+            // Expired, revoked, or from a registry that has since been rebuilt. Clearing it is
+            // the difference between "sign in again" and a browser that retries a dead cookie on
+            // every load forever.
+            SessionCookie.Clear(http);
+
+            return ProblemDetailsMapping.From(new DomainError(
+                ConcordatCodes.Unauthenticated, "That session is no longer valid."));
+        }
+
+        // The expiry is not re-read from the key here: Resume returns what the caller needs to
+        // act, and the key's own expiry already governs whether it works. Sliding it would turn
+        // a short-lived session into an indefinite one held open by a page left in a tab.
+        return TypedResults.Ok(new SignInResponse(
+            credential,
+            caller.Actor.Value,
+            caller.Scopes.Granted,
+            clock.GetUtcNow()));
+    }
+
+    private static NoContent SignOut(HttpContext http)
+    {
+        ArgumentNullException.ThrowIfNull(http);
+
+        SessionCookie.Clear(http);
+
+        return TypedResults.NoContent();
     }
 
     private static async Task<IResult> ListMembers(

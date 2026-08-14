@@ -502,30 +502,39 @@ The shape, all of which follows from "this must not touch the delivery path":
 > and calling flush on a timer. Putting a background timer inside a client library that hosts
 > already own the lifetime of is the next decision, not this one.
 
-### 26. A reload signs you out, and there is still no browser E2E
+### 26. A reload signs you out — ~~fixed~~; the browser E2E is still missing
 
-**Resolved in part.** The web app signs in, holds the credential, and gates its affordances on
-real scopes. Two things remain.
+**The reload half is resolved, 2026-08-14, with option (a).** `/v1/auth/signin` now sets an
+`HttpOnly`, `SameSite=Strict` cookie alongside the credential, and `POST /v1/auth/resume` trades
+it back for one at startup. The credential still lives in memory only — `localStorage` is
+readable by any script on the page and ADR-006 already declined that trade.
 
-**A reload drops the session.** The credential is held in memory only — deliberately, because a
-token in `localStorage` is readable by any script that runs on the page, and this project has
-already declined to ship one XSS hole (ADR-006). The cost is that F5 signs you out, which is
-irritating enough that somebody will eventually "fix" it the wrong way.
+**CSRF is structural here, not mitigated.** `/resume` is the *only* route that accepts the
+cookie, and its entire power is handing back a credential the browser already holds. Every
+mutating route still requires an `Authorization` header a cross-site request cannot set; a test
+pins that the cookie alone is refused everywhere else. `SameSite=Strict` is a second lock on a
+door already bolted.
 
-> **Options:** (a) an httpOnly, SameSite=Strict cookie issued by `/v1/auth/signin` alongside the
-> bearer credential — the browser holds it, script cannot read it, and CSRF is handled by the
-> SameSite attribute plus the fact that every mutating route already requires a non-cookie
-> header; (b) a refresh token, which is a second credential format and everything M8 avoided by
-> making a session a short-lived API key; (c) leave it and document it.
->
-> **Recommendation:** (a), and note that it is the one piece of M8 where the "sessions are just
-> API keys" simplification stops paying for itself.
+Three details worth knowing:
 
-**There is no browser E2E.** `if-scope.spec.ts` and `scope-guard.spec.ts` cover each half in
-isolation, and the API's `AuthorizationTests` cover the server. Nothing drives a real browser
-through "sign in as a reader, confirm the button is absent, paste the URL anyway". That needs
-Playwright, which the project has never had — a real dependency decision rather than an
-oversight.
+- **`Secure` follows the request rather than being forced on.** Forcing it would make the cookie
+  silently not-set on a self-hosted registry served over plain HTTP — a sign-in that appears to
+  work while only the reload keeps failing.
+- **`__Host-` is deliberately not used.** It is stronger and would make the cookie unusable at
+  `http://localhost:5062`, which is the ordinary evaluation path. A security feature that breaks
+  the quickstart gets turned off rather than obeyed.
+- **Sign-out needs the server**, because script cannot delete an `HttpOnly` cookie. The API key
+  is still left to expire on its own.
+
+`SessionApi` lives in `core/auth`, not the identity feature: the shell and the app initializer
+are the callers and neither may import a feature. The boundaries lint caught that, which is what
+it is for.
+
+> **Still open: there is no browser E2E.** `if-scope.spec.ts` and `scope-guard.spec.ts` cover
+> each half in isolation and the API's `AuthorizationTests` cover the server. Nothing drives a
+> real browser through "sign in as a reader, confirm the button is absent, paste the URL
+> anyway". That needs Playwright, which this project has never had — a dependency decision
+> rather than an oversight, and it is [M4.5](plan/M4-web-app.md)'s to make.
 
 ### 27. ~~`AllowAnonymousUntilClaimed` is on by default~~ — done
 

@@ -74,10 +74,20 @@ export class AuthApi {
       .pipe(map((dto) => ({ ...dto, scopes: toScopes(dto.scopes) })));
   }
 
-  /** Exchanges an email and password for a credential. */
+  /**
+   * Exchanges an email and password for a credential.
+   *
+   * `withCredentials` so the browser keeps the httpOnly session cookie the API sets alongside
+   * the credential (decision 26). Without it a cross-origin dev server drops the cookie and a
+   * reload signs you out again — silently, because sign-in itself still works.
+   */
   signIn(email: string, password: string): Observable<SignedIn> {
     return this.http
-      .post<SignInDto>(`${apiRoot(this.config)}/auth/signin`, { email, password })
+      .post<SignInDto>(
+        `${apiRoot(this.config)}/auth/signin`,
+        { email, password },
+        { withCredentials: true },
+      )
       .pipe(
         map((dto) => ({
           credential: dto.credential,
