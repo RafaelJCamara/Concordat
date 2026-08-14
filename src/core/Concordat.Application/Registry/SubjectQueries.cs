@@ -23,7 +23,11 @@ public sealed record CreateSubjectCommand(
 
 /// <summary>Handles <see cref="CreateSubjectCommand"/>.</summary>
 public sealed class CreateSubjectHandler(
-    ISubjectRepository subjects, IAuditLog audit, IUnitOfWork unitOfWork, TimeProvider clock)
+    ISubjectRepository subjects,
+    IAuditLog audit,
+    IBillingGate billing,
+    IUnitOfWork unitOfWork,
+    TimeProvider clock)
     : ICommandHandler<CreateSubjectCommand, Subject>
 {
     /// <inheritdoc />
@@ -52,6 +56,22 @@ public sealed class CreateSubjectHandler(
             return Result<Subject>.Failure(
                 ConcordatCodes.SubjectAlreadyExists,
                 $"Subject '{name.Value}' already exists in this environment.");
+        }
+
+        // The plan limit is checked here, at the point of creation, and nowhere else. Reads are
+        // never refused for a billing reason: the registry is on the delivery path, and a limit
+        // that could stop a consumer resolving a schema would turn a billing dispute into a
+        // production outage.
+        var allowed = await billing.MayCreateAsync(Meter.Subjects, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!allowed.Allowed)
+        {
+            return Result<Subject>.Failure(
+                ConcordatCodes.PlanLimitReached,
+                $"This organisation is at its plan's limit of {allowed.Limit} subjects. " +
+                "Upgrade, or retire something you no longer need — nothing already registered " +
+                "stops working.");
         }
 
         var subject = Subject.Create(

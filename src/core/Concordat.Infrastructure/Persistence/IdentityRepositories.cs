@@ -1,4 +1,5 @@
 using Concordat.Application.Abstractions;
+using Concordat.Domain.Billing;
 using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 using Microsoft.EntityFrameworkCore;
@@ -110,4 +111,18 @@ internal sealed class TenantRepository(ConcordatDbContext context) : ITenantRepo
 
     /// <inheritdoc />
     public void Add(Tenant tenant) => context.Tenants.Add(tenant);
+}
+
+/// <inheritdoc />
+internal sealed class BillingSubscriptionRepository(ConcordatDbContext context)
+    : IBillingSubscriptionRepository
+{
+    /// <inheritdoc />
+    public Task<Subscription?> FindAsync(TenantId tenantId, CancellationToken cancellationToken) =>
+        context.BillingSubscriptions.SingleOrDefaultAsync(
+            s => s.TenantId == tenantId, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(Subscription subscription) =>
+        context.BillingSubscriptions.Add(subscription);
 }

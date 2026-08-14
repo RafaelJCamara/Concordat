@@ -51,6 +51,7 @@ public sealed class RegisterVersionHandler(
     ICompatibilityEvaluator evaluator,
     IAuditLog audit,
     IOutbox outbox,
+    IBillingGate billing,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
     : ICommandHandler<RegisterVersionCommand, RegisterVersionResult>
@@ -93,6 +94,19 @@ public sealed class RegisterVersionHandler(
             }
 
             semver = parsed.Value;
+        }
+
+        // Checked before the schema is canonicalised and hashed, which is the expensive part.
+        // A tenant at their monthly limit should not pay for the work either.
+        var allowed = await billing.MayCreateAsync(Meter.VersionsPerMonth, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!allowed.Allowed)
+        {
+            return Result<RegisterVersionResult>.Failure(
+                ConcordatCodes.PlanLimitReached,
+                $"This organisation has registered its plan's limit of {allowed.Limit} versions " +
+                "this month. Existing versions keep resolving; only new registrations are held.");
         }
 
         var priors = await LoadPriorsAsync(subject, cancellationToken).ConfigureAwait(false);

@@ -1,5 +1,6 @@
 using Concordat.Application.Abstractions;
 using Concordat.Application.Registry;
+using Concordat.Domain.Billing;
 using Concordat.Domain.Governance;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
@@ -185,6 +186,29 @@ internal sealed class RecordingOutbox : IOutbox
         Task.FromResult((
             _staged.Count(m => m.DeliveredAt is null && !m.Parked),
             _staged.Count(m => m.Parked)));
+}
+
+/// <summary>A billing gate a test can close, to prove a limit is enforced (M9.3).</summary>
+/// <remarks>
+/// Open by default, because a handler test is about the handler. The interesting case is the
+/// one where it is shut: the check has to happen before anything is staged, or a refused
+/// creation still leaves a row behind.
+/// </remarks>
+internal sealed class SettableBillingGate : IBillingGate
+{
+    /// <summary>Whether to allow creation. True unless a test says otherwise.</summary>
+    public bool Allowed { get; set; } = true;
+
+    /// <summary>How many times the gate was consulted.</summary>
+    public int Calls { get; private set; }
+
+    public Task<BillingVerdict> MayCreateAsync(Meter meter, CancellationToken cancellationToken)
+    {
+        Calls++;
+
+        return Task.FromResult(
+            Allowed ? BillingVerdict.Yes : new BillingVerdict(false, Limit: 1, Tier: Tier.Free));
+    }
 }
 
 /// <summary>Mints one stable <see cref="EnvironmentId"/> per environment name.</summary>

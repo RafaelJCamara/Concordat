@@ -17,6 +17,7 @@ public class SubjectCommandHandlerTests
     private readonly RecordingUnitOfWork _unitOfWork = new();
     private readonly RecordingAuditLog _audit = new();
     private readonly RecordingOutbox _outbox = new();
+    private readonly SettableBillingGate _billing = new();
     private readonly FakeTimeProvider _clock = new(Build.At);
 
     private Task<Result<Subject>> CreateAsync(
@@ -24,7 +25,7 @@ public class SubjectCommandHandlerTests
         string owner = "alice",
         CompatibilityPolicy? policy = null,
         ContentModel contentModel = ContentModel.Open) =>
-        new CreateSubjectHandler(_subjects, _audit, _unitOfWork, _clock).HandleAsync(
+        new CreateSubjectHandler(_subjects, _audit, _billing, _unitOfWork, _clock).HandleAsync(
             new CreateSubjectCommand(
                 _environment, name, SchemaFormat.Json, owner, policy, contentModel),
             CancellationToken.None);
@@ -131,6 +132,29 @@ public class SubjectCommandHandlerTests
         var result = await CreateAsync(contentModel: ContentModel.Closed);
 
         Assert.Equal(ContentModel.Closed, result.Value.ContentModel);
+    }
+
+    [Fact]
+    public async Task APlanLimitRefusesCreationAndStagesNothing()
+    {
+        // The check has to happen before anything is staged. A refused creation that still
+        // left a row behind would let an organisation over its limit one subject at a time.
+        _billing.Allowed = false;
+
+        var result = await CreateAsync();
+
+        Assert.Equal(ConcordatCodes.PlanLimitReached, result.Error!.Code);
+        Assert.Empty(_subjects.Added);
+        Assert.Equal(0, _unitOfWork.Saves);
+    }
+
+    [Fact]
+    public async Task APlanLimitIsCheckedAfterTheCheapRefusals()
+    {
+        // An invalid name should not cost a round trip to the meter, which counts four things.
+        await CreateAsync(name: "acme..orders");
+
+        Assert.Equal(0, _billing.Calls);
     }
 
     // ------------------------------------------------------------------ update

@@ -30,12 +30,13 @@ public class RegisterVersionHandlerTests
 
     private readonly RecordingAuditLog _audit = new();
     private readonly RecordingOutbox _outbox = new();
+    private readonly SettableBillingGate _billing = new();
 
     private RegisterVersionHandler Handler() =>
-        new(_subjects, _schemas, _evaluator, _audit, _outbox, _unitOfWork, _clock);
+        new(_subjects, _schemas, _evaluator, _audit, _outbox, _billing, _unitOfWork, _clock);
 
     private RegisterVersionHandler Handler(ICompatibilityEvaluator evaluator) =>
-        new(_subjects, _schemas, evaluator, _audit, _outbox, _unitOfWork, _clock);
+        new(_subjects, _schemas, evaluator, _audit, _outbox, _billing, _unitOfWork, _clock);
 
     private Task<Result<RegisterVersionResult>> RegisterAsync(
         string? body,
@@ -46,6 +47,22 @@ public class RegisterVersionHandlerTests
         Handler().HandleAsync(
             new RegisterVersionCommand(_environment, subject, body, semver, changelog, registeredBy),
             CancellationToken.None);
+
+    [Fact]
+    public async Task AMonthlyVersionLimit_RefusesBeforeTheSchemaIsEvenCanonicalised()
+    {
+        // Canonicalising and hashing is the expensive part of a registration. A tenant at their
+        // monthly limit should not pay for work that is going to be thrown away.
+        _subjects.Seed(Build.Subject(_environment));
+        _billing.Allowed = false;
+
+        var result = await RegisterAsync(V1);
+
+        Assert.Equal(ConcordatCodes.PlanLimitReached, result.Error!.Code);
+        Assert.Equal(0, _evaluator.Calls);
+        Assert.Equal(0, _schemas.Staged);
+        Assert.Equal(0, _unitOfWork.Saves);
+    }
 
     [Fact]
     public async Task AnInvalidSubjectName_IsRefusedBeforeTheRepositoryIsTouched()

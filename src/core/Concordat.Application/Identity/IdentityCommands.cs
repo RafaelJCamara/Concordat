@@ -142,6 +142,7 @@ public sealed class CreateMemberHandler(
     IUserRepository users,
     IPasswordHasher passwords,
     IAuditLog audit,
+    IBillingGate billing,
     IUnitOfWork unitOfWork,
     ICallerContext caller,
     TimeProvider clock)
@@ -179,6 +180,17 @@ public sealed class CreateMemberHandler(
             return Result<User>.Failure(
                 ConcordatCodes.UserAlreadyExists,
                 $"An account already exists for '{address.Value}'.");
+        }
+
+        var allowed = await billing.MayCreateAsync(Meter.Seats, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!allowed.Allowed)
+        {
+            return Result<User>.Failure(
+                ConcordatCodes.PlanLimitReached,
+                $"This organisation is at its plan's limit of {allowed.Limit} seats. Upgrade, " +
+                "or disable a member who no longer needs access.");
         }
 
         var created = User.Create(

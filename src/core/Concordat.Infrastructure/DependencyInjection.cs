@@ -1,5 +1,6 @@
 using Concordat.Application.Abstractions;
 using Concordat.Domain.Registry;
+using Concordat.Infrastructure.Billing;
 using Concordat.Infrastructure.Identity;
 using Concordat.Infrastructure.Notifications;
 using Concordat.Infrastructure.Persistence;
@@ -37,10 +38,16 @@ public static class DependencyInjection
         if (profile is ConcordatProfile.Cloud)
         {
             services.AddScoped<ITenantContext, CallerTenantContext>();
+            services.AddScoped<IBillingGate, MeteredBillingGate>();
         }
         else
         {
             services.AddScoped<ITenantContext, SingleTenantContext>();
+
+            // Not a stub: ADR-009 puts every feature under Apache-2.0 and a self-hosted
+            // install has nobody to bill, so "yes" is the honest answer rather than a
+            // placeholder for one.
+            services.AddScoped<IBillingGate, UnmeteredBillingGate>();
         }
 
         services.AddDbContext<ConcordatDbContext>(options => options.UseNpgsql(connectionString));
@@ -55,6 +62,8 @@ public static class DependencyInjection
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<ITenantRepository, TenantRepository>();
+        services.AddScoped<IBillingSubscriptionRepository, BillingSubscriptionRepository>();
+        services.AddScoped<IUsageMeter, UsageMeter>();
         services.AddScoped<IApiKeyRepository, ApiKeyRepository>();
 
         // Singleton: it holds no state beyond the derived dummy hash, and that is exactly the

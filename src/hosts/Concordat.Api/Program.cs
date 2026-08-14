@@ -92,6 +92,7 @@ app.MapContractEndpoints();
 app.MapGovernanceEndpoints();
 app.MapNotificationEndpoints();
 app.MapIdentityEndpoints();
+app.MapBillingEndpoints();
 app.MapSubjectEndpoints();
 app.MapSchemaEndpoints();
 app.MapBootstrapEndpoint();

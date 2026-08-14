@@ -1,4 +1,5 @@
 using Concordat.Application.Abstractions;
+using Concordat.Domain.Billing;
 using Concordat.Domain.Contracts;
 using Concordat.Domain.Governance;
 using Concordat.Domain.Identity;
@@ -98,6 +99,13 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
     /// </summary>
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
+    /// <summary>
+    /// Billing subscriptions (M9.3). Named apart from <see cref="Subscriptions"/>, which is
+    /// M7.5's notification subscriptions — two unrelated things called "subscription" is the
+    /// sort of collision that gets the wrong one queried.
+    /// </summary>
+    public DbSet<Subscription> BillingSubscriptions => Set<Subscription>();
+
     /// <summary>Which tenants a user belongs to, and as what (M8.1).</summary>
     public DbSet<Membership> Memberships => Set<Membership>();
 
@@ -125,6 +133,7 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
         modelBuilder.ApplyConfiguration(new NotificationSubscriptionConfiguration());
         modelBuilder.ApplyConfiguration(new TenantConfiguration());
+        modelBuilder.ApplyConfiguration(new SubscriptionConfiguration());
         modelBuilder.ApplyConfiguration(new UserConfiguration());
         modelBuilder.ApplyConfiguration(new MembershipConfiguration());
         modelBuilder.ApplyConfiguration(new ApiKeyConfiguration());

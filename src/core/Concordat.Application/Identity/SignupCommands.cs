@@ -1,4 +1,5 @@
 using Concordat.Application.Abstractions;
+using Concordat.Domain.Billing;
 using Concordat.Domain.Identity;
 using Concordat.Domain.Results;
 
@@ -34,6 +35,7 @@ public sealed record SignedUp(Tenant Tenant, User Owner);
 public sealed class SignUpHandler(
     ITenantRepository tenants,
     IUserRepository users,
+    IBillingSubscriptionRepository subscriptions,
     IPasswordHasher passwords,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
@@ -103,6 +105,13 @@ public sealed class SignUpHandler(
         }
 
         tenants.Add(tenant.Value);
+
+        // In the same transaction as the organisation, deliberately. The billing gate treats a
+        // missing subscription as unlimited — failing open rather than silently downgrading a
+        // paying customer over an internal inconsistency — and that opening stays narrow only
+        // because provisioning cannot half-succeed.
+        subscriptions.Add(Subscription.Start(tenant.Value.Id, Tier.Free, clock.GetUtcNow()));
+
         users.Add(owner.Value);
         users.Add(Membership.Grant(
             tenant.Value.Id, owner.Value.Id, Role.Owner, clock.GetUtcNow()));

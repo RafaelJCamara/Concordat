@@ -83,6 +83,7 @@ public sealed class CreateEnvironmentHandler(
     IEnvironmentResolver resolver,
     IAuditLog audit,
     ICallerContext caller,
+    IBillingGate billing,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
     : ICommandHandler<CreateEnvironmentCommand, Environment>
@@ -123,6 +124,22 @@ public sealed class CreateEnvironmentHandler(
             return Result<Environment>.Failure(
                 ConcordatCodes.EnvironmentAlreadyExists,
                 $"An environment named '{name.Value}' already exists.");
+        }
+
+        // The plan limit is checked here, at the point of creation, and nowhere else. Reads are
+        // never refused for a billing reason: the registry is on the delivery path, and a limit
+        // that could stop a consumer resolving a schema would turn a billing dispute into a
+        // production outage.
+        var allowed = await billing.MayCreateAsync(Meter.Environments, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!allowed.Allowed)
+        {
+            return Result<Environment>.Failure(
+                ConcordatCodes.PlanLimitReached,
+                $"This organisation is at its plan's limit of {allowed.Limit} environments. " +
+                "Upgrade, or retire something you no longer need — nothing already registered " +
+                "stops working.");
         }
 
         var created = Environment.Create(

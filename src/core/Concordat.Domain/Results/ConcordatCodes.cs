@@ -122,6 +122,22 @@ public static class ConcordatCodes
     /// <summary>No organisation matched the request.</summary>
     public const string TenantNotFound = "tenant_not_found";
 
+    // ------------------------------------------------------------------ billing (M9.3)
+
+    /// <summary>A tier token is not one this build knows.</summary>
+    public const string TierInvalid = "tier_invalid";
+
+    /// <summary>
+    /// The organisation is at its plan's limit for the thing it tried to create.
+    /// </summary>
+    /// <remarks>
+    /// <b>Only ever raised by a creation.</b> Reads are never refused and no message is ever
+    /// rejected for a billing reason — the registry sits on the delivery path, and a plan limit
+    /// that could stop a consumer resolving a schema would turn a billing dispute into a
+    /// production outage.
+    /// </remarks>
+    public const string PlanLimitReached = "plan_limit_reached";
+
     /// <summary>A role token is not one this build knows.</summary>
     public const string RoleInvalid = "role_invalid";
 

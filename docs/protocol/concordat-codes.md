@@ -51,6 +51,8 @@ token and an operator can alert across a fleet.
 | `tenant_slug_invalid` | An organisation slug was not a usable DNS label. |
 | `tenant_already_exists` | An organisation with that slug already exists. |
 | `tenant_not_found` | No organisation matched the request. |
+| `tier_invalid` | A tier token is not one this build knows. |
+| `plan_limit_reached` | The organisation is at its plan's limit for the thing it tried to create. |
 | `role_invalid` | A role token is not one this build knows. |
 | `email_invalid` | An email address was empty, too long, or not an address. |
 | `password_invalid` | A password did not meet the minimum requirements. |
@@ -97,7 +99,7 @@ token and an operator can alert across a fleet.
 | `changelog_too_long` | A changelog exceeded the permitted length. |
 | `schema_unresolvable` | A client could not resolve a schema, so the operation could not be enforced. |
 
-**73 codes.**
+**75 codes.**
 
 ## Rules for implementers
 

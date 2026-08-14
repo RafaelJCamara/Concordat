@@ -686,6 +686,13 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | An anonymous Cloud caller resolves to `TenantId.SelfHosted` — an organisation nobody belongs to | M9.1 | Low, and deliberate: an empty view beats a full one. It is not a real organisation in a Cloud deployment |
 | `Tenant` has an immutable slug and a mutable name | M9.1 | Low. The slug is a DNS label and appears in URLs; renaming it breaks links somebody has already sent |
 | The Cloud test fixture sets the profile with `UseSetting`, not `ConfigureAppConfiguration` | M9.1, `ApiFactory` | Low, and a trap worth knowing: under minimal hosting the app reads configuration and builds before any `ConfigureAppConfiguration` callback runs, so the value is present and was never seen. It failed silently as a profile that stayed self-hosted while the test believed it was Cloud |
+| Usage is measured by `COUNT(*)`, not by an incrementing meter | [M9.3](plan/M9-cloud.md) | Low today, and revisit at scale. A counter has to stay correct across a failed transaction, a restore and a retry; a count is correct by construction. If the counts ever get slow, a materialised view is a smaller change than a counter |
+| **API requests are not metered** | M9.3 | Low, and stated rather than approximated. A write per request on the SDK's hot read path would cost more than the thing measured. Needs sampling or an aggregation pipeline |
+| Plan limits are in code, not configuration | M9.3 | Low. A limit editable per deployment is a limit no invoice can be reconciled against. Enterprise is unlimited precisely so "negotiated" does not mean "someone typed a number into a config file" |
+| `plan_limit_reached` is **402**, not 403 | M9.3 | Low, and user-visible: it is the difference between "upgrade" and "ask an admin for a scope you already have" |
+| A past-due subscription still allows creation; only a cancelled one refuses | M9.3 | **Deliberate and worth confirming.** A card that expired over a weekend must not stop a team registering a schema. If you want a stricter dunning policy, this is the line to move |
+| A downgrade is never refused for being over the new limit | M9.3 | Low, and it protects the customer: refusing strands them on a plan they no longer want, and the only escape is retiring subjects other teams depend on |
+| A missing subscription row allows everything rather than defaulting to Free | M9.3 | Low, and it fails open on purpose — the row is created in the same transaction as the organisation, so a missing one is an internal inconsistency, not a free-tier customer |
 
 ---
 

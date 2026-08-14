@@ -78,10 +78,48 @@ decisions-pending.
 
 ## M9.3 Billing
 
-- [ ] Stripe: `Subscription`, `Plan`, `UsageMeter`, `Invoice`
-- [ ] Metering: subjects, versions/month, API requests, environments, seats
-- [ ] Tiers: Free (1 env, 10 subjects) → Team → Business → Enterprise
-- [ ] `BillingPage` in the web app
+- [x] `Subscription`, `PlanLimits`, `UsageMeter`, `IBillingGate`
+- [x] Metering: subjects, versions/month, environments, seats — **not API requests**
+- [x] Tiers: Free (1 env, 10 subjects) → Team → Business → Enterprise
+- [x] `GET /v1/usage` reports what is used against what the plan allows
+- [ ] Stripe adapter and `Invoice` — needs an account. The provider's customer and
+      subscription ids already have columns and an index, so the webhook has somewhere to land.
+- [ ] `BillingPage` in the web app — nothing to render until there is a checkout to start
+
+**Usage is measured by query, not by counter.** Every figure is derived from rows that
+already exist, so there is no meter to increment, nothing to drift and no reconciliation
+job. A counter would have to stay correct across a failed transaction, a restore from backup
+and a retried request; a `COUNT(*)` is correct by construction and cheap at the sizes these
+limits describe.
+
+**API requests are deliberately not metered**, though DESIGN §10 lists them. Counting a
+request per request is a write on the read path, and the SDK's schema lookups are the
+highest-volume traffic this registry sees — turning each into a row would cost more than the
+thing being measured. It needs sampling or an aggregation pipeline, which is a different
+design, so it is recorded as not done rather than approximated badly.
+
+**The gate stops creation and nothing else.** Reads are never refused, existing resources
+never stop working, and no message is ever rejected for a billing reason. The registry sits
+on the delivery path: a plan limit that could stop a consumer resolving a schema would turn
+a billing dispute into a production outage, which is a far larger event than an unpaid
+invoice. `BeingOverALimitNeverBreaksReads` drives that through the SDK's own startup path.
+
+**A past-due subscription still allows everything.** A card that expired over a weekend must
+not stop a team registering a schema. Only a *cancelled* subscription refuses creation.
+
+**A downgrade is never refused for being over the new limit.** Refusing would strand an
+organisation on a plan they no longer want to pay for, with the only way out being to delete
+things — and deletion here means retiring subjects other teams depend on. Being over a limit
+stops you creating more; it never takes away what you have.
+
+**`plan_limit_reached` is 402, not 403.** The caller has every right to do this and their
+plan does not stretch to it — a distinction a client can act on by upgrading, rather than by
+asking an admin for a scope they already hold.
+
+**A missing subscription row allows everything, rather than falling back to Free.** The row
+is created inside the same transaction as the organisation; a missing one means provisioning
+went wrong, and the response to an internal inconsistency should not be to silently downgrade
+a paying customer.
 
 ## M9.4 Deployment
 
@@ -122,7 +160,10 @@ confirm it exists somewhere.
 The profile is exercised as a *configuration value*, not by substituting `ITenantContext` in
 the test container. Reaching in would prove something weaker than the thing that ships.
 
-**Second half not started.** M9.3 needs a Stripe account.
+**Second half half-met.** Usage is metered and enforced — `BillingApiTests` drives a Free
+organisation into its environment and subject limits and asserts a 402 — but nothing reaches
+Stripe yet, because that needs an account. The numbers an invoice would be built from are
+the part that has to be right regardless, and they are the part that exists.
 
 ---
 

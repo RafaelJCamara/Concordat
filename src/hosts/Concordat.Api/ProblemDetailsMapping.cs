@@ -49,6 +49,11 @@ public static class ProblemDetailsMapping
         ConcordatCodes.Unauthenticated => StatusCodes.Status401Unauthorized,
         ConcordatCodes.InsufficientScope => StatusCodes.Status403Forbidden,
 
+        // 402, not 403. The caller has the right to do this and their plan does not stretch to
+        // it — a distinction a client can act on by upgrading rather than by asking an admin
+        // for a scope they already have.
+        ConcordatCodes.PlanLimitReached => StatusCodes.Status402PaymentRequired,
+
         // State conflicts: the request was well-formed but the world says no.
         ConcordatCodes.SubjectAlreadyExists => StatusCodes.Status409Conflict,
         ConcordatCodes.EnvironmentAlreadyExists => StatusCodes.Status409Conflict,
