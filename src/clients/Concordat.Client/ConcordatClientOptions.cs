@@ -103,6 +103,42 @@ public sealed class ConcordatClientOptions
     /// </remarks>
     public bool RequireWarmUp { get; set; }
 
+    /// <summary>
+    /// This service's name, reported to the registry at warm-up so impact analysis can name it
+    /// (M7.4).
+    /// </summary>
+    /// <remarks>
+    /// <b>Opt-in, and null by default.</b> Nothing is reported unless a name is set, because
+    /// the registry cannot invent a meaningful one — a machine name or a process id would fill
+    /// the service table with rows nobody recognises, which is worse for impact analysis than
+    /// an empty table that at least says "nobody has declared themselves".
+    /// </remarks>
+    public string? ServiceName { get; set; }
+
+    /// <summary>The subjects this service publishes, as <c>subject</c> or <c>subject@selector</c>.</summary>
+    /// <remarks>Ignored unless <see cref="ServiceName"/> is set.</remarks>
+    public IList<string> Produces { get; } = [];
+
+    /// <summary>
+    /// The subjects this service reads, as <c>subject@selector</c> where the selector is
+    /// <c>latest</c>, an ordinal, or <c>&gt;=N</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Pin or range these if you want a useful answer.</b> A consumer declared as
+    /// <c>latest</c> can only ever be reported as "follows the pointer" — the registry does not
+    /// know what your code was built against, only what you fetch. An ordinal or a
+    /// <c>&gt;=N</c> floor is what lets it tell you that a proposed change would stop you.
+    /// </remarks>
+    public IList<string> Consumes { get; } = [];
+
+    /// <summary>Whether a failed service report should fail warm-up.</summary>
+    /// <remarks>
+    /// Off, and separate from <see cref="RequireWarmUp"/> on purpose. Declaring intent is a
+    /// governance nicety; failing to start a service because a bookkeeping call was refused
+    /// would put the registry back on the critical path for a reason nobody would accept.
+    /// </remarks>
+    public bool RequireServiceRegistration { get; set; }
+
     /// <summary>Validates the options, throwing on anything that cannot work.</summary>
     /// <exception cref="InvalidOperationException">A required value is missing or nonsensical.</exception>
     public void Validate()

@@ -53,7 +53,8 @@ there is load-bearing, not decoration.
 
 ## M7.4 Governance
 
-- [x] `ServiceRegistration` — producer/consumer intent, `POST /v1/environments/{env}/services`
+- [x] `ServiceRegistration` — producer/consumer intent, `POST /v1/environments/{env}/services`,
+      reported by the .NET SDK at warm-up (`ConcordatClientOptions.ServiceName`)
 - [x] **Impact analysis** — "who breaks if I change this?" (`GET|POST …/subjects/{s}/impact`, `concordat impact`)
 - [x] **Promotion** `dev → staging → prod`, re-checking compatibility in the target
 - [x] Audit log + `GET /v1/audit`
@@ -76,6 +77,13 @@ what such a consumer fetches, not what its code was built against. Calling it sa
 be a guess; calling it broken would make every report useless. A range is judged at its
 **floor** — `>=1` claims to handle version 1 onward, so version 1 is the reader that has
 to survive.
+
+**Declaring is opt-in and never blocks startup.** The SDK reports nothing unless
+`ServiceName` is set — a machine name or process id would fill the service table with rows
+nobody recognises, which is worse for impact analysis than an empty table that at least
+says "nobody has declared themselves". The report runs *after* the bootstrap payload is
+ingested and its failures are swallowed, because a service that would not start over a
+governance nicety has put the registry back on the critical path.
 
 **`LastSeenAt` is what keeps impact analysis honest.** A registration is a claim made once
 and then true until contradicted; without a timestamp a service decommissioned a year ago

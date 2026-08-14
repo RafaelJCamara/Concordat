@@ -146,6 +146,8 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
             _lastContact = _warmedAt;
             _degraded = false;
 
+            await DeclareServiceAsync(cancellationToken).ConfigureAwait(false);
+
             return Status;
         }
         finally
@@ -486,6 +488,79 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
     private sealed record SchemaPayload(string SchemaId, string Format, string Schema);
 
     private sealed record VersionPayload(int Ordinal, string SchemaId, string? SemanticVersion);
+
+    private sealed record SubjectRefPayload(string Subject, string Selector);
+
+    private sealed record RegisterServicePayload(
+        string Name,
+        IReadOnlyList<SubjectRefPayload> Produces,
+        IReadOnlyList<SubjectRefPayload> Consumes,
+        string ReportedBy);
+
+    /// <summary>
+    /// Tells the registry what this service publishes and reads (M7.4).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Runs after the bootstrap payload is ingested, not before. Warm-up's job is to make the
+    /// client able to work; declaring intent is bookkeeping for someone else's benefit, and a
+    /// slow or refused report must not delay the thing that actually matters.
+    /// </para>
+    /// <para>
+    /// <b>Failures are swallowed unless the caller asks otherwise.</b> A service that would not
+    /// start because a governance nicety was refused has put the registry back on the critical
+    /// path, which is the failure mode warm-up exists to avoid.
+    /// </para>
+    /// </remarks>
+    private async Task DeclareServiceAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_options.ServiceName))
+        {
+            return;
+        }
+
+        var payload = new RegisterServicePayload(
+            _options.ServiceName,
+            [.. _options.Produces.Select(ParseRef)],
+            [.. _options.Consumes.Select(ParseRef)],
+            "sdk");
+
+        try
+        {
+            using var response = await _http.PostAsJsonAsync(
+                $"/v1/environments/{_options.Environment}/services", payload, Json, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (response.IsSuccessStatusCode || !_options.RequireServiceRegistration)
+            {
+                return;
+            }
+
+            var problem = await ReadProblemAsync(response, cancellationToken).ConfigureAwait(false);
+
+            throw new ConcordatException(
+                problem.Code ?? "service_registration_failed",
+                $"Declaring service '{_options.ServiceName}' failed with " +
+                $"{(int)response.StatusCode}: {problem.Describe()} " +
+                "RequireServiceRegistration is on, so the client will not start undeclared.");
+        }
+        catch (HttpRequestException ex) when (!_options.RequireServiceRegistration)
+        {
+            // Deliberately not rethrown and deliberately not silent-by-accident: warm-up has
+            // already succeeded, so the client is usable. Only the governance record is missing.
+            _lastFailure = $"service registration: {ex.Message}";
+        }
+    }
+
+    /// <summary>Splits <c>subject@selector</c>, defaulting a bare subject to <c>latest</c>.</summary>
+    private static SubjectRefPayload ParseRef(string entry)
+    {
+        var at = entry.LastIndexOf('@');
+
+        return at < 0
+            ? new SubjectRefPayload(entry.Trim(), "latest")
+            : new SubjectRefPayload(entry[..at].Trim(), entry[(at + 1)..].Trim());
+    }
 }
 
 /// <summary>A failure the client cannot proceed through.</summary>
