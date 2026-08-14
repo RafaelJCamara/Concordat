@@ -39,8 +39,8 @@
     <Product>Concordat</Product>
     <Authors>Rafael Camara</Authors>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/RafaelJCamara/Signet</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/RafaelJCamara/Signet</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/RafaelJCamara/Concordat</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/RafaelJCamara/Concordat</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <!-- Nothing publishes until M2 at the earliest; opt in per project. -->
     <IsPackable>false</IsPackable>

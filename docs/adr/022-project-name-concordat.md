@@ -57,9 +57,12 @@ Burrow are all taken by messaging projects, precisely because everyone reaches f
 - **Negative:** availability is not reservation. `concordat.dev` and the `@concordat` npm
   org are unclaimed but unheld; package IDs are only claimed on first publish, at M2, M3
   and M6.
-- **Neutral:** the GitHub repository is still named `Signet` at time of writing, and
-  `RepositoryUrl` in `Directory.Build.props` points there. That should be renamed before
-  M2 publishes anything.
+- **Neutral:** the GitHub repository was still named `Signet` when this ADR was written.
+  **Renamed 2026-08-14**, along with `RepositoryUrl` and `PackageProjectUrl` in
+  `Directory.Build.props` — those strings are baked into package metadata from M2 onward,
+  so the rename had to land before the first publish. GitHub redirects the old URL, and the
+  local directory is still `Projects\Signet`, which is cosmetic: git identifies a repository
+  by its remote, not its folder.
 
 ## References
 

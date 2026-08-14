@@ -101,16 +101,34 @@ it does not.
 
 ## Blocking nothing today, but getting more expensive
 
-### 1. Rename the GitHub repository `Signet` → `Concordat`
+### 1. Rename the GitHub repository `Signet` → `Concordat` — one step left, and it is yours
 
-The project was renamed in ADR-022 but the repository was not. `Directory.Build.props`
-hardcodes `RepositoryUrl` and `PackageProjectUrl` as `github.com/RafaelJCamara/Signet`, and
-**those strings get baked into every NuGet package from M2 onward**.
+**Repository side done, 2026-08-14.** `RepositoryUrl` and `PackageProjectUrl` in
+`Directory.Build.props` now say `github.com/RafaelJCamara/Concordat`, as does `NOTICE`.
+Those strings are baked into every NuGet package from M2 onward, which is why they had to
+change before the first publish rather than after it.
 
-GitHub redirects the old URL, so the change is low-risk. It needs you because it is your
-account — or say the word and I'll do it via the API once `gh` is authenticated.
+**Remaining:** the rename itself, on GitHub — *Settings → General → Repository name*.
+I could not do it: `gh` is not installed on this machine and no `GH_TOKEN` is in the
+environment, so there is no credential I can legitimately reach. Installing and
+authenticating `gh` costs more of your time than the two clicks do.
 
-> **Cost of waiting:** after M2 publishes, the wrong URL is in released package metadata.
+Afterwards, `git remote set-url origin https://github.com/RafaelJCamara/Concordat.git`.
+Not urgent — GitHub redirects the old URL indefinitely and pushes keep working — but a
+redirect is a thing to remember, and the point of the rename is to stop remembering it.
+
+Two things the rename does **not** touch, recorded so neither looks like an oversight:
+
+- **The GHCR image paths.** `publish-images.yml` derives them from `github.repository_owner`
+  and a literal image name, never the repository name, so `ghcr.io/rafaeljcamara/concordat-api`
+  is already correct and stays correct.
+- **The local directory,** still `Projects\Signet`. Git identifies a repository by its remote;
+  the folder name is cosmetic. Renaming it mid-session would invalidate every absolute path in
+  flight, so it is left for you to do between sessions if it bothers you.
+
+> **What is still deliberately named Signet:** ADR-022, M0.1 and the `## Settled` table below
+> record *why the name was rejected* — an active `bytepunx/signet-proto` publishing the exact
+> package ids ADR-021 depends on. That history is the reason the ADR exists. It stays.
 
 ### 2. What to do with the `docs/design-and-plan` branch
 
