@@ -74,6 +74,7 @@ public sealed class PromoteVersionHandler(
     ISchemaRepository schemas,
     ICompatibilityEvaluator evaluator,
     IAuditLog audit,
+    IOutbox outbox,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
     : ICommandHandler<PromoteVersionCommand, PromotionResult>
@@ -213,6 +214,19 @@ public sealed class PromoteVersionHandler(
             clock.GetUtcNow(),
             $"{source.Value.Name.Value} v{sourceVersion.Ordinal} -> " +
             $"{target.Value.Name.Value} v{landed.Ordinal} ({WireTokens.For(landed.Status)})"));
+
+        // Notified into the target environment, which is where the people who care about a
+        // change arriving in prod have subscribed.
+        outbox.Stage(OutboxMessage.Stage(
+            target.Value.Id,
+            landed.Status is VersionStatus.AwaitingApproval
+                ? NotificationEvent.BreakingChangeSubmitted
+                : NotificationEvent.VersionPromoted,
+            name.Value.Value,
+            $"{name.Value} was promoted from {source.Value.Name.Value} " +
+            $"v{sourceVersion.Ordinal} into {target.Value.Name.Value} as v{landed.Ordinal} " +
+            $"({WireTokens.For(landed.Status)}) by {actor.Value.Value}.",
+            clock.GetUtcNow()));
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 

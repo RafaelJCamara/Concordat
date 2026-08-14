@@ -94,6 +94,17 @@ public static class ConcordatCodes
     /// </remarks>
     public const string PromotionSourceNotActive = "promotion_source_not_active";
 
+    // ------------------------------------------------------------ notifications (M7.5)
+
+    /// <summary>A subscription endpoint was not a usable address or https URL.</summary>
+    public const string SubscriptionEndpointInvalid = "subscription_endpoint_invalid";
+
+    /// <summary>A subscription named a channel or event token that is not known.</summary>
+    public const string SubscriptionInvalid = "subscription_invalid";
+
+    /// <summary>No subscription with the given id exists in the environment.</summary>
+    public const string SubscriptionNotFound = "subscription_not_found";
+
     /// <summary>An actor identifier was empty or too long.</summary>
     public const string ActorIdInvalid = "actor_id_invalid";
 

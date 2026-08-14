@@ -77,6 +77,12 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
     /// <remarks>Append-only: nothing in the model or the repository issues an update or a delete.</remarks>
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
 
+    /// <summary>Notifications staged for delivery, scoped to the current tenant (M7.5).</summary>
+    public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
+
+    /// <summary>Who wants to hear about what, scoped to the current tenant (M7.5).</summary>
+    public DbSet<NotificationSubscription> Subscriptions => Set<NotificationSubscription>();
+
     /// <summary>The tenant this context instance is bound to.</summary>
     internal TenantId CurrentTenant => _tenantContext.Current;
 
@@ -92,6 +98,8 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.ApplyConfiguration(new ContractConfiguration());
         modelBuilder.ApplyConfiguration(new ServiceRegistrationConfiguration());
         modelBuilder.ApplyConfiguration(new AuditEntryConfiguration());
+        modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
+        modelBuilder.ApplyConfiguration(new NotificationSubscriptionConfiguration());
 
         // Isolation by construction rather than by remembering a predicate. Every query
         // against Subjects is filtered whether or not the author thought about tenancy, which
@@ -117,6 +125,14 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<AuditEntry>().HasQueryFilter(
             e => EF.Property<Guid>(e, AuditEntryConfiguration.TenantIdProperty) ==
+                 CurrentTenant.Value);
+
+        modelBuilder.Entity<OutboxMessage>().HasQueryFilter(
+            m => EF.Property<Guid>(m, OutboxMessageConfiguration.TenantIdProperty) ==
+                 CurrentTenant.Value);
+
+        modelBuilder.Entity<NotificationSubscription>().HasQueryFilter(
+            s => EF.Property<Guid>(s, NotificationSubscriptionConfiguration.TenantIdProperty) ==
                  CurrentTenant.Value);
 
         base.OnModelCreating(modelBuilder);

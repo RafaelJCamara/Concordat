@@ -363,6 +363,29 @@ statement.
 > tempting shortcut is to append refusals on the same path, which reintroduces exactly the
 > "audit row survives a rolled-back change" failure this design avoids.
 
+### 25. `ENFORCEMENT_VIOLATION` is a notification event nothing emits
+
+M7.5 defines it because DESIGN §5 lists it, and every other event in the set is raised by the
+handler that causes it. This one cannot be: **an enforcement violation happens in the SDK, on
+the publisher's machine**, when a message fails validation against a contract the registry
+never sees the traffic for. The registry has no way to know it happened.
+
+That leaves a published token in the notification catalogue that no subscription will ever fire
+on — the same shape of problem as `envelope_format_mismatch` in #20, and worth fixing the same
+way rather than leaving both.
+
+> **Options:** (a) add a client-reported endpoint — `POST /v1/environments/{env}/violations` —
+> and have `Concordat.RabbitMq` report violations it blocks or observes. Honest, and it makes
+> the metric `EnforcementCounters` already keeps into something a team can be alerted on. It
+> also means an SDK reporting to the registry on the hot path, which needs the same
+> fire-and-forget treatment service registration got; (b) remove the token until an SDK can
+> raise it.
+>
+> **Recommendation:** (a), scoped to M8 or later. The counters exist client-side already
+> (M2.1), so this is a transport and a batching decision rather than new measurement — but it
+> is a new write path from every publisher in the estate, and that deserves to be designed
+> rather than appended.
+
 ### 15. Hard-delete semantics — before v1 ships
 
 M1.5 implements soft delete (`Subject.Retire()`) and never deletes schemas, which is what
@@ -533,6 +556,17 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | `Subject.Revision` exists to dirty the root row so `xmin` engages | M7.4 | Low, needs a migration. It closed a hole that already existed: `Reject` touches only a child row and slipped past optimistic concurrency entirely |
 | A CLI `4xx` is now exit **1**, not exit 3 | M7.4, `RegistryApi.EnsureAsync` | Low, but it changes what a pipeline does. Exit 3 means "retry, the registry is down"; a deliberate refusal was telling CI to retry until timeout |
 | `concordat impact` gates by default; `--warn-only` opts out | M7.4 | Low, and it matches `check`. A warning in a log nobody reads is not a gate |
+| **MailKit** added for SMTP delivery | [M7.5](plan/M7-governance.md) | Low. MIT, confined to Infrastructure, reaches no shipped client package. It is what Microsoft's own `System.Net.Mail.SmtpClient` documentation points at — that type is explicitly not recommended for new development and cannot negotiate STARTTLS properly |
+| Notification delivery is **at-least-once**; every message carries an id to deduplicate on | M7.5 | **Cannot be tightened later without a receiver-side contract change.** Exactly-once would need an acknowledgement protocol the receivers do not have |
+| A message with no matching subscription is marked **delivered** | M7.5 | Low, and required: nobody subscribing is the commonest configuration, and treating it as undelivered grows the table forever |
+| Partial delivery counts as success; the healthy subscriber gets a duplicate on retry | M7.5 | Low, given at-least-once. The alternative is silence for the broken subscriber |
+| Failed messages are **parked** after 5 attempts, never deleted | M7.5 | Low. A message nobody could deliver is evidence about the channel |
+| Backoff doubles from one minute, capped by the attempt limit | M7.5 | Low. Deliberately coarse — an endpoint that is down stays down for minutes |
+| `http://` webhooks are refused outright | M7.5 | Low, and user-visible. A webhook body names subjects, versions and reviewers |
+| An unknown event token in a subscription is refused, not ignored | M7.5 | Low. The alternative is a subscription that is configured, enabled, and silently delivers nothing |
+| The pump is in-process on every instance, with no leader election | M7.5 | Low today, and it is why at-least-once is the stated contract. Cloud (M9) may want a single writer; the receivers' contract does not change either way |
+| Ownership changes are audited but not notified; only deprecation is | M7.5 | Low. Deprecation is a signal to every consuming team; an owner change is not |
+| The API integration harness removes `OutboxPump` from the host | M7.5, `ApiFactory` | Low, and necessary: a background timer draining the outbox mid-assertion makes every count a race. Notification tests pump deliberately |
 
 ---
 

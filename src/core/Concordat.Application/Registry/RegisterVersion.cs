@@ -50,6 +50,7 @@ public sealed class RegisterVersionHandler(
     ISchemaRepository schemas,
     ICompatibilityEvaluator evaluator,
     IAuditLog audit,
+    IOutbox outbox,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
     : ICommandHandler<RegisterVersionCommand, RegisterVersionResult>
@@ -183,6 +184,21 @@ public sealed class RegisterVersionHandler(
             subject.Name.Value,
             at,
             $"version {outcome.Version.Ordinal}, schema {outcome.Version.SchemaId}"));
+
+        // Staged, not sent (M7.5). Sending here would mean a notification can go out for a
+        // registration that then rolls back, or vanish with a crash after the commit.
+        outbox.Stage(OutboxMessage.Stage(
+            environmentId,
+            submitted
+                ? NotificationEvent.BreakingChangeSubmitted
+                : NotificationEvent.VersionRegistered,
+            subject.Name.Value,
+            submitted
+                ? $"{subject.Name} version {outcome.Version.Ordinal} is a breaking change and " +
+                  $"is waiting for review. Registered by {actor.Value}."
+                : $"{subject.Name} version {outcome.Version.Ordinal} was registered by " +
+                  $"{actor.Value}.",
+            at));
     }
 
     private async Task<IReadOnlyList<PriorSchema>> LoadPriorsAsync(

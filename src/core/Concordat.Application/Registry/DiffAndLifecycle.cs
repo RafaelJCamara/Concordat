@@ -130,7 +130,11 @@ public sealed record UpdateSubjectCommand(
 
 /// <summary>Handles <see cref="UpdateSubjectCommand"/>.</summary>
 public sealed class UpdateSubjectHandler(
-    ISubjectRepository subjects, IAuditLog audit, IUnitOfWork unitOfWork, TimeProvider clock)
+    ISubjectRepository subjects,
+    IAuditLog audit,
+    IOutbox outbox,
+    IUnitOfWork unitOfWork,
+    TimeProvider clock)
     : ICommandHandler<UpdateSubjectCommand, Subject>
 {
     /// <inheritdoc />
@@ -181,6 +185,19 @@ public sealed class UpdateSubjectHandler(
             subject.Value.Name.Value,
             clock.GetUtcNow(),
             command.Deprecate ? "deprecated" : "owner changed"));
+
+        if (command.Deprecate)
+        {
+            // Only deprecation is notified. An ownership change is worth auditing and not worth
+            // interrupting anyone about; deprecation is a signal to every team consuming it.
+            outbox.Stage(OutboxMessage.Stage(
+                command.EnvironmentId,
+                NotificationEvent.SubjectDeprecated,
+                subject.Value.Name.Value,
+                $"{subject.Value.Name} was deprecated. It still accepts versions, but consumers " +
+                "should plan to move off it.",
+                clock.GetUtcNow()));
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return subject;

@@ -7,6 +7,13 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+
+    <!--
+      Abstractions only. The dispatcher is the first thing in this layer with something worth
+      saying out loud: a parked notification is invisible otherwise, and "the webhook silently
+      stopped" is the failure everyone discovers a quarter late.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
 </Project>

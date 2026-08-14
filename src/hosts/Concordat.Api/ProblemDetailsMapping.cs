@@ -38,6 +38,7 @@ public static class ProblemDetailsMapping
         ConcordatCodes.BrokerNotFound => StatusCodes.Status404NotFound,
         ConcordatCodes.ContractNotFound => StatusCodes.Status404NotFound,
         ConcordatCodes.ServiceNotFound => StatusCodes.Status404NotFound,
+        ConcordatCodes.SubscriptionNotFound => StatusCodes.Status404NotFound,
 
         // State conflicts: the request was well-formed but the world says no.
         ConcordatCodes.SubjectAlreadyExists => StatusCodes.Status409Conflict,

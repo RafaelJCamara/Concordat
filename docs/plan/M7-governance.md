@@ -115,10 +115,55 @@ now advances a counter on the root.
 
 ## M7.5 Notifications
 
-- [ ] Outbox for domain events
-- [ ] `INotificationChannel`: Email (SMTP) and Webhook
-- [ ] Events: breaking change attempted/blocked, version registered, enforcement violation, subject deprecated
-- [ ] Per-environment subscriptions
+- [x] Outbox for domain events
+- [x] `INotificationChannel`: Email (SMTP, MailKit) and Webhook
+- [x] Events: version registered, breaking change submitted/approved/rejected, version
+      promoted, subject deprecated
+- [x] Per-environment subscriptions, `GET|POST|DELETE /v1/environments/{env}/notifications`
+- [ ] `ENFORCEMENT_VIOLATION` is defined and **nothing emits it yet** — the violation happens
+      in the SDK, on the publisher's machine, and there is no endpoint for a client to report
+      one. See [decisions-pending #25](../DECISIONS-PENDING.md).
+
+**The outbox exists because of the transaction, not because of the queue.** Sending an
+email or a webhook inside a request handler means a change can commit and its notification
+vanish, or a notification can go out for a change that then rolls back — "your breaking
+change was approved" about an approval that did not happen. A row written alongside the
+change makes the two atomic; a separate pump makes delivery someone else's problem. A
+*refused* request stages nothing, for the same reason it audits nothing.
+
+**Delivery is at-least-once, and that is a promise to the receiver rather than an
+apology.** A crash between sending and marking sent re-sends: a duplicate "breaking change
+awaiting approval" is noise, a missing one is the outage this exists to prevent. Every
+notification carries an id, in the body and in an `X-Concordat-Message-Id` header, to
+deduplicate on.
+
+**A message nobody subscribed to is marked delivered, not left pending.** Nobody
+subscribing is a legitimate configuration — the commonest one — and treating it as
+undelivered would grow the table forever.
+
+**Partial success counts as success.** When two subscribers want a message and one endpoint
+is down, retrying re-delivers to the healthy one, so the choice is between duplicates for
+the working subscriber and silence for the broken one. Duplicates win. The failure is still
+recorded on the message and the retry still happens.
+
+**Failed messages are parked after five attempts, never deleted.** A message nobody could
+deliver is evidence about the channel; discarding it makes a misconfigured webhook
+indistinguishable from a quiet week. `GET /v1/notifications/outbox` reports the parked
+count, and nothing else will say so.
+
+**An empty event set means every event**, and an unknown event token is refused rather than
+ignored. The failure this avoids is a subscription that is configured, enabled, and
+silently delivers nothing — which looks correct from every screen.
+
+**`http://` webhooks are refused, not warned about.** A webhook body names subjects,
+versions and reviewers: the shape of an organisation's message contracts.
+
+**The pump is in-process and every instance polls**, so two instances can deliver the same
+message twice. That is acceptable precisely because the contract is already at-least-once;
+a leader election would add a protocol to buy a guarantee this design has already declined
+to make. It never lets an exception escape — a `BackgroundService` that throws is stopped by
+the host and never runs again, and the registry would keep accepting changes while quietly
+telling nobody.
 
 ---
 
@@ -126,6 +171,16 @@ now advances a counter on the root.
 
 Registering a version in staging reports exactly which registered consumers break,
 notifies the subscribed channel, and can be promoted to prod with a fresh check.
+
+**Met.** Each clause is covered by a test that exercises it over real PostgreSQL, and the
+first one end to end over a real broker as well: an SDK declares `subject@1` at startup
+(`ServiceDeclarationTests`), impact analysis names that service as broken by a type change,
+the registration stages a notification the pump delivers, and promotion re-checks against
+the target's own history.
+
+Two gaps are stated rather than hidden: **approval reviewers** need M8's identity, and
+**`ENFORCEMENT_VIOLATION`** cannot be raised by the registry because the violation happens
+in the SDK. Both are in [decisions-pending](../DECISIONS-PENDING.md).
 
 ---
 

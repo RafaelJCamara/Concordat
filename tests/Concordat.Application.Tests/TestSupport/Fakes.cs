@@ -162,6 +162,31 @@ internal sealed class RecordingAuditLog : IAuditLog
         Task.FromResult<IReadOnlyList<AuditEntry>>(_entries);
 }
 
+/// <summary>Collects staged notifications, so a test can assert what would be sent (M7.5).</summary>
+internal sealed class RecordingOutbox : IOutbox
+{
+    private readonly List<OutboxMessage> _staged = [];
+
+    /// <summary>Everything staged, in order.</summary>
+    public IReadOnlyList<OutboxMessage> Staged => _staged;
+
+    /// <summary>The events staged, for terse assertions.</summary>
+    public IReadOnlyList<NotificationEvent> Events => [.. _staged.Select(m => m.Event)];
+
+    public void Stage(OutboxMessage message) => _staged.Add(message);
+
+    public Task<IReadOnlyList<OutboxMessage>> ClaimDueAsync(
+        DateTimeOffset now, int batchSize, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<OutboxMessage>>(
+            [.. _staged.Where(m => m.DeliveredAt is null && !m.Parked && m.NextAttemptAt <= now)
+                .Take(batchSize)]);
+
+    public Task<(int Pending, int Parked)> DepthAsync(CancellationToken cancellationToken) =>
+        Task.FromResult((
+            _staged.Count(m => m.DeliveredAt is null && !m.Parked),
+            _staged.Count(m => m.Parked)));
+}
+
 /// <summary>Mints one stable <see cref="EnvironmentId"/> per environment name.</summary>
 /// <remarks>
 /// Reference resolution goes name → id, so a test that seeds a subject has to be able to ask

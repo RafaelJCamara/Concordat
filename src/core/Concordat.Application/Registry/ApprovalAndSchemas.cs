@@ -20,7 +20,11 @@ public sealed record DecideVersionCommand(
 
 /// <summary>Handles <see cref="DecideVersionCommand"/>.</summary>
 public sealed class DecideVersionHandler(
-    ISubjectRepository subjects, IAuditLog audit, IUnitOfWork unitOfWork, TimeProvider clock)
+    ISubjectRepository subjects,
+    IAuditLog audit,
+    IOutbox outbox,
+    IUnitOfWork unitOfWork,
+    TimeProvider clock)
     : ICommandHandler<DecideVersionCommand, Subject>
 {
     /// <inheritdoc />
@@ -60,13 +64,25 @@ public sealed class DecideVersionHandler(
             return Result<Subject>.Failure(decision.Error!);
         }
 
+        var at = clock.GetUtcNow();
+
         audit.Append(AuditEntry.Record(
             command.EnvironmentId,
             command.Approve ? AuditAction.VersionApproved : AuditAction.VersionRejected,
             actor.Value,
             name.Value.Value,
-            clock.GetUtcNow(),
+            at,
             $"version {command.Ordinal}"));
+
+        outbox.Stage(OutboxMessage.Stage(
+            command.EnvironmentId,
+            command.Approve
+                ? NotificationEvent.BreakingChangeApproved
+                : NotificationEvent.BreakingChangeRejected,
+            name.Value.Value,
+            $"{name.Value} version {command.Ordinal} was " +
+            $"{(command.Approve ? "approved" : "rejected")} by {actor.Value.Value}.",
+            at));
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return Result<Subject>.Success(subject);

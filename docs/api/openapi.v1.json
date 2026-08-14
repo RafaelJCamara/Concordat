@@ -100,6 +100,27 @@
         }
       }
     },
+    "/v1/notifications/outbox": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "How much is waiting to be delivered",
+        "description": "A non-zero parked count is the signal that a subscriber has been failing long enough to be given up on. Nothing else will say so.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutboxDepthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/environments/{env}/bootstrap": {
       "post": {
         "tags": [
@@ -1381,6 +1402,209 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/notifications": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "List an environment's notification subscriptions",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SubscriptionResponse"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Subscribe a channel to an environment's events",
+        "description": "An empty event list means every event. The alternative is a subscription that is configured, enabled, and silently delivers nothing — which looks correct from every screen.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSubscriptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/notifications/{id}/enabled": {
+      "put": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Mute or unmute a subscription without losing its settings",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSubscriptionEnabledRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/notifications/{id}": {
+      "delete": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Delete a subscription",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3068,6 +3292,34 @@
         },
         "description": "Request to create a subject."
       },
+      "CreateSubscriptionRequest": {
+        "required": [
+          "channel",
+          "endpoint"
+        ],
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "description": "`EMAIL` or `WEBHOOK`."
+          },
+          "endpoint": {
+            "type": "string",
+            "description": "An email address, or an `https` URL."
+          },
+          "events": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Which events, or omit for all of them."
+          }
+        },
+        "description": "Request to create a subscription."
+      },
       "DecideVersionRequest": {
         "required": [
           "decidedBy"
@@ -3303,6 +3555,34 @@
           }
         },
         "description": "The answer to a schema lookup."
+      },
+      "OutboxDepthResponse": {
+        "required": [
+          "pending",
+          "parked"
+        ],
+        "type": "object",
+        "properties": {
+          "pending": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Staged and not yet delivered.",
+            "format": "int32"
+          },
+          "parked": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Given up on after repeated failures, and kept as evidence.",
+            "format": "int32"
+          }
+        },
+        "description": "How much the outbox is holding."
       },
       "PolicyResponse": {
         "required": [
@@ -3967,6 +4247,19 @@
         },
         "description": "Request to change enforcement."
       },
+      "SetSubscriptionEnabledRequest": {
+        "required": [
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether to deliver."
+          }
+        },
+        "description": "Request to mute or unmute a subscription."
+      },
       "SubjectRefInput": {
         "required": [
           "subject",
@@ -4065,6 +4358,49 @@
           }
         },
         "description": "A subject and its versions."
+      },
+      "SubscriptionResponse": {
+        "required": [
+          "id",
+          "channel",
+          "endpoint",
+          "events",
+          "enabled",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Its identity.",
+            "format": "uuid"
+          },
+          "channel": {
+            "type": "string",
+            "description": "`EMAIL` or `WEBHOOK`."
+          },
+          "endpoint": {
+            "type": "string",
+            "description": "Where notifications go."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Which events, or empty for all of them."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether it is currently delivering."
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When it was created.",
+            "format": "date-time"
+          }
+        },
+        "description": "A notification subscription."
       },
       "UpdateEnvironmentRequest": {
         "type": "object",
@@ -4183,6 +4519,9 @@
   "tags": [
     {
       "name": "Governance"
+    },
+    {
+      "name": "Notifications"
     },
     {
       "name": "Bootstrap"

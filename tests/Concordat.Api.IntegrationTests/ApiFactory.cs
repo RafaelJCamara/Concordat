@@ -55,6 +55,19 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
             services.AddDbContext<ConcordatDbContext>(
                 options => options.UseNpgsql(_container.GetConnectionString()));
+
+            // M7.5's outbox pump is removed, and only it. A background timer draining the
+            // outbox mid-assertion makes every count in these tests a race; notification tests
+            // resolve NotificationDispatcher and pump deliberately, which is also the only way
+            // to assert on what one pass did. Removing IHostedService wholesale would take the
+            // test server's own host service with it and nothing would start.
+            foreach (var pump in services
+                .Where(d => d.ServiceType == typeof(IHostedService) &&
+                            d.ImplementationType == typeof(OutboxPump))
+                .ToList())
+            {
+                services.Remove(pump);
+            }
         });
 
         return base.CreateHost(builder);

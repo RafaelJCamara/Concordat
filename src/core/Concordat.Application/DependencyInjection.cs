@@ -146,6 +146,20 @@ public static class DependencyInjection
         services.AddScoped<
             IQueryHandler<QueryAuditQuery, IReadOnlyList<AuditEntry>>, QueryAuditHandler>();
 
+        // M7.5 notifications.
+        services.AddScoped<
+            ICommandHandler<CreateSubscriptionCommand, NotificationSubscription>,
+            CreateSubscriptionHandler>();
+        services.AddScoped<
+            ICommandHandler<SetSubscriptionEnabledCommand, NotificationSubscription>,
+            SetSubscriptionEnabledHandler>();
+        services.AddScoped<
+            ICommandHandler<DeleteSubscriptionCommand, bool>, DeleteSubscriptionHandler>();
+        services.AddScoped<
+            IQueryHandler<ListSubscriptionsQuery, IReadOnlyList<NotificationSubscription>>,
+            ListSubscriptionsHandler>();
+        services.AddScoped<NotificationDispatcher>();
+
         return services;
     }
 }

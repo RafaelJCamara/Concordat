@@ -22,6 +22,10 @@
     <!-- M7.1: the broker health check completes a real AMQP handshake. -->
     <PackageReference Include="RabbitMQ.Client" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" />
+    <!-- M7.5: SMTP delivery and the options binding the channels read their configuration from. -->
+    <PackageReference Include="MailKit" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 
 </Project>

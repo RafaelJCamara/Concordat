@@ -43,6 +43,9 @@ token and an operator can alert across a fleet.
 | `audit_filter_invalid` | An audit query carried a filter value that could not be understood. |
 | `promotion_target_invalid` | A promotion named a target environment that is the source environment. |
 | `promotion_source_not_active` | A promotion named a source version that is not active — a proposal, a rejection or a dismissal. |
+| `subscription_endpoint_invalid` | A subscription endpoint was not a usable address or https URL. |
+| `subscription_invalid` | A subscription named a channel or event token that is not known. |
+| `subscription_not_found` | No subscription with the given id exists in the environment. |
 | `actor_id_invalid` | An actor identifier was empty or too long. |
 | `reference_invalid` | A schema reference was malformed. |
 | `duplicate_reference_name` | Two references in one schema shared a name. |
@@ -80,7 +83,7 @@ token and an operator can alert across a fleet.
 | `changelog_too_long` | A changelog exceeded the permitted length. |
 | `schema_unresolvable` | A client could not resolve a schema, so the operation could not be enforced. |
 
-**56 codes.**
+**59 codes.**
 
 ## Rules for implementers
 

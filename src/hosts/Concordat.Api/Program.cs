@@ -19,6 +19,14 @@ var connectionString =
 builder.Services.AddConcordatApplication();
 builder.Services.AddConcordatPersistence(connectionString);
 
+// M7.5: both channels are registered whether or not SMTP is configured. A channel is only
+// reached when a subscription names it, and an unconfigured one fails loudly with the reason
+// recorded on the message rather than resolving to nothing at delivery time.
+builder.Services.AddConcordatNotifications(
+    smtp => builder.Configuration.GetSection("Concordat:Smtp").Bind(smtp));
+
+builder.Services.AddHostedService<OutboxPump>();
+
 // M7.2: broker credentials are encrypted at rest with Data Protection, and the key ring lives
 // in the database so a second API instance can decrypt what the first one wrote. Persisting to
 // disk is the framework default and would silently destroy every stored credential the first
@@ -72,6 +80,7 @@ app.MapOpenApi();
 app.MapEnvironmentEndpoints();
 app.MapContractEndpoints();
 app.MapGovernanceEndpoints();
+app.MapNotificationEndpoints();
 app.MapSubjectEndpoints();
 app.MapSchemaEndpoints();
 app.MapBootstrapEndpoint();
