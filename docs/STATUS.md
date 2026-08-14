@@ -140,7 +140,7 @@ These matter more than the two lists above, because the surface exists and looks
 | Gap | Where it bites |
 |---|---|
 | **Mode B binary framing (`0x01 \| 16-byte id \| payload`) is specified and not implemented** | The envelope spec describes a wire format nothing writes or reads. Recorded as decision #19. The content-type form of Mode B does work. |
-| **`ENFORCEMENT_VIOLATION` is a notification event nothing emits** | The violation happens in the SDK, on the publisher's machine, and there is no endpoint for a client to report one. A subscriber can subscribe to silence. Decision #25. |
+| ~~`ENFORCEMENT_VIOLATION` is a notification event nothing emits~~ | **Closed 2026-08-14** by decision 25 — `POST …/violations`, aggregated and reported by the SDK, upserted by fingerprint, notification on first sight only. **Nothing schedules the flush yet**: a host opts in by wrapping its observer and calling `FlushViolationsAsync` on a timer. |
 | ~~An environment with no row has no registration policy~~ | **Closed 2026-08-14** by decision 23. The first write creates the row with the derived id, so the policy applies from the first request rather than from whenever somebody thought to create the environment. |
 | **Approval reviewers do not exist** | Anyone with `subject:admin` can approve anything. A reviewer *set* was deferred to M8 and M8 did not build it. |
 | **Hard delete does not exist** | Soft delete is all there is. The full rule — no registered consumers, force flag, audit entry — is an outstanding commitment. |

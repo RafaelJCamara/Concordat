@@ -244,7 +244,8 @@ public sealed class ConcordatConsumer : IAsyncBasicConsumer
             decision.Subject?.Value,
             decision.SchemaId?.Value,
             exchange,
-            routingKey));
+            routingKey,
+            _queue));
 
     /// <inheritdoc />
     public Task HandleBasicCancelAsync(string consumerTag, CancellationToken cancellationToken = default) =>

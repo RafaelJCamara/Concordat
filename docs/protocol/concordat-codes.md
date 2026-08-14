@@ -43,6 +43,7 @@ token and an operator can alert across a fleet.
 | `contract_version_not_permitted` | The subject is permitted on the route, but not at the version being sent. Raised by the SDK. |
 | `contract_subject_ambiguous` | The route is governed and permits several subjects, and the message declared none — so the subject cannot be chosen without guessing. Raised by the SDK. |
 | `service_name_invalid` | A service name was empty, too long, or outside the permitted grammar. |
+| `violation_report_invalid` | A client-reported enforcement violation was missing something the registry needs. Its own code rather than `invalid_request`: reports arrive fire-and-forget, so nobody reads the response and the code is what makes a rejected report legible in a log. |
 | `service_not_found` | No service with the given name is registered in the environment. |
 | `audit_filter_invalid` | An audit query carried a filter value that could not be understood. |
 | `promotion_target_invalid` | A promotion named a target environment that is the source environment. |
@@ -103,7 +104,7 @@ token and an operator can alert across a fleet.
 | `changelog_too_long` | A changelog exceeded the permitted length. |
 | `schema_unresolvable` | A client could not resolve a schema, so the operation could not be enforced. |
 
-**79 codes.**
+**80 codes.**
 
 ## Rules for implementers
 

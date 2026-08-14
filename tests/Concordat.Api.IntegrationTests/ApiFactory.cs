@@ -111,6 +111,21 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         ArgumentNullException.ThrowIfNull(response);
 
+        // THE STATUS IS CHECKED FIRST, AND THAT WAS LEARNED THE SLOW WAY.
+        //
+        // Without this, a 500 whose RFC 9457 body shares no field names with T deserialises to a
+        // T with every value defaulted -- so a failing endpoint reads as one that ran and did
+        // nothing. That is a worse lie than an exception: it sends whoever is debugging into the
+        // handler to work out why it returned zeros, when the handler never ran.
+        if (!response.IsSuccessStatusCode)
+        {
+            var problem = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            Assert.Fail(
+                $"Expected a success response to deserialise as {typeof(T).Name}, got " +
+                $"{(int)response.StatusCode} {response.StatusCode}: {problem}");
+        }
+
         var body = await response.Content.ReadFromJsonAsync<T>(Json).ConfigureAwait(false);
         Assert.NotNull(body);
         return body;
@@ -119,8 +134,16 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// <summary>Reads an RFC 9457 problem body.</summary>
     /// <param name="response">The response.</param>
     /// <returns>The parts a test cares about.</returns>
-    public static Task<ApiProblem> ReadProblemAsync(HttpResponseMessage response) =>
-        ReadAsync<ApiProblem>(response);
+    public static async Task<ApiProblem> ReadProblemAsync(HttpResponseMessage response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        // Deliberately does not go through ReadAsync: a problem body is expected on a failure
+        // status, so asserting success there would refuse exactly the responses this reads.
+        var body = await response.Content.ReadFromJsonAsync<ApiProblem>(Json).ConfigureAwait(false);
+        Assert.NotNull(body);
+        return body;
+    }
 }
 
 /// <summary>The parts of a problem response tests assert on.</summary>

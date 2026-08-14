@@ -99,3 +99,25 @@ public interface IDeploymentLog
     /// </remarks>
     Task<IReadOnlyList<DeploymentEvent>> ReadAsync(int limit, CancellationToken cancellationToken);
 }
+
+/// <summary>Reads and writes client-reported enforcement violations (decision 25).</summary>
+public interface IViolationRepository
+{
+    /// <summary>Finds a violation by its fingerprint.</summary>
+    /// <param name="fingerprint">Environment, side, route, subject and code.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The violation, or <see langword="null"/> when it has never been reported.</returns>
+    Task<EnforcementViolation?> FindAsync(string fingerprint, CancellationToken cancellationToken);
+
+    /// <summary>Stages a violation nobody has reported before.</summary>
+    /// <param name="violation">The violation.</param>
+    void Add(EnforcementViolation violation);
+
+    /// <summary>Lists an environment's open violations, most recently seen first.</summary>
+    /// <param name="environmentId">The environment.</param>
+    /// <param name="limit">The most rows to return.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The violations.</returns>
+    Task<IReadOnlyList<EnforcementViolation>> ListAsync(
+        EnvironmentId environmentId, int limit, CancellationToken cancellationToken);
+}

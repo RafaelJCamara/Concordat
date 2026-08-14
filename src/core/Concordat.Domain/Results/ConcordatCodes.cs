@@ -113,6 +113,16 @@ public static class ConcordatCodes
     /// <summary>A service name was empty, too long, or outside the permitted grammar.</summary>
     public const string ServiceNameInvalid = "service_name_invalid";
 
+    /// <summary>
+    /// A client-reported enforcement violation was missing something the registry needs.
+    /// </summary>
+    /// <remarks>
+    /// Its own code rather than <c>invalid_request</c>: this arrives on a fire-and-forget path
+    /// from an SDK, so nobody is reading the response. The code is what makes a rejected report
+    /// legible in a log rather than a silent hole in the metric.
+    /// </remarks>
+    public const string ViolationReportInvalid = "violation_report_invalid";
+
     /// <summary>No service with the given name is registered in the environment.</summary>
     public const string ServiceNotFound = "service_not_found";
 

@@ -108,3 +108,27 @@ internal sealed class DeploymentLog(ConcordatDbContext context) : IDeploymentLog
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 }
+
+/// <summary>Client-reported enforcement violations (decision 25).</summary>
+internal sealed class ViolationRepository(ConcordatDbContext context) : IViolationRepository
+{
+    /// <inheritdoc />
+    public Task<EnforcementViolation?> FindAsync(
+        string fingerprint, CancellationToken cancellationToken) =>
+        context.Violations.FirstOrDefaultAsync(
+            v => v.Fingerprint == fingerprint, cancellationToken);
+
+    /// <inheritdoc />
+    public void Add(EnforcementViolation violation) => context.Violations.Add(violation);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<EnforcementViolation>> ListAsync(
+        EnvironmentId environmentId, int limit, CancellationToken cancellationToken) =>
+        await context.Violations
+            .AsNoTracking()
+            .Where(v => v.EnvironmentId == environmentId)
+            .OrderByDescending(v => v.LastSeenAt)
+            .Take(limit)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+}

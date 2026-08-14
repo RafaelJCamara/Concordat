@@ -471,28 +471,36 @@ statement.
 > tempting shortcut is to append refusals on the same path, which reintroduces exactly the
 > "audit row survives a rolled-back change" failure this design avoids.
 
-### 25. `ENFORCEMENT_VIOLATION` is a notification event nothing emits
+### 25. ~~`ENFORCEMENT_VIOLATION` is a notification event nothing emits~~ — done
 
-M7.5 defines it because DESIGN §5 lists it, and every other event in the set is raised by the
-handler that causes it. This one cannot be: **an enforcement violation happens in the SDK, on
-the publisher's machine**, when a message fails validation against a contract the registry
-never sees the traffic for. The registry has no way to know it happened.
+**Resolved 2026-08-14 with option (a).** `POST /v1/environments/{env}/violations`, reported by
+`Concordat.RabbitMq` through a `ViolationReportingObserver` that decorates whatever observer the
+host already wired up rather than replacing it.
 
-That leaves a published token in the notification catalogue that no subscription will ever fire
-on — the same shape of problem as `envelope_format_mismatch` in #20, and worth fixing the same
-way rather than leaving both.
+The shape, all of which follows from "this must not touch the delivery path":
 
-> **Options:** (a) add a client-reported endpoint — `POST /v1/environments/{env}/violations` —
-> and have `Concordat.RabbitMq` report violations it blocks or observes. Honest, and it makes
-> the metric `EnforcementCounters` already keeps into something a team can be alerted on. It
-> also means an SDK reporting to the registry on the hot path, which needs the same
-> fire-and-forget treatment service registration got; (b) remove the token until an SDK can
-> raise it.
->
-> **Recommendation:** (a), scoped to M8 or later. The counters exist client-side already
-> (M2.1), so this is a transport and a batching decision rather than new measurement — but it
-> is a new write path from every publisher in the estate, and that deserves to be designed
-> rather than appended.
+- **Counted locally, sent on a timer.** `RecordViolation` does one dictionary update and returns.
+- **Aggregated by fingerprint** — environment, side, route, subject, code — not queued per
+  message. A broken publisher emits thousands a second, and a queue of individual violations
+  would post a batch big enough to hurt the registry: a denial of service written by our own SDK.
+- **Bounded and dropping**, at 256 distinct violations between flushes, counted in `Dropped`. A
+  client that exhausts its own memory recording that something else is broken has made the
+  outage worse.
+- **Upserted at the registry**, one row per distinct violation with `FirstSeenAt`, `LastSeenAt`
+  and a count. The unique index is what stops every replica of a broken service opening its own
+  row and firing its own notification.
+- **The notification fires on first sight only.** "This started happening" is the alert; "this is
+  still happening" is the counter. Staging one per report would page somebody every reporting
+  window for as long as the fault lasted.
+- **Unenforced is not a violation** and is never reported — a brownfield estate would otherwise
+  report every message it sends.
+- **Opt-in on `ServiceName`,** the same rule service registration uses: a table of violations
+  reported by "unknown" names a problem and nobody to talk to about it.
+
+> **Not yet wired by default.** `ViolationReportingObserver` and `FlushViolationsAsync` exist and
+> are tested end to end, but nothing schedules the flush — a host opts in by wrapping its observer
+> and calling flush on a timer. Putting a background timer inside a client library that hosts
+> already own the lifetime of is the next decision, not this one.
 
 ### 26. A reload signs you out, and there is still no browser E2E
 

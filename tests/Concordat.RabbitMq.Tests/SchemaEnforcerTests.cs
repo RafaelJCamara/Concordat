@@ -38,6 +38,18 @@ internal sealed class FakeClient : IConcordatClient
         ValueTask.FromResult(
             _consumeRoutes.GetValueOrDefault(queue) ?? ResolvedRoute.Ungoverned(DateTimeOffset.UtcNow));
 
+    /// <summary>Violations the SDK counted, in the order they were recorded.</summary>
+    public List<ViolationKey> Violations { get; } = [];
+
+    public void RecordViolation(ViolationKey key) => Violations.Add(key);
+
+    public Task<int> FlushViolationsAsync(CancellationToken cancellationToken = default)
+    {
+        var count = Violations.Count;
+        Violations.Clear();
+        return Task.FromResult(count);
+    }
+
     public FakeClient Register(string subject, string schemaId, string body, int ordinal = 1)
     {
         var id = SchemaId.Create(schemaId).Value;

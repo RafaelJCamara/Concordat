@@ -1326,6 +1326,120 @@
         }
       }
     },
+    "/v1/environments/{env}/violations": {
+      "post": {
+        "tags": [
+          "Governance"
+        ],
+        "summary": "Report contract violations an SDK saw",
+        "description": "The registry never sees message traffic, so an enforcement violation is only observable in the SDK on the publisher's machine. Reports are aggregated by the client and upserted here on (side, route, subject, code): one row per distinct violation, not one per message. The ENFORCEMENT_VIOLATION notification fires on FIRST SIGHT only -- 'this started happening' is an alert, 'this is still happening' is the row's counter.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportViolationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViolationsAcceptedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Governance"
+        ],
+        "summary": "List the violations reported in an environment",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ViolationResponse"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/environments/{env}/subjects/{subject}/impact": {
       "get": {
         "tags": [
@@ -4867,6 +4981,33 @@
         },
         "description": "Who may register schemas in an environment, and what that requires of them."
       },
+      "ReportViolationsRequest": {
+        "required": [
+          "reportedBy",
+          "violations"
+        ],
+        "type": "object",
+        "properties": {
+          "reportedBy": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The reporting service, for a human reading the row later."
+          },
+          "violations": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ViolationReportRequest"
+            },
+            "description": "The batch."
+          }
+        },
+        "description": "A batch of violation reports."
+      },
       "ResolveContractsRequest": {
         "type": "object",
         "properties": {
@@ -5568,6 +5709,165 @@
           }
         },
         "description": "One registered version."
+      },
+      "ViolationReportRequest": {
+        "required": [
+          "side",
+          "route",
+          "subject",
+          "code",
+          "detail",
+          "occurrences"
+        ],
+        "type": "object",
+        "properties": {
+          "side": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "`PUBLISH` or `CONSUME`."
+          },
+          "route": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The exchange and routing key, or the queue."
+          },
+          "subject": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The subject, when the SDK resolved one."
+          },
+          "code": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The `concordatCode` that classified it."
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "What went wrong."
+          },
+          "occurrences": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many messages hit it in the window.",
+            "format": "int64"
+          }
+        },
+        "description": "One violation an SDK counted over its reporting window."
+      },
+      "ViolationResponse": {
+        "required": [
+          "side",
+          "route",
+          "subject",
+          "code",
+          "detail",
+          "reportedBy",
+          "firstSeenAt",
+          "lastSeenAt",
+          "occurrences"
+        ],
+        "type": "object",
+        "properties": {
+          "side": {
+            "type": "string",
+            "description": "`PUBLISH` or `CONSUME`."
+          },
+          "route": {
+            "type": "string",
+            "description": "The exchange and routing key, or the queue."
+          },
+          "subject": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The subject, when one was resolved."
+          },
+          "code": {
+            "type": "string",
+            "description": "The classifying code."
+          },
+          "detail": {
+            "type": "string",
+            "description": "The most recent explanation."
+          },
+          "reportedBy": {
+            "type": "string",
+            "description": "The service that last reported it."
+          },
+          "firstSeenAt": {
+            "type": "string",
+            "description": "When it was first seen.",
+            "format": "date-time"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "description": "When it was last seen.",
+            "format": "date-time"
+          },
+          "occurrences": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many messages have hit it.",
+            "format": "int64"
+          }
+        },
+        "description": "A violation as the registry holds it."
+      },
+      "ViolationsAcceptedResponse": {
+        "required": [
+          "accepted",
+          "opened",
+          "rejected"
+        ],
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many were recorded.",
+            "format": "int32"
+          },
+          "opened": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many were violations nobody had reported before.",
+            "format": "int32"
+          },
+          "rejected": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many were unusable and dropped. <b>Non-zero means a reporting client is malformed</b>,\r\nand it is here because nothing else would ever say so — this runs fire-and-forget, so no\r\nSDK is reading the status code.",
+            "format": "int32"
+          }
+        },
+        "description": "What the registry did with a batch."
       }
     }
   },

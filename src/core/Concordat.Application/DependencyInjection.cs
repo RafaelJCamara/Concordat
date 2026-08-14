@@ -136,6 +136,11 @@ public static class DependencyInjection
 
         // M7.4 governance.
         services.AddScoped<
+            ICommandHandler<ReportViolationsCommand, ViolationsAccepted>, ReportViolationsHandler>();
+        services.AddScoped<
+            IQueryHandler<ListViolationsQuery, IReadOnlyList<EnforcementViolation>>,
+            ListViolationsHandler>();
+        services.AddScoped<
             ICommandHandler<RegisterServiceCommand, ServiceRegistration>, RegisterServiceHandler>();
         services.AddScoped<
             IQueryHandler<ListServicesQuery, IReadOnlyList<ServiceRegistration>>,

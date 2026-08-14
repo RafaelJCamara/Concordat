@@ -198,3 +198,92 @@ internal sealed class DeploymentEventConfiguration : IEntityTypeConfiguration<De
             $"'{token}' is not a deployment action this build knows."),
     };
 }
+
+/// <summary>
+/// Maps <see cref="EnforcementViolation"/> (decision 25).
+/// </summary>
+/// <remarks>
+/// Tenant-scoped, unlike <see cref="DeploymentEvent"/>: a violation is something that happened
+/// inside one organisation's estate and belongs to that organisation's view of itself.
+/// </remarks>
+internal sealed class EnforcementViolationConfiguration
+    : IEntityTypeConfiguration<EnforcementViolation>
+{
+    /// <summary>The shadow column carrying tenant ownership.</summary>
+    internal const string TenantIdProperty = "TenantId";
+
+    public void Configure(EntityTypeBuilder<EnforcementViolation> builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ToTable("enforcement_violation");
+        builder.HasKey(v => v.Id);
+
+        builder.Property(v => v.Id).HasColumnName("violation_id").ValueGeneratedNever();
+
+        builder.Property(v => v.EnvironmentId)
+            .HasColumnName("environment_id")
+            .HasConversion(id => id.Value, value => new EnvironmentId(value));
+
+        builder.Property(v => v.Side)
+            .HasColumnName("side")
+            .HasConversion(side => ViolationTokens.For(side), token => ParseSide(token))
+            .HasMaxLength(16)
+            .IsRequired();
+
+        builder.Property(v => v.Route)
+            .HasColumnName("route")
+            .HasMaxLength(EnforcementViolation.MaxRouteLength)
+            .IsRequired();
+
+        builder.Property(v => v.Subject).HasColumnName("subject").HasMaxLength(256);
+
+        builder.Property(v => v.Code).HasColumnName("code").HasMaxLength(64).IsRequired();
+
+        builder.Property(v => v.Detail)
+            .HasColumnName("detail")
+            .HasMaxLength(EnforcementViolation.MaxDetailLength)
+            .IsRequired();
+
+        builder.Property(v => v.ReportedBy)
+            .HasColumnName("reported_by")
+            .HasMaxLength(EnforcementViolation.MaxReportedByLength)
+            .IsRequired();
+
+        builder.Property(v => v.FirstSeenAt).HasColumnName("first_seen_at");
+        builder.Property(v => v.LastSeenAt).HasColumnName("last_seen_at");
+        builder.Property(v => v.Occurrences).HasColumnName("occurrences");
+
+        builder.Property(v => v.Fingerprint)
+            .HasColumnName("fingerprint")
+            .HasMaxLength(1024)
+            .IsRequired();
+
+        builder.Property<Guid>(TenantIdProperty).HasColumnName("tenant_id");
+
+        // The upsert key, enforced by the database rather than by a read-then-write. Every
+        // replica of a broken service reports the same fingerprint at the same moment, and a race
+        // would leave duplicate rows -- which would then each fire their own "first sight"
+        // notification, turning one fault into an alert storm.
+        builder.HasIndex(TenantIdProperty, nameof(EnforcementViolation.Fingerprint))
+            .IsUnique()
+            .HasDatabaseName("ux_violation_tenant_fingerprint");
+
+        builder.HasIndex(
+                TenantIdProperty,
+                nameof(EnforcementViolation.EnvironmentId),
+                nameof(EnforcementViolation.LastSeenAt))
+            .IsDescending(false, false, true)
+            .HasDatabaseName("ix_violation_tenant_environment_last_seen");
+    }
+
+    private static ViolationSide ParseSide(string token)
+    {
+        if (ViolationTokens.Parse(token, out var side).IsFailure)
+        {
+            throw new InvalidOperationException($"'{token}' is not a violation side.");
+        }
+
+        return side;
+    }
+}

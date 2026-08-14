@@ -29,6 +29,7 @@ export const DOMAIN_CONCORDAT_CODES = [
   'contract_version_not_permitted',
   'contract_subject_ambiguous',
   'service_name_invalid',
+  'violation_report_invalid',
   'service_not_found',
   'audit_filter_invalid',
   'promotion_target_invalid',

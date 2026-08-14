@@ -39,6 +39,27 @@ public static class GovernanceEndpoints
             .Produces<ServiceResponse>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
+        var violations = app.MapGroup("/v1/environments/{env}/violations").WithTags("Governance");
+
+        violations.MapPost("/", ReportViolations)
+            .WithSummary("Report contract violations an SDK saw")
+            .WithDescription(
+                "The registry never sees message traffic, so an enforcement violation is only " +
+                "observable in the SDK on the publisher's machine. Reports are aggregated by " +
+                "the client and upserted here on (side, route, subject, code): one row per " +
+                "distinct violation, not one per message. The ENFORCEMENT_VIOLATION " +
+                "notification fires on FIRST SIGHT only -- 'this started happening' is an " +
+                "alert, 'this is still happening' is the row's counter.")
+            .Produces<ViolationsAcceptedResponse>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
+
+        violations.MapGet("/", ListViolations)
+            .WithSummary("List the violations reported in an environment")
+            .Produces<IReadOnlyList<ViolationResponse>>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
         var subjects = app.MapGroup("/v1/environments/{env}/subjects/{subject}")
             .WithTags("Governance");
 
@@ -101,6 +122,39 @@ public static class GovernanceEndpoints
         return result.IsFailure
             ? ProblemDetailsMapping.From(result.Error!)
             : TypedResults.Ok(ServiceResponse.From(result.Value));
+    }
+
+    private static async Task<IResult> ReportViolations(
+        string env,
+        ReportViolationsRequest request,
+        IDispatcher dispatcher,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var result = await dispatcher.SendAsync(
+            new ReportViolationsCommand(
+                env,
+                request.ReportedBy,
+                [.. (request.Violations ?? []).Select(v => new ViolationReport(
+                    v.Side, v.Route, v.Subject, v.Code, v.Detail, v.Occurrences))]),
+            cancellationToken).ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(new ViolationsAcceptedResponse(
+                result.Value.Accepted, result.Value.Opened, result.Value.Rejected));
+    }
+
+    private static async Task<IResult> ListViolations(
+        string env, int? limit, IDispatcher dispatcher, CancellationToken cancellationToken)
+    {
+        var result = await dispatcher.QueryAsync(
+            new ListViolationsQuery(env, limit ?? 100), cancellationToken).ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(result.Value.Select(ViolationResponse.From).ToList());
     }
 
     private static async Task<IResult> ListServices(
@@ -402,5 +456,78 @@ public sealed record AuditResponse(
             entry.Actor.Value,
             entry.Target,
             entry.Detail);
+    }
+}
+
+/// <summary>One violation an SDK counted over its reporting window.</summary>
+/// <param name="Side"><c>PUBLISH</c> or <c>CONSUME</c>.</param>
+/// <param name="Route">The exchange and routing key, or the queue.</param>
+/// <param name="Subject">The subject, when the SDK resolved one.</param>
+/// <param name="Code">The <c>concordatCode</c> that classified it.</param>
+/// <param name="Detail">What went wrong.</param>
+/// <param name="Occurrences">How many messages hit it in the window.</param>
+public sealed record ViolationReportRequest(
+    string? Side,
+    string? Route,
+    string? Subject,
+    string? Code,
+    string? Detail,
+    long Occurrences);
+
+/// <summary>A batch of violation reports.</summary>
+/// <param name="ReportedBy">The reporting service, for a human reading the row later.</param>
+/// <param name="Violations">The batch.</param>
+public sealed record ReportViolationsRequest(
+    string? ReportedBy,
+    IReadOnlyList<ViolationReportRequest>? Violations);
+
+/// <summary>What the registry did with a batch.</summary>
+/// <param name="Accepted">How many were recorded.</param>
+/// <param name="Opened">How many were violations nobody had reported before.</param>
+/// <param name="Rejected">
+/// How many were unusable and dropped. <b>Non-zero means a reporting client is malformed</b>,
+/// and it is here because nothing else would ever say so — this runs fire-and-forget, so no
+/// SDK is reading the status code.
+/// </param>
+public sealed record ViolationsAcceptedResponse(int Accepted, int Opened, int Rejected);
+
+/// <summary>A violation as the registry holds it.</summary>
+/// <param name="Side"><c>PUBLISH</c> or <c>CONSUME</c>.</param>
+/// <param name="Route">The exchange and routing key, or the queue.</param>
+/// <param name="Subject">The subject, when one was resolved.</param>
+/// <param name="Code">The classifying code.</param>
+/// <param name="Detail">The most recent explanation.</param>
+/// <param name="ReportedBy">The service that last reported it.</param>
+/// <param name="FirstSeenAt">When it was first seen.</param>
+/// <param name="LastSeenAt">When it was last seen.</param>
+/// <param name="Occurrences">How many messages have hit it.</param>
+public sealed record ViolationResponse(
+    string Side,
+    string Route,
+    string? Subject,
+    string Code,
+    string Detail,
+    string ReportedBy,
+    DateTimeOffset FirstSeenAt,
+    DateTimeOffset LastSeenAt,
+    long Occurrences)
+{
+    /// <summary>Projects a violation.</summary>
+    /// <param name="violation">The violation.</param>
+    /// <returns>The wire form.</returns>
+    public static ViolationResponse From(EnforcementViolation violation)
+    {
+        ArgumentNullException.ThrowIfNull(violation);
+
+        return new ViolationResponse(
+            ViolationTokens.For(violation.Side),
+            violation.Route,
+            violation.Subject,
+            violation.Code,
+            violation.Detail,
+            violation.ReportedBy,
+            violation.FirstSeenAt,
+            violation.LastSeenAt,
+            violation.Occurrences);
     }
 }

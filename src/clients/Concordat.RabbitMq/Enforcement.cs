@@ -58,6 +58,16 @@ public enum EnforcementOutcome
 /// <param name="SchemaId">The schema id, when known.</param>
 /// <param name="Exchange">The exchange.</param>
 /// <param name="RoutingKey">The routing key.</param>
+/// <param name="Queue">
+/// The queue a delivery arrived on, when the consumer knows it. Null on the publish side.
+/// </param>
+/// <remarks>
+/// <b>The queue is carried separately from the exchange, and both are needed.</b> A publish
+/// contract is written against an exchange and a routing key; a consume contract is written
+/// against a queue. A delivery carries the exchange it was published to, which is not what its
+/// consumer's contract names — so reporting a consume violation by exchange would file it under
+/// a route nobody wrote a rule for.
+/// </remarks>
 public sealed record EnforcementEvent(
     EnforcementSide Side,
     EnforcementOutcome Outcome,
@@ -66,7 +76,8 @@ public sealed record EnforcementEvent(
     string? Subject = null,
     string? SchemaId = null,
     string? Exchange = null,
-    string? RoutingKey = null);
+    string? RoutingKey = null,
+    string? Queue = null);
 
 /// <summary>Receives every enforcement decision.</summary>
 /// <remarks>

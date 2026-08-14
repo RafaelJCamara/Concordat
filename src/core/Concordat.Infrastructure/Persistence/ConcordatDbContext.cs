@@ -89,6 +89,9 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
     /// </remarks>
     public DbSet<DeploymentEvent> DeploymentEvents => Set<DeploymentEvent>();
 
+    /// <summary>Client-reported enforcement violations, scoped to the current tenant (decision 25).</summary>
+    public DbSet<EnforcementViolation> Violations => Set<EnforcementViolation>();
+
     /// <summary>Notifications staged for delivery, scoped to the current tenant (M7.5).</summary>
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
 
@@ -141,6 +144,7 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.ApplyConfiguration(new ServiceRegistrationConfiguration());
         modelBuilder.ApplyConfiguration(new AuditEntryConfiguration());
         modelBuilder.ApplyConfiguration(new DeploymentEventConfiguration());
+        modelBuilder.ApplyConfiguration(new EnforcementViolationConfiguration());
         modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
         modelBuilder.ApplyConfiguration(new NotificationSubscriptionConfiguration());
         modelBuilder.ApplyConfiguration(new TenantConfiguration());
@@ -173,6 +177,10 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<AuditEntry>().HasQueryFilter(
             e => EF.Property<Guid>(e, AuditEntryConfiguration.TenantIdProperty) ==
+                 CurrentTenant.Value);
+
+        modelBuilder.Entity<EnforcementViolation>().HasQueryFilter(
+            v => EF.Property<Guid>(v, EnforcementViolationConfiguration.TenantIdProperty) ==
                  CurrentTenant.Value);
 
         modelBuilder.Entity<OutboxMessage>().HasQueryFilter(

@@ -50,6 +50,22 @@ public interface IConcordatClient
     /// <returns>The governing contract, or an ungoverned answer.</returns>
     ValueTask<ResolvedRoute> GetConsumeRouteAsync(
         string queue, CancellationToken cancellationToken = default);
+
+    /// <summary>Counts a contract violation for later reporting (decision 25).</summary>
+    /// <param name="key">What went wrong.</param>
+    /// <remarks>
+    /// <b>Called on the delivery path, so it does no I/O.</b> The registry never sees message
+    /// traffic, so this is the only way an enforcement violation can reach it — but the whole
+    /// point of the SDK is that the registry is not in the critical path, so the counting is
+    /// local and the reporting happens on a timer.
+    /// </remarks>
+    void RecordViolation(ViolationKey key);
+
+    /// <summary>Sends everything counted since the last flush.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>How many distinct violations were sent.</returns>
+    /// <remarks>Never throws for a transport failure: a lost report must not fail anything.</remarks>
+    Task<int> FlushViolationsAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -88,6 +104,7 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
     private readonly ConcordatClientOptions _options;
     private readonly SchemaCache _cache;
     private readonly ContractCache _contracts;
+    private readonly ViolationReporter _violations = new();
     private readonly TimeProvider _clock;
     private readonly SemaphoreSlim _warmUpGate = new(1, 1);
 
@@ -148,6 +165,69 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
 
     /// <summary>The contract cache, exposed so a host can report on it.</summary>
     public ContractCache Contracts => _contracts;
+
+    /// <summary>The violation counter, exposed so a host can report on it.</summary>
+    public ViolationReporter Violations => _violations;
+
+    /// <inheritdoc />
+    public void RecordViolation(ViolationKey key) => _violations.Record(key);
+
+    /// <inheritdoc />
+    public async Task<int> FlushViolationsAsync(CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(_options.ServiceName))
+        {
+            // Nothing to attribute a report to. A table of violations reported by "unknown" is
+            // worse than no table: it names a problem and nobody to talk to about it, and the
+            // same opt-in rule already governs service registration.
+            return 0;
+        }
+
+        var batch = _violations.Drain();
+
+        if (batch.Count is 0)
+        {
+            return 0;
+        }
+
+        var payload = new ReportViolationsPayload(
+            _options.ServiceName,
+            [.. batch.Select(entry => new ViolationPayload(
+                entry.Key.Side,
+                entry.Key.Route,
+                entry.Key.Subject,
+                entry.Key.Code,
+                entry.Key.Detail,
+                entry.Count))]);
+
+        try
+        {
+            using var response = await _http.PostAsJsonAsync(
+                $"/v1/environments/{_options.Environment}/violations",
+                payload,
+                Json,
+                cancellationToken).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var problem = await ReadProblemAsync(response, cancellationToken).ConfigureAwait(false);
+                RecordRefusal(response.StatusCode, problem);
+                return 0;
+            }
+
+            _lastContact = _clock.GetUtcNow();
+            return batch.Count;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            // Swallowed, and the batch is gone with it. Retrying would need a queue that grows
+            // during exactly the outage that caused the failure, and these are counters rather
+            // than facts anybody reconciles -- losing a window of them is the cheaper mistake.
+            _degraded = true;
+            _lastFailure = $"violation report: {ex.Message}";
+            return 0;
+        }
+    }
 
     /// <inheritdoc />
     public async Task<ConcordatClientStatus> WarmUpAsync(CancellationToken cancellationToken = default)
@@ -750,6 +830,12 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
         IReadOnlyList<string>? Contracts,
         string? Enforcement,
         IReadOnlyList<SubjectRefPayload> Subjects);
+
+    private sealed record ViolationPayload(
+        string Side, string Route, string? Subject, string Code, string Detail, long Occurrences);
+
+    private sealed record ReportViolationsPayload(
+        string ReportedBy, IReadOnlyList<ViolationPayload> Violations);
 
     private sealed record ResolveResponsePayload(
         IReadOnlyList<ResolvedBindingPayload> Publishes,
