@@ -436,25 +436,24 @@ addressable.
 > a human-facing governance artefact where `Orders — EU` is a reasonable thing to want to
 > write, unlike a subject name, which is a wire identifier.
 
-### 23. A subject can be registered in an environment that does not exist, and then cannot be promoted
+### 23. ~~A subject can be registered in an environment that does not exist~~ — done
 
-`IEnvironmentResolver` derives an `EnvironmentId` by hashing the name (M1.6, recorded below),
-so `POST /v1/environments/dev/subjects` works whether or not anyone ever created `dev`. M7.4 is
-where that stops being harmless: **promotion and impact analysis both require a real
-`Environment` row**, because they read the target's compatibility policy and a derived id has
-no policy to read. The CLI's own tests had to start creating environments to keep passing.
+**Resolved 2026-08-14 with option (a).** The row is created on the first write to an
+environment, carrying the **derived** id — so it is not a migration, it is filling in the record
+the hashed id always implied, and every subject already pointing at that id is adopted rather
+than orphaned. `RegistrationGate` does it, shared by subject creation and version registration.
 
-So an estate can be in a state where subjects register happily and promotion refuses with
-`environment_not_found`, which reads as a bug rather than a missing setup step.
+Two things fell out of it that are worth knowing:
 
-> **Options:** (a) auto-create the `Environment` row on first use, with defaults — makes the
-> derived path a real path; (b) refuse registration into an environment that does not exist,
-> which is the honest model but breaks the zero-setup first run the quickstart relies on;
-> (c) leave it, and make the error message say "create the environment first".
->
-> **Recommendation:** (a). The derived id is already deterministic, so auto-creating a row with
-> that id is not a migration — it is filling in the record that was always implied. It also
-> retires the "needs an M7 migration" note below rather than deferring it again.
+- **It closed the registration-policy hole.** A never-created environment had no row, therefore
+  no policy, therefore admitted everyone — so `prod` was open precisely until somebody thought
+  to create it. The first write now materialises the row, the `CiOnly` default applies
+  immediately, and a non-CI caller is refused.
+- **A refused first write leaves nothing behind.** The row is staged, not committed; the handler
+  returns before saving, so the refusal does not quietly create the environment it just refused.
+
+It also discharged the standing M7 commitment to *"adopt the derived environment ids or migrate
+`subject.environment_id`"*, which had been deferred twice.
 
 ### 24. The audit trail records successful changes only
 
@@ -613,7 +612,7 @@ into the milestone that owes it, and collected here because they are the ones th
 | ~~M7~~ ✅ | ~~Contract-resolution caching, deferred from M2.1~~ | **Discharged.** `ContractCache` at the specified 60 s, keyed by topology rather than subject; batch resolve at warm-up, on-demand for anything undeclared, stale-on-failure. The oldest outstanding commitment in this register, and closing it turned `/contracts/resolve` from an endpoint nothing called into the feature it was built to be |
 | ~~M2.5~~ ✅ | ~~Verify the AMQP 1.0 header conversion~~ | **Discharged.** Measured on `rabbitmq:4.1-management`: `concordat-*` arrive as application-properties, and an `x-`-prefixed control header on the same message is demoted to an annotation, so the prefix rule is load-bearing rather than precautionary |
 | **M7** | Hard delete: no registered consumers + force flag + audit entry | Soft delete is all that exists today |
-| **M7** | Adopt the derived environment ids, or migrate `subject.environment_id` | `DerivedEnvironmentResolver` hashes the name to a stable id so `/environments/{env}/…` works before environments exist. Real rows will generate their own |
+| ~~M7~~ ✅ | ~~Adopt the derived environment ids, or migrate `subject.environment_id`~~ | **Discharged by decision 23.** The row is now created on first write *carrying the derived id*, so nothing migrates and no subject is orphaned — the id was always deterministic, and this fills in the record it always implied |
 | ~~M7~~ ✅ | ~~`GET\|PUT …/registration-policy`~~ | **Discharged, and the routes were the smaller half.** `Environment.RegistrationPolicy` had been stored since M7.1, defaulted to `CiOnly` for production-sounding names, and documented in three places as "enforced server-side, which is the whole point" — while no handler read it. Now enforced on subject creation and version registration, refused with 403 `registration_policy_forbids`. See decision #33 for how a pipeline is told apart from a producer |
 | **After M1.5** | Any change to canonicalisation now needs a **preimage version bump and a migration** | Schemas are persisted from here on. The golden id test exists to make such a change impossible to miss |
 | **Maintenance** | Drop the `SSH.NET` pin when Testcontainers requires a patched version itself | A stale forward-pin eventually holds a dependency *back* |

@@ -418,11 +418,12 @@ and documented it in three places as *"enforced server-side, which is the whole 
 against Confluent, whose equivalent is client-side only. No handler ever read it. It is
 enforced now, on subject creation as well as version registration.
 
-`{env}` in the route is still resolved by `DerivedEnvironmentResolver`, an M1 shim that hashes
-the name to a stable id so the API works before environments exist. **M7 must still either adopt
-those derived ids or migrate `subject.environment_id`** — and note the consequence for this
-policy: an environment with no row has no policy and is allowed, which is what keeps the
-quickstart working and is also a gap somebody could stand in.
+`{env}` in the route is still resolved by `DerivedEnvironmentResolver`, the M1 shim that hashes
+the name to a stable id so the API works before environments exist. **That shim is now the real
+mechanism, not a placeholder:** decision 23 has the first write to an environment create its row
+*carrying the derived id*, so the ids are adopted rather than migrated and no subject is
+orphaned. It also closes the gap this note used to describe — an environment with no row had no
+policy and therefore admitted everyone.
 
 ### One gap not yet closed
 

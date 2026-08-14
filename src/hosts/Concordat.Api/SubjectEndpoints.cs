@@ -159,7 +159,7 @@ public static class SubjectEndpoints
         var result = await dispatcher.SendAsync(
             new CreateSubjectCommand(
                 environments.Resolve(env), request.Name, format, request.Owner,
-                policy, contentModel),
+                policy, contentModel, env),
             cancellationToken).ConfigureAwait(false);
 
         return result.IsFailure
@@ -256,7 +256,7 @@ public static class SubjectEndpoints
         var result = await dispatcher.SendAsync(
             new RegisterVersionCommand(
                 environments.Resolve(env), subject, request.Schema,
-                request.SemanticVersion, request.Changelog, request.RegisteredBy),
+                request.SemanticVersion, request.Changelog, request.RegisteredBy, env),
             cancellationToken).ConfigureAwait(false);
 
         if (result.IsFailure)

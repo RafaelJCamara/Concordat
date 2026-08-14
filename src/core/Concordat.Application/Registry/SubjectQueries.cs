@@ -13,13 +13,18 @@ namespace Concordat.Application.Registry;
 /// <param name="Owner">Who owns the contract.</param>
 /// <param name="CompatibilityPolicy">An explicit policy, or null to inherit the environment default.</param>
 /// <param name="ContentModel">Whether unknown properties are permitted.</param>
+/// <param name="EnvironmentName">
+/// The environment as it appeared in the route, so the row can be created if this is the first
+/// thing anyone has written to it (decision 23).
+/// </param>
 public sealed record CreateSubjectCommand(
     EnvironmentId EnvironmentId,
     string Name,
     SchemaFormat Format,
     string Owner,
     CompatibilityPolicy? CompatibilityPolicy,
-    ContentModel ContentModel) : ICommand<Subject>;
+    ContentModel ContentModel,
+    string? EnvironmentName = null) : ICommand<Subject>;
 
 /// <summary>Handles <see cref="CreateSubjectCommand"/>.</summary>
 public sealed class CreateSubjectHandler(
@@ -54,17 +59,17 @@ public sealed class CreateSubjectHandler(
         // would let a misconfigured producer fill a closed production environment with empty
         // subjects — permanent clutter, arriving through the exact door the policy exists to
         // shut, and reported as a success every time.
-        var environment = await environments
-            .FindAsync(command.EnvironmentId, cancellationToken).ConfigureAwait(false);
+        var admitted = await RegistrationGate.AdmitAsync(
+            environments,
+            caller,
+            command.EnvironmentId,
+            command.EnvironmentName,
+            clock,
+            cancellationToken).ConfigureAwait(false);
 
-        if (environment is not null)
+        if (admitted.IsFailure)
         {
-            var permitted = environment.MayRegister(caller.Current.Scopes);
-
-            if (permitted.IsFailure)
-            {
-                return Result<Subject>.Failure(permitted.Error!);
-            }
+            return Result<Subject>.Failure(admitted.Error!);
         }
 
         var existing = await subjects.FindAsync(command.EnvironmentId, name.Value, cancellationToken)

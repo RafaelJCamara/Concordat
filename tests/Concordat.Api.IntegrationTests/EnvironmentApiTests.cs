@@ -250,11 +250,14 @@ public class EnvironmentApiTests(ApiFactory factory)
     [Fact]
     public async Task SubjectsRegisteredBeforeTheEnvironmentExistedStayVisible()
     {
-        // The M7 migration commitment, discharged. Before this milestone the routes worked
-        // with no Environment row at all, because the id was derived from the name. Creating
-        // the environment afterwards adopts that same id -- so subjects registered under the
-        // old scheme are still found. A freshly generated id would have orphaned every one of
-        // them, silently.
+        // The M7 migration commitment, discharged twice over. The id has always been derived
+        // from the name, so the routes worked with no Environment row at all -- and promotion
+        // and impact analysis, which need a real row to read a policy from, did not. Decision 23
+        // closed that by creating the row on the first write.
+        //
+        // What this pins is that the row adopts the DERIVED id rather than a fresh one. A newly
+        // generated id would have orphaned every subject already pointing at the derived one,
+        // silently, and the symptom would have been an environment that lists nothing.
         var client = factory.CreateClient();
         var name = Unique();
         var subject = $"acme.adopt.S{Guid.CreateVersion7():N}";
@@ -266,8 +269,14 @@ public class EnvironmentApiTests(ApiFactory factory)
 
         Assert.Equal(HttpStatusCode.Created, createdSubject.StatusCode);
 
-        // Now the environment gains a row of its own.
-        await CreateAsync(client, name);
+        // The environment now exists without anyone having created it, and creating it again is
+        // a conflict rather than a second row.
+        var environment = await client.GetAsync($"/v1/environments/{name}");
+        Assert.Equal(HttpStatusCode.OK, environment.StatusCode);
+
+        var again = await client.PostAsJsonAsync(
+            "/v1/environments", new CreateEnvironmentRequest(name), ApiFactory.Json);
+        Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
 
         var listed = await client.GetAsync($"/v1/environments/{name}/subjects");
         var subjects = await ApiFactory.ReadAsync<List<SubjectResponse>>(listed);

@@ -13,13 +13,18 @@ namespace Concordat.Application.Registry;
 /// <param name="SemanticVersion">An optional intent label, verified against the verdict.</param>
 /// <param name="Changelog">An optional note.</param>
 /// <param name="RegisteredBy">Who is registering.</param>
+/// <param name="EnvironmentName">
+/// The environment as it appeared in the route, so the row can be created if this is the first
+/// thing anyone has written to it (decision 23).
+/// </param>
 public sealed record RegisterVersionCommand(
     EnvironmentId EnvironmentId,
     string SubjectName,
     string? Body,
     string? SemanticVersion,
     string? Changelog,
-    string RegisteredBy) : ICommand<RegisterVersionResult>;
+    string RegisteredBy,
+    string? EnvironmentName = null) : ICommand<RegisterVersionResult>;
 
 /// <summary>What registration produced.</summary>
 /// <param name="SubjectName">The subject.</param>
@@ -78,23 +83,20 @@ public sealed class RegisterVersionHandler(
 
         // THE REGISTRATION POLICY, CHECKED BEFORE ANYTHING ELSE COSTS ANYTHING.
         //
-        // Environment.RegistrationPolicy was stored, defaulted to CiOnly for anything named like
-        // production, and described in three places as "enforced server-side, which is the whole
-        // point" — while nothing read it. An environment with no row has no policy and is
-        // allowed: routes accept an environment name before an Environment aggregate exists
-        // (DerivedEnvironmentResolver), and refusing there would refuse every registration on a
-        // registry nobody had explicitly configured.
-        var environment = await environments
-            .FindAsync(command.EnvironmentId, cancellationToken).ConfigureAwait(false);
+        // Creates the environment's row if this is the first write to it, so the policy applies
+        // everywhere rather than only where somebody happened to create an environment first.
+        // See RegistrationGate for why auto-creating is safe and what it closes.
+        var admitted = await RegistrationGate.AdmitAsync(
+            environments,
+            caller,
+            command.EnvironmentId,
+            command.EnvironmentName,
+            clock,
+            cancellationToken).ConfigureAwait(false);
 
-        if (environment is not null)
+        if (admitted.IsFailure)
         {
-            var permitted = environment.MayRegister(caller.Current.Scopes);
-
-            if (permitted.IsFailure)
-            {
-                return Result<RegisterVersionResult>.Failure(permitted.Error!);
-            }
+            return Result<RegisterVersionResult>.Failure(admitted.Error!);
         }
 
         var subject = await subjects.FindAsync(command.EnvironmentId, name.Value, cancellationToken)

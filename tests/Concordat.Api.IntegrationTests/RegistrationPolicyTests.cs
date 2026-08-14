@@ -162,7 +162,14 @@ public class RegistrationPolicyTests(ApiFactory factory)
     {
         // The default has existed since M7.1 and did nothing at all, because no handler read the
         // field. This is the test that would have failed then.
-        var (http, environment) = await NewEnvironmentAsync(name: "prod");
+        //
+        // The environment is deliberately NOT created first. Since decision 23 the first write
+        // materialises the row and the CiOnly default applies to it immediately — which is the
+        // gap that closed: a never-created 'prod' used to have no policy, and therefore admitted
+        // everyone, precisely until somebody thought to create it. This test owns the literal
+        // name 'prod' in the shared database; every other test here uses a unique one.
+        var http = factory.CreateClient();
+        const string environment = "prod";
 
         var refused = await CreateSubjectAsync(http, environment, UniqueSubject());
         var problem = await ApiFactory.ReadProblemAsync(refused);
@@ -235,15 +242,21 @@ public class RegistrationPolicyTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task AnEnvironmentThatWasNeverCreatedHasNoPolicyAndAccepts()
+    public async Task AnEnvironmentThatWasNeverCreatedIsCreatedOnFirstWriteAndAccepts()
     {
-        // Routes take an environment name before any Environment row exists — the id is derived
-        // from the name. Refusing there would refuse every registration on a registry nobody had
-        // explicitly configured, which is every quickstart.
+        // Decision 23. The first write creates the row, with the derived id, and an ordinary
+        // name defaults to OPEN — so the zero-setup first run the quickstart relies on still
+        // works, and the environment is now real enough to promote out of.
         var http = factory.CreateClient();
+        var environment = UniqueEnvironment();
 
-        var created = await CreateSubjectAsync(http, UniqueEnvironment(), UniqueSubject());
-
+        var created = await CreateSubjectAsync(http, environment, UniqueSubject());
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var policy = await ApiFactory.ReadAsync<RegistrationPolicyResponse>(
+            await http.GetAsync($"/v1/environments/{environment}/registration-policy"));
+
+        Assert.Equal("OPEN", policy.Policy);
     }
+
 }

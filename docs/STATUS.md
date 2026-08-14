@@ -141,7 +141,7 @@ These matter more than the two lists above, because the surface exists and looks
 |---|---|
 | **Mode B binary framing (`0x01 \| 16-byte id \| payload`) is specified and not implemented** | The envelope spec describes a wire format nothing writes or reads. Recorded as decision #19. The content-type form of Mode B does work. |
 | **`ENFORCEMENT_VIOLATION` is a notification event nothing emits** | The violation happens in the SDK, on the publisher's machine, and there is no endpoint for a client to report one. A subscriber can subscribe to silence. Decision #25. |
-| **An environment with no row has no registration policy** | Routes accept an environment name before the aggregate exists (`DerivedEnvironmentResolver` hashes it). Registration into a never-created environment is unpoliced. This is what keeps the quickstart working; it is also a door. |
+| ~~An environment with no row has no registration policy~~ | **Closed 2026-08-14** by decision 23. The first write creates the row with the derived id, so the policy applies from the first request rather than from whenever somebody thought to create the environment. |
 | **Approval reviewers do not exist** | Anyone with `subject:admin` can approve anything. A reviewer *set* was deferred to M8 and M8 did not build it. |
 | **Hard delete does not exist** | Soft delete is all there is. The full rule — no registered consumers, force flag, audit entry — is an outstanding commitment. |
 | **Subject prefix search is not implemented** | Value converters do not translate `StartsWith`; it needs a `ComplexProperty` mapping or a shadow column. |
@@ -150,7 +150,7 @@ These matter more than the two lists above, because the surface exists and looks
 | **`AllowAnonymousUntilClaimed` is on by default** | A fresh deployment answers every request as an owner until an account exists. Deliberate, documented in the Azure README, and still the thing most likely to surprise. Decision #27. |
 | **No browser E2E over sign-in + guards** | Unit tests cover each half; nothing drives the two together. |
 | **`Tenant` is not an aggregate** | There is exactly one, `TenantId.SelfHosted`. Cloud multi-tenancy is tested but single-rowed. |
-| **The derived-environment-id decision is unmade** | Either adopt the hashed ids or migrate `subject.environment_id`. Outstanding commitment; the longer real rows accumulate, the more it costs. |
+| ~~The derived-environment-id decision is unmade~~ | **Closed 2026-08-14.** Adopted, by creating rows that carry the derived id. No migration, and no orphaned subjects. |
 
 ---
 
