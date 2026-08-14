@@ -84,7 +84,10 @@ services:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost:8080/health/ready >/dev/null || exit 1']
+      # curl, not wget: the aspnet runtime image has neither by default, and this check called
+      # wget for long enough that the registry reported unhealthy while answering every request.
+      # The image installs curl for exactly this (docker/api.Dockerfile).
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:8080/health/ready >/dev/null || exit 1']
       interval: 5s
       timeout: 3s
       retries: 20

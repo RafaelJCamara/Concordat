@@ -48,6 +48,22 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /out .
 
+# curl, solely so a container healthcheck can reach /health/ready from inside the container.
+#
+# The compose file shipped a healthcheck calling `wget`, and neither wget nor curl is in the
+# aspnet runtime image — so the registry reported UNHEALTHY permanently while serving every
+# request correctly, and any `depends_on: condition: service_healthy` against it would have
+# waited forever. A health signal that is wrong in the safe-looking direction is bad enough;
+# this one was wrong in the direction that makes a working service look broken to whoever is
+# evaluating the product.
+#
+# Azure Container Apps does not need this — its probes are HTTP requests made by the platform,
+# not commands run inside the container. Docker's are the other way round, and there is no way
+# to run one without a tool in the image.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl \
+ && rm -rf /var/lib/apt/lists/*
+
 # Non-root, using the account the base image already provides. Container Apps does not
 # require it; running as root when nothing needs it is just a larger blast radius.
 USER $APP_UID

@@ -31,9 +31,22 @@ cd deploy/compose && CONCORDAT_IMAGE=concordat/api:local docker compose --profil
 | `PUT …/registration-policy` to `CLOSED`, then register | **403** `registration_policy_forbids` |
 | CLI `export` against the live registry | wrote 2 contracts to disk |
 | Quickstart sample over real RabbitMQ | valid message accepted, invalid one refused at publish, queue drained clean |
+| Container healthcheck | **was broken, now fixed** — see below |
 
 `CONCORDAT__*` configuration binding is listed as an open M1 item and appears to be **stale**:
 the container ran on `ConnectionStrings__Concordat` and `Concordat__Profile` today.
+
+### The one defect this found
+
+`docker ps` reported the registry **unhealthy while it answered every request correctly**. The
+compose healthcheck called `wget`, and the aspnet runtime image has neither wget nor curl — so
+the check had never once passed, and `depends_on: condition: service_healthy` against the
+registry would have waited forever.
+
+It failed in the worst direction: a working service that looks broken to whoever is evaluating
+the product. The image now installs `curl` for this alone. Azure Container Apps was never
+affected — its probes are HTTP requests made by the platform, not commands run inside the
+container — which is exactly why CI and the Bicep deployment never caught it.
 
 ### Two things that path does not cover
 
