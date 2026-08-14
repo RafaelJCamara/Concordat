@@ -2,6 +2,8 @@ using Concordat.Application.Abstractions;
 using Concordat.Domain.Registry;
 using Microsoft.EntityFrameworkCore;
 
+using Environment = Concordat.Domain.Registry.Environment;
+
 namespace Concordat.Infrastructure.Persistence;
 
 /// <summary>
@@ -47,6 +49,9 @@ public sealed class ConcordatDbContext : DbContext
     /// </remarks>
     public DbSet<Schema> Schemas => Set<Schema>();
 
+    /// <summary>Environments and their brokers, scoped to the current tenant (M7.1).</summary>
+    public DbSet<Environment> Environments => Set<Environment>();
+
     /// <summary>The tenant this context instance is bound to.</summary>
     internal TenantId CurrentTenant => _tenantContext.Current;
 
@@ -57,6 +62,7 @@ public sealed class ConcordatDbContext : DbContext
 
         modelBuilder.ApplyConfiguration(new SchemaConfiguration());
         modelBuilder.ApplyConfiguration(new SubjectConfiguration());
+        modelBuilder.ApplyConfiguration(new EnvironmentConfiguration());
 
         // Isolation by construction rather than by remembering a predicate. Every query
         // against Subjects is filtered whether or not the author thought about tenancy, which
@@ -66,6 +72,9 @@ public sealed class ConcordatDbContext : DbContext
         // Schema carries no filter on purpose (ADR-015): it is global and deduplicated.
         modelBuilder.Entity<Subject>().HasQueryFilter(
             s => EF.Property<Guid>(s, SubjectConfiguration.TenantIdProperty) == CurrentTenant.Value);
+
+        modelBuilder.Entity<Environment>().HasQueryFilter(
+            e => EF.Property<Guid>(e, EnvironmentConfiguration.TenantIdProperty) == CurrentTenant.Value);
 
         base.OnModelCreating(modelBuilder);
     }

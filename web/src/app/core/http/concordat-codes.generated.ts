@@ -11,6 +11,12 @@
 export const DOMAIN_CONCORDAT_CODES = [
   'schema_id_malformed',
   'subject_name_invalid',
+  'environment_name_invalid',
+  'environment_not_found',
+  'environment_already_exists',
+  'broker_uri_invalid',
+  'broker_already_exists',
+  'broker_not_found',
   'actor_id_invalid',
   'reference_invalid',
   'duplicate_reference_name',

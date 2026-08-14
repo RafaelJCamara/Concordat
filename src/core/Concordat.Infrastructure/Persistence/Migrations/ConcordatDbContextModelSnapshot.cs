@@ -23,6 +23,63 @@ namespace Concordat.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Concordat.Domain.Registry.Environment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("environment_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("RegistrationPolicy")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("registration_policy");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.ComplexProperty(typeof(Dictionary<string, object>), "DefaultCompatibilityPolicy", "Concordat.Domain.Registry.Environment.DefaultCompatibilityPolicy#CompatibilityPolicy", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<string>("Mode")
+                                .IsRequired()
+                                .HasMaxLength(24)
+                                .HasColumnType("character varying(24)")
+                                .HasColumnName("default_compatibility_mode");
+
+                            b1.Property<string>("Surface")
+                                .IsRequired()
+                                .HasMaxLength(16)
+                                .HasColumnType("character varying(16)")
+                                .HasColumnName("default_compatibility_surface");
+                        });
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_environment_tenant_name");
+
+                    b.ToTable("environment", (string)null);
+                });
+
             modelBuilder.Entity("Concordat.Domain.Registry.Schema", b =>
                 {
                     b.Property<string>("Id")
@@ -144,6 +201,72 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ux_subject_name_per_environment");
 
                     b.ToTable("subject", (string)null);
+                });
+
+            modelBuilder.Entity("Concordat.Domain.Registry.Environment", b =>
+                {
+                    b.OwnsMany("Concordat.Domain.Registry.BrokerConnection", "Brokers", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .HasColumnType("uuid")
+                                .HasColumnName("broker_id");
+
+                            b1.Property<string>("CredentialRef")
+                                .HasMaxLength(256)
+                                .HasColumnType("character varying(256)")
+                                .HasColumnName("credential_ref");
+
+                            b1.Property<string>("DisplayName")
+                                .IsRequired()
+                                .HasMaxLength(128)
+                                .HasColumnType("character varying(128)")
+                                .HasColumnName("display_name");
+
+                            b1.Property<DateTimeOffset?>("LastCheckedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("last_checked_at");
+
+                            b1.Property<string>("LastError")
+                                .HasMaxLength(1024)
+                                .HasColumnType("character varying(1024)")
+                                .HasColumnName("last_error");
+
+                            b1.Property<string>("Status")
+                                .IsRequired()
+                                .HasMaxLength(16)
+                                .HasColumnType("character varying(16)")
+                                .HasColumnName("status");
+
+                            b1.Property<string>("Uri")
+                                .IsRequired()
+                                .HasMaxLength(512)
+                                .HasColumnType("character varying(512)")
+                                .HasColumnName("uri");
+
+                            b1.Property<bool>("UseTls")
+                                .HasColumnType("boolean")
+                                .HasColumnName("use_tls");
+
+                            b1.Property<string>("VirtualHost")
+                                .IsRequired()
+                                .HasMaxLength(256)
+                                .HasColumnType("character varying(256)")
+                                .HasColumnName("virtual_host");
+
+                            b1.Property<Guid>("environment_id")
+                                .HasColumnType("uuid");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("environment_id");
+
+                            b1.ToTable("broker_connection", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("environment_id");
+                        });
+
+                    b.Navigation("Brokers");
                 });
 
             modelBuilder.Entity("Concordat.Domain.Registry.Schema", b =>

@@ -16,6 +16,28 @@ public static class ConcordatCodes
     /// <summary>A subject name did not match the canonical grammar.</summary>
     public const string SubjectNameInvalid = "subject_name_invalid";
 
+    // ------------------------------------------------------------- environments (M7)
+
+    /// <summary>An environment name did not match the canonical grammar.</summary>
+    public const string EnvironmentNameInvalid = "environment_name_invalid";
+
+    /// <summary>No environment with the given name exists.</summary>
+    public const string EnvironmentNotFound = "environment_not_found";
+
+    /// <summary>An environment with that name already exists.</summary>
+    public const string EnvironmentAlreadyExists = "environment_already_exists";
+
+    /// <summary>A broker URI was absent, not absolute, or not an AMQP 0-9-1 scheme.</summary>
+    public const string BrokerUriInvalid = "broker_uri_invalid";
+
+    /// <summary>
+    /// A broker with that endpoint or display name is already registered in the environment.
+    /// </summary>
+    public const string BrokerAlreadyExists = "broker_already_exists";
+
+    /// <summary>No broker with the given id exists in the environment.</summary>
+    public const string BrokerNotFound = "broker_not_found";
+
     /// <summary>An actor identifier was empty or too long.</summary>
     public const string ActorIdInvalid = "actor_id_invalid";
 

@@ -29,7 +29,7 @@ public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<Con
     public ConcordatDbContext CreateDbContext(string[] args)
     {
         var connectionString =
-            Environment.GetEnvironmentVariable("CONCORDAT_DESIGN_TIME_CONNECTION")
+            System.Environment.GetEnvironmentVariable("CONCORDAT_DESIGN_TIME_CONNECTION")
             ?? DesignTimeConnectionString;
 
         var options = new DbContextOptionsBuilder<ConcordatDbContext>()
