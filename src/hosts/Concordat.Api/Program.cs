@@ -39,13 +39,9 @@ builder.Services.AddScoped<CallerContext>();
 builder.Services.AddScoped<ICallerContext>(p => p.GetRequiredService<CallerContext>());
 builder.Services.AddScoped<CallerResolver>();
 
-// M7.2: broker credentials are encrypted at rest with Data Protection, and the key ring lives
-// in the database so a second API instance can decrypt what the first one wrote. Persisting to
-// disk is the framework default and would silently destroy every stored credential the first
-// time a container restarted without a mounted volume.
-builder.Services.AddDataProtection()
-    .SetApplicationName("Concordat")
-    .PersistKeysToDbContext<ConcordatDbContext>();
+// M7.2 persists the Data Protection key ring in the database; M9.1 wraps it with a KMS key
+// where one is configured, and refuses to start in Cloud without one.
+builder.AddConcordatKeyProtection(profile);
 
 // Concrete formats are registered here and nowhere else. The Application layer resolves them
 // through ISchemaFormatRegistry and never names one, which is what keeps a second format an

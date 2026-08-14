@@ -14,9 +14,17 @@ competes on managed upgrades, backups, HA, SLA and support, not on withheld code
 - [x] `Tenant` aggregate, and a real row in both flavours
 - [x] Multi-tenant row-level isolation via the EF global query filters wired in
       [M1.5](M1-registry-core.md#m15-persistence)
-- [ ] KMS-backed Data Protection key ring — deferred. The key ring is already an
-      abstraction (`PersistKeysToDbContext`); pointing it at a KMS is a provider choice and
-      credentials, neither of which exists yet, and a test would be mocking the cloud.
+- [x] KMS-backed Data Protection key ring — Azure Key Vault wraps it, and the `Cloud`
+      profile **refuses to start without a key URI**
+
+**Persistence and protection are separate decisions.** The key ring lives in PostgreSQL in
+both flavours (M7.2) so a second instance can decrypt what the first wrote. What M9.1 adds
+is *wrapping* those keys, so the keys that decrypt every broker credential are not sitting
+unprotected in the same database as the ciphertext they protect. A Cloud deployment that
+believed its keys were wrapped and found out otherwise during an incident is worse off than
+one that never claimed it — hence the refusal rather than a warning. Self-hosted is left
+free: an operator running one container against their own database has no KMS and ADR-008
+promises they do not need one.
 
 **The tenant comes from the credential, never from the request.** A header, a path segment
 or a subdomain are all caller-supplied, and this value is the sole input to every global
@@ -75,10 +83,27 @@ decisions-pending.
 - [ ] Tiers: Free (1 env, 10 subjects) → Team → Business → Enterprise
 - [ ] `BillingPage` in the web app
 
-## M9.4 Self-hosted parity
+## M9.4 Deployment
 
-- [ ] Helm chart
-- [ ] Verify the same image serves both profiles
+- [x] **Azure Container Apps** — `deploy/azure/main.bicep`, which compiles and lints:
+      Container Apps, PostgreSQL Flexible Server, a Key Vault key, Log Analytics, and a
+      managed identity granted *Key Vault Crypto User* and nothing else
+- [x] The same image serves both profiles — one `Concordat__Profile` environment variable,
+      and `CloudTenancyTests` runs the real host in the other one
+- [ ] Helm chart — for self-hosted Kubernetes users, and nobody has asked for one. Cloud
+      does not need it.
+
+**`minReplicas` is 1, and that is not a capacity decision.** Container Apps scales to zero
+by default and the registry carries an in-process background worker: at zero replicas
+nothing polls the outbox, so a notification is staged inside the change's own transaction —
+correctly — and then delivered whenever the next HTTP request happens to wake the app.
+**Alerts stop arriving and nothing reports an error**, because from the registry's point of
+view every message is still pending and will be retried. A quiet weekend looks exactly like
+a working system.
+
+**What the template deliberately does not do** is written down in
+[`deploy/azure/README.md`](../../deploy/azure/README.md) rather than left to be discovered:
+no VNet integration, no custom domain, no database HA.
 
 ---
 

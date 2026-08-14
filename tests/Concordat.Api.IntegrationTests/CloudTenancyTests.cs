@@ -3,11 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Concordat.Domain.Identity;
 using Concordat.Infrastructure;
-using Concordat.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Testcontainers.PostgreSql;
+using Microsoft.AspNetCore.Hosting;
 
 namespace Concordat.Api.IntegrationTests;
 
@@ -25,6 +21,24 @@ public sealed class CloudApiFactory : ApiFactory
 {
     /// <inheritdoc />
     protected override ConcordatProfile Profile => ConcordatProfile.Cloud;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A key URI is required to start in Cloud (M9.1) and this one points nowhere. That is
+    /// sound because registering key protection performs no I/O — the credential and the vault
+    /// are reached lazily, on the first Protect or Unprotect — and nothing in this suite stores
+    /// a broker credential. A test that did would hang trying to reach Azure, which is a loud
+    /// failure rather than a silently unprotected key ring, and is the point of the refusal
+    /// this fixture is working around.
+    /// </remarks>
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        base.ConfigureWebHost(builder);
+
+        builder.UseSetting(
+            "Concordat:KeyProtection:KeyUri",
+            "https://concordat-tests.vault.azure.net/keys/data-protection/none");
+    }
 
     /// <summary>Creates an organisation with an owner, and returns a credential for them.</summary>
     /// <param name="slug">The organisation's handle.</param>

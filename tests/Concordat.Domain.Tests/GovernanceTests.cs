@@ -207,13 +207,30 @@ public class AuditEntryTests
     }
 
     [Fact]
-    public void IdentifiersAreTimeOrderedSoTheLogSortsByInsertion()
+    public async Task IdentifiersAreTimeOrderedSoInsertsStayLocalInTheIndex()
     {
-        // The audit log is read newest-first far more often than it is read at all, and a v4
-        // GUID key would scatter inserts across the index for no benefit.
+        // The audit log only grows and is read newest-first, so a v4 GUID key would scatter
+        // every insert across the index for no benefit.
+        //
+        // This test was wrong twice before it was right, and both mistakes are easy to repeat.
+        // A UUIDv7 encodes a *millisecond* timestamp and fills the rest with randomness, so two
+        // ids minted in the same millisecond have no defined order — asserting one was a coin
+        // flip that passed roughly half the time. And Guid.CompareTo orders by its internal
+        // fields, not by the byte order PostgreSQL's uuid type sorts on, so it would not have
+        // measured index locality even when it passed.
         var first = AuditEntry.Record(null, AuditAction.SubjectCreated, Actor, "a", Now);
+        await Task.Delay(5);
         var second = AuditEntry.Record(null, AuditAction.SubjectCreated, Actor, "b", Now);
 
-        Assert.True(first.Id.CompareTo(second.Id) < 0);
+        var earlier = first.Id.ToByteArray(bigEndian: true);
+        var later = second.Id.ToByteArray(bigEndian: true);
+
+        Assert.True(
+            earlier.AsSpan().SequenceCompareTo(later) < 0,
+            "a later id should sort after an earlier one in byte order");
+
+        // And the ordering comes from the timestamp, not from luck: the first 48 bits are
+        // milliseconds since the epoch, and they are what makes consecutive inserts adjacent.
+        Assert.True(earlier.AsSpan(0, 6).SequenceCompareTo(later.AsSpan(0, 6)) < 0);
     }
 }

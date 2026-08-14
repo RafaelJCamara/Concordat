@@ -32,6 +32,13 @@
     -->
     <PackageVersion Include="Microsoft.Extensions.Identity.Core" Version="10.0.11" />
     <!--
+      M9.1 Cloud key protection. The key ring is persisted in PostgreSQL either way; these wrap
+      it so the keys that decrypt every stored broker credential are not sitting in the same
+      database as the ciphertext. MIT, and reached only when a key URI is configured.
+    -->
+    <PackageVersion Include="Azure.Extensions.AspNetCore.DataProtection.Keys" Version="1.6.3" />
+    <PackageVersion Include="Azure.Identity" Version="1.21.0" />
+    <!--
       M7.5 email delivery. MIT, and the option Microsoft's own SmtpClient documentation points
       at: System.Net.Mail.SmtpClient is explicitly not recommended for new development and
       cannot negotiate STARTTLS properly. It is confined to Infrastructure and reaches no

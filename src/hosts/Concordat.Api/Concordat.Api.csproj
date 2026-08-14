@@ -13,6 +13,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- M9.1: wraps the key ring with an Azure Key Vault key. Reached only when configured. -->
+    <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Keys" />
+    <PackageReference Include="Azure.Identity" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\core\Concordat.Application\Concordat.Application.csproj" />
     <ProjectReference Include="..\..\core\Concordat.Infrastructure\Concordat.Infrastructure.csproj" />
     <ProjectReference Include="..\..\formats\Concordat.Formats.Avro\Concordat.Formats.Avro.csproj" />

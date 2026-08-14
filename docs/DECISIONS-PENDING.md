@@ -429,23 +429,33 @@ it, and nothing says so.
 > **Recommendation:** (a) plus a banner in the web app. (c) is tempting but wrong: the common
 > evaluation path is a container, where nothing is loopback.
 
-### 28. Cloud needs credentials and accounts that only you can create
+### 28. Cloud is Azure, on Container Apps — what that settles and what it does not
 
-M9.1 is done and its exit criterion is met. **Everything remaining in M9 is blocked on things
-that are yours, not mine**, and it is worth naming them together rather than discovering them
-one at a time:
+**Settled by you:** Azure, deployed to Azure Container Apps.
 
-| Needed for | What | Why it cannot be faked |
-|---|---|---|
-| M9.1 | A KMS (AWS KMS, GCP KMS, Azure Key Vault) | The Data Protection key ring is already an abstraction; pointing it at a KMS is a provider choice plus credentials. A test would be mocking the cloud, which proves the mock works |
-| M9.2 | Google and GitHub OAuth client registrations | Redirect URIs have to be registered against a real domain, which is #3 |
-| M9.3 | A Stripe account and API keys | Metering can be built and tested without one; the adapter that ships money cannot |
-| M9.4 | A Kubernetes cluster to install into | A Helm chart can be written and linted without one, but "the same image serves both profiles" is only shown by running it |
+That resolves two of the four blockers and changes a third:
 
-> **Recommendation:** decide the cloud provider first, because it settles the KMS and probably
-> the cluster. Until then M9.3's *metering* is the part with no external dependency — counting
-> subjects, versions, requests, environments and seats needs nothing from Stripe, and the
-> billing adapter is a thin layer on top of numbers that have to be right anyway.
+| Was blocked on | Now |
+|---|---|
+| A KMS for the key ring | **Done.** Azure Key Vault wraps the Data Protection key ring, and the `Cloud` profile refuses to start without a key URI |
+| A cluster for M9.4 | **Done differently.** Container Apps, not AKS — `deploy/azure/main.bicep`, which compiles and lints. The Helm chart M9.4 asks for is for self-hosted Kubernetes users, and nobody has asked for one |
+| Google / GitHub OAuth clients (M9.2) | Still yours. Needs redirect URIs on a real domain, which is [#3](#3-reserve-the-names-that-are-still-unreserved) |
+| A Stripe account (M9.3) | Still yours. Metering needs nothing from Stripe and is the obvious next build |
+
+> **Two things worth deciding soon, both consequences of Container Apps rather than of Azure:**
+>
+> **(a) The outbox pump and scale-to-zero.** `minReplicas` is pinned to 1 because `OutboxPump`
+> is an in-process background worker: at zero replicas nothing polls, so notifications are
+> staged correctly and then delivered whenever the next HTTP request wakes the app. Alerts stop
+> arriving and *nothing reports an error* — from the registry's point of view every message is
+> still pending and will be retried. One always-on replica is the cheap fix. Moving the pump
+> into a Container Apps job on a cron schedule would let the API scale to zero; it is the right
+> answer if that idle cost matters and the wrong one to build before it does.
+>
+> **(b) VNet integration.** The template reaches PostgreSQL through the allow-Azure-services
+> firewall rule, because a VNet-integrated environment with a private endpoint roughly triples
+> the resources on a first deployment. That is fine for an evaluation and not fine for
+> production, and the gap should close before anyone real depends on it.
 
 ### 29. A signup writes no audit entry
 
