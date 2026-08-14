@@ -32,6 +32,7 @@ token and an operator can alert across a fleet.
 | `broker_already_exists` | A broker with that endpoint or display name is already registered in the environment. |
 | `broker_not_found` | No broker with the given id exists in the environment. |
 | `credential_invalid` | A broker credential was missing a username or a password. |
+| `registration_policy_forbids` | The environment's registration policy does not admit this caller. Answered **403**, not 400: the request is well formed and the credential is valid — what refused it is a property of the environment. |
 | `contract_name_invalid` | A contract name was empty or too long. |
 | `contract_not_found` | No contract with the given name exists in the environment. |
 | `contract_already_exists` | A contract with that name already exists in the environment. |
@@ -102,7 +103,7 @@ token and an operator can alert across a fleet.
 | `changelog_too_long` | A changelog exceeded the permitted length. |
 | `schema_unresolvable` | A client could not resolve a schema, so the operation could not be enforced. |
 
-**78 codes.**
+**79 codes.**
 
 ## Rules for implementers
 

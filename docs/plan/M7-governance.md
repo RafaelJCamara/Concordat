@@ -13,6 +13,39 @@ Contexts B, C and D of the domain model — the contract layer Kafka has no equi
 - [x] `Environment` aggregate — `Name`, `Description`, `Brokers[]`, `DefaultCompatibilityPolicy`
 - [x] `BrokerConnection` entity — `Uri`, `VirtualHost`, `CredentialRef`, `TlsSettings`, `Status`
 - [x] Connection health check
+- [x] `GET|PUT …/registration-policy`, deferred from [M1.6](M1-registry-core.md)
+- [x] **`RegistrationPolicy` enforced**, on subject creation and version registration alike
+- [x] `Scope.Ci` — the marker that separates a build pipeline from a producer
+
+### The policy was stored for a whole milestone without being read
+
+`Environment.RegistrationPolicy` shipped in M7.1 with a clever default — anything named `prod`,
+`production` or `live` starts at `CiOnly` — and three separate comments saying it is *"enforced
+server-side, which is the whole point"*, the stated advantage over Confluent's client-side-only
+equivalent. **Nothing consulted it.** A production registry created on the strength of that
+sentence was exactly as open as one with no policy at all.
+
+Building the two routes without fixing that would have shipped a control panel wired to nothing.
+
+**`CiOnly` needs to tell a pipeline from a producer, and nothing else in the system could.**
+Both arrive with an API key and `subject:write`; `ApiKeyKind` distinguishes *how* a credential
+was issued, not *what holds it*. So `ci` is a marker scope: it grants nothing, is implied by
+nothing, and is read by exactly one rule. **No role grants it** — not even Owner — because it
+belongs on a key issued to a pipeline rather than on a human's role, and an administrator who
+inherited it could walk through the control that keeps production clean.
+
+**It gates subject creation too, not just registration.** Gating only versions would let a
+misconfigured producer fill a closed environment with empty subjects: permanent clutter,
+arriving through the exact door the policy exists to shut, reported as success every time.
+
+**An environment with no row has no policy and is allowed.** Routes accept an environment name
+before an `Environment` aggregate exists — the id is derived from the name — so refusing there
+would refuse every registration on a registry nobody had explicitly configured. Stated because
+it is a real gap, not a corner case.
+
+**Refused with 403 and `registration_policy_forbids`, never 400.** The first run answered 400,
+because an unmapped code falls through to the default — telling a pipeline author their payload
+was malformed, which is the one thing it was not.
 
 ## M7.2 Credential handling
 

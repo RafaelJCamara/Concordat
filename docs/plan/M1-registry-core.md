@@ -330,7 +330,9 @@ distinct "forbidden" would confirm another tenant's schema exists.
 - [x] **`GET …/versions/{from}/diff/{to}`**
 - [x] **Subject patch and retire** — `PATCH` for owner and deprecation, `DELETE` for the
       soft delete
-- [ ] `GET|PUT …/registration-policy` → **blocked on M7**, see below
+- [x] `GET|PUT …/registration-policy` → was blocked on M7; built once the `Environment`
+      aggregate existed, **and made to do something** — the field had been stored and never read.
+      See [M7.1](M7-governance.md#m71-environments-and-brokers)
 - [x] Negative-lookup caching semantics → **delivered in M2.1**, in `SchemaCache`; deferred from, where the client cache exists
 - [ ] Subject prefix search — needs a `ComplexProperty` mapping or a shadow column
 
@@ -404,13 +406,23 @@ alone cannot tell a name collision from an incompatible schema. Every failure ca
 stable string. An unmapped code falls through to 400 rather than throwing: wrong-but-safe
 beats an unhandled exception, and the code is still in the body.
 
-### Registration policy is blocked on M7
+### Registration policy was blocked on M7 — now built, and now enforced
 
 `GET|PUT …/registration-policy` is per **environment**, and the `Environment` aggregate is
-M7 (ADR-012) — there is nowhere to store it. Meanwhile `{env}` in the route is resolved by
-`DerivedEnvironmentResolver`, an M1 shim that hashes the name to a stable id so the API works
-before environments exist. **M7 must either adopt those derived ids or migrate
-`subject.environment_id`.**
+M7 (ADR-012) — there was nowhere to store it. Both routes exist as of
+[M7.1](M7-governance.md#m71-environments-and-brokers).
+
+**The field turned out to be the smaller half of the problem.** M7.1 shipped
+`Environment.RegistrationPolicy`, defaulted it to `CiOnly` for anything named like production,
+and documented it in three places as *"enforced server-side, which is the whole point"* —
+against Confluent, whose equivalent is client-side only. No handler ever read it. It is
+enforced now, on subject creation as well as version registration.
+
+`{env}` in the route is still resolved by `DerivedEnvironmentResolver`, an M1 shim that hashes
+the name to a stable id so the API works before environments exist. **M7 must still either adopt
+those derived ids or migrate `subject.environment_id`** — and note the consequence for this
+policy: an environment with no row has no policy and is allowed, which is what keeps the
+quickstart working and is also a gap somebody could stand in.
 
 ### One gap not yet closed
 

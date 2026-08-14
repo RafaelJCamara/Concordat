@@ -49,6 +49,11 @@ public static class ProblemDetailsMapping
         ConcordatCodes.Unauthenticated => StatusCodes.Status401Unauthorized,
         ConcordatCodes.InsufficientScope => StatusCodes.Status403Forbidden,
 
+        // 403 and not 400. The request is well formed and the credential is valid — what refused
+        // it is a property of the environment. Falling through to the 400 default would tell a
+        // pipeline author their payload was malformed, which is the one thing it was not.
+        ConcordatCodes.RegistrationPolicyForbids => StatusCodes.Status403Forbidden,
+
         // 402, not 403. The caller has the right to do this and their plan does not stretch to
         // it — a distinction a client can act on by upgrading rather than by asking an admin
         // for a scope they already have.

@@ -50,6 +50,26 @@ public static class Scope
     /// <summary>Manage members, roles and API keys.</summary>
     public const string OrgAdmin = "org:admin";
 
+    /// <summary>
+    /// Marks a credential as belonging to a build pipeline rather than to a running application.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Not a permission — a statement about who is holding the key.</b> It grants nothing on
+    /// its own and never appears in an <c>Allows</c> check outside
+    /// <c>RegistrationPolicy.CiOnly</c>, which is the one rule that needs to tell a
+    /// pipeline apart from a producer. Both authenticate with an API key and
+    /// <see cref="SubjectWrite"/>, so nothing else in the system can distinguish them.
+    /// </para>
+    /// <para>
+    /// Implied by nothing, deliberately, including <see cref="OrgAdmin"/>: being an
+    /// administrator does not make you a build pipeline, and a policy that said otherwise would
+    /// let the most privileged human in the organisation bypass the control designed to keep
+    /// production clean.
+    /// </para>
+    /// </remarks>
+    public const string Ci = "ci";
+
     /// <summary>Every scope, in the order the frontend lists them.</summary>
     public static readonly IReadOnlyList<string> All =
     [
@@ -63,6 +83,7 @@ public static class Scope
         BrokerRead,
         BrokerWrite,
         OrgAdmin,
+        Ci,
     ];
 
     /// <summary>
@@ -87,6 +108,10 @@ public static class Scope
         // acquire them by managing the org, because ADR-018's whole point is that the set of
         // people who can change a contract stays small and deliberate.
         [OrgAdmin] = [],
+
+        // Grants nothing. It is a marker saying "this key belongs to CI", and a marker that
+        // implied a permission would be a permission wearing a disguise.
+        [Ci] = [],
     };
 
     /// <summary>Whether a token is a scope this build knows.</summary>

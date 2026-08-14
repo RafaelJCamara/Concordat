@@ -1,3 +1,4 @@
+using Concordat.Domain.Identity;
 using Concordat.Domain.Results;
 
 namespace Concordat.Domain.Registry;
@@ -233,6 +234,59 @@ public sealed class Environment
     /// <summary>Changes who may register schemas here.</summary>
     /// <param name="policy">The new policy.</param>
     public void SetRegistrationPolicy(RegistrationPolicy policy) => RegistrationPolicy = policy;
+
+    /// <summary>
+    /// Whether this caller may register a schema directly against this environment.
+    /// </summary>
+    /// <param name="scopes">What the caller holds.</param>
+    /// <returns>
+    /// Success, or a failure carrying <see cref="ConcordatCodes.RegistrationPolicyForbids"/>.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>The rule lives here rather than in a handler because it is the invariant the
+    /// property exists for.</b> The policy was stored, defaulted by name and described in three
+    /// places as "enforced server-side, which is the whole point" — while nothing read it. A
+    /// rule kept next to the field it governs is harder to leave inert.
+    /// </para>
+    /// <para>
+    /// <see cref="RegistrationPolicy.CiOnly"/> asks for <see cref="Scope.Ci"/>, which is the
+    /// only thing in the system that separates a build pipeline from a producer: both arrive
+    /// with an API key and <see cref="Scope.SubjectWrite"/>. It is checked <em>in addition to</em>
+    /// write access, never instead of it.
+    /// </para>
+    /// <para>
+    /// <b>Refusals name the policy and the environment.</b> Whoever hits this is usually a
+    /// pipeline author who has no idea the environment has a policy at all, and "forbidden" on
+    /// its own sends them to go and check their key's scopes, which are fine.
+    /// </para>
+    /// </remarks>
+    public Result MayRegister(ScopeSet scopes)
+    {
+        ArgumentNullException.ThrowIfNull(scopes);
+
+        return RegistrationPolicy switch
+        {
+            RegistrationPolicy.Open => Result.Success(),
+
+            RegistrationPolicy.CiOnly when scopes.Allows(Scope.Ci) => Result.Success(),
+
+            RegistrationPolicy.CiOnly => Result.Failure(
+                ConcordatCodes.RegistrationPolicyForbids,
+                $"Environment '{Name.Value}' accepts registrations from CI only. This " +
+                $"credential does not carry the '{Scope.Ci}' scope. Register through your " +
+                "pipeline, or promote a version from another environment."),
+
+            RegistrationPolicy.Closed => Result.Failure(
+                ConcordatCodes.RegistrationPolicyForbids,
+                $"Environment '{Name.Value}' is closed to direct registration. Schemas arrive " +
+                "here by promotion from another environment."),
+
+            _ => Result.Failure(
+                ConcordatCodes.RegistrationPolicyForbids,
+                $"Environment '{Name.Value}' has an unrecognised registration policy."),
+        };
+    }
 
     private static bool SameEndpoint(BrokerConnection left, BrokerConnection right) =>
         string.Equals(left.Uri.Authority, right.Uri.Authority, StringComparison.OrdinalIgnoreCase) &&

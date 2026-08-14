@@ -354,6 +354,105 @@
         }
       }
     },
+    "/v1/environments/{env}/registration-policy": {
+      "get": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Read who may register schemas here",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationPolicyResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Change who may register schemas here",
+        "description": "OPEN admits any caller with subject:write. CI_ONLY additionally requires the 'ci' scope, which is what separates a build pipeline from a producer — both otherwise arrive with an API key and write access. CLOSED admits nobody: schemas reach the environment only by promotion. Enforced server-side, on both subject creation and version registration.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRegistrationPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationPolicyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/environments/{env}/brokers": {
       "post": {
         "tags": [
@@ -4742,6 +4841,32 @@
         },
         "description": "The outcome of registering a version."
       },
+      "RegistrationPolicyResponse": {
+        "required": [
+          "environment",
+          "policy",
+          "requiredScopes"
+        ],
+        "type": "object",
+        "properties": {
+          "environment": {
+            "type": "string",
+            "description": "The environment."
+          },
+          "policy": {
+            "type": "string",
+            "description": "`OPEN`, `CI_ONLY` or `CLOSED`."
+          },
+          "requiredScopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What a credential must carry to register here, so a caller debugging a refusal can compare\r\nit against their own key instead of guessing which of the three policies is in force."
+          }
+        },
+        "description": "Who may register schemas in an environment, and what that requires of them."
+      },
       "ResolveContractsRequest": {
         "type": "object",
         "properties": {
@@ -4990,6 +5115,19 @@
           }
         },
         "description": "Request to change enforcement."
+      },
+      "SetRegistrationPolicyRequest": {
+        "required": [
+          "policy"
+        ],
+        "type": "object",
+        "properties": {
+          "policy": {
+            "type": "string",
+            "description": "`OPEN`, `CI_ONLY` or `CLOSED`."
+          }
+        },
+        "description": "Request to change who may register schemas in an environment."
       },
       "SetSubscriptionEnabledRequest": {
         "required": [

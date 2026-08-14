@@ -1,3 +1,4 @@
+using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 using Environment = Concordat.Domain.Registry.Environment;
@@ -290,4 +291,78 @@ public class EnvironmentTests
     [Fact]
     public void AnOverlongDescriptionIsRefused() =>
         Assert.True(Environment.Create("dev", Now, description: new string('x', 513)).IsFailure);
+
+    // ------------------------------------------------- the registration policy (M7.1)
+
+    private static Environment With(RegistrationPolicy policy, string name = "dev") =>
+        Environment.Create(name, Now, null, null, policy).Value;
+
+    [Fact]
+    public void OpenAdmitsAnybody() =>
+        Assert.True(With(RegistrationPolicy.Open).MayRegister(ScopeSet.None).IsSuccess);
+
+    [Fact]
+    public void CiOnlyAdmitsACallerCarryingTheCiScope() =>
+        Assert.True(With(RegistrationPolicy.CiOnly)
+            .MayRegister(ScopeSet.Of([Scope.SubjectWrite, Scope.Ci])).IsSuccess);
+
+    [Fact]
+    public void CiOnlyRefusesAProducerHoldingOnlyWriteAccess()
+    {
+        // The case the policy exists for. A producer and a pipeline both arrive with an API key
+        // and subject:write; nothing else in the system tells them apart.
+        var refused = With(RegistrationPolicy.CiOnly).MayRegister(ScopeSet.Of([Scope.SubjectWrite]));
+
+        Assert.Equal(ConcordatCodes.RegistrationPolicyForbids, refused.Error!.Code);
+    }
+
+    [Fact]
+    public void CiOnlyRefusesAnOrganisationAdministrator()
+    {
+        // org:admin does not imply ci, deliberately. Being an administrator does not make you a
+        // build pipeline, and the opposite would let the most privileged human in the
+        // organisation walk straight through the control that keeps production clean.
+        var refused = With(RegistrationPolicy.CiOnly)
+            .MayRegister(ScopeSet.Of([Scope.OrgAdmin, Scope.SubjectAdmin]));
+
+        Assert.Equal(ConcordatCodes.RegistrationPolicyForbids, refused.Error!.Code);
+    }
+
+    [Fact]
+    public void ClosedRefusesEvenCi()
+    {
+        // Closed means promotion only. A CI pipeline is still direct registration.
+        var refused = With(RegistrationPolicy.Closed)
+            .MayRegister(ScopeSet.Of([Scope.SubjectWrite, Scope.Ci]));
+
+        Assert.Equal(ConcordatCodes.RegistrationPolicyForbids, refused.Error!.Code);
+        Assert.Contains("promotion", refused.Error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ARefusalNamesTheEnvironmentAndWhatIsMissing()
+    {
+        // Whoever hits this is usually a pipeline author who does not know the environment has a
+        // policy at all. "Forbidden" alone sends them to audit their key's scopes, which are fine.
+        var refused = With(RegistrationPolicy.CiOnly, "prod").MayRegister(ScopeSet.None);
+
+        Assert.Contains("'prod'", refused.Error!.Message, StringComparison.Ordinal);
+        Assert.Contains("'ci'", refused.Error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("prod")]
+    [InlineData("production")]
+    [InlineData("live")]
+    public void AProductionNameDefaultsToCiOnlyAndThatIsNowEnforced(string name)
+    {
+        // The default existed and did nothing: no handler read RegistrationPolicy. It refuses now.
+        var refused = New(name).MayRegister(ScopeSet.Of([Scope.SubjectWrite]));
+
+        Assert.Equal(ConcordatCodes.RegistrationPolicyForbids, refused.Error!.Code);
+    }
+
+    [Fact]
+    public void AnOrdinaryNameDefaultsToOpen() =>
+        Assert.True(New("staging").MayRegister(ScopeSet.None).IsSuccess);
 }

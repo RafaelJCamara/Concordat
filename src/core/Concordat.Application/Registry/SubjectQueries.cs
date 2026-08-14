@@ -24,6 +24,8 @@ public sealed record CreateSubjectCommand(
 /// <summary>Handles <see cref="CreateSubjectCommand"/>.</summary>
 public sealed class CreateSubjectHandler(
     ISubjectRepository subjects,
+    IEnvironmentRepository environments,
+    ICallerContext caller,
     IAuditLog audit,
     IBillingGate billing,
     IUnitOfWork unitOfWork,
@@ -46,6 +48,23 @@ public sealed class CreateSubjectHandler(
         if (owner.IsFailure)
         {
             return Result<Subject>.Failure(owner.Error!);
+        }
+
+        // The registration policy gates creation as well as registration. Gating only versions
+        // would let a misconfigured producer fill a closed production environment with empty
+        // subjects — permanent clutter, arriving through the exact door the policy exists to
+        // shut, and reported as a success every time.
+        var environment = await environments
+            .FindAsync(command.EnvironmentId, cancellationToken).ConfigureAwait(false);
+
+        if (environment is not null)
+        {
+            var permitted = environment.MayRegister(caller.Current.Scopes);
+
+            if (permitted.IsFailure)
+            {
+                return Result<Subject>.Failure(permitted.Error!);
+            }
         }
 
         var existing = await subjects.FindAsync(command.EnvironmentId, name.Value, cancellationToken)

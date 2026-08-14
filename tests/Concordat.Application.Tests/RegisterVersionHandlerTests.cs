@@ -1,5 +1,6 @@
 using Concordat.Application.Registry;
 using Concordat.Application.Tests.TestSupport;
+using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 using Concordat.Formats.Abstractions;
@@ -31,12 +32,16 @@ public class RegisterVersionHandlerTests
     private readonly RecordingAuditLog _audit = new();
     private readonly RecordingOutbox _outbox = new();
     private readonly SettableBillingGate _billing = new();
+    private readonly FakeEnvironmentStore _environments = new();
+    private readonly SettableCaller _caller = new();
 
     private RegisterVersionHandler Handler() =>
-        new(_subjects, _schemas, _evaluator, _audit, _outbox, _billing, _unitOfWork, _clock);
+        new(_subjects, _schemas, _environments, _caller, _evaluator,
+            _audit, _outbox, _billing, _unitOfWork, _clock);
 
     private RegisterVersionHandler Handler(ICompatibilityEvaluator evaluator) =>
-        new(_subjects, _schemas, evaluator, _audit, _outbox, _billing, _unitOfWork, _clock);
+        new(_subjects, _schemas, _environments, _caller, evaluator,
+            _audit, _outbox, _billing, _unitOfWork, _clock);
 
     private Task<Result<RegisterVersionResult>> RegisterAsync(
         string? body,
@@ -47,6 +52,64 @@ public class RegisterVersionHandlerTests
         Handler().HandleAsync(
             new RegisterVersionCommand(_environment, subject, body, semver, changelog, registeredBy),
             CancellationToken.None);
+
+    // ------------------------------------------------- the registration policy (M7.1)
+
+    [Fact]
+    public async Task ACiOnlyEnvironment_RefusesAProducerAndCanonicalisesNothing()
+    {
+        _environments.Seed(_environment, "prod", RegistrationPolicy.CiOnly);
+        _subjects.Seed(Build.Subject(_environment));
+        _caller.Holding(Scope.SubjectWrite);
+
+        var result = await RegisterAsync(V1);
+
+        Assert.Equal(ConcordatCodes.RegistrationPolicyForbids, result.Error!.Code);
+
+        // Refused before anything is spent: no meter call, no canonicalisation, no write.
+        Assert.Equal(0, _billing.Calls);
+        Assert.Equal(0, _evaluator.Calls);
+        Assert.Equal(0, _schemas.Staged);
+        Assert.Equal(0, _unitOfWork.Saves);
+    }
+
+    [Fact]
+    public async Task ACiOnlyEnvironment_AdmitsAPipeline()
+    {
+        _environments.Seed(_environment, "prod", RegistrationPolicy.CiOnly);
+        _subjects.Seed(Build.Subject(_environment));
+        _caller.Holding(Scope.SubjectWrite, Scope.Ci);
+
+        var result = await RegisterAsync(V1);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+    }
+
+    [Fact]
+    public async Task AClosedEnvironment_RefusesEvenCi()
+    {
+        _environments.Seed(_environment, "vault", RegistrationPolicy.Closed);
+        _subjects.Seed(Build.Subject(_environment));
+        _caller.Holding(Scope.SubjectWrite, Scope.Ci);
+
+        var result = await RegisterAsync(V1);
+
+        Assert.Equal(ConcordatCodes.RegistrationPolicyForbids, result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task AnEnvironmentWithNoRow_HasNoPolicyAndIsAllowed()
+    {
+        // Routes accept an environment name before an Environment aggregate exists — the id is
+        // derived from the name. Refusing there would refuse every registration on a registry
+        // nobody had explicitly configured, which is every quickstart.
+        _subjects.Seed(Build.Subject(_environment));
+        _caller.Holding(Scope.SubjectWrite);
+
+        var result = await RegisterAsync(V1);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+    }
 
     [Fact]
     public async Task AMonthlyVersionLimit_RefusesBeforeTheSchemaIsEvenCanonicalised()

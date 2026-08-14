@@ -16,6 +16,10 @@ export const SCOPES = [
   'broker:read',
   'broker:write',
   'org:admin',
+  // Not a permission — a marker saying "this credential belongs to a build pipeline". It grants
+  // nothing on its own and is only ever consulted by an environment whose registration policy is
+  // CI_ONLY, which is the one rule that has to tell a pipeline apart from a producer.
+  'ci',
 ] as const;
 
 /** A scope token as the API returns it. */

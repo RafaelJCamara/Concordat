@@ -8,18 +8,16 @@ import { DOMAIN_CONCORDAT_CODES, type DomainConcordatCode } from './concordat-co
  *
  * - `invalid_request` is raised by the API's own request parsing — an unknown format token,
  *   a half-specified compatibility policy — before any domain rule runs.
- * - `insufficient_scope` is named in DESIGN §5 (Context E) and ADR-018 as the answer to an
- *   unauthorised mutation, but authorisation lands in M8, so it is not in the catalogue
- *   yet. It is listed now because M4.2 gates write affordances on it and a UI that cannot
- *   name the code cannot explain the refusal.
  * - `registry_unreachable` and `registry_refused` are synthesised in this app when there was
  *   no usable response at all. The spellings are the CLI's (`RegistryApi.cs`) on purpose:
  *   an operator comparing a browser console with a CI log should see the same token for the
  *   same condition.
+ *
+ * `insufficient_scope` was here until M8 put it in `ConcordatCodes.cs`. It is now generated,
+ * and the overlap test is what said so — the union would otherwise have carried it twice.
  */
 export const TRANSPORT_CONCORDAT_CODES = [
   'invalid_request',
-  'insufficient_scope',
   'registry_unreachable',
   'registry_refused',
 ] as const;

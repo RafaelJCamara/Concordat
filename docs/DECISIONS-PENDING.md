@@ -10,6 +10,44 @@ architectural, becomes an ADR in [`adr/`](adr/README.md).
 
 ## Proceeded on my judgement — confirm or overturn
 
+### 33. `ci` is a marker scope, and no role grants it
+
+**Implemented.** `RegistrationPolicy.CiOnly` has to tell a build pipeline apart from a running
+producer, and **nothing in the system could**: both authenticate with an API key carrying
+`subject:write`, and `ApiKeyKind` records how a credential was issued, not what holds it.
+
+So `ci` is a scope that grants nothing, is implied by nothing, and is read by exactly one rule.
+The alternatives I rejected: a third `ApiKeyKind` member, which mixes lifetime with purpose on
+one axis; and a boolean column on `ApiKey`, which adds a second authorisation axis alongside
+scopes for a single consumer.
+
+**The consequence worth your attention: no role grants `ci`, including Owner.** It belongs on a
+key issued to a pipeline, not on a human's role — an administrator who inherited it could walk
+straight through the control that keeps production clean. Two things follow, and neither is
+obviously right:
+
+- **A human cannot register into a `CI_ONLY` environment at all**, however senior, without being
+  issued a key carrying `ci`. That is the intent, and it will read as a bug the first time
+  somebody hits it in the UI.
+- **An unclaimed instance cannot either**, because `Caller.Unclaimed` holds the Owner scopes.
+  Create an environment called `prod` on a fresh self-hosted registry and it refuses everything
+  until an account and a CI key exist. Defensible — `prod` defaulting to `CiOnly` is deliberate —
+  but it is a sharper first-run experience than it was yesterday.
+
+> **If you overturn this**, the cheapest variants are: grant `ci` to `Role.Owner`; or narrow the
+> default so only an explicitly-set `CI_ONLY` enforces and the name-based guess merely warns.
+> Nothing is persisted that a change would have to migrate.
+
+### 34. The policy gates subject creation as well as version registration
+
+**Implemented.** `RegistrationPolicy` is documented as "whether an SDK may register schemas
+directly", which reads as versions only. I extended it to `CreateSubject` because gating only
+versions would let a misconfigured producer fill a closed environment with empty subjects —
+permanent clutter, through the exact door the policy exists to shut, reported as success.
+
+The argument the other way: creating a subject is a deliberate act, usually by a person, and a
+team setting up a new service in a locked-down environment now needs CI to do it for them.
+
 ### 30. A governing contract beats local `Mode` in both directions — except `Off`
 
 **Implemented and shipped** as part of contract resolution in the SDK. It is the load-bearing
@@ -576,7 +614,7 @@ into the milestone that owes it, and collected here because they are the ones th
 | ~~M2.5~~ ✅ | ~~Verify the AMQP 1.0 header conversion~~ | **Discharged.** Measured on `rabbitmq:4.1-management`: `concordat-*` arrive as application-properties, and an `x-`-prefixed control header on the same message is demoted to an annotation, so the prefix rule is load-bearing rather than precautionary |
 | **M7** | Hard delete: no registered consumers + force flag + audit entry | Soft delete is all that exists today |
 | **M7** | Adopt the derived environment ids, or migrate `subject.environment_id` | `DerivedEnvironmentResolver` hashes the name to a stable id so `/environments/{env}/…` works before environments exist. Real rows will generate their own |
-| **M7** | `GET\|PUT …/registration-policy` | Per-environment, and the `Environment` aggregate does not exist yet, so there is nowhere to store it |
+| ~~M7~~ ✅ | ~~`GET\|PUT …/registration-policy`~~ | **Discharged, and the routes were the smaller half.** `Environment.RegistrationPolicy` had been stored since M7.1, defaulted to `CiOnly` for production-sounding names, and documented in three places as "enforced server-side, which is the whole point" — while no handler read it. Now enforced on subject creation and version registration, refused with 403 `registration_policy_forbids`. See decision #33 for how a pipeline is told apart from a producer |
 | **After M1.5** | Any change to canonicalisation now needs a **preimage version bump and a migration** | Schemas are persisted from here on. The golden id test exists to make such a change impossible to miss |
 | **Maintenance** | Drop the `SSH.NET` pin when Testcontainers requires a patched version itself | A stale forward-pin eventually holds a dependency *back* |
 

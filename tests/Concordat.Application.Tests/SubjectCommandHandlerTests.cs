@@ -1,5 +1,6 @@
 using Concordat.Application.Registry;
 using Concordat.Application.Tests.TestSupport;
+using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 using Microsoft.Extensions.Time.Testing;
@@ -19,13 +20,16 @@ public class SubjectCommandHandlerTests
     private readonly RecordingOutbox _outbox = new();
     private readonly SettableBillingGate _billing = new();
     private readonly FakeTimeProvider _clock = new(Build.At);
+    private readonly FakeEnvironmentStore _environments = new();
+    private readonly SettableCaller _caller = new();
 
     private Task<Result<Subject>> CreateAsync(
         string name = Name,
         string owner = "alice",
         CompatibilityPolicy? policy = null,
         ContentModel contentModel = ContentModel.Open) =>
-        new CreateSubjectHandler(_subjects, _audit, _billing, _unitOfWork, _clock).HandleAsync(
+        new CreateSubjectHandler(
+            _subjects, _environments, _caller, _audit, _billing, _unitOfWork, _clock).HandleAsync(
             new CreateSubjectCommand(
                 _environment, name, SchemaFormat.Json, owner, policy, contentModel),
             CancellationToken.None);
@@ -146,6 +150,33 @@ public class SubjectCommandHandlerTests
         Assert.Equal(ConcordatCodes.PlanLimitReached, result.Error!.Code);
         Assert.Empty(_subjects.Added);
         Assert.Equal(0, _unitOfWork.Saves);
+    }
+
+    [Fact]
+    public async Task AClosedEnvironmentRefusesSubjectCreationTooNotJustRegistration()
+    {
+        // Gating only version registration would let a misconfigured producer fill a closed
+        // production environment with empty subjects — permanent clutter, arriving through the
+        // exact door the policy exists to shut, reported as a success every time.
+        _environments.Seed(_environment, "prod", RegistrationPolicy.Closed);
+        _caller.Holding(Scope.SubjectWrite, Scope.Ci);
+
+        var result = await CreateAsync();
+
+        Assert.Equal(ConcordatCodes.RegistrationPolicyForbids, result.Error!.Code);
+        Assert.Empty(_subjects.Added);
+        Assert.Equal(0, _unitOfWork.Saves);
+    }
+
+    [Fact]
+    public async Task ACiOnlyEnvironmentAdmitsAPipelineCreatingASubject()
+    {
+        _environments.Seed(_environment, "prod", RegistrationPolicy.CiOnly);
+        _caller.Holding(Scope.SubjectWrite, Scope.Ci);
+
+        var result = await CreateAsync();
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
     }
 
     [Fact]

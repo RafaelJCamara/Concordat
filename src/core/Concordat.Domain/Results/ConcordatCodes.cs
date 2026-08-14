@@ -41,6 +41,16 @@ public static class ConcordatCodes
     /// <summary>A broker credential was missing a username or a password.</summary>
     public const string CredentialInvalid = "credential_invalid";
 
+    /// <summary>
+    /// The environment's registration policy does not admit this caller.
+    /// </summary>
+    /// <remarks>
+    /// Separate from an authorisation failure, and deliberately so: the credential is valid and
+    /// carries write access. What refused it is a property of the <em>environment</em>, and a
+    /// caller told merely "forbidden" would go and audit their key's scopes, which are correct.
+    /// </remarks>
+    public const string RegistrationPolicyForbids = "registration_policy_forbids";
+
     // ---------------------------------------------------------------- contracts (M7.3)
 
     /// <summary>A contract name was empty or too long.</summary>

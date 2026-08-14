@@ -2,10 +2,12 @@ using Concordat.Application.Abstractions;
 using Concordat.Application.Registry;
 using Concordat.Domain.Billing;
 using Concordat.Domain.Governance;
+using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 using Concordat.Formats.Abstractions;
 using Concordat.Formats.Json;
+using RegistryEnvironment = Concordat.Domain.Registry.Environment;
 
 namespace Concordat.Application.Tests.TestSupport;
 
@@ -335,4 +337,51 @@ internal sealed class StubEvaluator(EvaluatedProposal proposal) : ICompatibility
 
         return Result<EvaluatedProposal>.Success(proposal);
     }
+}
+
+/// <summary>
+/// An in-memory <see cref="IEnvironmentRepository"/>, empty until a test seeds it.
+/// </summary>
+/// <remarks>
+/// Empty is the interesting default. A registry accepts an environment name in a route before
+/// any <see cref="Environment"/> row exists — <c>DerivedEnvironmentResolver</c> hashes the name
+/// to a stable id — so "no environment, therefore no registration policy, therefore allowed" is
+/// the ordinary path and not a corner case.
+/// </remarks>
+internal sealed class FakeEnvironmentStore : IEnvironmentRepository
+{
+    private readonly List<RegistryEnvironment> _all = [];
+
+    /// <summary>Seeds an environment carrying a registration policy.</summary>
+    public void Seed(EnvironmentId id, string name, RegistrationPolicy policy) =>
+        _all.Add(RegistryEnvironment.Create(name, Build.At, null, null, policy, id).Value);
+
+    public Task<RegistryEnvironment?> FindAsync(EnvironmentName name, CancellationToken cancellationToken) =>
+        Task.FromResult(_all.FirstOrDefault(e => e.Name == name));
+
+    public Task<RegistryEnvironment?> FindAsync(EnvironmentId id, CancellationToken cancellationToken) =>
+        Task.FromResult(_all.FirstOrDefault(e => e.Id == id));
+
+    public Task<IReadOnlyList<RegistryEnvironment>> ListAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<RegistryEnvironment>>(_all);
+
+    public void Add(RegistryEnvironment environment) => _all.Add(environment);
+}
+
+/// <summary>A caller a test can rewrite between calls.</summary>
+internal sealed class SettableCaller : ICallerContext
+{
+    /// <summary>
+    /// Every scope by default, so a test that is not about authorisation does not have to
+    /// enumerate them — and so a test that <em>is</em> about authorisation has to say so.
+    /// </summary>
+    public Caller Current { get; set; } = new(
+        CredentialKind.ApiKey,
+        TenantId.SelfHosted,
+        ScopeSet.Of(Scope.All),
+        ActorId.Create("tests").Value);
+
+    /// <summary>Narrows the caller to exactly these scopes.</summary>
+    public void Holding(params string[] scopes) =>
+        Current = Current with { Scopes = ScopeSet.Of(scopes) };
 }

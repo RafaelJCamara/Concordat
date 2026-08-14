@@ -32,6 +32,7 @@ public class ScopeTests
                 "broker:read",
                 "broker:write",
                 "org:admin",
+                "ci",
             ],
             Scope.All);
     }

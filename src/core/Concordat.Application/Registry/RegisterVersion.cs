@@ -48,6 +48,8 @@ public sealed record RegisterVersionResult(
 public sealed class RegisterVersionHandler(
     ISubjectRepository subjects,
     ISchemaRepository schemas,
+    IEnvironmentRepository environments,
+    ICallerContext caller,
     ICompatibilityEvaluator evaluator,
     IAuditLog audit,
     IOutbox outbox,
@@ -72,6 +74,27 @@ public sealed class RegisterVersionHandler(
         if (actor.IsFailure)
         {
             return Result<RegisterVersionResult>.Failure(actor.Error!);
+        }
+
+        // THE REGISTRATION POLICY, CHECKED BEFORE ANYTHING ELSE COSTS ANYTHING.
+        //
+        // Environment.RegistrationPolicy was stored, defaulted to CiOnly for anything named like
+        // production, and described in three places as "enforced server-side, which is the whole
+        // point" — while nothing read it. An environment with no row has no policy and is
+        // allowed: routes accept an environment name before an Environment aggregate exists
+        // (DerivedEnvironmentResolver), and refusing there would refuse every registration on a
+        // registry nobody had explicitly configured.
+        var environment = await environments
+            .FindAsync(command.EnvironmentId, cancellationToken).ConfigureAwait(false);
+
+        if (environment is not null)
+        {
+            var permitted = environment.MayRegister(caller.Current.Scopes);
+
+            if (permitted.IsFailure)
+            {
+                return Result<RegisterVersionResult>.Failure(permitted.Error!);
+            }
         }
 
         var subject = await subjects.FindAsync(command.EnvironmentId, name.Value, cancellationToken)

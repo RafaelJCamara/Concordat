@@ -2,6 +2,7 @@ using Concordat.Application.Abstractions;
 using Concordat.Application.Registry;
 using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
+using Concordat.Domain.Results;
 using Environment = Concordat.Domain.Registry.Environment;
 
 namespace Concordat.Api;
@@ -46,6 +47,29 @@ public static class EnvironmentEndpoints
                 "subject that has not set its own — which is the point of inheritance, and " +
                 "worth knowing before changing it on an environment with traffic.")
             .Produces<EnvironmentResponse>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.EnvWrite);
+
+        // Its own route pair rather than only a field on PATCH /{env}. This is the control an
+        // operator reaches for during an incident — "stop everything writing to prod" — and it
+        // is the one an auditor asks to see. Read access is deliberately looser than write:
+        // anyone who can see the environment can see what it admits, because a producer author
+        // debugging a refusal needs to read the policy that refused them.
+        group.MapGet("/{env}/registration-policy", GetRegistrationPolicy)
+            .WithSummary("Read who may register schemas here")
+            .Produces<RegistrationPolicyResponse>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapPut("/{env}/registration-policy", SetRegistrationPolicy)
+            .WithSummary("Change who may register schemas here")
+            .WithDescription(
+                "OPEN admits any caller with subject:write. CI_ONLY additionally requires the " +
+                "'ci' scope, which is what separates a build pipeline from a producer — both " +
+                "otherwise arrive with an API key and write access. CLOSED admits nobody: " +
+                "schemas reach the environment only by promotion. Enforced server-side, on " +
+                "both subject creation and version registration.")
+            .Produces<RegistrationPolicyResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .RequireScope(Scope.EnvWrite);
@@ -166,6 +190,48 @@ public static class EnvironmentEndpoints
         return result.IsFailure
             ? ProblemDetailsMapping.From(result.Error!)
             : TypedResults.Ok(EnvironmentResponse.From(result.Value));
+    }
+
+    private static async Task<IResult> GetRegistrationPolicy(
+        string env, IDispatcher dispatcher, CancellationToken cancellationToken)
+    {
+        var result = await dispatcher.QueryAsync(new GetEnvironmentQuery(env), cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(RegistrationPolicyResponse.From(result.Value));
+    }
+
+    private static async Task<IResult> SetRegistrationPolicy(
+        string env,
+        SetRegistrationPolicyRequest request,
+        IDispatcher dispatcher,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        // An omitted policy is refused rather than treated as "leave it alone". PATCH means
+        // "change what I named"; PUT on a single value means "make it this", and answering 200
+        // to a request that changed nothing would tell an operator mid-incident that they had
+        // closed an environment they had not.
+        if (string.IsNullOrWhiteSpace(request.Policy))
+        {
+            return ProblemDetailsMapping.From(new DomainError(
+                "invalid_request",
+                "A policy is required: OPEN, CI_ONLY or CLOSED."));
+        }
+
+        // Reuses UpdateEnvironmentCommand rather than adding a command that would duplicate its
+        // parsing and its audit entry. Passing null for the other fields is what that command
+        // already means by "leave it alone".
+        var result = await dispatcher.SendAsync(
+            new UpdateEnvironmentCommand(env, null, null, null, request.Policy),
+            cancellationToken).ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(RegistrationPolicyResponse.From(result.Value));
     }
 
     private static async Task<IResult> AddBroker(
@@ -328,6 +394,45 @@ public sealed record BrokerResponse(
     }
 }
 
+/// <summary>Request to change who may register schemas in an environment.</summary>
+/// <param name="Policy"><c>OPEN</c>, <c>CI_ONLY</c> or <c>CLOSED</c>.</param>
+public sealed record SetRegistrationPolicyRequest(string Policy);
+
+/// <summary>Who may register schemas in an environment, and what that requires of them.</summary>
+/// <param name="Environment">The environment.</param>
+/// <param name="Policy"><c>OPEN</c>, <c>CI_ONLY</c> or <c>CLOSED</c>.</param>
+/// <param name="RequiredScopes">
+/// What a credential must carry to register here, so a caller debugging a refusal can compare
+/// it against their own key instead of guessing which of the three policies is in force.
+/// </param>
+public sealed record RegistrationPolicyResponse(
+    string Environment,
+    string Policy,
+    IReadOnlyList<string> RequiredScopes)
+{
+    /// <summary>Projects an environment's policy.</summary>
+    /// <param name="environment">The environment.</param>
+    /// <returns>The wire form.</returns>
+    public static RegistrationPolicyResponse From(Environment environment)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+
+        // CLOSED lists nothing rather than an impossible scope: no credential admits you, and
+        // naming one would send somebody to go and request it.
+        IReadOnlyList<string> required = environment.RegistrationPolicy switch
+        {
+            Domain.Registry.RegistrationPolicy.Open => [Scope.SubjectWrite],
+            Domain.Registry.RegistrationPolicy.CiOnly => [Scope.SubjectWrite, Scope.Ci],
+            _ => [],
+        };
+
+        return new RegistrationPolicyResponse(
+            environment.Name.Value,
+            EnvironmentResponse.RegistrationToken(environment.RegistrationPolicy),
+            required);
+    }
+}
+
 /// <summary>An environment and its brokers.</summary>
 /// <param name="Name">The name that appears in every route.</param>
 /// <param name="Description">What it is for.</param>
@@ -361,7 +466,7 @@ public sealed record EnvironmentResponse(
 
     // Explicit, not ToUpperInvariant() on the member name: CiOnly would serialise as CIONLY,
     // which is the class of bug M6.1 found across the rest of the API.
-    private static string RegistrationToken(RegistrationPolicy policy) => policy switch
+    internal static string RegistrationToken(RegistrationPolicy policy) => policy switch
     {
         Domain.Registry.RegistrationPolicy.Open => "OPEN",
         Domain.Registry.RegistrationPolicy.CiOnly => "CI_ONLY",
