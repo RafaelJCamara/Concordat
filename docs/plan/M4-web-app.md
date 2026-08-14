@@ -8,12 +8,12 @@ Off the critical path — can slip without invalidating M0–M3.
 
 ## M4.1 Scaffold
 
-- [ ] Angular 22 standalone + signals, no NgModules; Angular CLI 21+
-- [ ] Spartan UI — `@spartan-ng/brain` + `helm` components generated into the repo as source
-- [ ] Port the prototype's `index.css` token set **verbatim**; add a light theme
-- [ ] `@ngrx/signals` SignalStore per feature
-- [ ] Folder structure per DESIGN §9; **ESLint boundaries rule** enforcing it
-- [ ] `core/` interceptors: auth, tenant, problem-details
+- [x] Angular 22 standalone + signals, no NgModules; Angular CLI 21+
+- [x] Spartan UI — `@spartan-ng/brain` + `helm` components generated into the repo as source
+- [x] Port the prototype's `index.css` token set **verbatim**; add a light theme
+- [x] `@ngrx/signals` SignalStore per feature
+- [x] Folder structure per DESIGN §9; **ESLint boundaries rule** enforcing it
+- [x] `core/` interceptors: auth, tenant, problem-details
 
 ## M4.2 Access control
 
@@ -21,11 +21,19 @@ Off the critical path — can slip without invalidating M0–M3.
 
 Build now, not in M8 — retrofitting across finished screens is how a write path gets missed.
 
-- [ ] `canWriteSchemas` computed on the session store, derived from API-returned scopes
-- [ ] `*cdIfScope` structural directive for affordances
-- [ ] `scopeGuard` on write routes; direct navigation redirects to the read view
-- [ ] Stub returning admin in the single-user self-hosted profile until M8
-- [ ] Write affordances **absent, not disabled**, for non-admins
+- [x] `canWriteSchemas` computed on the session store, derived from API-returned scopes
+- [x] `*cdIfScope` structural directive for affordances
+- [x] `scopeGuard` on write routes; direct navigation redirects to the read view
+- [x] ~~Stub returning admin~~ — **superseded, and better.** The stub was never built; the
+      API's unclaimed-instance caller (M8.2) does the same job on the server, so the UI and
+      the server agree by construction rather than by two people remembering to.
+- [x] Write affordances **absent, not disabled**, for non-admins
+
+**Delivered across M4.1 and M8.2.** The access-control half deliberately waited for real
+scopes rather than shipping against a stub — the sequencing hazard ADR-018 warned about was
+retrofitting the *check*, and the check went in with the screens. What arrived late was the
+sign-in screen that lets someone pass it, which is recorded as
+[decisions-pending #26](../DECISIONS-PENDING.md).
 
 ## M4.3 Pages
 

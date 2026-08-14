@@ -30,7 +30,7 @@ public sealed record DispatchResult(int Claimed, int Delivered, int Failed, int 
 /// The failure is still recorded against the message.
 /// </para>
 /// </remarks>
-public sealed class NotificationDispatcher(
+public sealed partial class NotificationDispatcher(
     IOutbox outbox,
     ISubscriptionRepository subscriptions,
     IEnvironmentRepository environments,
@@ -105,9 +105,8 @@ public sealed class NotificationDispatcher(
             {
                 parked++;
 
-                logger.LogWarning(
-                    "Notification {MessageId} for {Event} on {Target} was parked after " +
-                    "{Attempts} attempts: {Error}",
+                Log.Parked(
+                    logger,
                     message.Id,
                     NotificationTokens.For(message.Event),
                     message.Target,
@@ -164,14 +163,37 @@ public sealed class NotificationDispatcher(
                 // subscriber's exception escape would abandon the whole batch.
                 firstError ??= $"{subscription.Endpoint}: {ex.Message}";
 
-                logger.LogWarning(
-                    ex,
-                    "Delivering {MessageId} to {Endpoint} failed",
-                    message.Id,
-                    subscription.Endpoint);
+                Log.DeliveryFailed(logger, message.Id, subscription.Endpoint, ex);
             }
         }
 
         return firstError;
+    }
+
+    /// <summary>
+    /// Source-generated log messages.
+    /// </summary>
+    /// <remarks>
+    /// <c>ILogger.LogWarning</c> allocates a <c>params object?[]</c> and boxes every argument
+    /// whether or not the level is enabled. <c>.editorconfig</c> sets CA1848 to a suggestion
+    /// because most call sites are not hot — this one is, since the pump runs on a timer
+    /// forever and pays the cost on every quiet pass as well as every busy one. Matches
+    /// <c>OutboxPump</c>, which is the same loop one layer up.
+    /// </remarks>
+    private static partial class Log
+    {
+        [LoggerMessage(
+            EventId = 7503,
+            Level = LogLevel.Warning,
+            Message = "Notification {MessageId} for {Event} on {Target} was parked after {Attempts} attempts: {Error}")]
+        public static partial void Parked(
+            ILogger logger, Guid messageId, string @event, string target, int attempts, string error);
+
+        [LoggerMessage(
+            EventId = 7504,
+            Level = LogLevel.Warning,
+            Message = "Delivering {MessageId} to {Endpoint} failed")]
+        public static partial void DeliveryFailed(
+            ILogger logger, Guid messageId, string endpoint, Exception exception);
     }
 }

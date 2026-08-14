@@ -1,8 +1,15 @@
 # Concordat's dependencies for local work: a database and a broker.
 #
-# The registry itself is NOT here on purpose. You run it with `dotnet run`, so a change to
-# the API is a restart rather than an image rebuild — which is the loop you actually want
+#   docker compose up                        # Postgres and RabbitMQ only — the dev loop
+#   docker compose --profile registry up     # ...and the registry itself
+#
+# The default leaves the registry out on purpose. You run it with `dotnet run`, so a change
+# to the API is a restart rather than an image rebuild — which is the loop you actually want
 # while writing code against the SDK. See docs/QUICKSTART.md.
+#
+# The `registry` profile is the other audience: somebody evaluating Concordat who has no .NET
+# SDK and wants the promise ADR-008 makes — compose up, and try it. It runs the published
+# image, so it needs no toolchain at all.
 services:
   postgres:
     # Pinned rather than floating, matching the version the test suite runs against. A
@@ -44,6 +51,42 @@ services:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
       interval: 5s
       timeout: 10s
+      retries: 20
+
+  # ---- profile: registry -------------------------------------------------------------
+  #
+  # Migrations run as their own service and the API waits for it to exit cleanly. The API
+  # deliberately does not migrate on startup (M1.5) — every replica would race, and a failed
+  # migration would take the app down instead of failing a step somebody is watching.
+  migrate:
+    profiles: ['registry']
+    image: ${CONCORDAT_IMAGE:-ghcr.io/rafaeljcamara/concordat-api:latest}
+    container_name: concordat-migrate
+    entrypoint: ['dotnet', 'Concordat.Migrator.dll']
+    environment:
+      ConnectionStrings__Concordat: 'Host=postgres;Database=concordat;Username=postgres;Password=postgres'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  registry:
+    profiles: ['registry']
+    # The same image as `migrate`, and that is deliberate: a migrator from a different build
+    # than the API is how a deployment ends up with a schema the code does not expect.
+    image: ${CONCORDAT_IMAGE:-ghcr.io/rafaeljcamara/concordat-api:latest}
+    container_name: concordat-api
+    environment:
+      ConnectionStrings__Concordat: 'Host=postgres;Database=concordat;Username=postgres;Password=postgres'
+      Concordat__Profile: 'SelfHosted'
+    ports:
+      - "5062:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:8080/health/ready >/dev/null || exit 1']
+      interval: 5s
+      timeout: 3s
       retries: 20
 
 volumes:

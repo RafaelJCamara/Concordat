@@ -209,6 +209,49 @@ jobs:
       - name: Build the image
         run: docker build -f docker/cli.Dockerfile -t concordat/cli:ci .
 
+      # The API image is built here too, and only built. Publishing needs write access to the
+      # registry, which CI deliberately does not have — that is `Publish images`. What this
+      # catches is the failure mode that produced this job: an image that cannot be built at
+      # all, which nothing else notices because every other check runs on the host.
+      #
+      # It is also the check that the container build reproduces the repository's build rules.
+      # It does not, unless .editorconfig is copied in: TreatWarningsAsErrors is on, and
+      # without .editorconfig every analyser applies its DEFAULT severity, so the image fails
+      # on rules the repository has deliberately relaxed and does so nowhere else.
+      - name: Build the API image
+        run: docker build -f docker/api.Dockerfile -t concordat/api:ci .
+
+      - name: The API image runs the migrator and the registry from one build
+        run: |
+          docker network create ci-check
+          docker run -d --name ci-pg --network ci-check             -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=concordat             postgres:17-alpine
+
+          for _ in $(seq 1 30); do
+            docker exec ci-pg pg_isready -U postgres -d concordat && break
+            sleep 2
+          done
+
+          CS='Host=ci-pg;Database=concordat;Username=postgres;Password=postgres'
+
+          # Same image, different entrypoint. A migrator shipped separately could be built
+          # from another commit, and the mismatch would not surface until a request touched
+          # the changed table.
+          docker run --rm --network ci-check -e ConnectionStrings__Concordat="$CS"             --entrypoint dotnet concordat/api:ci Concordat.Migrator.dll
+
+          docker run -d --name ci-api --network ci-check             -e ConnectionStrings__Concordat="$CS" -p 8080:8080 concordat/api:ci
+
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/health/ready >/dev/null 2>&1; then
+              echo "the image serves /health/ready"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "::error::the API image never became ready"
+          docker logs ci-api
+          exit 1
+
       - name: The image must carry no .NET runtime
         run: |
           if docker run --rm --entrypoint sh concordat/cli:ci \

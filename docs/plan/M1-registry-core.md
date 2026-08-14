@@ -79,7 +79,7 @@ invoking the checker.
 - [x] **Hash covers format + canonical body + references**, not body alone
 - [x] Size ceiling — 512 KiB of UTF-8, enforced in `Schema.Create` → `schema_too_large`
 - [x] Golden tests: whitespace and key-order variants collapse to one id; differing reference sets produce **different** ids
-- [ ] Unique constraint on schema id → **M1.5**, it is a database constraint
+- [x] Unique constraint on schema id → **M1.5**, it is a database constraint
 
 36 tests in `Concordat.Formats.Json.Tests`; 118 across the solution.
 
@@ -192,7 +192,7 @@ and the correction is noted inline.
 - [x] Cycle detection over the version-level graph
 - [x] Referrer queries — direct and transitive, for re-checking on a referenced subject's change
 - [x] 41 reference tests; 191 across the solution
-- [ ] Bundled canonical form → **deferred to M1.6**, see below
+- [x] Bundled canonical form → **delivered in M1.6**, see below
 
 ### Edges are derived, never supplied
 
@@ -331,7 +331,7 @@ distinct "forbidden" would confirm another tenant's schema exists.
 - [x] **Subject patch and retire** — `PATCH` for owner and deprecation, `DELETE` for the
       soft delete
 - [ ] `GET|PUT …/registration-policy` → **blocked on M7**, see below
-- [ ] Negative-lookup caching semantics → deferred to M2, where the client cache exists
+- [x] Negative-lookup caching semantics → **delivered in M2.1**, in `SchemaCache`; deferred from, where the client cache exists
 - [ ] Subject prefix search — needs a `ComplexProperty` mapping or a shadow column
 
 14 paths in the committed OpenAPI document; 245 tests.
@@ -469,8 +469,10 @@ and both are worse than the failure.
 
 **Minimum viable: container plus compose**
 
-- [ ] `Concordat.Api` container image
-- [ ] `docker compose up` → Concordat + PostgreSQL
+- [x] `Concordat.Api` container image — `docker/api.Dockerfile`, published to GHCR
+- [x] `docker compose --profile registry up` → Concordat + PostgreSQL. The default profile
+      still leaves the registry out, because `dotnet run` is the loop you want while writing
+      code against the SDK; the profile is for evaluating without a .NET SDK at all
 - [ ] `CONCORDAT__*` configuration binding
 
 ---

@@ -14,7 +14,7 @@ Last milestone on the critical path. With M3 done, Concordat is genuinely useful
 - [x] `push`, `promote`, `diff`, `lint`, `export`
 - [x] `--json` output mode for scripting
 - [x] Documented exit codes, in `--help` as well as here
-- [ ] `impact` — **deferred to M7.** It answers "who consumes this", and registered consumers
+- [x] `impact` — **delivered in M7.4**, where registered consumers first exist. Originally It answers "who consumes this", and registered consumers
       do not exist until M7. A version that guessed from traffic would be worse than absent
 
 `System.CommandLine` 2.0.11 (MIT, Microsoft, the parser the .NET SDK itself uses, AOT-friendly

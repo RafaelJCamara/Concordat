@@ -13,9 +13,12 @@ a couple of things a cluster gives you for free have to be asked for — see
 ## What you need first
 
 - An Azure subscription and `az login`
-- The registry image pushed somewhere Container Apps can pull from — GHCR is fine for a
-  public image, ACR for a private one
 - `az bicep install` (once)
+
+The image defaults to `ghcr.io/rafaeljcamara/concordat-api:latest`, published by the
+**Publish images** workflow. Pass `image=` to pin a SHA tag, which is what a deployment
+should do — `latest` moves, and a deployment that follows it is one whose version nobody can
+state afterwards.
 
 ## Deploy
 
@@ -25,8 +28,8 @@ az group create --name concordat --location westeurope
 az deployment group create \
   --resource-group concordat \
   --template-file deploy/azure/main.bicep \
-  --parameters image=ghcr.io/rafaeljcamara/concordat:latest \
-               databasePassword='<a long random password>'
+  --parameters databasePassword='<a long random password>' \
+               image=ghcr.io/rafaeljcamara/concordat-api:<sha>
 ```
 
 The template outputs the registry URL and the database host.
@@ -37,15 +40,29 @@ The template outputs the registry URL and the database host.
 auto-migration means every replica races to alter the schema, and a failed migration takes
 the app down rather than failing a step somebody is watching.
 
-Run the migrator against the database the template created:
+**The migrator ships in the same image**, which is deliberate: published separately it could
+be built from a different commit than the API, and the mismatch would not surface until a
+request touched the changed table. Override the entrypoint to run it:
 
 ```bash
-ConnectionStrings__Concordat="Host=<databaseHost>;Database=concordat;Username=concordat;Password=<password>;SSL Mode=Require" \
-  dotnet run --project src/hosts/Concordat.Migrator
+az containerapp job create \
+  --name concordat-migrate \
+  --resource-group concordat \
+  --environment concordat-env \
+  --trigger-type Manual \
+  --image ghcr.io/rafaeljcamara/concordat-api:<sha> \
+  --command dotnet Concordat.Migrator.dll \
+  --env-vars "ConnectionStrings__Concordat=<connection string>"
+
+az containerapp job start --name concordat-migrate --resource-group concordat
 ```
 
-In a pipeline this is a Container Apps **job** using the same image, run before the revision
-is promoted.
+Locally, the same thing is one `docker run`:
+
+```bash
+docker run --rm -e ConnectionStrings__Concordat='<connection string>' \
+  --entrypoint dotnet ghcr.io/rafaeljcamara/concordat-api:<sha> Concordat.Migrator.dll
+```
 
 ## Claim the instance
 

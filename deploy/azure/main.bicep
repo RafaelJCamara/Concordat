@@ -14,7 +14,8 @@ param location string = resourceGroup().location
 param name string = 'concordat'
 
 @description('The registry image to run, including its tag.')
-param image string
+@minLength(1)
+param image string = 'ghcr.io/rafaeljcamara/concordat-api:latest'
 
 @description('The PostgreSQL administrator login.')
 param databaseAdministrator string = 'concordat'
@@ -152,6 +153,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       containers: [
         {
           name: 'api'
+          // Public on GHCR, so Container Apps pulls it without a registry credential. A
+          // private package needs a `registries` block here and a secret to go with it.
           image: image
           resources: {
             cpu: json('0.5')

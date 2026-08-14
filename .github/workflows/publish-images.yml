@@ -1,0 +1,143 @@
+name: Publish images
+
+# Separate from CI for the same reason `Release CLI` is: this workflow needs write access to
+# the package registry, and CI must not have it. CI still *builds* both images and smoke-tests
+# the CLI one — what it cannot do is push.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Extra tag to publish alongside the commit SHA, for example 0.1.0'
+        required: false
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  publish:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      # Not fail-fast: if the API image fails to build, knowing whether the CLI did too is
+      # the difference between a shared problem and a specific one.
+      fail-fast: false
+      matrix:
+        include:
+          - image: concordat-api
+            dockerfile: docker/api.Dockerfile
+          - image: concordat-cli
+            dockerfile: docker/cli.Dockerfile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Sign in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          # Provided by the runner from the `packages: write` permission above. No stored
+          # secret to rotate, and it cannot be used from a fork.
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Lowercases the owner: GHCR rejects an upper-case path, and `github.repository_owner`
+      # preserves whatever case the account was registered with.
+      - name: Work out the image name
+        id: name
+        run: echo "value=${REGISTRY}/${OWNER,,}/${IMAGE}" >> "$GITHUB_OUTPUT"
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          OWNER: ${{ github.repository_owner }}
+          IMAGE: ${{ matrix.image }}
+
+      - name: Tags
+        id: tags
+        run: |
+          # The SHA tag is the one deployments should pin. `latest` is a convenience for
+          # someone trying the product, and moves — a deployment that follows it is a
+          # deployment whose version nobody can state after the fact.
+          TAGS="${NAME}:${GITHUB_SHA}"
+          TAGS="${TAGS},${NAME}:latest"
+
+          if [ -n "${EXTRA}" ]; then
+            TAGS="${TAGS},${NAME}:${EXTRA}"
+          fi
+
+          # A tag push names the release, and that is the tag people will actually pin.
+          case "${GITHUB_REF}" in
+            refs/tags/v*) TAGS="${TAGS},${NAME}:${GITHUB_REF#refs/tags/v}" ;;
+          esac
+
+          echo "value=${TAGS}" >> "$GITHUB_OUTPUT"
+        env:
+          NAME: ${{ steps.name.outputs.value }}
+          EXTRA: ${{ inputs.tag }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.tags.outputs.value }}
+          # Container Apps runs amd64. arm64 is here for Apple Silicon developers running the
+          # compose `registry` profile, who would otherwise emulate and wonder why it crawls.
+          platforms: linux/amd64,linux/arm64
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=Apache-2.0
+
+      # The API image is never exercised by CI, unlike the CLI's, so this is the only place
+      # that finds out whether what was just published can start at all. It is a 30-second
+      # check against a real database, and the alternative is discovering it in a deployment.
+      - name: The published API image starts and answers
+        if: matrix.image == 'concordat-api'
+        run: |
+          docker network create concordat-check
+
+          docker run -d --name pg --network concordat-check \
+            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=concordat \
+            postgres:17-alpine
+
+          for _ in $(seq 1 30); do
+            docker exec pg pg_isready -U postgres -d concordat && break
+            sleep 2
+          done
+
+          CS='Host=pg;Database=concordat;Username=postgres;Password=postgres'
+
+          docker run --rm --network concordat-check \
+            -e ConnectionStrings__Concordat="$CS" \
+            --entrypoint dotnet "${NAME}:${GITHUB_SHA}" Concordat.Migrator.dll
+
+          docker run -d --name api --network concordat-check \
+            -e ConnectionStrings__Concordat="$CS" -p 8080:8080 "${NAME}:${GITHUB_SHA}"
+
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/health/ready >/dev/null 2>&1; then
+              echo "the published image serves /health/ready"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "::error::the published image never became ready"
+          docker logs api
+          exit 1
+        env:
+          NAME: ${{ steps.name.outputs.value }}

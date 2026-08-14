@@ -14,9 +14,14 @@ RUN apt-get update \
 
 WORKDIR /src
 
-# Central Package Management means the props files govern every restore, so they
-# have to be present before it runs.
-COPY Directory.Build.props Directory.Packages.props nuget.config* ./
+# Central Package Management means the props files govern every restore, so they have to be
+# present before it runs.
+#
+# .editorconfig governs analyser severity, and TreatWarningsAsErrors is on. Without it this
+# build applies each rule's DEFAULT severity and turns every one into an error — so the image
+# build fails on rules the repository has deliberately relaxed, and does so nowhere else.
+# CA1848 is the one that caught this: set to `suggestion` with a reason, fatal without.
+COPY Directory.Build.props Directory.Packages.props .editorconfig nuget.config* ./
 COPY src/ src/
 
 RUN dotnet publish src/tools/Concordat.Cli \
