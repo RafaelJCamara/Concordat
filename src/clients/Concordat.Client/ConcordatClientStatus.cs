@@ -66,12 +66,38 @@ public sealed record ConcordatClientStatus
     /// </remarks>
     public string? LastFailure { get; init; }
 
+    /// <summary>How many routes and queues have a cached contract answer, governed or not.</summary>
+    public int RoutesResolved { get; init; }
+
+    /// <summary>
+    /// How many of those routes a contract actually governs.
+    /// </summary>
+    /// <remarks>
+    /// <b>Zero against a non-zero <see cref="RoutesResolved"/> is the signal worth reading.</b>
+    /// It means the registry answered about every route this service uses and said no contract
+    /// covers any of them — a topology nobody has written a contract for, which from every other
+    /// signal is indistinguishable from governance working perfectly.
+    /// </remarks>
+    public int GovernedRoutes { get; init; }
+
+    /// <summary>
+    /// How many contract lookups fell back to ungoverned because the registry could not answer.
+    /// </summary>
+    /// <remarks>
+    /// Counted apart from <see cref="ResolutionFailures"/> because the consequence differs. A
+    /// schema that will not resolve leaves a message unchecked; a contract that will not resolve
+    /// leaves the route governed by the client's own <c>Mode</c>, which may well still be
+    /// enforcing. Adding them together would overstate the enforcement hole.
+    /// </remarks>
+    public long ContractResolutionFailures { get; init; }
+
     /// <summary>A one-line summary for a log line or a health endpoint.</summary>
     /// <returns>The summary.</returns>
     public override string ToString()
     {
         var state = IsWarm
             ? $"warm since {WarmedAt:O}: {SubjectsLoaded} subjects, {SchemasLoaded} schemas, " +
+              $"{GovernedRoutes}/{RoutesResolved} routes governed, " +
               $"{ResolutionFailures} unenforced, {StaleServed} stale"
             : $"cold — warm-up has not completed, {ResolutionFailures} unenforced";
 

@@ -30,6 +30,7 @@ public sealed class ConcordatConsumer : IAsyncBasicConsumer
     private readonly SchemaEnforcer _enforcer;
     private readonly ConcordatRabbitMqOptions _options;
     private readonly IChannel _channel;
+    private readonly string? _queue;
     private int _quarantineDeclared;
 
     /// <summary>Wraps a consumer.</summary>
@@ -41,11 +42,18 @@ public sealed class ConcordatConsumer : IAsyncBasicConsumer
     /// </param>
     /// <param name="enforcer">The shared enforcement rules.</param>
     /// <param name="options">Configuration.</param>
+    /// <param name="queue">
+    /// The queue being consumed, used to resolve the contract governing it (M7.3). Supplied
+    /// automatically by <see cref="ConcordatChannel.BasicConsumeAsync"/>. Null leaves deliveries
+    /// governed by <see cref="ConcordatRabbitMqOptions.Mode"/> alone, because RabbitMQ does not
+    /// put the queue name on a delivery and there is nothing else to infer it from.
+    /// </param>
     public ConcordatConsumer(
         IAsyncBasicConsumer inner,
         IChannel channel,
         SchemaEnforcer enforcer,
-        ConcordatRabbitMqOptions options)
+        ConcordatRabbitMqOptions options,
+        string? queue = null)
     {
         ArgumentNullException.ThrowIfNull(inner);
         ArgumentNullException.ThrowIfNull(channel);
@@ -56,6 +64,7 @@ public sealed class ConcordatConsumer : IAsyncBasicConsumer
         _inner = inner;
         _enforcer = enforcer;
         _options = options;
+        _queue = queue;
 
         // Unwrapped deliberately. A quarantined message is by definition one that fails its
         // schema, so publishing it through an enforcing channel would refuse it — and the
@@ -78,6 +87,9 @@ public sealed class ConcordatConsumer : IAsyncBasicConsumer
         ReadOnlyMemory<byte> body,
         CancellationToken cancellationToken = default)
     {
+        // Local Off is the one setting a contract cannot override, matching ConcordatChannel:
+        // it means "Concordat does nothing in this process", and honouring that must not depend
+        // on the registry being reachable. Everywhere above this line the contract wins.
         if (_options.Mode is EnforcementMode.Off)
         {
             await Deliver().ConfigureAwait(false);
@@ -92,6 +104,7 @@ public sealed class ConcordatConsumer : IAsyncBasicConsumer
                 properties.Type,
                 properties.ContentType,
                 body,
+                _queue,
                 cancellationToken).ConfigureAwait(false);
         }
 #pragma warning disable CA1031 // Deliberately broad: see below.
@@ -113,7 +126,8 @@ public sealed class ConcordatConsumer : IAsyncBasicConsumer
 
         var violated = decision.Outcome is EnforcementOutcome.Observed;
 
-        if (!violated || _options.Mode is EnforcementMode.Monitor)
+        // EffectiveMode, not _options.Mode: the queue's contract has already decided.
+        if (!violated || decision.EffectiveMode is EnforcementMode.Monitor)
         {
             Report(decision, decision.Outcome, exchange, routingKey);
             await Deliver().ConfigureAwait(false);

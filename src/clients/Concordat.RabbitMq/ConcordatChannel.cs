@@ -17,7 +17,9 @@ namespace Concordat.RabbitMq;
 /// product exists to prevent, so the only publish path is the enforced one.
 /// </para>
 /// <para>
-/// Everything except publishing forwards untouched. The channel is not a place to be clever.
+/// <see cref="BasicConsumeAsync"/> wraps the application's consumer for the same reason, so a
+/// codebase cannot publish under enforcement and consume without it. Everything else forwards
+/// untouched — the channel is not a place to be clever.
 /// </para>
 /// </remarks>
 public sealed class ConcordatChannel : IChannel
@@ -76,9 +78,15 @@ public sealed class ConcordatChannel : IChannel
         CancellationToken cancellationToken)
         where TProperties : IReadOnlyBasicProperties, IAmqpHeader
     {
+        // LOCAL OFF IS THE ONE SETTING A CONTRACT CANNOT OVERRIDE, AND THAT IS DELIBERATE.
+        //
+        // Everywhere else a governing contract beats local configuration — see SchemaEnforcer,
+        // where that is the whole point of central enforcement. Off is the exception because it
+        // means "Concordat does nothing in this process", and honouring that must not depend on
+        // the registry being reachable or on what somebody writes into a contract later. It is
+        // also what lets Off cost nothing: no resolution, no validation, no copy.
         if (_options.Mode is EnforcementMode.Off)
         {
-            // Off must cost nothing and touch nothing. No resolution, no validation, no copy.
             await _inner
                 .BasicPublishAsync(exchange, routingKey, mandatory, basicProperties, body, cancellationToken)
                 .ConfigureAwait(false);
@@ -98,7 +106,9 @@ public sealed class ConcordatChannel : IChannel
 
         var violated = decision.Outcome is EnforcementOutcome.Observed;
 
-        if (violated && _options.Mode is EnforcementMode.Enforce)
+        // decision.EffectiveMode, not _options.Mode: the contract governing this route has
+        // already had its say, and consulting local configuration here would quietly ignore it.
+        if (violated && decision.EffectiveMode is EnforcementMode.Enforce)
         {
             Report(decision, EnforcementOutcome.Blocked, exchange, routingKey);
 
@@ -255,7 +265,32 @@ public sealed class ConcordatChannel : IChannel
     public Task BasicCancelAsync(string consumerTag, bool noWait = false, CancellationToken cancellationToken = default) =>
         _inner.BasicCancelAsync(consumerTag, noWait, cancellationToken);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Registers a consumer, wrapping it so deliveries are enforced on the way in.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Wrapped for the same reason publishing is decorated rather than opted into:</b>
+    /// enforcement you can bypass by forgetting is the failure mode this product exists to
+    /// prevent. Leaving this a pass-through meant a codebase could publish under enforcement and
+    /// consume without it, and nothing would say so.
+    /// </para>
+    /// <para>
+    /// This is also the only place the queue name is known. RabbitMQ hands
+    /// <c>HandleBasicDeliverAsync</c> the exchange and routing key a message was published with,
+    /// never the queue it was delivered to — so a consume-side contract could not be resolved at
+    /// all without capturing it here.
+    /// </para>
+    /// </remarks>
+    /// <param name="queue">The queue to consume from.</param>
+    /// <param name="autoAck">Whether deliveries are acknowledged automatically.</param>
+    /// <param name="consumerTag">The consumer tag.</param>
+    /// <param name="noLocal">Unsupported by RabbitMQ; forwarded unchanged.</param>
+    /// <param name="exclusive">Whether this is the queue's only consumer.</param>
+    /// <param name="arguments">Broker-specific arguments.</param>
+    /// <param name="consumer">The application's consumer.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The consumer tag the broker assigned.</returns>
     public Task<string> BasicConsumeAsync(
         string queue,
         bool autoAck,
@@ -264,8 +299,17 @@ public sealed class ConcordatChannel : IChannel
         bool exclusive,
         IDictionary<string, object?>? arguments,
         IAsyncBasicConsumer consumer,
-        CancellationToken cancellationToken = default) =>
-        _inner.BasicConsumeAsync(queue, autoAck, consumerTag, noLocal, exclusive, arguments, consumer, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        // Already wrapped by a caller who wanted to choose the queue name or the options. Wrapping
+        // again would validate every message twice and double every counter.
+        var enforced = consumer is ConcordatConsumer
+            ? consumer
+            : new ConcordatConsumer(consumer, _inner, _enforcer, _options, queue);
+
+        return _inner.BasicConsumeAsync(
+            queue, autoAck, consumerTag, noLocal, exclusive, arguments, enforced, cancellationToken);
+    }
 
     /// <inheritdoc />
     public Task<BasicGetResult?> BasicGetAsync(string queue, bool autoAck, CancellationToken cancellationToken = default) =>

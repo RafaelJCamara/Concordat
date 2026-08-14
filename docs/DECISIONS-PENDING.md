@@ -10,6 +10,59 @@ architectural, becomes an ADR in [`adr/`](adr/README.md).
 
 ## Proceeded on my judgement — confirm or overturn
 
+### 30. A governing contract beats local `Mode` in both directions — except `Off`
+
+**Implemented and shipped** as part of contract resolution in the SDK. It is the load-bearing
+call in that work and it is yours to confirm.
+
+When a contract governs a route, its enforcement decides and the client's configured `Mode` is
+ignored. `Mode` governs only routes no contract covers.
+
+The alternative was **stricter of the two**, which sounds safer and is not. Under it an operator
+could switch enforcement **on** centrally but never **off**: any service configured locally to
+`Enforce` would keep refusing traffic after the contract had been set to `OFF`. An off switch
+that does not switch anything off is worse than none, because it is believed. That asymmetry is
+what decided it.
+
+**The exception, and it is an inconsistency worth seeing plainly:** local `Mode = Off` cannot be
+overridden by a contract, because `ConcordatChannel` short-circuits on it before resolving
+anything. The justification is that `Off` means "Concordat does nothing in this process", and
+honouring that must not depend on the registry being reachable — it is also what lets `Off` cost
+nothing. But it does mean an operator cannot switch enforcement *on* for a service that has
+opted out locally, and there is no signal anywhere telling them so.
+
+> **If you overturn this:** the change is confined to `SchemaEnforcer.Decision` and two
+> short-circuits. Nothing is persisted, so there is no migration either way.
+
+### 31. `BasicConsumeAsync` now wraps the application's consumer
+
+**Implemented.** `ConcordatChannel` decorated `BasicPublishAsync` and passed `BasicConsumeAsync`
+straight through, so a codebase could publish under enforcement and consume without it. That
+contradicts the stated reason the channel is a decorator at all — "enforcement you can bypass by
+forgetting is the failure mode this product exists to prevent" — so I closed it rather than
+record it.
+
+It is here because **it changes behaviour for existing users without them asking.** Anyone on a
+`ConcordatChannel` today gets consume-side enforcement they did not previously have, including
+quarantining in `Enforce`. Double-wrapping is guarded, so a manual `ConcordatConsumer` is left
+alone, and `Mode = Off` still bypasses everything.
+
+> **Cost of waiting:** none — but the longer it stands, the more likely someone depends on the
+> old asymmetry without knowing it. Worth a line in the release notes at v1 either way.
+
+### 32. Publish-side version conformance judges `latest`, not the pinned version
+
+**Implemented.** When a binding pins `orders.created@3` and the subject's latest is 7, the SDK
+reports `contract_version_not_permitted` rather than fetching version 3 and validating against it.
+
+The reasoning: a publisher stamps the tip, so the honest question is whether the route accepts
+the tip — and it needs no version-by-ordinal fetch on the publish path. The alternative reading
+is that a pinned binding *instructs* the publisher to send version 3, which would mean validating
+against it and stamping it. That is a coherent design and a different product decision.
+
+> **If you want the other reading**, `GET /subjects/{s}/versions/{ordinal}` already exists; the
+> work is a `GetVersionAsync` on the client and a branch in `SchemaEnforcer`.
+
 ### 17. Avro's Parsing Canonical Form is lossy, and the architecture stores the canonical form
 
 **Option (B) below is implemented and shipped.** M5.2 was blocked on this and you were not
@@ -519,7 +572,7 @@ into the milestone that owes it, and collected here because they are the ones th
 | **M1.6** | Subject prefix search needs a `ComplexProperty` mapping or a shadow column | Value converters do not translate `StartsWith` |
 | ~~M1.7~~ ✅ | ~~Pin the schema-id preimage bytes, not just ids~~ | **Discharged.** 4 fixtures pin the exact framing; all matched hand-written expectations first run |
 | ~~M2~~ ✅ | ~~Run the payload-validation fixtures against a real validator~~ | **Discharged.** NJsonSchema behind `IPayloadValidator`; the corpus caught a real draft-conformance gap on its first run |
-| **M7** | Contract-resolution caching, deferred from M2.1 | The 60 s TTL was specified before contracts existed; there is no endpoint to cache until M7 ships one |
+| ~~M7~~ ✅ | ~~Contract-resolution caching, deferred from M2.1~~ | **Discharged.** `ContractCache` at the specified 60 s, keyed by topology rather than subject; batch resolve at warm-up, on-demand for anything undeclared, stale-on-failure. The oldest outstanding commitment in this register, and closing it turned `/contracts/resolve` from an endpoint nothing called into the feature it was built to be |
 | ~~M2.5~~ ✅ | ~~Verify the AMQP 1.0 header conversion~~ | **Discharged.** Measured on `rabbitmq:4.1-management`: `concordat-*` arrive as application-properties, and an `x-`-prefixed control header on the same message is demoted to an annotation, so the prefix rule is load-bearing rather than precautionary |
 | **M7** | Hard delete: no registered consumers + force flag + audit entry | Soft delete is all that exists today |
 | **M7** | Adopt the derived environment ids, or migrate `subject.environment_id` | `DerivedEnvironmentResolver` hashes the name to a stable id so `/environments/{env}/…` works before environments exist. Real rows will generate their own |

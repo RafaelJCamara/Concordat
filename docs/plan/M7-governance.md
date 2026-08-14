@@ -30,6 +30,12 @@ Contexts B, C and D of the domain model — the contract layer Kafka has no equi
 - [x] `EnforcementMode` — `Off | Monitor | Enforce`
 - [x] Invariant: valid AMQP topic patterns; overlapping patterns cannot bind conflicting subjects without explicit precedence
 - [x] `POST /contracts/resolve` for SDK startup
+- [x] **The SDK actually calls it** — `ContractCache` (60 s TTL), batch resolve at warm-up from
+      the declared topology, on-demand resolve for anything undeclared, stale-on-failure
+- [x] Contracts decide enforcement per route, overriding the client's `Mode` in both directions
+- [x] A single-subject binding supplies the subject an un-instrumented publisher omitted
+- [x] Route conformance: `contract_subject_not_permitted`, `contract_version_not_permitted`
+- [x] `ConcordatChannel.BasicConsumeAsync` wraps consumers, so consume is enforced like publish
 
 **Overlap is intersection, not text equality.** `orders.*` and `*.created` share no
 characters in common yet both match `orders.created`, so comparing the pattern strings
@@ -46,6 +52,62 @@ discovered in production.
 `{contract: null, enforcement: "OFF"}` for a route no contract governs, because the SDK
 has to tell "nothing governs this" (normal, brownfield) from "I forgot to ask" (a bug),
 and the answers are positional.
+
+### A governing contract wins outright; `Mode` is the default for what it does not cover
+
+The obvious alternative — take the stricter of the contract and the client's own `Mode` — is
+wrong, and wrong in the direction that matters. Under it an operator could switch enforcement
+**on** centrally but never **off** again: any service configured locally to `Enforce` would keep
+refusing traffic after the contract had been set to `OFF`. An off switch that does not switch
+anything off is worse than no off switch, because it is believed.
+
+So a contract that matches decides, and the client's `Mode` governs only routes nothing covers.
+This is the whole reason `resolve` distinguishes a null contract from an `OFF` one: **"nobody has
+written a contract for this" has to mean something different from "a contract covers this and
+says do nothing"**, or the central control is unreachable from the client.
+
+The one exception is local `Mode = Off`, which no contract can override. It means "Concordat does
+nothing in this process", and honouring that must not depend on the registry being reachable — it
+is also what lets `Off` cost nothing, since the channel short-circuits before resolving anything.
+
+### What contracts let the SDK do that schemas alone cannot
+
+- **Enforce an un-instrumented publisher.** No `properties.type` used to be the end of the line.
+  A binding that permits exactly one subject supplies the one the publisher omitted, so a
+  brownfield service becomes enforceable without its code being touched. Two or more subjects and
+  the SDK refuses to guess — `contract_subject_ambiguous` — because choosing would silently
+  validate against the wrong schema.
+- **Catch the right message on the wrong route.** A payload can be perfectly valid against the
+  schema it claims and still not belong on that exchange. Schema validation never sees the
+  topology, so nothing but the contract can tell.
+- **Catch a version the route has not agreed to.** A binding pinned to `orders.created@3` against
+  a subject whose latest is 7 means the publisher is stamping identity the route does not accept.
+
+**A route violation carries no envelope; a payload violation does.** An envelope asserts "this is
+schema X, sent here deliberately" — stamping one on a message the contract does not accept would
+put a claim on the wire the registry itself contradicts. A bad payload on the *right* route has no
+such problem, and stamping it is what lets consumers start reading schema ids before every
+publisher is clean.
+
+**Consume-side conformance is best-effort by construction.** Mode B carries only the schema id in
+the content type, so a message that arrives that way has no subject to compare against the
+contract. Stated here rather than silently skipped.
+
+### Two defects this found
+
+- **A successful resolve could be thrown away.** The per-route lookup wrote the cache and then
+  read it back demanding a `Fresh` entry, so a resolve was discarded whenever the clock moved past
+  the TTL in between — on a short TTL, every time. The route was then reported *ungoverned*, which
+  falls back to the client's `Mode`: enforcement switching itself off with nothing reporting an
+  error. Found by an integration test with an aggressive TTL, fixed by using the resolved value
+  rather than re-reading.
+- **Consumers were opt-in while publishes were not.** `ConcordatChannel` decorated
+  `BasicPublishAsync` on the stated grounds that "enforcement you can bypass by forgetting is the
+  failure mode this product exists to prevent", and then passed `BasicConsumeAsync` straight
+  through. A codebase could publish under enforcement and consume without it, and nothing said so.
+  It is also the only place the queue name is known — RabbitMQ hands a delivery its exchange and
+  routing key, never the queue it arrived on — so consume-side contracts could not have worked
+  without capturing it there.
 
 **Subjects are one text column, not a child table** — a value-object list with no identity
 that is always read and written together. See `ContractConfiguration`; the value comparer

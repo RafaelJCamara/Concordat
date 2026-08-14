@@ -1,7 +1,9 @@
 using System.Text;
 using Concordat.Client;
+using Concordat.Domain.Contracts;
 using Concordat.Domain.Messaging;
 using Concordat.Domain.Registry;
+using Concordat.Domain.Results;
 using Concordat.Formats.Json;
 using Concordat.RabbitMq;
 
@@ -12,6 +14,8 @@ internal sealed class FakeClient : IConcordatClient
 {
     private readonly Dictionary<string, CachedSchema> _schemas = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CachedLatest> _latest = new(StringComparer.Ordinal);
+    private readonly Dictionary<PublishRoute, ResolvedRoute> _publishRoutes = [];
+    private readonly Dictionary<string, ResolvedRoute> _consumeRoutes = new(StringComparer.Ordinal);
 
     public ConcordatClientStatus Status { get; } = new();
 
@@ -24,11 +28,21 @@ internal sealed class FakeClient : IConcordatClient
     public ValueTask<CachedLatest?> GetLatestAsync(SubjectName subject, CancellationToken cancellationToken = default) =>
         ValueTask.FromResult(_latest.GetValueOrDefault(subject.Value));
 
-    public FakeClient Register(string subject, string schemaId, string body)
+    public ValueTask<ResolvedRoute> GetPublishRouteAsync(
+        PublishRoute route, CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(
+            _publishRoutes.GetValueOrDefault(route) ?? ResolvedRoute.Ungoverned(DateTimeOffset.UtcNow));
+
+    public ValueTask<ResolvedRoute> GetConsumeRouteAsync(
+        string queue, CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(
+            _consumeRoutes.GetValueOrDefault(queue) ?? ResolvedRoute.Ungoverned(DateTimeOffset.UtcNow));
+
+    public FakeClient Register(string subject, string schemaId, string body, int ordinal = 1)
     {
         var id = SchemaId.Create(schemaId).Value;
         _schemas[schemaId] = new CachedSchema(id, SchemaFormat.Json, body);
-        _latest[subject] = new CachedLatest(id, 1, DateTimeOffset.UtcNow);
+        _latest[subject] = new CachedLatest(id, ordinal, DateTimeOffset.UtcNow);
         return this;
     }
 
@@ -37,6 +51,48 @@ internal sealed class FakeClient : IConcordatClient
     {
         _latest[subject] = new CachedLatest(SchemaId.Create(schemaId).Value, 1, DateTimeOffset.UtcNow);
         return this;
+    }
+
+    /// <summary>Puts a contract over a publish route.</summary>
+    public FakeClient Governs(
+        string exchange,
+        string routingKey,
+        string contract,
+        EnforcementMode enforcement,
+        params string[] subjects)
+    {
+        _publishRoutes[new PublishRoute(exchange, routingKey)] =
+            new ResolvedRoute(contract, enforcement, Parse(subjects), DateTimeOffset.UtcNow);
+
+        return this;
+    }
+
+    /// <summary>Puts a contract over a queue.</summary>
+    public FakeClient GovernsQueue(
+        string queue, string contract, EnforcementMode enforcement, params string[] subjects)
+    {
+        _consumeRoutes[queue] =
+            new ResolvedRoute(contract, enforcement, Parse(subjects), DateTimeOffset.UtcNow);
+
+        return this;
+    }
+
+    /// <summary>Reads <c>subject@selector</c>, defaulting a bare subject to <c>latest</c>.</summary>
+    private static List<SubjectRef> Parse(IEnumerable<string> entries)
+    {
+        var refs = new List<SubjectRef>();
+
+        foreach (var entry in entries)
+        {
+            var at = entry.LastIndexOf('@');
+            var name = at < 0 ? entry : entry[..at];
+            var selector = at < 0 ? "latest" : entry[(at + 1)..];
+
+            refs.Add(new SubjectRef(
+                SubjectName.Create(name).Value, VersionSelector.Parse(selector).Value));
+        }
+
+        return refs;
     }
 }
 
@@ -258,6 +314,236 @@ public class SchemaEnforcerTests
         var decision = await enforcer.InspectPublishAsync(Publishing(), Violating);
 
         Assert.Equal(EnforcementOutcome.Valid, decision.Outcome);
+    }
+
+    // ------------------------------------------------------------- contracts (M7.3)
+
+    [Fact]
+    public async Task AnUngovernedRouteFallsBackToTheClientsOwnMode()
+    {
+        var decision = await Build(configure: o => o.Mode = EnforcementMode.Enforce)
+            .InspectPublishAsync(Publishing(), Conforming);
+
+        Assert.Null(decision.Contract);
+        Assert.Equal(EnforcementMode.Enforce, decision.EffectiveMode);
+    }
+
+    [Fact]
+    public async Task AGoverningContractOverridesTheClientUpwards()
+    {
+        var client = new FakeClient()
+            .Register(Subject, SchemaIdHex, Schema)
+            .Governs("orders", "order.created", "orders-v1", EnforcementMode.Enforce, Subject);
+
+        // The client asked for Monitor. The operator promoted the contract to ENFORCE, which is
+        // the entire reason enforcement lives in the registry rather than in each deployment.
+        var decision = await Build(client, o => o.Mode = EnforcementMode.Monitor)
+            .InspectPublishAsync(Publishing(), Conforming);
+
+        Assert.Equal("orders-v1", decision.Contract);
+        Assert.Equal(EnforcementMode.Enforce, decision.EffectiveMode);
+    }
+
+    [Fact]
+    public async Task AGoverningContractOverridesTheClientDownwards()
+    {
+        var client = new FakeClient()
+            .Register(Subject, SchemaIdHex, Schema)
+            .Governs("orders", "order.created", "orders-v1", EnforcementMode.Off, Subject);
+
+        // THE CENTRAL OFF SWITCH, AND THE REASON 'STRICTER OF THE TWO' WAS REJECTED.
+        //
+        // Under a stricter-wins rule this service would keep enforcing after the operator had
+        // switched the contract off, because it happens to be configured Enforce locally. An off
+        // switch that does not switch anything off is worse than none, because it is believed.
+        var decision = await Build(client, o => o.Mode = EnforcementMode.Enforce)
+            .InspectPublishAsync(Publishing(), Violating);
+
+        Assert.Equal(EnforcementMode.Off, decision.EffectiveMode);
+        Assert.Equal(EnforcementOutcome.Unenforced, decision.Outcome);
+    }
+
+    [Fact]
+    public async Task AGovernedRouteInOffIsDistinguishableFromAnUngovernedOne()
+    {
+        var governed = new FakeClient()
+            .Register(Subject, SchemaIdHex, Schema)
+            .Governs("orders", "order.created", "orders-v1", EnforcementMode.Off, Subject);
+
+        var off = await Build(governed).InspectPublishAsync(Publishing(), Violating);
+        var ungoverned = await Build().InspectPublishAsync(Publishing(), Violating);
+
+        // Both are "not enforcing", and they are not the same thing: one is an operator's
+        // decision, the other is nobody having written a contract yet. Collapsing them would make
+        // the off switch indistinguishable from its own absence.
+        Assert.Equal("orders-v1", off.Contract);
+        Assert.Null(ungoverned.Contract);
+        Assert.Equal(EnforcementOutcome.Unenforced, off.Outcome);
+        Assert.Equal(EnforcementOutcome.Observed, ungoverned.Outcome);
+    }
+
+    [Fact]
+    public async Task ASingleSubjectContractSuppliesTheSubjectAPublisherOmitted()
+    {
+        var client = new FakeClient()
+            .Register(Subject, SchemaIdHex, Schema)
+            .Governs("orders", "order.created", "orders-v1", EnforcementMode.Monitor, Subject);
+
+        // No properties.type at all — the un-instrumented publisher that was previously
+        // unenforceable. The contract knows what belongs on this route, so it is enforceable now
+        // without anyone touching the publisher's code.
+        var decision = await Build(client).InspectPublishAsync(Publishing(type: null), Conforming);
+
+        Assert.Equal(EnforcementOutcome.Valid, decision.Outcome);
+        Assert.Equal(Subject, decision.Subject?.Value);
+        Assert.NotNull(decision.Envelope);
+    }
+
+    [Fact]
+    public async Task AMultiSubjectContractWillNotGuessTheSubject()
+    {
+        var client = new FakeClient()
+            .Register(Subject, SchemaIdHex, Schema)
+            .Governs(
+                "orders", "order.created", "orders-v1", EnforcementMode.Monitor,
+                Subject, "acme.orders.OrderAmended");
+
+        var decision = await Build(client).InspectPublishAsync(Publishing(type: null), Conforming);
+
+        Assert.Equal(EnforcementOutcome.Unenforced, decision.Outcome);
+        Assert.Equal(ConcordatCodes.ContractSubjectAmbiguous, decision.Code);
+    }
+
+    [Fact]
+    public async Task PublishingASubjectTheRouteDoesNotPermitIsAViolation()
+    {
+        var client = new FakeClient()
+            .Register(Subject, SchemaIdHex, Schema)
+            .Governs(
+                "orders", "order.created", "orders-v1", EnforcementMode.Monitor,
+                "acme.orders.OrderAmended");
+
+        // A perfectly valid payload, correctly identified, on the wrong route. Schema validation
+        // alone can never catch this: it never sees the topology.
+        var decision = await Build(client).InspectPublishAsync(Publishing(), Conforming);
+
+        Assert.Equal(EnforcementOutcome.Observed, decision.Outcome);
+        Assert.Equal(ConcordatCodes.ContractSubjectNotPermitted, decision.Code);
+        Assert.Contains("acme.orders.OrderAmended@latest", decision.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ARouteViolationCarriesNoEnvelopeButAPayloadViolationDoes()
+    {
+        var wrongRoute = new FakeClient()
+            .Register(Subject, SchemaIdHex, Schema)
+            .Governs(
+                "orders", "order.created", "orders-v1", EnforcementMode.Monitor,
+                "acme.orders.OrderAmended");
+
+        var route = await Build(wrongRoute).InspectPublishAsync(Publishing(), Conforming);
+        var payload = await Build().InspectPublishAsync(Publishing(), Violating);
+
+        // An envelope asserts "this is schema X, sent here deliberately". Stamping one on a
+        // message the contract does not accept would put a claim on the wire that the registry
+        // itself contradicts. A bad payload on the right route has no such problem, and stamping
+        // it is what lets consumers start reading schema ids before publishers are clean.
+        Assert.Null(route.Envelope);
+        Assert.NotNull(payload.Envelope);
+    }
+
+    [Fact]
+    public async Task APinnedBindingRefusesAVersionAheadOfIt()
+    {
+        var client = new FakeClient()
+            .Register(Subject, SchemaIdHex, Schema, ordinal: 7)
+            .Governs(
+                "orders", "order.created", "orders-v1", EnforcementMode.Monitor, $"{Subject}@3");
+
+        var decision = await Build(client).InspectPublishAsync(Publishing(), Conforming);
+
+        Assert.Equal(EnforcementOutcome.Observed, decision.Outcome);
+        Assert.Equal(ConcordatCodes.ContractVersionNotPermitted, decision.Code);
+        Assert.Contains("version is 7", decision.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ARangeBindingAcceptsAnythingAtOrAboveItsFloor()
+    {
+        var client = new FakeClient()
+            .Register(Subject, SchemaIdHex, Schema, ordinal: 7)
+            .Governs(
+                "orders", "order.created", "orders-v1", EnforcementMode.Monitor, $"{Subject}@>=2");
+
+        var decision = await Build(client).InspectPublishAsync(Publishing(), Conforming);
+
+        Assert.Equal(EnforcementOutcome.Valid, decision.Outcome);
+    }
+
+    [Fact]
+    public async Task ConsultContractsOffPinsTheRouteToTheClientMode()
+    {
+        var client = new FakeClient()
+            .Register(Subject, SchemaIdHex, Schema)
+            .Governs("orders", "order.created", "orders-v1", EnforcementMode.Enforce, Subject);
+
+        var decision = await Build(
+                client,
+                o =>
+                {
+                    o.Mode = EnforcementMode.Monitor;
+                    o.ConsultContracts = false;
+                })
+            .InspectPublishAsync(Publishing(), Conforming);
+
+        Assert.Null(decision.Contract);
+        Assert.Equal(EnforcementMode.Monitor, decision.EffectiveMode);
+    }
+
+    [Fact]
+    public async Task AQueueContractRefusesASubjectItDoesNotExpect()
+    {
+        var client = new FakeClient()
+            .Register(Subject, SchemaIdHex, Schema)
+            .GovernsQueue("orders-worker", "orders-v1", EnforcementMode.Monitor, "acme.orders.OrderAmended");
+
+        var envelope = EnvelopeWriter.Headers(
+            SchemaId.Create(SchemaIdHex).Value,
+            SubjectName.Create(Subject).Value,
+            1,
+            null,
+            SchemaFormat.Json);
+
+        var decision = await Build(client).InspectConsumeAsync(
+            AsHeaders(envelope), Subject, null, Conforming, "orders-worker");
+
+        Assert.Equal(EnforcementOutcome.Observed, decision.Outcome);
+        Assert.Equal(ConcordatCodes.ContractSubjectNotPermitted, decision.Code);
+        Assert.Contains("orders-worker", decision.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AQueueWithNoNameIsGovernedByTheClientModeAlone()
+    {
+        var client = new FakeClient()
+            .Register(Subject, SchemaIdHex, Schema)
+            .GovernsQueue("orders-worker", "orders-v1", EnforcementMode.Enforce, "acme.orders.OrderAmended");
+
+        var envelope = EnvelopeWriter.Headers(
+            SchemaId.Create(SchemaIdHex).Value,
+            SubjectName.Create(Subject).Value,
+            1,
+            null,
+            SchemaFormat.Json);
+
+        // A consumer constructed without a queue name. RabbitMQ does not put the queue on a
+        // delivery, so there is nothing to infer it from and the contract is simply unreachable
+        // — which must degrade to the client's own mode rather than to a spurious violation.
+        var decision = await Build(client).InspectConsumeAsync(
+            AsHeaders(envelope), Subject, null, Conforming, queue: null);
+
+        Assert.Equal(EnforcementOutcome.Valid, decision.Outcome);
+        Assert.Null(decision.Contract);
     }
 
     private static Dictionary<string, object?> AsHeaders(IReadOnlyDictionary<string, string> envelope) =>

@@ -35,7 +35,29 @@ public sealed class ConcordatRabbitMqOptions
     /// </remarks>
     public bool DeclareQuarantineExchange { get; set; } = true;
 
+    /// <summary>
+    /// Whether the environment's contracts govern routes, or only <see cref="Mode"/> does (M7.3).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// On by default. A deployment with no contracts pays one resolve per route, cached
+    /// thereafter, and gets <c>GovernedRoutes = 0</c> in the client status — which is worth
+    /// having, because "no contract covers anything we send" otherwise looks exactly like
+    /// working governance.
+    /// </para>
+    /// <para>
+    /// Turning it off pins every route to <see cref="Mode"/> and is for a service that must not
+    /// have its enforcement changed from outside, whatever an operator does in the registry.
+    /// </para>
+    /// </remarks>
+    public bool ConsultContracts { get; set; } = true;
+
     /// <summary>How the subject is derived on the publish side.</summary>
+    /// <remarks>
+    /// Consulted first. When it yields nothing and a contract governs the route with exactly one
+    /// permitted subject, that subject is used instead — which is how an un-instrumented
+    /// publisher becomes enforceable without touching its code.
+    /// </remarks>
     public ISubjectResolver SubjectResolver { get; set; } = MessageTypeSubjectResolver.Instance;
 
     /// <summary>Where enforcement decisions go.</summary>

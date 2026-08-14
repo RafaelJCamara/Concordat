@@ -63,6 +63,24 @@ public sealed class ConcordatClientOptions
     /// </remarks>
     public TimeSpan LatestTtl { get; set; } = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// How long a contract resolution stays fresh (M2.1, deferred to M7).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Longer than <see cref="LatestTtl"/> because the two pointers move on different clocks.
+    /// <c>latest</c> advances whenever a pipeline registers a schema; a contract changes when a
+    /// person edits a binding or promotes MONITOR to ENFORCE. Sixty seconds is the figure M2.1
+    /// specified before contracts existed, and nothing since has argued for a different one.
+    /// </para>
+    /// <para>
+    /// It is also the delay on the central off switch: turning a contract to OFF takes effect
+    /// across a fleet within this window, without a redeploy. Shortening it buys a faster switch
+    /// at the cost of one resolve call per route per interval.
+    /// </para>
+    /// </remarks>
+    public TimeSpan ContractTtl { get; set; } = TimeSpan.FromMinutes(1);
+
     /// <summary>How long a "no such subject" answer is remembered.</summary>
     /// <remarks>
     /// Negative caching exists so a missing subject cannot retry-storm the registry during a
@@ -131,6 +149,42 @@ public sealed class ConcordatClientOptions
     /// </remarks>
     public IList<string> Consumes { get; } = [];
 
+    /// <summary>
+    /// The routes this service publishes on, resolved against the environment's contracts in a
+    /// single call during warm-up (M7.3).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Optional, and an optimisation rather than a requirement.</b> A route that is not
+    /// declared is resolved the first time a message goes to it and cached from then on, so
+    /// declaring nothing still works — it just moves the first resolve of each route onto the
+    /// delivery path, which is exactly what DESIGN §5 says must not happen at steady state.
+    /// </para>
+    /// <para>
+    /// Declaring them is what makes <c>/contracts/resolve</c> worth its batch shape: a
+    /// fleet-wide restart asks once per instance for the whole topology rather than once per
+    /// route per instance.
+    /// </para>
+    /// </remarks>
+    public IList<PublishRoute> PublishRoutes { get; } = [];
+
+    /// <summary>The queues this service consumes from, resolved during warm-up alongside
+    /// <see cref="PublishRoutes"/>.</summary>
+    public IList<string> ConsumeQueues { get; } = [];
+
+    /// <summary>
+    /// Which broker this service is connected to, when contracts are scoped per broker.
+    /// </summary>
+    /// <remarks>
+    /// Null resolves against bindings that apply to every broker in the environment, which is
+    /// the common case. Set it only where the same exchange means different things on different
+    /// brokers.
+    /// </remarks>
+    public Guid? BrokerId { get; set; }
+
+    /// <summary>The virtual host this service is connected to. Defaults to <c>/</c> at the registry.</summary>
+    public string? VirtualHost { get; set; }
+
     /// <summary>Whether a failed service report should fail warm-up.</summary>
     /// <remarks>
     /// Off, and separate from <see cref="RequireWarmUp"/> on purpose. Declaring intent is a
@@ -156,6 +210,11 @@ public sealed class ConcordatClientOptions
         if (LatestTtl <= TimeSpan.Zero)
         {
             throw new InvalidOperationException($"{nameof(LatestTtl)} must be positive.");
+        }
+
+        if (ContractTtl <= TimeSpan.Zero)
+        {
+            throw new InvalidOperationException($"{nameof(ContractTtl)} must be positive.");
         }
 
         if (NegativeTtl <= TimeSpan.Zero || MaxNegativeTtl < NegativeTtl)

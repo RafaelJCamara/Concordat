@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Concordat.Domain.Contracts;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 
@@ -28,6 +29,27 @@ public interface IConcordatClient
     /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>The tip, or <see langword="null"/> when the subject is unknown or unreachable.</returns>
     ValueTask<CachedLatest?> GetLatestAsync(SubjectName subject, CancellationToken cancellationToken = default);
+
+    /// <summary>Resolves what the environment's contracts say about a publish route (M7.3).</summary>
+    /// <param name="route">The exchange and concrete routing key.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The governing contract, or an ungoverned answer.</returns>
+    /// <remarks>
+    /// <b>Never returns null and never throws for a resolution failure.</b> A registry that
+    /// cannot be reached degrades to <see cref="ResolvedRoute.Ungoverned"/>, which hands the
+    /// decision back to the client's own <c>Mode</c> — the behaviour that existed before
+    /// contracts. See <see cref="ConcordatClient"/> for why this does not honour
+    /// <see cref="ResolutionFailureMode.FailClosed"/>.
+    /// </remarks>
+    ValueTask<ResolvedRoute> GetPublishRouteAsync(
+        PublishRoute route, CancellationToken cancellationToken = default);
+
+    /// <summary>Resolves what the environment's contracts say about a queue (M7.3).</summary>
+    /// <param name="queue">The queue name.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The governing contract, or an ungoverned answer.</returns>
+    ValueTask<ResolvedRoute> GetConsumeRouteAsync(
+        string queue, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -48,6 +70,15 @@ public interface IConcordatClient
 /// <see cref="ResolutionFailureMode"/>, and every occurrence is counted in
 /// <see cref="Status"/>.
 /// </para>
+/// <para>
+/// <b>Contract resolution is deliberately outside <see cref="ResolutionFailureMode"/></b>
+/// (M7.3). That setting answers "can I check this payload?" — a question whose honest failure
+/// is to refuse the message. Contract resolution answers "is anyone governing this route?",
+/// and the honest failure there is to fall back to the client's own <c>Mode</c>, which is the
+/// behaviour that existed before contracts. Wiring it to <c>FailClosed</c> would mean a
+/// registry blip refused every publish in a fail-closed service, including on the routes no
+/// contract has ever covered — an outage manufactured out of a governance lookup.
+/// </para>
 /// </remarks>
 public sealed class ConcordatClient : IConcordatClient, IDisposable
 {
@@ -56,10 +87,12 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
     private readonly HttpClient _http;
     private readonly ConcordatClientOptions _options;
     private readonly SchemaCache _cache;
+    private readonly ContractCache _contracts;
     private readonly TimeProvider _clock;
     private readonly SemaphoreSlim _warmUpGate = new(1, 1);
 
     private long _resolutionFailures;
+    private long _contractFailures;
     private long _staleServed;
     private DateTimeOffset? _warmedAt;
     private DateTimeOffset? _lastContact;
@@ -82,6 +115,7 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
         _options = options;
         _clock = clock ?? TimeProvider.System;
         _cache = new SchemaCache(_clock, options);
+        _contracts = new ContractCache(_clock, options);
 
         _http.BaseAddress ??= options.BaseAddress;
 
@@ -103,10 +137,16 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
         LastSuccessfulContact = _lastContact,
         IsDegraded = _degraded,
         LastFailure = _lastFailure,
+        RoutesResolved = _contracts.PublishRouteCount + _contracts.ConsumeRouteCount,
+        GovernedRoutes = _contracts.GovernedCount,
+        ContractResolutionFailures = Interlocked.Read(ref _contractFailures),
     };
 
     /// <summary>The cache, exposed so a host can report on it.</summary>
     public SchemaCache Cache => _cache;
+
+    /// <summary>The contract cache, exposed so a host can report on it.</summary>
+    public ContractCache Contracts => _contracts;
 
     /// <inheritdoc />
     public async Task<ConcordatClientStatus> WarmUpAsync(CancellationToken cancellationToken = default)
@@ -147,6 +187,14 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
             _degraded = false;
 
             await DeclareServiceAsync(cancellationToken).ConfigureAwait(false);
+
+            // The declared topology in one round trip, which is what the batch shape of
+            // /contracts/resolve exists for. A failure here is not fatal and not retried: every
+            // route resolves on demand the first time a message uses it, so the cost of the
+            // registry being unavailable right now is one lookup later, not a broken client.
+            await ResolveAsync(
+                [.. _options.PublishRoutes], [.. _options.ConsumeQueues], cancellationToken)
+                .ConfigureAwait(false);
 
             return Status;
         }
@@ -309,6 +357,203 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
                 $"The registry is unreachable, so subject {subject.Value} could not be resolved.");
         }
     }
+
+    /// <inheritdoc />
+    public async ValueTask<ResolvedRoute> GetPublishRouteAsync(
+        PublishRoute route, CancellationToken cancellationToken = default)
+    {
+        var freshness = _contracts.TryGetPublish(route, out var cached);
+
+        if (freshness is CacheFreshness.Fresh)
+        {
+            return cached!;
+        }
+
+        var outcome = await ResolveAsync([route], [], cancellationToken).ConfigureAwait(false);
+
+        // The resolved value, not a re-read of the cache. Reading it back and demanding it be
+        // Fresh made a successful resolve depend on the clock not having moved between the write
+        // and the read — so a short TTL, or a pause on a loaded machine, would silently discard a
+        // perfectly good answer and report the route as ungoverned. That turns enforcement off.
+        return outcome is not null ? outcome.Publishes[0] : Fallback(freshness, cached);
+    }
+
+    /// <inheritdoc />
+    public async ValueTask<ResolvedRoute> GetConsumeRouteAsync(
+        string queue, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(queue);
+
+        var freshness = _contracts.TryGetConsume(queue, out var cached);
+
+        if (freshness is CacheFreshness.Fresh)
+        {
+            return cached!;
+        }
+
+        var outcome = await ResolveAsync([], [queue], cancellationToken).ConfigureAwait(false);
+
+        return outcome is not null ? outcome.Consumes[0] : Fallback(freshness, cached);
+    }
+
+    /// <summary>
+    /// What to answer when a resolve failed.
+    /// </summary>
+    /// <remarks>
+    /// Stale beats ungoverned, and by a wide margin. A route governed in ENFORCE that degrades
+    /// to "ungoverned" during a registry blip silently stops enforcing, which is the exact
+    /// failure this whole subsystem exists to prevent — so a cached answer inside the staleness
+    /// budget is served and counted. Past the budget there is nothing honest left to say, and
+    /// the client falls back to its own <c>Mode</c>.
+    /// </remarks>
+    private ResolvedRoute Fallback(CacheFreshness freshness, ResolvedRoute? cached)
+    {
+        if (freshness is CacheFreshness.Stale && cached is not null)
+        {
+            Interlocked.Increment(ref _staleServed);
+            return cached;
+        }
+
+        Interlocked.Increment(ref _contractFailures);
+        return ResolvedRoute.Ungoverned(_clock.GetUtcNow());
+    }
+
+    /// <summary>What one resolve pass established, in the order it was asked.</summary>
+    private sealed record ResolveOutcome(
+        IReadOnlyList<ResolvedRoute> Publishes, IReadOnlyList<ResolvedRoute> Consumes);
+
+    /// <summary>
+    /// Asks the registry which contracts govern a topology, and caches every answer.
+    /// </summary>
+    /// <returns>What was resolved, or <see langword="null"/> when the registry could not answer.</returns>
+    private async Task<ResolveOutcome?> ResolveAsync(
+        IReadOnlyList<PublishRoute> publishes,
+        IReadOnlyList<string> consumes,
+        CancellationToken cancellationToken)
+    {
+        if (publishes.Count is 0 && consumes.Count is 0)
+        {
+            return new ResolveOutcome([], []);
+        }
+
+        try
+        {
+            var request = new ResolveRequestPayload(
+                _options.BrokerId,
+                _options.VirtualHost,
+                [.. publishes.Select(p => new PublishTargetPayload(p.Exchange, p.RoutingKey))],
+                consumes);
+
+            using var response = await _http.PostAsJsonAsync(
+                $"/v1/environments/{_options.Environment}/contracts/resolve",
+                request,
+                Json,
+                cancellationToken).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var problem = await ReadProblemAsync(response, cancellationToken).ConfigureAwait(false);
+                RecordRefusal(response.StatusCode, problem);
+                return null;
+            }
+
+            var body = await response.Content
+                .ReadFromJsonAsync<ResolveResponsePayload>(Json, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (body is null)
+            {
+                return null;
+            }
+
+            // POSITIONAL, SO A LENGTH MISMATCH IS NOT RECOVERABLE.
+            //
+            // The endpoint answers in request order, which is what makes one round trip work for
+            // a whole topology. It also means a short or long array cannot be zipped: entry two
+            // would carry entry three's contract, and the client would enforce the wrong
+            // subjects on a route while reporting complete success. Refusing the whole response
+            // costs one unresolved pass; guessing costs correctness silently.
+            if (body.Publishes.Count != publishes.Count || body.Consumes.Count != consumes.Count)
+            {
+                _lastFailure =
+                    $"contracts/resolve answered {body.Publishes.Count} publishes and " +
+                    $"{body.Consumes.Count} consumes for {publishes.Count} and {consumes.Count} asked";
+                return null;
+            }
+
+            _lastContact = _clock.GetUtcNow();
+            _degraded = false;
+
+            var resolvedPublishes = new List<ResolvedRoute>(publishes.Count);
+            var resolvedConsumes = new List<ResolvedRoute>(consumes.Count);
+
+            for (var i = 0; i < publishes.Count; i++)
+            {
+                var route = ToRoute(body.Publishes[i], _lastContact.Value);
+                _contracts.PutPublish(publishes[i], route);
+                resolvedPublishes.Add(route);
+            }
+
+            for (var i = 0; i < consumes.Count; i++)
+            {
+                var route = ToRoute(body.Consumes[i], _lastContact.Value);
+                _contracts.PutConsume(consumes[i], route);
+                resolvedConsumes.Add(route);
+            }
+
+            return new ResolveOutcome(resolvedPublishes, resolvedConsumes);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _degraded = true;
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Projects a resolved binding, dropping references this client cannot parse.
+    /// </summary>
+    /// <remarks>
+    /// A subject reference that will not parse is skipped rather than failing the route. The
+    /// registry is the newer component in most deployments, so an unrecognised selector spelling
+    /// is far more likely to be a client that predates it than corruption — and refusing the
+    /// whole route would turn a forward-compatible addition into an enforcement outage.
+    /// </remarks>
+    private static ResolvedRoute ToRoute(ResolvedBindingPayload payload, DateTimeOffset at)
+    {
+        var subjects = new List<SubjectRef>(payload.Subjects.Count);
+
+        foreach (var entry in payload.Subjects)
+        {
+            var name = SubjectName.Create(entry.Subject);
+            var selector = VersionSelector.Parse(entry.Selector);
+
+            if (name.IsSuccess && selector.IsSuccess)
+            {
+                subjects.Add(new SubjectRef(name.Value, selector.Value));
+            }
+        }
+
+        return new ResolvedRoute(payload.Contract, ParseEnforcement(payload.Enforcement), subjects, at);
+    }
+
+    /// <summary>
+    /// Reads an enforcement token, defaulting an unrecognised one to <c>Monitor</c>.
+    /// </summary>
+    /// <remarks>
+    /// Not <c>Off</c> and not <c>Enforce</c>. A token this client does not know means the
+    /// registry is newer than the client: defaulting to Off would silently disable governance
+    /// the operator believes is on, and defaulting to Enforce would start refusing production
+    /// traffic on the strength of a string nobody here understands. Monitor observes and reports
+    /// without doing either.
+    /// </remarks>
+    private static EnforcementMode ParseEnforcement(string? token) => token switch
+    {
+        "OFF" => EnforcementMode.Off,
+        "MONITOR" => EnforcementMode.Monitor,
+        "ENFORCE" => EnforcementMode.Enforce,
+        _ => EnforcementMode.Monitor,
+    };
 
     private void Ingest(BootstrapPayload? payload)
     {
@@ -490,6 +735,21 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
     private sealed record VersionPayload(int Ordinal, string SchemaId, string? SemanticVersion);
 
     private sealed record SubjectRefPayload(string Subject, string Selector);
+
+    private sealed record PublishTargetPayload(string Exchange, string RoutingKey);
+
+    private sealed record ResolveRequestPayload(
+        Guid? BrokerId,
+        string? VirtualHost,
+        IReadOnlyList<PublishTargetPayload> Publishes,
+        IReadOnlyList<string> Consumes);
+
+    private sealed record ResolvedBindingPayload(
+        string? Contract, string? Enforcement, IReadOnlyList<SubjectRefPayload> Subjects);
+
+    private sealed record ResolveResponsePayload(
+        IReadOnlyList<ResolvedBindingPayload> Publishes,
+        IReadOnlyList<ResolvedBindingPayload> Consumes);
 
     private sealed record RegisterServicePayload(
         string Name,

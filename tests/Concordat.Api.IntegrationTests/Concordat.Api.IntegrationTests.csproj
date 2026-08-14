@@ -20,6 +20,12 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\hosts\Concordat.Api\Concordat.Api.csproj" />
     <ProjectReference Include="..\..\src\core\Concordat.Infrastructure\Concordat.Infrastructure.csproj" />
+    <!--
+      The SDK, so contract resolution can be driven end to end by the code that will actually
+      call it rather than by a hand-written request. The two sides agreeing on a wire shape is
+      the thing most likely to be wrong and least likely to be caught by either side's own tests.
+    -->
+    <ProjectReference Include="..\..\src\clients\Concordat.Client\Concordat.Client.csproj" />
   </ItemGroup>
 
 </Project>

@@ -425,4 +425,175 @@ public class ClientTests
 
         Assert.Equal("Bearer secret", http.DefaultRequestHeaders.Authorization?.ToString());
     }
+
+    // ------------------------------------------------------- contract resolution (M7.3)
+
+    private const string ResolvePath = "/contracts/resolve";
+
+    private static readonly PublishRoute Created = new("orders", "order.created");
+    private static readonly PublishRoute Shipped = new("orders", "order.shipped");
+
+    /// <summary>One governed answer and one ungoverned, in request order.</summary>
+    private static string ResolveBody(params string?[] contracts)
+    {
+        var entries = contracts.Select(c => c is null
+            ? """{"contract":null,"enforcement":"OFF","subjects":[]}"""
+            : $$"""
+                {"contract":"{{c}}","enforcement":"ENFORCE",
+                 "subjects":[{"subject":"acme.Order","selector":"latest"}]}
+                """);
+
+        return $$"""{"publishes":[{{string.Join(",", entries)}}],"consumes":[]}""";
+    }
+
+    private static HttpResponseMessage RouteOr404(HttpRequestMessage request, string resolveBody) =>
+        request.RequestUri!.PathAndQuery.Contains(ResolvePath, StringComparison.Ordinal)
+            ? FakeHandler.Json(resolveBody)
+            : FakeHandler.Json(BootstrapBody());
+
+    [Fact]
+    public async Task Contracts_WarmUpResolvesTheDeclaredTopologyInOneRequest()
+    {
+        var (client, handler, _) = Build(
+            r => RouteOr404(r, ResolveBody("orders-v1", null)),
+            o =>
+            {
+                o.PublishRoutes.Add(Created);
+                o.PublishRoutes.Add(Shipped);
+            });
+
+        var status = await client.WarmUpAsync();
+
+        // One resolve for the whole topology, which is the entire reason the endpoint takes a
+        // batch. Two routes known, one of them actually governed.
+        Assert.Equal(1, handler.CallsTo(ResolvePath));
+        Assert.Equal(2, status.RoutesResolved);
+        Assert.Equal(1, status.GovernedRoutes);
+    }
+
+    [Fact]
+    public async Task Contracts_AnUngovernedRouteIsCachedSoItIsNotAskedAgain()
+    {
+        var (client, handler, _) = Build(r => RouteOr404(r, ResolveBody((string?)null)));
+
+        var first = await client.GetPublishRouteAsync(Created);
+        var second = await client.GetPublishRouteAsync(Created);
+
+        // A negative answer is a real answer. Caching only governed routes would send every
+        // message on every uncovered route back to the registry — which in a typical deployment
+        // is most of them, and would break the hard rule this feature exists to keep.
+        Assert.False(first.IsGoverned);
+        Assert.False(second.IsGoverned);
+        Assert.Equal(1, handler.CallsTo(ResolvePath));
+    }
+
+    [Fact]
+    public async Task Contracts_APositionalMismatchIsRefusedRatherThanZipped()
+    {
+        // Two routes asked about, one answer returned. The response is positional, so pairing
+        // what arrived with what was asked would attach route one's contract to route two and
+        // report complete success. Nothing may be cached from a response like this.
+        var (client, _, _) = Build(
+            r => RouteOr404(r, ResolveBody("orders-v1")),
+            o =>
+            {
+                o.PublishRoutes.Add(Created);
+                o.PublishRoutes.Add(Shipped);
+            });
+
+        var status = await client.WarmUpAsync();
+
+        Assert.Equal(0, status.RoutesResolved);
+        Assert.Contains("contracts/resolve answered", status.LastFailure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Contracts_ASuccessfulResolveIsUsedEvenWhenItExpiresImmediately()
+    {
+        // Regression, found by an integration test that set an aggressive TTL. The lookup used
+        // to write the cache and then read it back demanding a Fresh entry — so a successful
+        // resolve was discarded whenever the clock had moved past the TTL in between, and the
+        // route was reported ungoverned. On a short TTL that is every single time, and the
+        // visible symptom is enforcement quietly switching itself off.
+        var (client, _, _) = Build(
+            r => RouteOr404(r, ResolveBody("orders-v1")),
+            o => o.ContractTtl = TimeSpan.FromTicks(1));
+
+        var route = await client.GetPublishRouteAsync(Created);
+
+        Assert.True(route.IsGoverned);
+        Assert.Equal("orders-v1", route.Contract);
+    }
+
+    [Fact]
+    public async Task Contracts_AreReResolvedOnceTheirTtlExpires()
+    {
+        var (client, handler, clock) = Build(r => RouteOr404(r, ResolveBody("orders-v1")));
+
+        await client.GetPublishRouteAsync(Created);
+        clock.Advance(TimeSpan.FromSeconds(61));
+        await client.GetPublishRouteAsync(Created);
+
+        // The TTL is the latency of the central off switch: a contract switched to OFF takes
+        // effect across a fleet within one of these, with no redeploy.
+        Assert.Equal(2, handler.CallsTo(ResolvePath));
+    }
+
+    [Fact]
+    public async Task Contracts_ServeStaleRatherThanSilentlyUngovernedWhenTheRegistryFails()
+    {
+        var failing = false;
+
+        var (client, _, clock) = Build(r => failing
+            ? throw new HttpRequestException("registry down")
+            : RouteOr404(r, ResolveBody("orders-v1")));
+
+        var fresh = await client.GetPublishRouteAsync(Created);
+        Assert.Equal(EnforcementMode.Enforce, fresh.Enforcement);
+
+        clock.Advance(TimeSpan.FromSeconds(61));
+        failing = true;
+
+        // Degrading an ENFORCE route to "ungoverned" during a blip would silently stop enforcing
+        // — the exact failure this subsystem exists to prevent. Stale is served, and counted.
+        var stale = await client.GetPublishRouteAsync(Created);
+
+        Assert.True(stale.IsGoverned);
+        Assert.Equal(EnforcementMode.Enforce, stale.Enforcement);
+        Assert.Equal(1, client.Status.StaleServed);
+    }
+
+    [Fact]
+    public async Task Contracts_DegradeToUngovernedRatherThanThrowingUnderFailClosed()
+    {
+        var (client, _, _) = Build(
+            _ => throw new HttpRequestException("registry down"),
+            o => o.OnResolutionFailure = ResolutionFailureMode.FailClosed);
+
+        // FailClosed answers "can I check this payload?", not "is anyone governing this route?".
+        // Wiring contract resolution to it would turn a governance lookup into an outage, on
+        // routes that may well have no contract at all.
+        var route = await client.GetPublishRouteAsync(Created);
+
+        Assert.False(route.IsGoverned);
+        Assert.Equal(1, client.Status.ContractResolutionFailures);
+    }
+
+    [Fact]
+    public async Task Contracts_AnUnrecognisedEnforcementTokenIsTreatedAsMonitor()
+    {
+        const string Body = """
+            {"publishes":[{"contract":"orders-v1","enforcement":"QUARANTINE_ONLY","subjects":[]}],
+             "consumes":[]}
+            """;
+
+        var (client, _, _) = Build(r => RouteOr404(r, Body));
+
+        var route = await client.GetPublishRouteAsync(Created);
+
+        // A registry newer than this client. Off would disable governance the operator believes
+        // is running; Enforce would start refusing production traffic on the strength of a
+        // string nobody here understands. Monitor reports without doing either.
+        Assert.Equal(EnforcementMode.Monitor, route.Enforcement);
+    }
 }

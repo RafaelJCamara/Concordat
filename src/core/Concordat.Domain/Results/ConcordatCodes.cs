@@ -68,6 +68,36 @@ public static class ConcordatCodes
     /// </remarks>
     public const string BindingConflict = "binding_conflict";
 
+    /// <summary>
+    /// A message carried a subject the contract governing that route does not permit.
+    /// </summary>
+    /// <remarks>
+    /// Raised by the SDK, not the registry: it is the whole point of resolving contracts at the
+    /// client. A payload can be perfectly valid against its own schema and still be the wrong
+    /// message on that route, and nothing except the contract can tell the difference.
+    /// </remarks>
+    public const string ContractSubjectNotPermitted = "contract_subject_not_permitted";
+
+    /// <summary>
+    /// The subject is permitted on the route, but not at the version being sent.
+    /// </summary>
+    /// <remarks>
+    /// A binding pinned to <c>orders.created@3</c> against a subject whose latest is 7. The
+    /// publisher is stamping identity the route has not agreed to accept, which is a contract
+    /// violation even though the payload conforms to the schema it claims.
+    /// </remarks>
+    public const string ContractVersionNotPermitted = "contract_version_not_permitted";
+
+    /// <summary>
+    /// The route is governed and permits several subjects, and the message declared none.
+    /// </summary>
+    /// <remarks>
+    /// Not a violation and not resolvable. A single-subject binding lets the SDK supply the
+    /// subject an un-instrumented publisher omitted; a multi-subject binding cannot, because
+    /// choosing one would be a guess that silently validated against the wrong schema.
+    /// </remarks>
+    public const string ContractSubjectAmbiguous = "contract_subject_ambiguous";
+
     // --------------------------------------------------------------- governance (M7.4)
 
     /// <summary>A service name was empty, too long, or outside the permitted grammar.</summary>

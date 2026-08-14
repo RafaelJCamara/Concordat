@@ -38,6 +38,9 @@ token and an operator can alert across a fleet.
 | `routing_key_pattern_invalid` | A routing key pattern was not a valid AMQP topic pattern. |
 | `version_selector_invalid` | A version selector was not `latest`, an ordinal, or `>=N`. |
 | `binding_conflict` | Two bindings overlap and carry different subjects with no precedence to separate them. |
+| `contract_subject_not_permitted` | A message carried a subject the contract governing that route does not permit. Raised by the SDK, not the registry. |
+| `contract_version_not_permitted` | The subject is permitted on the route, but not at the version being sent. Raised by the SDK. |
+| `contract_subject_ambiguous` | The route is governed and permits several subjects, and the message declared none — so the subject cannot be chosen without guessing. Raised by the SDK. |
 | `service_name_invalid` | A service name was empty, too long, or outside the permitted grammar. |
 | `service_not_found` | No service with the given name is registered in the environment. |
 | `audit_filter_invalid` | An audit query carried a filter value that could not be understood. |
@@ -99,7 +102,7 @@ token and an operator can alert across a fleet.
 | `changelog_too_long` | A changelog exceeded the permitted length. |
 | `schema_unresolvable` | A client could not resolve a schema, so the operation could not be enforced. |
 
-**75 codes.**
+**78 codes.**
 
 ## Rules for implementers
 

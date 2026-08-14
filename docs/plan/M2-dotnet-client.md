@@ -20,8 +20,9 @@ Scope is RabbitMQ.Client only (ADR-020). Service-bus adapters are [Appendix A](.
 - [x] Warm-up via `POST /bootstrap`, **with jitter** — a fleet-wide rolling restart must not stampede
 - [x] `fail-open | fail-closed` configuration
 - [x] **Hard rule enforced by test: after warm-up the registry is never in the delivery path**
-- [ ] Contract-resolution TTL — **deferred to M7**, which is where contracts first exist. There
-      is no endpoint to cache
+- [x] Contract-resolution TTL — **deferred to M7**, which is where contracts first exist; built
+      once it did. 60 s, the figure specified here before contracts existed, in its own
+      `ContractCache` keyed by topology rather than by subject. See [M7.3](M7-governance.md#m73-contracts)
 
 ### The hard rule needs a caveat
 
