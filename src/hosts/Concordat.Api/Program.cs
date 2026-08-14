@@ -35,6 +35,10 @@ builder.Services.AddHostedService<OutboxPump>();
 // M8: who is calling, resolved once per request before anything else looks at it.
 builder.Services.Configure<AuthenticationOptions>(
     builder.Configuration.GetSection("Concordat:Authentication"));
+
+// Says out loud, repeatedly, that an unclaimed instance answers everyone as an owner
+// (decision 27). A line at boot is as invisible as no line by the time it matters.
+builder.Services.AddHostedService<UnclaimedInstanceWarning>();
 builder.Services.AddScoped<CallerContext>();
 builder.Services.AddScoped<ICallerContext>(p => p.GetRequiredService<CallerContext>());
 builder.Services.AddScoped<CallerResolver>();

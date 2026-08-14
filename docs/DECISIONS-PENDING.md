@@ -527,23 +527,25 @@ through "sign in as a reader, confirm the button is absent, paste the URL anyway
 Playwright, which the project has never had — a real dependency decision rather than an
 oversight.
 
-### 27. `AllowAnonymousUntilClaimed` is on by default
+### 27. ~~`AllowAnonymousUntilClaimed` is on by default~~ — done
 
-An unclaimed instance treats an unauthenticated request as an owner, so `docker compose up`
-gives you something you can use (ADR-008) and existing installations are not locked out by
-upgrading. It disables itself the moment an account exists, and never applies to a request that
-presented a credential and failed to verify.
+**Resolved 2026-08-14 with option (a) plus the banner.** The default stands: an unclaimed
+instance answers an unauthenticated request as an owner, so `docker compose up` gives you
+something usable and an upgrade locks nobody out. What changed is that it now **says so**.
 
-The residual risk is an instance nobody ever claims: it is wide open to anyone who can reach
-it, and nothing says so.
+- **`UnclaimedInstanceWarning`** logs it as a warning naming both ways to close it, and repeats
+  hourly until claimed. **Repeated rather than logged once at startup**, because a line at boot
+  is exactly as invisible as no line by the time it matters — the container has been up three
+  weeks and that message scrolled away on day one. It stops the moment somebody claims the
+  instance, so the noise ends by being acted on.
+- **The web app already had the banner**, shipped with M8.2 and never noted here. It had no test;
+  it does now, including that it stays silent while `claimed` is still `null` — flashing a
+  security warning on every page load of a correctly configured registry is how people learn to
+  ignore it.
 
-> **Options:** (a) leave it, and have the API log a warning on every start while unclaimed —
-> cheap, and it makes the state visible; (b) default it off and require bootstrap before
-> anything works, which is safer and breaks the quickstart's first thirty seconds; (c) bind the
-> unclaimed caller to loopback only.
->
-> **Recommendation:** (a) plus a banner in the web app. (c) is tempting but wrong: the common
-> evaluation path is a container, where nothing is loopback.
+Verified by running the real container against a real database and reading the log, not only by
+test. Option (c), binding the unclaimed caller to loopback, stays rejected: the common evaluation
+path is a container, where nothing is loopback.
 
 ### 28. Cloud is Azure, on Container Apps — what that settles and what it does not
 

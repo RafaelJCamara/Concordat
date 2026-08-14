@@ -86,17 +86,21 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             services.AddDbContext<ConcordatDbContext>(
                 options => options.UseNpgsql(_container.GetConnectionString()));
 
-            // M7.5's outbox pump is removed, and only it. A background timer draining the
+            // Our two background services are removed, and only ours. A timer draining the
             // outbox mid-assertion makes every count in these tests a race; notification tests
             // resolve NotificationDispatcher and pump deliberately, which is also the only way
-            // to assert on what one pass did. Removing IHostedService wholesale would take the
-            // test server's own host service with it and nothing would start.
-            foreach (var pump in services
+            // to assert on what one pass did. The unclaimed-instance warning is removed because
+            // it polls the database on a timer for a condition these tests toggle constantly,
+            // and its findings would be noise on a fixture that both claims and does not.
+            // Removing IHostedService wholesale would take the test server's own host service
+            // with it and nothing would start.
+            foreach (var ours in services
                 .Where(d => d.ServiceType == typeof(IHostedService) &&
-                            d.ImplementationType == typeof(OutboxPump))
+                            (d.ImplementationType == typeof(OutboxPump) ||
+                             d.ImplementationType == typeof(UnclaimedInstanceWarning)))
                 .ToList())
             {
-                services.Remove(pump);
+                services.Remove(ours);
             }
         });
 

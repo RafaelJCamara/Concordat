@@ -147,7 +147,7 @@ These matter more than the two lists above, because the surface exists and looks
 | **Subject prefix search is not implemented** | Value converters do not translate `StartsWith`; it needs a `ComplexProperty` mapping or a shadow column. |
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | **A page reload signs you out** | Sessions are API keys in memory. The fix is an httpOnly cookie. Decision #26. |
-| **`AllowAnonymousUntilClaimed` is on by default** | A fresh deployment answers every request as an owner until an account exists. Deliberate, documented in the Azure README, and still the thing most likely to surprise. Decision #27. |
+| ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Still on, and now audible** (decision 27). The API logs a warning naming both ways to close it and repeats hourly until claimed; the web app shows a banner. Verified against a real container. |
 | **No browser E2E over sign-in + guards** | Unit tests cover each half; nothing drives the two together. |
 | **`Tenant` is not an aggregate** | There is exactly one, `TenantId.SelfHosted`. Cloud multi-tenancy is tested but single-rowed. |
 | ~~The derived-environment-id decision is unmade~~ | **Closed 2026-08-14.** Adopted, by creating rows that carry the derived id. No migration, and no orphaned subjects. |
