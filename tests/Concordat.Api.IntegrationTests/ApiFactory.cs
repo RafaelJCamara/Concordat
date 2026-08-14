@@ -17,7 +17,7 @@ namespace Concordat.Api.IntegrationTests;
 /// that canonicalisation, identity, the compatibility engine, the aggregate and the database
 /// agree with each other, which is exactly what a mocked layer would hide.
 /// </remarks>
-public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
+public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     private readonly PostgreSqlContainer _container =
         new PostgreSqlBuilder("postgres:17-alpine").Build();

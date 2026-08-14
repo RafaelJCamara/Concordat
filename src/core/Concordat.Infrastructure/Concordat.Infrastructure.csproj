@@ -26,6 +26,8 @@
     <PackageReference Include="MailKit" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Microsoft.Extensions.Http" />
+    <!-- M8.1: PasswordHasher<T> and nothing else from Identity. -->
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" />
   </ItemGroup>
 
 </Project>

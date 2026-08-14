@@ -39,12 +39,21 @@ public static class ProblemDetailsMapping
         ConcordatCodes.ContractNotFound => StatusCodes.Status404NotFound,
         ConcordatCodes.ServiceNotFound => StatusCodes.Status404NotFound,
         ConcordatCodes.SubscriptionNotFound => StatusCodes.Status404NotFound,
+        ConcordatCodes.UserNotFound => StatusCodes.Status404NotFound,
+        ConcordatCodes.ApiKeyNotFound => StatusCodes.Status404NotFound,
+
+        // M8. Unauthenticated is 401 and insufficient_scope is 403, and the difference is the
+        // whole point: 401 means "tell me who you are", 403 means "I know who you are and the
+        // answer is still no". Collapsing them sends a client into a sign-in loop it cannot win.
+        ConcordatCodes.Unauthenticated => StatusCodes.Status401Unauthorized,
+        ConcordatCodes.InsufficientScope => StatusCodes.Status403Forbidden,
 
         // State conflicts: the request was well-formed but the world says no.
         ConcordatCodes.SubjectAlreadyExists => StatusCodes.Status409Conflict,
         ConcordatCodes.EnvironmentAlreadyExists => StatusCodes.Status409Conflict,
         ConcordatCodes.BrokerAlreadyExists => StatusCodes.Status409Conflict,
         ConcordatCodes.ContractAlreadyExists => StatusCodes.Status409Conflict,
+        ConcordatCodes.UserAlreadyExists => StatusCodes.Status409Conflict,
 
         // The request is well-formed; it is the existing bindings that refuse it.
         ConcordatCodes.BindingConflict => StatusCodes.Status409Conflict,

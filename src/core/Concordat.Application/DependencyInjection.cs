@@ -1,8 +1,10 @@
 using Concordat.Application.Abstractions;
 using Concordat.Application.Governance;
+using Concordat.Application.Identity;
 using Concordat.Application.Registry;
 using Concordat.Domain.Contracts;
 using Concordat.Domain.Governance;
+using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 using Concordat.Formats.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
@@ -159,6 +161,20 @@ public static class DependencyInjection
             IQueryHandler<ListSubscriptionsQuery, IReadOnlyList<NotificationSubscription>>,
             ListSubscriptionsHandler>();
         services.AddScoped<NotificationDispatcher>();
+
+        // M8 identity.
+        services.AddScoped<Authenticator>();
+        services.AddScoped<ICommandHandler<BootstrapOwnerCommand, User>, BootstrapOwnerHandler>();
+        services.AddScoped<ICommandHandler<CreateMemberCommand, User>, CreateMemberHandler>();
+        services.AddScoped<
+            ICommandHandler<ChangeMemberRoleCommand, Membership>, ChangeMemberRoleHandler>();
+        services.AddScoped<
+            IQueryHandler<ListMembersQuery, IReadOnlyList<Member>>, ListMembersHandler>();
+        services.AddScoped<
+            ICommandHandler<IssueApiKeyCommand, IssuedApiKey>, IssueApiKeyHandler>();
+        services.AddScoped<ICommandHandler<RevokeApiKeyCommand, ApiKey>, RevokeApiKeyHandler>();
+        services.AddScoped<
+            IQueryHandler<ListApiKeysQuery, IReadOnlyList<ApiKey>>, ListApiKeysHandler>();
 
         return services;
     }

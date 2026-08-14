@@ -1,5 +1,6 @@
 using Concordat.Application.Abstractions;
 using Concordat.Application.Registry;
+using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 
@@ -26,7 +27,8 @@ public static class SubjectEndpoints
                 "instead of silently starting a second contract.")
             .Produces<SubjectResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .RequireScope(Scope.SubjectWrite);
 
         group.MapGet("/", ListSubjects)
             .WithSummary("List subjects in an environment")
@@ -61,19 +63,22 @@ public static class SubjectEndpoints
             .Produces<RegisterVersionResponse>(StatusCodes.Status201Created)
             .Produces<RegisterVersionResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectWrite);
 
         group.MapPost("/{subject}/versions/{ordinal:int}/approve", ApproveVersion)
             .WithSummary("Approve a pending version")
             .Produces<SubjectResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectAdmin);
 
         group.MapPost("/{subject}/versions/{ordinal:int}/reject", RejectVersion)
             .WithSummary("Reject a pending version")
             .Produces<SubjectResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectAdmin);
 
         group.MapPost("/{subject}/compatibility", CheckCompatibility)
             .WithSummary("Check a schema without registering it")
@@ -98,7 +103,8 @@ public static class SubjectEndpoints
                 "existing producers need to be able to patch their contract.")
             .Produces<SubjectResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectWrite);
 
         group.MapDelete("/{subject}", RetireSubject)
             .WithSummary("Retire a subject")
@@ -108,7 +114,8 @@ public static class SubjectEndpoints
                 "check and audit entry that arrive in M7.")
             .Produces<SubjectResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectAdmin);
 
         group.MapGet("/{subject}/compatibility-policy", GetPolicy)
             .WithSummary("Get the compatibility policy")
@@ -120,7 +127,8 @@ public static class SubjectEndpoints
             .WithDescription("Send nulls to clear it and inherit the environment default.")
             .Produces<PolicyResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectAdmin);
 
         return app;
     }

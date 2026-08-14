@@ -24,6 +24,14 @@
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.11" />
     <!--
+      M8.1 password hashing only. PasswordHasher<T> is PBKDF2-HMAC-SHA512 with a per-password
+      salt, a self-describing format, and an iteration count Microsoft raises across releases.
+      ADR-008 accepts that built-in identity means owning password storage; owning it
+      responsibly means not hand-rolling the part that has been broken in public a hundred
+      times. None of Identity's stores, managers or UI are used.
+    -->
+    <PackageVersion Include="Microsoft.Extensions.Identity.Core" Version="10.0.11" />
+    <!--
       M7.5 email delivery. MIT, and the option Microsoft's own SmtpClient documentation points
       at: System.Net.Mail.SmtpClient is explicitly not recommended for new development and
       cannot negotiate STARTTLS properly. It is confined to Infrastructure and reaches no

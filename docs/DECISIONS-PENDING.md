@@ -386,6 +386,43 @@ way rather than leaving both.
 > is a new write path from every publisher in the estate, and that deserves to be designed
 > rather than appended.
 
+### 26. The web app cannot sign in yet, and the unclaimed-instance escape hatch is what hides it
+
+M8's API half is done: sign-in, members, keys, and a scope check on every mutating route. The
+Angular app still sends no credential — `SessionStore` has a `signIn` method nothing calls, and
+the auth interceptor sends nothing.
+
+Today that works, because an instance with no accounts answers as an owner. **The moment
+somebody runs `POST /v1/auth/bootstrap`, the web app stops being able to write anything**, and
+the failure looks like a broken UI rather than a missing sign-in screen.
+
+> **This is the sequencing hazard ADR-018 predicted in writing** — "the web app is M4 and real
+> roles are M8… retrofitting the check across finished screens in M8 is how a write path gets
+> missed." The server-side check is in place, so no write path is *ungated*; what is missing is
+> the screen that lets a legitimate user pass it.
+>
+> **Recommendation:** finish it before anything else in M8 — a sign-in page, the interceptor
+> attaching the credential, and `canWriteSchemas` reading real scopes. The E2E non-admin test
+> M8.3 asks for is blocked on the same work.
+
+### 27. `AllowAnonymousUntilClaimed` is on by default
+
+An unclaimed instance treats an unauthenticated request as an owner, so `docker compose up`
+gives you something you can use (ADR-008) and existing installations are not locked out by
+upgrading. It disables itself the moment an account exists, and never applies to a request that
+presented a credential and failed to verify.
+
+The residual risk is an instance nobody ever claims: it is wide open to anyone who can reach
+it, and nothing says so.
+
+> **Options:** (a) leave it, and have the API log a warning on every start while unclaimed —
+> cheap, and it makes the state visible; (b) default it off and require bootstrap before
+> anything works, which is safer and breaks the quickstart's first thirty seconds; (c) bind the
+> unclaimed caller to loopback only.
+>
+> **Recommendation:** (a) plus a banner in the web app. (c) is tempting but wrong: the common
+> evaluation path is a container, where nothing is loopback.
+
 ### 15. Hard-delete semantics — before v1 ships
 
 M1.5 implements soft delete (`Subject.Retire()`) and never deletes schemas, which is what
@@ -567,6 +604,18 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | The pump is in-process on every instance, with no leader election | M7.5 | Low today, and it is why at-least-once is the stated contract. Cloud (M9) may want a single writer; the receivers' contract does not change either way |
 | Ownership changes are audited but not notified; only deprecation is | M7.5 | Low. Deprecation is a signal to every consuming team; an owner change is not |
 | The API integration harness removes `OutboxPump` from the host | M7.5, `ApiFactory` | Low, and necessary: a background timer draining the outbox mid-assertion makes every count a race. Notification tests pump deliberately |
+| Three roles — `READER`, `ADMIN`, `OWNER` — rather than a permission matrix | [M8.1](plan/M8-identity.md) | Low. Per-subject grants are a reasonable later refinement (`Subject.Owner` exists for it), but shipping one before anyone has enough subjects to need it makes "can this person change a contract?" a longer question than it deserves |
+| `org:admin` does **not** imply `subject:write` | M8.1 | Low, and deliberate: acquiring schema authority by managing the org would be a way around ADR-018 |
+| Passwords have a 12-character minimum and no character classes | M8.1 | Low. Composition rules measurably push people towards predictable substitutions; NIST dropped them for that reason |
+| Password hashing delegated to `PasswordHasher<T>` from `Microsoft.Extensions.Identity.Core` | M8.1 | Low. None of Identity's stores, managers or UI are used. Argon2id is defensible and would mean a third-party cryptographic dependency replacing a reviewed in-framework one |
+| API key secrets are SHA-256, not a slow KDF | M8.1 | Low, and correct: a slow KDF protects a *low-entropy* secret, and this is 256 bits from a CSPRNG. It would add milliseconds to every authenticated request and buy nothing |
+| A credential is `cdt_<keyId>_<secret>`, both halves alphanumeric | M8.1 | **User-visible format.** Changing it invalidates every issued key. Not base64url: that alphabet contains the `_` separator |
+| Authentication failures are indistinguishable, and a failed sign-in still runs a key derivation | M8.1 | Low, and both are the point: the distinction is worth nothing to a legitimate caller and enumerates accounts for everyone else |
+| A key may not grant more than its issuer holds | M8.1 | Low, and load-bearing: without it, reaching the issue endpoint is a privilege escalation |
+| A browser session is a short-lived API key, not a second token format | [M8.2](plan/M8-identity.md) | Low. One thing to verify, one thing to revoke; session keys are excluded from the key listing so they cannot bury the standing ones |
+| `AllowAnonymousUntilClaimed` defaults to **on**, and disables itself once an account exists | M8.2 | **See #27.** Never applies to a request that presented a credential and failed to verify |
+| Scope enforcement is an endpoint filter with a structural test, not a check in each handler | M8.2 | Low, and it is what makes the convention real: a forgotten check is silent and works for everyone |
+| `StampTenant` now stamps **shadow** properties only | M8.1, `ConcordatDbContext` | Low, and a fix: M8's `Membership` and `ApiKey` carry a real strongly-typed `TenantId` with the same name, and matching on the name alone threw on the first sign-in |
 
 ---
 

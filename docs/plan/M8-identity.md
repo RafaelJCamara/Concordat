@@ -6,25 +6,82 @@
 
 ## M8.1 Identity model
 
-- [ ] `Tenant`, `User`, `Membership`, `Role`
-- [ ] `ApiKey`, hashed at rest, with scopes
-- [ ] Scopes: `subject:read|write|admin`, `contract:*`, `env:*`, `broker:*`, `org:admin`
-- [ ] Local accounts; **OIDC optional** (ADR-008 — no third-party dependency required to run Concordat)
+- [x] `User`, `Membership`, `Role` (`READER`, `ADMIN`, `OWNER`)
+- [x] `ApiKey`, hashed at rest, with scopes
+- [x] Scopes: `subject:read|write|admin`, `contract:read|write`, `env:read|write`,
+      `broker:read|write`, `org:admin`
+- [x] Local accounts, claimed by a one-time `POST /v1/auth/bootstrap`
+- [ ] **OIDC** — deferred. ADR-008 makes it optional and the built-in path is what the
+      decision was for; nothing here forecloses it, and no test would be meaningful until
+      there is a provider to test against.
+- [ ] `Tenant` as an aggregate — there is still exactly one, `TenantId.SelfHosted`.
+      Memberships already carry a tenant, so the row is what M9 adds, not the model.
+
+**Scope implication is enumerated, never derived from the string.** A prefix rule would
+make a future `subject:read-only` satisfy a `subject:read` check. `subject:admin` implies
+write implies read, nothing crosses resources, and **`org:admin` does not imply
+`subject:write`** — acquiring schema authority by managing the org would be a way around
+ADR-018.
+
+**API keys are SHA-256 at rest; passwords are PBKDF2.** The opposite treatments are the
+point: a slow KDF makes guessing a *low-entropy* secret expensive, and a key secret is 256
+bits from a CSPRNG. Passwords get a length minimum and no character classes, because
+composition rules measurably push people towards predictable substitutions.
+
+**A credential is `cdt_<keyId>_<secret>`**, both halves alphanumeric. The obvious choice —
+base64url — contains the `_` separator, so roughly half of all issued keys would have
+failed to parse and arrived as an *intermittent* authentication failure. There is a test
+that issues 200 keys and parses every one.
+
+**An unknown key, a wrong secret, a revoked key, an expired key, a disabled account and a
+missing membership all answer identically.** A failed sign-in also runs a real key
+derivation against a throwaway hash, so a request for a nonexistent address costs what a
+real one does — without that, response timing enumerates users.
+
+**A key may never grant more than its issuer holds.** Without it, anyone who can reach the
+issue endpoint mints themselves `subject:admin`.
 
 ## M8.2 Authorization
 
 **ADR-018**
 
-- [ ] `subject:write` and `subject:admin` granted to admin roles only; non-admin membership carries `subject:read`
-- [ ] Every mutating subject/version endpoint checks scope server-side → `403 insufficient_scope`
-- [ ] Approve/reject is admin-only — keeps the author of a breaking change from waving it through
-- [ ] Replace [M4.2](M4-web-app.md#m42-access-control)'s admin stub with real role resolution
+- [x] `subject:write` and `subject:admin` granted to admin roles only; a non-admin
+      membership carries `subject:read`
+- [x] Every mutating endpoint checks scope server-side → `403 insufficient_scope`
+- [x] Approve/reject is `subject:admin` — the author of a breaking change cannot wave it through
+- [ ] Replace [M4.2](M4-web-app.md#m42-access-control)'s admin stub with real role
+      resolution — **the API half is done**; the Angular side still has to call
+      `/v1/auth/signin` and populate `SessionStore`, which is M8's remaining frontend work
+
+**Enforcement is an endpoint filter, declared next to the route.** A check inside each
+handler is one a handler can forget, and the failure is silent: the endpoint works, for
+everyone. `RequireScope` also records metadata, and a test enumerates every `POST`/`PUT`/
+`PATCH`/`DELETE` endpoint and fails if one carries no requirement — with an explicit,
+commented exemption list for the routes that mutate nothing despite their verb.
+
+**401 and 403 are kept apart.** 401 means "tell me who you are", 403 means "I know who you
+are and the answer is still no". Collapsing them sends a client into a sign-in loop it
+cannot win.
+
+**An unclaimed instance answers as an owner, and stops the moment anyone creates an
+account.** ADR-008 promises `docker compose up` gives you something usable immediately, and
+M4's web app was built against a stub that returned admin — without this, adopting M8 locks
+every existing installation out of its own registry. It is *never* the answer for a request
+that presented a credential and failed to verify, so a stale key is a 401 rather than full
+access.
+
+**A browser session is a short-lived API key, not a second credential format.** One thing
+to verify, one thing to revoke, and sign-in exercises the same path CI does every day.
+Session keys are excluded from the key listing so they cannot bury the standing keys
+somebody actually has to manage.
 
 ## M8.3 Tests
 
-- [ ] Every mutating endpoint rejects a `subject:read` principal — for API keys and sessions alike
-- [ ] The read surface stays fully available to non-admins
-- [ ] E2E as a non-admin: no write affordance renders; direct URL to a write route redirects
+- [x] Every mutating endpoint rejects a `subject:read` principal — for API keys and sessions alike
+- [x] The read surface stays fully available to non-admins
+- [x] A structural test that no mutating route ships without a declared scope
+- [ ] E2E as a non-admin: no write affordance renders; direct URL to a write route
+      redirects — **blocked on the frontend sign-in work above**
 
 ---
 
@@ -32,6 +89,12 @@
 
 A non-admin can browse everything and change nothing, and that holds against curl, not
 just the UI.
+
+**Met on the API.** `AuthorizationTests.AReaderCanChangeNothing` drives eight distinct
+write paths as a `READER` over real HTTP and asserts `403 insufficient_scope` on every one;
+`AReaderCanBrowseEverything` asserts the read surface is untouched. What remains is the
+web app calling `/v1/auth/signin` — the server-side boundary ADR-018 insists on is in
+place, and the UI gating is a presentation of it.
 
 ---
 

@@ -68,6 +68,18 @@ public enum AuditAction
 
     /// <summary>A service declared its producer/consumer intent.</summary>
     ServiceRegistered,
+
+    /// <summary>An account was added to the tenant (M8).</summary>
+    MemberAdded,
+
+    /// <summary>A member's role changed.</summary>
+    MemberRoleChanged,
+
+    /// <summary>An API key was issued.</summary>
+    ApiKeyIssued,
+
+    /// <summary>An API key was revoked.</summary>
+    ApiKeyRevoked,
 }
 
 /// <summary>
@@ -221,6 +233,10 @@ public static class AuditTokens
         [AuditAction.ContractBindingAdded] = "CONTRACT_BINDING_ADDED",
         [AuditAction.ContractEnforcementChanged] = "CONTRACT_ENFORCEMENT_CHANGED",
         [AuditAction.ServiceRegistered] = "SERVICE_REGISTERED",
+        [AuditAction.MemberAdded] = "MEMBER_ADDED",
+        [AuditAction.MemberRoleChanged] = "MEMBER_ROLE_CHANGED",
+        [AuditAction.ApiKeyIssued] = "API_KEY_ISSUED",
+        [AuditAction.ApiKeyRevoked] = "API_KEY_REVOKED",
     };
 
     private static readonly Dictionary<string, AuditAction> Actions =

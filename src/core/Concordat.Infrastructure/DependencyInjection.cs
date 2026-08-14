@@ -1,5 +1,6 @@
 using Concordat.Application.Abstractions;
 using Concordat.Domain.Registry;
+using Concordat.Infrastructure.Identity;
 using Concordat.Infrastructure.Notifications;
 using Concordat.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -44,6 +45,12 @@ public static class DependencyInjection
         services.AddScoped<IAuditLog, AuditLog>();
         services.AddScoped<IOutbox, Outbox>();
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IApiKeyRepository, ApiKeyRepository>();
+
+        // Singleton: it holds no state beyond the derived dummy hash, and that is exactly the
+        // thing that must be computed once rather than per request.
+        services.AddSingleton<IPasswordHasher, AspNetPasswordHasher>();
         services.AddScoped<ICredentialStore, DataProtectionCredentialStore>();
         services.AddScoped<IBrokerHealthProbe, RabbitMqBrokerHealthProbe>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();

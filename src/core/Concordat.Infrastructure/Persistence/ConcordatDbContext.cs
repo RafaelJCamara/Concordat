@@ -1,6 +1,7 @@
 using Concordat.Application.Abstractions;
 using Concordat.Domain.Contracts;
 using Concordat.Domain.Governance;
+using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -83,6 +84,23 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
     /// <summary>Who wants to hear about what, scoped to the current tenant (M7.5).</summary>
     public DbSet<NotificationSubscription> Subscriptions => Set<NotificationSubscription>();
 
+    /// <summary>
+    /// Local accounts (M8.1). <b>Global, not tenant-scoped</b> — a login belongs to a person,
+    /// and which tenants they may act in is what <see cref="Memberships"/> answers. Filtering
+    /// these by tenant would make sign-in circular: the request has to find the account before
+    /// it can know which tenant to filter by.
+    /// </summary>
+    public DbSet<User> Users => Set<User>();
+
+    /// <summary>Which tenants a user belongs to, and as what (M8.1).</summary>
+    public DbSet<Membership> Memberships => Set<Membership>();
+
+    /// <summary>
+    /// API keys (M8.1). Global for the same reason as <see cref="Users"/>: authentication is
+    /// what establishes the tenant, so a filter here would be circular.
+    /// </summary>
+    public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
+
     /// <summary>The tenant this context instance is bound to.</summary>
     internal TenantId CurrentTenant => _tenantContext.Current;
 
@@ -100,6 +118,9 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.ApplyConfiguration(new AuditEntryConfiguration());
         modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
         modelBuilder.ApplyConfiguration(new NotificationSubscriptionConfiguration());
+        modelBuilder.ApplyConfiguration(new UserConfiguration());
+        modelBuilder.ApplyConfiguration(new MembershipConfiguration());
+        modelBuilder.ApplyConfiguration(new ApiKeyConfiguration());
 
         // Isolation by construction rather than by remembering a predicate. Every query
         // against Subjects is filtered whether or not the author thought about tenancy, which
@@ -177,7 +198,14 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
                 continue;
             }
 
-            if (entry.Metadata.FindProperty(SubjectConfiguration.TenantIdProperty) is not null)
+            // Shadow properties only, and the qualifier is load-bearing. M8's Membership and
+            // ApiKey carry a real, strongly-typed TenantId property with exactly this name --
+            // matching on the name alone assigned a Guid to a TenantId and threw
+            // InvalidCastException on the first sign-in. A shadow property is what "this table
+            // is tenant-isolated" has always meant here; an aggregate that owns its tenant as
+            // domain state sets it itself.
+            if (entry.Metadata.FindProperty(SubjectConfiguration.TenantIdProperty)
+                is { } property && property.IsShadowProperty())
             {
                 entry.Property(SubjectConfiguration.TenantIdProperty).CurrentValue = tenant;
             }

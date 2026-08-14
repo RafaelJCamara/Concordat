@@ -2,6 +2,7 @@ using Concordat.Application.Abstractions;
 using Concordat.Application.Governance;
 using Concordat.Application.Registry;
 using Concordat.Domain.Governance;
+using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 
 namespace Concordat.Api;
@@ -68,7 +69,8 @@ public static class GovernanceEndpoints
             .Produces<PromotionResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .RequireScope(Scope.SubjectAdmin);
 
         app.MapGet("/v1/audit", Audit)
             .WithTags("Governance")

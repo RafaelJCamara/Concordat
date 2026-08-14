@@ -1,6 +1,7 @@
 using Concordat.Application.Abstractions;
 using Concordat.Application.Governance;
 using Concordat.Domain.Governance;
+using Concordat.Domain.Identity;
 
 namespace Concordat.Api;
 
@@ -29,17 +30,20 @@ public static class NotificationEndpoints
                 "from every screen.")
             .Produces<SubscriptionResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.EnvWrite);
 
         group.MapPut("/{id:guid}/enabled", SetEnabled)
             .WithSummary("Mute or unmute a subscription without losing its settings")
             .Produces<SubscriptionResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.EnvWrite);
 
         group.MapDelete("/{id:guid}", Delete)
             .WithSummary("Delete a subscription")
             .Produces(StatusCodes.Status204NoContent)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.EnvWrite);
 
         app.MapGet("/v1/notifications/outbox", Depth)
             .WithTags("Notifications")

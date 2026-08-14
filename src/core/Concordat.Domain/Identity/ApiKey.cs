@@ -12,6 +12,25 @@ namespace Concordat.Domain.Identity;
 /// </param>
 public sealed record IssuedApiKey(ApiKey Key, string Secret);
 
+/// <summary>What an API key is for.</summary>
+/// <remarks>
+/// <b>A browser session is a short-lived API key, not a second credential format.</b> The
+/// alternative — inventing session tokens — means a second thing to verify, a second thing to
+/// revoke, and a second place for an authentication bug to live. Reusing this mechanism means
+/// sign-in exercises the same verification path that CI does, every day.
+/// </remarks>
+public enum ApiKeyKind
+{
+    /// <summary>Issued deliberately, for CI or an SDK. Listed, and revoked by hand.</summary>
+    Standing = 1,
+
+    /// <summary>
+    /// Minted by a sign-in and short-lived. Never listed among a tenant's keys, because a
+    /// screenful of one-per-sign-in rows would bury the keys somebody actually has to manage.
+    /// </summary>
+    Session = 2,
+}
+
 /// <summary>
 /// A credential for CI and the SDKs, hashed at rest (ADR-008).
 /// </summary>
@@ -77,8 +96,10 @@ public sealed class ApiKey
         string label,
         IReadOnlyList<string> scopes,
         DateTimeOffset createdAt,
-        DateTimeOffset? expiresAt)
+        DateTimeOffset? expiresAt,
+        ApiKeyKind kind)
     {
+        Kind = kind;
         Id = id;
         TenantId = tenantId;
         UserId = userId;
@@ -93,6 +114,7 @@ public sealed class ApiKey
     // Materialisation only.
     private ApiKey()
     {
+        Kind = ApiKeyKind.Standing;
         KeyId = null!;
         SecretHash = null!;
         Label = null!;
@@ -116,6 +138,9 @@ public sealed class ApiKey
 
     /// <summary>What this key is for, as its creator described it.</summary>
     public string Label { get; private set; }
+
+    /// <summary>Whether it was issued deliberately or minted by a sign-in.</summary>
+    public ApiKeyKind Kind { get; private set; }
 
     /// <summary>
     /// What it may do — a subset of the issuer's own scopes, never a superset.
@@ -155,6 +180,7 @@ public sealed class ApiKey
     /// <param name="scopes">What it may do.</param>
     /// <param name="createdAt">When.</param>
     /// <param name="expiresAt">When it should stop working, or null.</param>
+    /// <param name="kind">Whether it is a standing key or a session.</param>
     /// <returns>The key and its secret, or a validation failure.</returns>
     public static Result<IssuedApiKey> Issue(
         TenantId tenantId,
@@ -162,7 +188,8 @@ public sealed class ApiKey
         string? label,
         IReadOnlyList<string>? scopes,
         DateTimeOffset createdAt,
-        DateTimeOffset? expiresAt = null)
+        DateTimeOffset? expiresAt = null,
+        ApiKeyKind kind = ApiKeyKind.Standing)
     {
         var trimmed = label?.Trim();
 
@@ -208,7 +235,8 @@ public sealed class ApiKey
             trimmed,
             granted,
             createdAt.ToUniversalTime(),
-            expiresAt?.ToUniversalTime());
+            expiresAt?.ToUniversalTime(),
+            kind);
 
         return Result<IssuedApiKey>.Success(
             new IssuedApiKey(key, $"{Prefix}_{keyId}_{secret}"));

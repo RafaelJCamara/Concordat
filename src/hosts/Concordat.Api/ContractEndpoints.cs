@@ -1,6 +1,7 @@
 using Concordat.Application.Abstractions;
 using Concordat.Application.Registry;
 using Concordat.Domain.Contracts;
+using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 
 namespace Concordat.Api;
@@ -30,7 +31,8 @@ public static class ContractEndpoints
             .Produces<ContractResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .RequireScope(Scope.ContractWrite);
 
         // Before /{contract}, or 'resolve' would be read as a contract name.
         group.MapPost("/resolve", Resolve)
@@ -57,20 +59,23 @@ public static class ContractEndpoints
             .Produces<ContractResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .RequireScope(Scope.ContractWrite);
 
         group.MapPost("/{contract}/consumes", AddConsumeBinding)
             .WithSummary("Add a consume binding")
             .Produces<ContractResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .RequireScope(Scope.ContractWrite);
 
         group.MapPut("/{contract}/enforcement", SetEnforcement)
             .WithSummary("Change how much a contract may do")
             .Produces<ContractResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.ContractWrite);
 
         return app;
     }

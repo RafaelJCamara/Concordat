@@ -27,6 +27,13 @@ builder.Services.AddConcordatNotifications(
 
 builder.Services.AddHostedService<OutboxPump>();
 
+// M8: who is calling, resolved once per request before anything else looks at it.
+builder.Services.Configure<AuthenticationOptions>(
+    builder.Configuration.GetSection("Concordat:Authentication"));
+builder.Services.AddScoped<CallerContext>();
+builder.Services.AddScoped<ICallerContext>(p => p.GetRequiredService<CallerContext>());
+builder.Services.AddScoped<CallerResolver>();
+
 // M7.2: broker credentials are encrypted at rest with Data Protection, and the key ring lives
 // in the database so a second API instance can decrypt what the first one wrote. Persisting to
 // disk is the framework default and would silently destroy every stored credential the first
@@ -75,12 +82,17 @@ var app = builder.Build();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
+// Before routing runs anything: every endpoint filter and handler reads the caller this sets,
+// and a request that reached a handler without one would be a request nobody authorised.
+app.UseMiddleware<AuthenticationMiddleware>();
+
 app.MapOpenApi();
 
 app.MapEnvironmentEndpoints();
 app.MapContractEndpoints();
 app.MapGovernanceEndpoints();
 app.MapNotificationEndpoints();
+app.MapIdentityEndpoints();
 app.MapSubjectEndpoints();
 app.MapSchemaEndpoints();
 app.MapBootstrapEndpoint();

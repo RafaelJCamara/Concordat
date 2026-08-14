@@ -1,5 +1,6 @@
 using Concordat.Application.Abstractions;
 using Concordat.Application.Registry;
+using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 using Environment = Concordat.Domain.Registry.Environment;
 
@@ -30,7 +31,8 @@ public static class EnvironmentEndpoints
                 "over-strict scratch one produces a clear error and a config change.")
             .Produces<EnvironmentResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .RequireScope(Scope.EnvWrite);
 
         group.MapGet("/{env}", GetEnvironment)
             .WithSummary("Get an environment and its brokers")
@@ -45,7 +47,8 @@ public static class EnvironmentEndpoints
                 "worth knowing before changing it on an environment with traffic.")
             .Produces<EnvironmentResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.EnvWrite);
 
         group.MapPost("/{env}/brokers", AddBroker)
             .WithSummary("Register a broker")
@@ -56,7 +59,8 @@ public static class EnvironmentEndpoints
             .Produces<EnvironmentResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .RequireScope(Scope.BrokerWrite);
 
         group.MapPost("/{env}/brokers/{brokerId:guid}/check", CheckBroker)
             .WithSummary("Test a broker connection and record the result")
@@ -68,7 +72,8 @@ public static class EnvironmentEndpoints
                 "that failed because a broker was down would have adopted someone else's " +
                 "outage.")
             .Produces<EnvironmentResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.BrokerRead);
 
         group.MapPut("/{env}/brokers/{brokerId:guid}/credentials", SetBrokerCredential)
             .WithSummary("Set or replace a broker's credentials")
@@ -78,17 +83,20 @@ public static class EnvironmentEndpoints
                 "exists. Replacing rotates in place, so the previous secret is not left behind.")
             .Produces<EnvironmentResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.BrokerWrite);
 
         group.MapDelete("/{env}/brokers/{brokerId:guid}/credentials", RemoveBrokerCredential)
             .WithSummary("Remove a broker's stored credentials")
             .Produces<EnvironmentResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.BrokerWrite);
 
         group.MapDelete("/{env}/brokers/{brokerId:guid}", RemoveBroker)
             .WithSummary("Remove a broker")
             .Produces<EnvironmentResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.BrokerWrite);
 
         return app;
     }

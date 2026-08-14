@@ -1616,6 +1616,365 @@
         }
       }
     },
+    "/v1/auth/status": {
+      "get": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Whether this instance has been claimed, and who you are",
+        "description": "Unauthenticated on purpose: a sign-in screen has to be able to ask whether there is anyone to sign in as.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/bootstrap": {
+      "post": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Create the first owner",
+        "description": "Works exactly once. ADR-008 promises 'docker compose up' produces a working authenticated instance with no external dependency, which means the first run must be able to create an account — and every run after it must not.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BootstrapRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/signin": {
+      "post": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Exchange an email and password for a credential",
+        "description": "The credential is a short-lived API key, not a second token format: one thing to verify, one thing to revoke, and sign-in exercises the same path CI does.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignInRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignInResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/members": {
+      "get": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "List the tenant's members",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MemberResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Add a member",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/members/{userId}/role": {
+      "put": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Change a member's role",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberRoleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/api-keys": {
+      "get": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "List the tenant's API keys",
+        "description": "Never their secrets — those exist only in the issue response.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKeyResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Issue an API key",
+        "description": "The secret is returned once and never again. A key may not grant more than its issuer holds.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueApiKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedApiKeyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/api-keys/{id}": {
+      "delete": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Revoke an API key",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/environments/{env}/subjects": {
       "post": {
         "tags": [
@@ -2755,6 +3114,71 @@
         },
         "description": "Request to add a publish binding."
       },
+      "ApiKeyResponse": {
+        "required": [
+          "id",
+          "keyId",
+          "label",
+          "scopes",
+          "createdAt",
+          "expiresAt",
+          "lastUsedAt",
+          "revokedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Its identity, for revocation.",
+            "format": "uuid"
+          },
+          "keyId": {
+            "type": "string",
+            "description": "The public half, which appears in the credential and in logs."
+          },
+          "label": {
+            "type": "string",
+            "description": "What it is for."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What it may do."
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When it was issued.",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "When it stops working, or null.",
+            "format": "date-time"
+          },
+          "lastUsedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "When it last authenticated, or null.",
+            "format": "date-time"
+          },
+          "revokedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "When it was revoked, or null.",
+            "format": "date-time"
+          }
+        },
+        "description": "An API key, without its secret."
+      },
       "AuditResponse": {
         "required": [
           "at",
@@ -2791,6 +3215,65 @@
           }
         },
         "description": "One line of the audit trail."
+      },
+      "AuthStatusResponse": {
+        "required": [
+          "claimed",
+          "authenticated",
+          "actor",
+          "scopes"
+        ],
+        "type": "object",
+        "properties": {
+          "claimed": {
+            "type": "boolean",
+            "description": "Whether any account exists."
+          },
+          "authenticated": {
+            "type": "boolean",
+            "description": "Whether this request carried a credential that verified."
+          },
+          "actor": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Who the caller is, when there is one."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What the caller may do."
+          }
+        },
+        "description": "Whether this instance has been claimed, and who the caller is."
+      },
+      "BootstrapRequest": {
+        "required": [
+          "email",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The login."
+          },
+          "password": {
+            "type": "string",
+            "description": "At least 12 characters."
+          },
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "What to show; defaults to the address's local part."
+          }
+        },
+        "description": "Request to create the first owner."
       },
       "BootstrapResponse": {
         "required": [
@@ -2995,6 +3478,19 @@
           }
         },
         "description": "A self-contained schema."
+      },
+      "ChangeRoleRequest": {
+        "required": [
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "The new role."
+          }
+        },
+        "description": "Request to change a member's role."
       },
       "CheckCompatibilityRequest": {
         "required": [
@@ -3249,6 +3745,38 @@
           }
         },
         "description": "Request to create an environment."
+      },
+      "CreateMemberRequest": {
+        "required": [
+          "email",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Their login."
+          },
+          "password": {
+            "type": "string",
+            "description": "An initial password, at least 12 characters."
+          },
+          "role": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "`READER`, `ADMIN` or `OWNER`; defaults to READER."
+          },
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "What to show."
+          }
+        },
+        "description": "Request to add a member."
       },
       "CreateSubjectRequest": {
         "required": [
@@ -3515,6 +4043,53 @@
         },
         "description": "The impact of a change."
       },
+      "IssueApiKeyRequest": {
+        "required": [
+          "label",
+          "scopes"
+        ],
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "What it is for. Required — an unlabelled key is one nobody dares revoke."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What it may do. Never more than the issuer holds."
+          },
+          "expiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "When it should stop working, or omit for a key that never expires.",
+            "format": "date-time"
+          }
+        },
+        "description": "Request to issue an API key."
+      },
+      "IssuedApiKeyResponse": {
+        "required": [
+          "key",
+          "secret"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "description": "The key.",
+            "$ref": "#/components/schemas/ApiKeyResponse"
+          },
+          "secret": {
+            "type": "string",
+            "description": "The full credential. <b>This is the only time it is ever returned</b> — the server stores\r\nonly a hash and cannot show it again."
+          }
+        },
+        "description": "A newly issued key and its one-time secret."
+      },
       "LookupSchemaRequest": {
         "required": [
           "format",
@@ -3555,6 +4130,74 @@
           }
         },
         "description": "The answer to a schema lookup."
+      },
+      "MemberResponse": {
+        "required": [
+          "userId",
+          "email",
+          "displayName",
+          "role",
+          "disabled",
+          "createdAt",
+          "lastSignedInAt"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "Their identity.",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "description": "Their login."
+          },
+          "displayName": {
+            "type": "string",
+            "description": "What to show."
+          },
+          "role": {
+            "type": "string",
+            "description": "Their role."
+          },
+          "disabled": {
+            "type": "boolean",
+            "description": "Whether they may sign in."
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When the account was created.",
+            "format": "date-time"
+          },
+          "lastSignedInAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "When they last signed in.",
+            "format": "date-time"
+          }
+        },
+        "description": "A member."
+      },
+      "MemberRoleResponse": {
+        "required": [
+          "userId",
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "Their identity.",
+            "format": "uuid"
+          },
+          "role": {
+            "type": "string",
+            "description": "The new role."
+          }
+        },
+        "description": "A member's role after a change."
       },
       "OutboxDepthResponse": {
         "required": [
@@ -4260,6 +4903,56 @@
         },
         "description": "Request to mute or unmute a subscription."
       },
+      "SignInRequest": {
+        "required": [
+          "email",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The login."
+          },
+          "password": {
+            "type": "string",
+            "description": "The password."
+          }
+        },
+        "description": "Request to sign in."
+      },
+      "SignInResponse": {
+        "required": [
+          "credential",
+          "actor",
+          "scopes",
+          "expiresAt"
+        ],
+        "type": "object",
+        "properties": {
+          "credential": {
+            "type": "string",
+            "description": "Send this as `Authorization: Bearer`. Hold it in memory only."
+          },
+          "actor": {
+            "type": "string",
+            "description": "Who you are, as the audit trail will record it."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What you may do."
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "When the credential stops working.",
+            "format": "date-time"
+          }
+        },
+        "description": "A credential and what it grants."
+      },
       "SubjectRefInput": {
         "required": [
           "subject",
@@ -4531,6 +5224,9 @@
     },
     {
       "name": "Contracts"
+    },
+    {
+      "name": "Identity"
     },
     {
       "name": "Subjects"
