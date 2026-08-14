@@ -114,7 +114,7 @@ public sealed class SchemaEnforcer
             return decide.Build(
                 EnforcementOutcome.Unenforced,
                 null,
-                $"Contract '{route.Contract}' sets enforcement to OFF for this route.");
+                $"Contract '{route.Describe()}' sets enforcement to OFF for this route.");
         }
 
         var resolution = _options.SubjectResolver.Resolve(context);
@@ -146,7 +146,7 @@ public sealed class SchemaEnforcer
                 return decide.Build(
                     EnforcementOutcome.Unenforced,
                     ConcordatCodes.ContractSubjectAmbiguous,
-                    $"No properties.type was set and contract '{route.Contract}' permits " +
+                    $"No properties.type was set and contract '{route.Describe()}' permits " +
                     $"{route.Subjects.Count} subjects on this route, so the subject cannot be " +
                     "chosen without guessing.");
             }
@@ -167,7 +167,7 @@ public sealed class SchemaEnforcer
             return decide.Build(
                 EnforcementOutcome.Observed,
                 ConcordatCodes.ContractSubjectNotPermitted,
-                $"Contract '{route.Contract}' does not permit subject '{subject.Value}' on " +
+                $"Contract '{route.Describe()}' does not permit subject '{subject.Value}' on " +
                 $"exchange '{context.Exchange}' with routing key '{context.RoutingKey}'. " +
                 $"Permitted: {Describe(route.Subjects)}.",
                 subject);
@@ -192,7 +192,7 @@ public sealed class SchemaEnforcer
             return decide.Build(
                 EnforcementOutcome.Observed,
                 ConcordatCodes.ContractVersionNotPermitted,
-                $"Contract '{route.Contract}' accepts '{subject.Value}@{permitted.Selector}' on " +
+                $"Contract '{route.Describe()}' accepts '{subject.Value}@{permitted.Selector}' on " +
                 $"this route, but the current version is {latest.Ordinal}.",
                 subject,
                 latest.SchemaId);
@@ -258,7 +258,7 @@ public sealed class SchemaEnforcer
             return decide.Build(
                 EnforcementOutcome.Unenforced,
                 null,
-                $"Contract '{route.Contract}' sets enforcement to OFF for queue '{queue}'.");
+                $"Contract '{route.Describe()}' sets enforcement to OFF for queue '{queue}'.");
         }
 
         var read = EnvelopeReader.Read(headers, propertiesType, contentType);
@@ -359,7 +359,7 @@ public sealed class SchemaEnforcer
         {
             return (
                 ConcordatCodes.ContractSubjectNotPermitted,
-                $"Contract '{route.Contract}' does not expect subject '{envelope.Subject!.Value}' " +
+                $"Contract '{route.Describe()}' does not expect subject '{envelope.Subject!.Value}' " +
                 $"on queue '{queue}'. Expected: {Describe(route.Subjects)}.");
         }
 
@@ -390,7 +390,7 @@ public sealed class SchemaEnforcer
             ? null
             : (
                 ConcordatCodes.ContractVersionNotPermitted,
-                $"Contract '{route.Contract}' expects " +
+                $"Contract '{route.Describe()}' expects " +
                 $"'{envelope.Subject!.Value}@{permitted.Selector}' on queue '{queue}', " +
                 $"but the message carries version {ordinal}.");
     }

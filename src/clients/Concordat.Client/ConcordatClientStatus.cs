@@ -81,6 +81,16 @@ public sealed record ConcordatClientStatus
     public int GovernedRoutes { get; init; }
 
     /// <summary>
+    /// How many routes more than one contract governs.
+    /// </summary>
+    /// <remarks>
+    /// <b>Should be zero.</b> Non-zero means two contracts in the environment bind the same
+    /// route, which nobody authors on purpose (decision 21). The SDK keeps enforcing — strictest
+    /// mode, union of subjects — so nothing breaks, and nothing else would ever mention it.
+    /// </remarks>
+    public int AmbiguousRoutes { get; init; }
+
+    /// <summary>
     /// How many contract lookups fell back to ungoverned because the registry could not answer.
     /// </summary>
     /// <remarks>
@@ -107,6 +117,13 @@ public sealed record ConcordatClientStatus
         if (IsDegraded)
         {
             state += " — DEGRADED, registry unreachable";
+        }
+
+        // Reported only when non-zero, because zero is the answer every healthy deployment gives
+        // and a permanent "0 ambiguous" trains people to stop reading the line.
+        if (AmbiguousRoutes > 0)
+        {
+            state += $" — {AmbiguousRoutes} route(s) governed by more than one contract";
         }
 
         return LastFailure is null ? state : $"{state} (last failure: {LastFailure})";

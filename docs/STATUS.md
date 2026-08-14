@@ -27,7 +27,7 @@ cd deploy/compose && CONCORDAT_IMAGE=concordat/api:local docker compose --profil
 | `GET /health/ready` | `Healthy` |
 | Create environment, subject, register a schema | 201, ordinal 1, `ACTIVE` |
 | Compatibility engine on a breaking change | `AWAITING_APPROVAL` with a `required_field_added` divergence naming the path |
-| Contract + publish binding, then `POST /contracts/resolve` | governed route returns the contract in `ENFORCE`; `order.line.added` returns `{contract: null, enforcement: "OFF"}` — `*` is one word |
+| Contract + publish binding, then `POST /contracts/resolve` | governed route returns the contract in `ENFORCE`; `order.line.added` returns `{contracts: [], enforcement: "OFF"}` — `*` is one word |
 | `PUT …/registration-policy` to `CLOSED`, then register | **403** `registration_policy_forbids` |
 | CLI `export` against the live registry | wrote 2 contracts to disk |
 | Quickstart sample over real RabbitMQ | valid message accepted, invalid one refused at publish, queue drained clean |
@@ -145,7 +145,7 @@ These matter more than the two lists above, because the surface exists and looks
 | **Approval reviewers do not exist** | Anyone with `subject:admin` can approve anything. A reviewer *set* was deferred to M8 and M8 did not build it. |
 | **Hard delete does not exist** | Soft delete is all there is. The full rule — no registered consumers, force flag, audit entry — is an outstanding commitment. |
 | **Subject prefix search is not implemented** | Value converters do not translate `StartsWith`; it needs a `ComplexProperty` mapping or a shadow column. |
-| **Two contracts can govern one route, first-by-name wins** | Decision #21, and M7.4's impact analysis inherits the ambiguity. |
+| ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | **A page reload signs you out** | Sessions are API keys in memory. The fix is an httpOnly cookie. Decision #26. |
 | **`AllowAnonymousUntilClaimed` is on by default** | A fresh deployment answers every request as an owner until an account exists. Deliberate, documented in the Azure README, and still the thing most likely to surprise. Decision #27. |
 | **No browser E2E over sign-in + guards** | Unit tests cover each half; nothing drives the two together. |

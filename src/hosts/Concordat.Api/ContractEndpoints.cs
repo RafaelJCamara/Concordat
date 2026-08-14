@@ -40,8 +40,11 @@ public static class ContractEndpoints
             .WithDescription(
                 "What an SDK calls at startup: one request for its whole topology rather than " +
                 "one per route, because a fleet-wide restart is the real load pattern. A route " +
-                "nothing governs is answered with no contract and OFF, not omitted — the SDK " +
-                "needs to tell 'ungoverned' from 'I forgot to ask'.")
+                "nothing governs is answered with an empty contract list and OFF, not omitted " +
+                "— the SDK needs to tell 'ungoverned' from 'I forgot to ask'. A route governed " +
+                "by more than one contract returns all of them, with the strictest enforcement " +
+                "and the union of their subjects, so the ambiguity is visible rather than " +
+                "resolved by name order.")
             .Produces<ResolveContractsResponse>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
@@ -356,12 +359,22 @@ public sealed record ContractResponse(
     internal static string EnforcementToken(EnforcementMode mode) => WireTokens.For(mode);
 }
 
-/// <summary>What a contract says about one route or queue.</summary>
-/// <param name="Contract">The contract that matched, or null when nothing governs it.</param>
-/// <param name="Enforcement">How much that contract may do; <c>OFF</c> when nothing matched.</param>
-/// <param name="Subjects">The subjects permitted.</param>
+/// <summary>What the environment's contracts say about one route or queue.</summary>
+/// <param name="Contracts">
+/// Every contract that matched, in name order; empty when nothing governs the route.
+/// </param>
+/// <param name="Enforcement">
+/// The strictest enforcement among them; <c>OFF</c> when nothing matched.
+/// </param>
+/// <param name="Subjects">The union of what they permit.</param>
+/// <remarks>
+/// <b>A list, because more than one contract can govern a route</b> (decision 21). The overlap
+/// invariant holds within a contract and never held across them, so resolve used to answer with
+/// whichever sorted first by name — the arbitrary outcome that invariant exists to prevent, one
+/// level up, and invisible to the publisher it affected.
+/// </remarks>
 public sealed record ResolvedBindingResponse(
-    string? Contract,
+    IReadOnlyList<string> Contracts,
     string Enforcement,
     IReadOnlyList<SubjectRefResponse> Subjects)
 {
@@ -373,7 +386,7 @@ public sealed record ResolvedBindingResponse(
         ArgumentNullException.ThrowIfNull(binding);
 
         return new ResolvedBindingResponse(
-            binding.Contract,
+            binding.Contracts,
             ContractResponse.EnforcementToken(binding.Enforcement),
             [.. binding.Subjects.Select(SubjectRefResponse.From)]);
     }

@@ -171,6 +171,57 @@ public class ContractResolutionSdkTests(ApiFactory factory)
     }
 
     [Fact]
+    public async Task TwoContractsOverOneRouteAreBothReported()
+    {
+        // Decision 21. The overlap invariant holds WITHIN a contract — two bindings that
+        // intersect and carry different subjects are refused unless precedence separates them —
+        // and never held across contracts. Nothing stopped two contracts in one environment from
+        // binding the same route, and resolve answered with whichever sorted first by name: the
+        // arbitrary outcome the within-contract invariant exists to prevent, one level up, and
+        // invisible to the publisher it affected.
+        var (http, environment, first) = await GovernedAsync(enforcement: "MONITOR");
+
+        // A second contract over the same route, stricter, naming a different subject.
+        var second = $"a-{Guid.CreateVersion7():N}"[..20];   // sorts before `first`, so a
+                                                            // first-by-name bug would pick it
+        var created = await http.PostAsJsonAsync(
+            $"/v1/environments/{environment}/contracts",
+            new CreateContractRequest(second, "ENFORCE"),
+            ApiFactory.Json);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var bound = await http.PostAsJsonAsync(
+            $"/v1/environments/{environment}/contracts/{second}/publishes",
+            new AddPublishBindingRequest(
+                "orders", "order.created", Subjects("acme.Other@latest")),
+            ApiFactory.Json);
+        Assert.Equal(HttpStatusCode.Created, bound.StatusCode);
+
+        using var sdk = Sdk(http, environment);
+        var route = await sdk.GetPublishRouteAsync(new PublishRoute("orders", "order.created"));
+
+        Assert.True(route.IsAmbiguous);
+        Assert.Equal([second, first], [.. route.Contracts.OrderBy(c => c, StringComparer.Ordinal)]);
+
+        // Strictest enforcement and the union of subjects: the combination that fails safe both
+        // ways while the ambiguity stands. The loosest mode would let an authoring mistake switch
+        // enforcement off; intersecting the subjects would refuse a publisher one contract plainly
+        // permits. Neither silently picks a winner.
+        Assert.Equal(EnforcementMode.Enforce, route.Enforcement);
+        Assert.Contains(route.Subjects, s => s.Subject.Value == "acme.Order");
+        Assert.Contains(route.Subjects, s => s.Subject.Value == "acme.Other");
+
+        // And the SDK says so once, on its status, rather than a million times per message.
+        Assert.Equal(1, sdk.Status.AmbiguousRoutes);
+        Assert.Contains(
+            "more than one contract", sdk.Status.ToString(), StringComparison.Ordinal);
+
+        // `Contract` is null under ambiguity, deliberately: nothing in the SDK should be able to
+        // name one of a colliding pair as though it were the answer.
+        Assert.Null(route.Contract);
+    }
+
+    [Fact]
     public async Task AContractSwitchedToOffStaysGovernedAndStopsEnforcing()
     {
         var (http, environment, contract) = await GovernedAsync();

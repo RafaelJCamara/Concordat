@@ -395,32 +395,32 @@ conformance corpus exists to prevent, and no fixture covers it — which is why 
 > catalogue and **nothing emits it**. Either the check it was written for is missing, or the
 > code should go.
 
-### 21. Two contracts in one environment can govern the same route, and the first one wins
+### 21. ~~Two contracts in one environment can govern the same route~~ — done
 
-M7.3 enforces the overlap invariant **within** a contract: two publish bindings that intersect
-and carry different subjects are refused unless precedence separates them. Across contracts
-there is no such check. Nothing stops `orders-v1` and `orders-legacy` in the same environment
-from both binding `orders.created` to different subjects, and `POST /contracts/resolve` answers
-with whichever contract sorts first by name.
+**Resolved 2026-08-14 with option (b).** `POST /contracts/resolve` returns **every** matching
+contract rather than whichever sorted first by name. The field is `contracts` and it is a list;
+an ungoverned route sends an empty one.
 
-That is the arbitrary outcome the within-contract invariant exists to prevent, one level up.
-It is not a defect in what was built — cross-contract checking was never specified — but the
-guarantee is weaker than the DESIGN §4 wording suggests, and a publisher cannot tell.
+Option (a) — checking across contracts when a binding is added — was the alternative and was
+rejected for the reason recorded when the decision was written: it makes authoring a contract an
+environment-wide operation and needs a story for concurrent writers, to prevent a condition that
+is rare and now visible.
 
-> **Options:** (a) extend the invariant across the environment, so adding a binding checks
-> every contract — correct, but makes contract authoring a global operation and needs a story
-> for concurrent writers; (b) keep it per-contract and make resolve return **all** matching
-> contracts, letting the SDK refuse on ambiguity — honest, and pushes the decision to where the
-> topology is actually known; (c) leave it, and document that overlapping contracts are the
-> author's problem.
->
-> **Recommendation:** (b). It surfaces the ambiguity at the moment it matters without turning
-> every binding write into an environment-wide lock, and the response shape is a superset of
-> today's — the field is already `contract`, it would become `contracts`.
+**Strictest enforcement, union of subjects.** That combination fails safe in both directions
+while the ambiguity stands: taking the loosest mode would let an authoring mistake quietly
+switch enforcement off, and intersecting the subjects would refuse a publisher that one contract
+plainly permits. Neither picks a winner.
 
-**Until this is decided, M7.4's impact analysis inherits the ambiguity**: "who breaks if I
-change this subject" is answered from bindings, and a route governed twice will be attributed
-to one contract.
+**Reported once per route, not once per message.** `ConcordatClientStatus.AmbiguousRoutes` counts
+them and `ToString()` names the condition when it is non-zero. Ambiguity is a property of the
+topology, so a per-message signal would say the same thing a million times.
+
+`ResolvedRoute.Contract` is now null when *several* contracts match as well as when none do, so
+nothing in the SDK can name one of a colliding pair as though it were the answer.
+
+> **Still inherited by M7.4's impact analysis**, which attributes a route to a contract when it
+> answers "who breaks if I change this subject". It now has a list to work from; using it is not
+> done.
 
 ### 22. Contract names take anything up to 128 characters
 

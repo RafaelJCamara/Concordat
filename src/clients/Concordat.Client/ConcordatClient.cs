@@ -139,6 +139,7 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
         LastFailure = _lastFailure,
         RoutesResolved = _contracts.PublishRouteCount + _contracts.ConsumeRouteCount,
         GovernedRoutes = _contracts.GovernedCount,
+        AmbiguousRoutes = _contracts.AmbiguousCount,
         ContractResolutionFailures = Interlocked.Read(ref _contractFailures),
     };
 
@@ -534,7 +535,8 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
             }
         }
 
-        return new ResolvedRoute(payload.Contract, ParseEnforcement(payload.Enforcement), subjects, at);
+        return new ResolvedRoute(
+            payload.Contracts ?? [], ParseEnforcement(payload.Enforcement), subjects, at);
     }
 
     /// <summary>
@@ -745,7 +747,9 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
         IReadOnlyList<string> Consumes);
 
     private sealed record ResolvedBindingPayload(
-        string? Contract, string? Enforcement, IReadOnlyList<SubjectRefPayload> Subjects);
+        IReadOnlyList<string>? Contracts,
+        string? Enforcement,
+        IReadOnlyList<SubjectRefPayload> Subjects);
 
     private sealed record ResolveResponsePayload(
         IReadOnlyList<ResolvedBindingPayload> Publishes,

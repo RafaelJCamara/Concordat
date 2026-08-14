@@ -77,14 +77,47 @@ public sealed record GetContractQuery(string? EnvironmentName, string? ContractN
 /// <param name="RoutingKey">A concrete routing key, not a pattern.</param>
 public sealed record PublishTarget(string? Exchange, string? RoutingKey);
 
-/// <summary>What a contract says about one route or queue.</summary>
-/// <param name="Contract">The contract that matched, or null when nothing governs it.</param>
-/// <param name="Enforcement">How much that contract may do.</param>
-/// <param name="Subjects">The subjects permitted, and which versions.</param>
+/// <summary>What the environment's contracts say about one route or queue.</summary>
+/// <param name="Contracts">
+/// Every contract that matched, in name order. Empty when nothing governs the route.
+/// </param>
+/// <param name="Enforcement">
+/// The <b>strictest</b> enforcement among the matches, or <c>Off</c> when nothing matched.
+/// </param>
+/// <param name="Subjects">The union of what the matching contracts permit.</param>
+/// <remarks>
+/// <para>
+/// <b>All of them, not the first one</b> (decision 21). The overlap invariant holds
+/// <em>within</em> a contract — two bindings that intersect and carry different subjects are
+/// refused unless precedence separates them — and there was never a check across contracts.
+/// Nothing stopped <c>orders-v1</c> and <c>orders-legacy</c> from both binding
+/// <c>orders.created</c> to different subjects, and resolve answered with whichever sorted
+/// first by name. That is the arbitrary outcome the within-contract invariant exists to
+/// prevent, one level up, and a publisher could not tell it was happening.
+/// </para>
+/// <para>
+/// Reporting all of them was chosen over checking at binding time, which would have made
+/// authoring a contract an environment-wide operation needing a story for concurrent writers.
+/// The ambiguity is surfaced where the topology is actually known instead.
+/// </para>
+/// <para>
+/// <b>Strictest enforcement, union of subjects</b> is the combination that fails safe in both
+/// directions while the ambiguity stands: taking the loosest mode would let an authoring
+/// mistake quietly switch enforcement off, and intersecting the subjects would refuse a
+/// publisher that one contract plainly permits. Neither silently picks a winner.
+/// </para>
+/// </remarks>
 public sealed record ResolvedBinding(
-    string? Contract,
+    IReadOnlyList<string> Contracts,
     EnforcementMode Enforcement,
-    IReadOnlyList<SubjectRef> Subjects);
+    IReadOnlyList<SubjectRef> Subjects)
+{
+    /// <summary>Whether any contract governs the route.</summary>
+    public bool IsGoverned => Contracts.Count > 0;
+
+    /// <summary>Whether more than one contract governs it, which nobody intended.</summary>
+    public bool IsAmbiguous => Contracts.Count > 1;
+}
 
 /// <summary>Everything an SDK asked about, answered.</summary>
 /// <param name="Publishes">One entry per requested route, in request order.</param>
@@ -441,6 +474,8 @@ public sealed class ResolveContractsHandler(
     private static ResolvedBinding ResolvePublish(
         IReadOnlyList<Contract> contracts, Guid broker, string vhost, PublishTarget target)
     {
+        var matches = new List<(string Name, EnforcementMode Mode, IReadOnlyList<SubjectRef> Subjects)>();
+
         foreach (var contract in contracts)
         {
             var matched = contract.ResolvePublish(
@@ -448,27 +483,68 @@ public sealed class ResolveContractsHandler(
 
             if (matched.Count > 0)
             {
-                return new ResolvedBinding(
-                    contract.Name, contract.Enforcement, matched[0].Subjects);
+                // matched[0] and not a merge across the contract's own bindings: within one
+                // contract the overlap invariant already guarantees that intersecting bindings
+                // either agree on subjects or declare precedence, so the first is the answer.
+                matches.Add((contract.Name, contract.Enforcement, matched[0].Subjects));
             }
         }
 
-        return new ResolvedBinding(null, EnforcementMode.Off, []);
+        return Combine(matches);
     }
 
     private static ResolvedBinding ResolveConsume(
         IReadOnlyList<Contract> contracts, Guid broker, string vhost, string queue)
     {
+        var matches = new List<(string Name, EnforcementMode Mode, IReadOnlyList<SubjectRef> Subjects)>();
+
         foreach (var contract in contracts)
         {
             if (contract.ResolveConsume(broker, vhost, queue) is { } binding)
             {
-                return new ResolvedBinding(
-                    contract.Name, contract.Enforcement, binding.Subjects);
+                matches.Add((contract.Name, contract.Enforcement, binding.Subjects));
             }
         }
 
-        return new ResolvedBinding(null, EnforcementMode.Off, []);
+        return Combine(matches);
+    }
+
+    /// <summary>Folds every matching contract into one answer, keeping the ambiguity visible.</summary>
+    private static ResolvedBinding Combine(
+        List<(string Name, EnforcementMode Mode, IReadOnlyList<SubjectRef> Subjects)> matches)
+    {
+        if (matches.Count is 0)
+        {
+            return new ResolvedBinding([], EnforcementMode.Off, []);
+        }
+
+        // Ordered by name so two SDKs asking the same question get the same answer in the same
+        // order, and a diff of two resolutions is about the topology rather than about row order.
+        matches.Sort((left, right) => string.CompareOrdinal(left.Name, right.Name));
+
+        var subjects = new List<SubjectRef>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var strictest = EnforcementMode.Off;
+
+        foreach (var match in matches)
+        {
+            if (match.Mode > strictest)
+            {
+                strictest = match.Mode;
+            }
+
+            foreach (var subject in match.Subjects)
+            {
+                // Deduplicated on subject AND selector: two contracts naming the same subject at
+                // different versions is a real disagreement the SDK should see both halves of.
+                if (seen.Add($"{subject.Subject.Value}@{subject.Selector}"))
+                {
+                    subjects.Add(subject);
+                }
+            }
+        }
+
+        return new ResolvedBinding([.. matches.Select(m => m.Name)], strictest, subjects);
     }
 }
 

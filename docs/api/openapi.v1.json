@@ -858,7 +858,7 @@
           "Contracts"
         ],
         "summary": "Resolve a topology against the environment's contracts",
-        "description": "What an SDK calls at startup: one request for its whole topology rather than one per route, because a fleet-wide restart is the real load pattern. A route nothing governs is answered with no contract and OFF, not omitted — the SDK needs to tell 'ungoverned' from 'I forgot to ask'.",
+        "description": "What an SDK calls at startup: one request for its whole topology rather than one per route, because a fleet-wide restart is the real load pattern. A route nothing governs is answered with an empty contract list and OFF, not omitted — the SDK needs to tell 'ungoverned' from 'I forgot to ask'. A route governed by more than one contract returns all of them, with the strictest enforcement and the union of their subjects, so the ambiguity is visible rather than resolved by name order.",
         "parameters": [
           {
             "name": "env",
@@ -4934,32 +4934,32 @@
       },
       "ResolvedBindingResponse": {
         "required": [
-          "contract",
+          "contracts",
           "enforcement",
           "subjects"
         ],
         "type": "object",
         "properties": {
-          "contract": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "The contract that matched, or null when nothing governs it."
+          "contracts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every contract that matched, in name order; empty when nothing governs the route."
           },
           "enforcement": {
             "type": "string",
-            "description": "How much that contract may do; `OFF` when nothing matched."
+            "description": "The strictest enforcement among them; `OFF` when nothing matched."
           },
           "subjects": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SubjectRefResponse"
             },
-            "description": "The subjects permitted."
+            "description": "The union of what they permit."
           }
         },
-        "description": "What a contract says about one route or queue."
+        "description": "What the environment's contracts say about one route or queue."
       },
       "SchemaResponse": {
         "required": [

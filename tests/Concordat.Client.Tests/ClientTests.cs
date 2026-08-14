@@ -434,12 +434,16 @@ public class ClientTests
     private static readonly PublishRoute Shipped = new("orders", "order.shipped");
 
     /// <summary>One governed answer and one ungoverned, in request order.</summary>
+    /// <remarks>
+    /// <c>contracts</c> is a list because a route can be governed by more than one (decision 21).
+    /// An ungoverned route sends an empty list, not a null one.
+    /// </remarks>
     private static string ResolveBody(params string?[] contracts)
     {
         var entries = contracts.Select(c => c is null
-            ? """{"contract":null,"enforcement":"OFF","subjects":[]}"""
+            ? """{"contracts":[],"enforcement":"OFF","subjects":[]}"""
             : $$"""
-                {"contract":"{{c}}","enforcement":"ENFORCE",
+                {"contracts":["{{c}}"],"enforcement":"ENFORCE",
                  "subjects":[{"subject":"acme.Order","selector":"latest"}]}
                 """);
 
@@ -583,7 +587,7 @@ public class ClientTests
     public async Task Contracts_AnUnrecognisedEnforcementTokenIsTreatedAsMonitor()
     {
         const string Body = """
-            {"publishes":[{"contract":"orders-v1","enforcement":"QUARANTINE_ONLY","subjects":[]}],
+            {"publishes":[{"contracts":["orders-v1"],"enforcement":"QUARANTINE_ONLY","subjects":[]}],
              "consumes":[]}
             """;
 

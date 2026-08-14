@@ -62,7 +62,7 @@ internal sealed class FakeClient : IConcordatClient
         params string[] subjects)
     {
         _publishRoutes[new PublishRoute(exchange, routingKey)] =
-            new ResolvedRoute(contract, enforcement, Parse(subjects), DateTimeOffset.UtcNow);
+            new ResolvedRoute([contract], enforcement, Parse(subjects), DateTimeOffset.UtcNow);
 
         return this;
     }
@@ -72,7 +72,7 @@ internal sealed class FakeClient : IConcordatClient
         string queue, string contract, EnforcementMode enforcement, params string[] subjects)
     {
         _consumeRoutes[queue] =
-            new ResolvedRoute(contract, enforcement, Parse(subjects), DateTimeOffset.UtcNow);
+            new ResolvedRoute([contract], enforcement, Parse(subjects), DateTimeOffset.UtcNow);
 
         return this;
     }

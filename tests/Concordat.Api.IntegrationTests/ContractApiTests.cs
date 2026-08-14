@@ -270,7 +270,7 @@ public class ContractApiTests(ApiFactory factory)
         var body = await ApiFactory.ReadAsync<ResolveContractsResponse>(response);
 
         var resolved = Assert.Single(body.Publishes);
-        Assert.Equal(contract, resolved.Contract);
+        Assert.Equal([contract], resolved.Contracts);
         Assert.Equal("ENFORCE", resolved.Enforcement);
         Assert.Equal("acme.Created", Assert.Single(resolved.Subjects).Subject);
     }
@@ -301,14 +301,14 @@ public class ContractApiTests(ApiFactory factory)
         var body = await ApiFactory.ReadAsync<ResolveContractsResponse>(response);
 
         Assert.Equal(2, body.Publishes.Count);
-        Assert.Null(body.Publishes[0].Contract);
+        Assert.Empty(body.Publishes[0].Contracts);
         Assert.Equal("OFF", body.Publishes[0].Enforcement);
         Assert.Empty(body.Publishes[0].Subjects);
 
-        Assert.Equal(contract, body.Publishes[1].Contract);
+        Assert.Equal([contract], body.Publishes[1].Contracts);
 
         var consume = Assert.Single(body.Consumes);
-        Assert.Null(consume.Contract);
+        Assert.Empty(consume.Contracts);
         Assert.Equal("OFF", consume.Enforcement);
     }
 
@@ -341,8 +341,8 @@ public class ContractApiTests(ApiFactory factory)
                 new ResolveContractsRequest(VirtualHost: "/tenant-b", Consumes: ["orders.q"]),
                 ApiFactory.Json));
 
-        Assert.Equal(contract, matching.Consumes[0].Contract);
-        Assert.Null(elsewhere.Consumes[0].Contract);
+        Assert.Equal([contract], matching.Consumes[0].Contracts);
+        Assert.Empty(elsewhere.Consumes[0].Contracts);
     }
 
     [Fact]

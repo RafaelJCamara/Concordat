@@ -12,16 +12,34 @@ public readonly record struct PublishRoute(string Exchange, string RoutingKey);
 /// <summary>
 /// What the environment's contracts say about one route or queue (M7.3).
 /// </summary>
-/// <param name="Contract">The contract that matched, or <see langword="null"/> when nothing governs it.</param>
-/// <param name="Enforcement">How much that contract may do. <c>Off</c> when nothing matched.</param>
-/// <param name="Subjects">The subjects the contract permits, with the versions of each it accepts.</param>
+/// <param name="Contracts">Every contract that matched, in name order. Empty when nothing governs it.</param>
+/// <param name="Enforcement">The strictest enforcement among them. <c>Off</c> when nothing matched.</param>
+/// <param name="Subjects">The union of what they permit, with the versions of each.</param>
 /// <param name="FetchedAt">When the registry last confirmed this.</param>
 public sealed record ResolvedRoute(
-    string? Contract,
+    IReadOnlyList<string> Contracts,
     EnforcementMode Enforcement,
     IReadOnlyList<SubjectRef> Subjects,
     DateTimeOffset FetchedAt)
 {
+    /// <summary>
+    /// The governing contract, when exactly one governs the route.
+    /// </summary>
+    /// <remarks>
+    /// Null when nothing governs it <em>and</em> when several do, so nothing in the SDK can
+    /// accidentally name one of an ambiguous pair as though it were the answer. Use
+    /// <see cref="Describe"/> for a message and <see cref="IsAmbiguous"/> to branch.
+    /// </remarks>
+    public string? Contract => Contracts.Count is 1 ? Contracts[0] : null;
+
+    /// <summary>Whether more than one contract governs the route, which nobody intended.</summary>
+    public bool IsAmbiguous => Contracts.Count > 1;
+
+    /// <summary>Names the governing contracts for a message somebody has to act on.</summary>
+    /// <returns>The contract names, or <c>"no contract"</c>.</returns>
+    public string Describe() =>
+        Contracts.Count is 0 ? "no contract" : string.Join("' and '", Contracts);
+
     /// <summary>
     /// Whether a contract actually matched.
     /// </summary>
@@ -33,12 +51,12 @@ public sealed record ResolvedRoute(
     /// contract and setting it to OFF indistinguishable from never writing one — so the central
     /// off switch would silently do nothing wherever a client had opted into local enforcement.
     /// </remarks>
-    public bool IsGoverned => Contract is not null;
+    public bool IsGoverned => Contracts.Count > 0;
 
     /// <summary>The answer for a route no contract covers.</summary>
     /// <param name="at">When this was established.</param>
     /// <returns>An ungoverned answer.</returns>
-    public static ResolvedRoute Ungoverned(DateTimeOffset at) => new(null, EnforcementMode.Off, [], at);
+    public static ResolvedRoute Ungoverned(DateTimeOffset at) => new([], EnforcementMode.Off, [], at);
 }
 
 /// <summary>
@@ -84,6 +102,16 @@ public sealed class ContractCache(TimeProvider clock, ConcordatClientOptions opt
     /// </remarks>
     public int GovernedCount =>
         _publishes.Values.Count(r => r.IsGoverned) + _consumes.Values.Count(r => r.IsGoverned);
+
+    /// <summary>How many held routes more than one contract governs.</summary>
+    /// <remarks>
+    /// <b>Non-zero means somebody authored two contracts over the same route</b> (decision 21),
+    /// which nobody intends and which nothing else reports. Counted here rather than raised per
+    /// message: the condition is a property of the topology, so a per-message signal would say
+    /// the same thing a million times and a per-route one says it once.
+    /// </remarks>
+    public int AmbiguousCount =>
+        _publishes.Values.Count(r => r.IsAmbiguous) + _consumes.Values.Count(r => r.IsAmbiguous);
 
     /// <summary>Looks up what governs a publish route.</summary>
     /// <param name="route">The exchange and routing key.</param>
