@@ -97,8 +97,10 @@ public sealed class ApiKey
         IReadOnlyList<string> scopes,
         DateTimeOffset createdAt,
         DateTimeOffset? expiresAt,
-        ApiKeyKind kind)
+        ApiKeyKind kind,
+        ActorId actor)
     {
+        Actor = actor;
         Kind = kind;
         Id = id;
         TenantId = tenantId;
@@ -115,6 +117,7 @@ public sealed class ApiKey
     private ApiKey()
     {
         Kind = ApiKeyKind.Standing;
+        Actor = null!;
         KeyId = null!;
         SecretHash = null!;
         Label = null!;
@@ -141,6 +144,19 @@ public sealed class ApiKey
 
     /// <summary>Whether it was issued deliberately or minted by a sign-in.</summary>
     public ApiKeyKind Kind { get; private set; }
+
+    /// <summary>
+    /// How requests made with this key are attributed in the audit trail.
+    /// </summary>
+    /// <remarks>
+    /// <b>Stored rather than derived, and that is what makes the trail readable.</b> A session
+    /// key is how a person acts through the web app, and attributing their changes to
+    /// <c>key:session for alice@example.com</c> instead of <c>alice@example.com</c> would make
+    /// every entry a puzzle. Deriving it would mean a user lookup on every authenticated
+    /// request — this sits on the SDK's hot path — or string-munging a label, which breaks the
+    /// first time somebody names a key <c>session for the demo</c>.
+    /// </remarks>
+    public ActorId Actor { get; private set; }
 
     /// <summary>
     /// What it may do — a subset of the issuer's own scopes, never a superset.
@@ -181,6 +197,10 @@ public sealed class ApiKey
     /// <param name="createdAt">When.</param>
     /// <param name="expiresAt">When it should stop working, or null.</param>
     /// <param name="kind">Whether it is a standing key or a session.</param>
+    /// <param name="actor">
+    /// How to attribute requests made with this key. Defaults to <c>key:&lt;label&gt;</c>; a
+    /// sign-in passes the user's own identity so the audit trail names a person.
+    /// </param>
     /// <returns>The key and its secret, or a validation failure.</returns>
     public static Result<IssuedApiKey> Issue(
         TenantId tenantId,
@@ -189,7 +209,8 @@ public sealed class ApiKey
         IReadOnlyList<string>? scopes,
         DateTimeOffset createdAt,
         DateTimeOffset? expiresAt = null,
-        ApiKeyKind kind = ApiKeyKind.Standing)
+        ApiKeyKind kind = ApiKeyKind.Standing,
+        ActorId? actor = null)
     {
         var trimmed = label?.Trim();
 
@@ -236,7 +257,8 @@ public sealed class ApiKey
             granted,
             createdAt.ToUniversalTime(),
             expiresAt?.ToUniversalTime(),
-            kind);
+            kind,
+            actor ?? ActorId.Create($"key:{trimmed}").Value);
 
         return Result<IssuedApiKey>.Success(
             new IssuedApiKey(key, $"{Prefix}_{keyId}_{secret}"));

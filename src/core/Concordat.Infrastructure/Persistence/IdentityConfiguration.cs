@@ -143,6 +143,18 @@ internal sealed class ApiKeyConfiguration : IEntityTypeConfiguration<ApiKey>
             .HasMaxLength(ApiKey.MaxLabelLength)
             .IsRequired();
 
+        builder.Property(k => k.Kind)
+            .HasColumnName("kind")
+            .HasConversion<string>()
+            .HasMaxLength(16)
+            .IsRequired();
+
+        builder.Property(k => k.Actor)
+            .HasColumnName("actor")
+            .HasConversion(a => a.Value, value => ActorId.Create(value).Value)
+            .HasMaxLength(ActorId.MaxLength)
+            .IsRequired();
+
         builder.Property(k => k.Scopes)
             .HasColumnName("scopes")
             .HasMaxLength(512)

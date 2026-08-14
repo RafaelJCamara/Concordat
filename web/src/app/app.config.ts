@@ -1,6 +1,7 @@
 import { provideBrowserGlobalErrorListeners, type ApplicationConfig } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideRouter, withComponentInputBinding, withInMemoryScrolling } from '@angular/router';
+import { provideSessionInitializer } from './core/auth/session-initializer';
 import { provideConcordatConfig } from './core/config/app-config';
 import { authInterceptor } from './core/http/auth-interceptor';
 import { problemDetailsInterceptor } from './core/http/problem-details-interceptor';
@@ -34,5 +35,12 @@ export const appConfig: ApplicationConfig = {
     // Same-origin, self-hosted, single tenant. A deployment that differs overrides here;
     // nothing about the API location is baked into the bundle.
     provideConcordatConfig(),
+
+    // After the HTTP client, and it has to be: the probe is an HTTP call. It asks the API
+    // whether this instance has been claimed before the first screen renders, because an
+    // unclaimed one answers as an owner and the app cannot otherwise tell "signed out" from
+    // "nobody has signed up". A failure is swallowed — a registry that is not up yet must
+    // not stop the UI rendering.
+    provideSessionInitializer(),
   ],
 };

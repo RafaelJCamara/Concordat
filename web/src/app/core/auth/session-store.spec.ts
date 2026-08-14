@@ -2,10 +2,8 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { SessionStore } from './session-store';
 
-// The store is three fields and two methods. What is worth testing is the shape of the
-// signed-out state, because M4.2 will hang `canWriteSchemas` off `scopes` and everything
-// that follows depends on a dropped session being genuinely empty rather than merely
-// missing its credential.
+// `canWriteSchemas` hangs off `scopes`, so everything that follows depends on a dropped
+// session being genuinely empty rather than merely missing its credential.
 
 describe('SessionStore', () => {
   let session: InstanceType<typeof SessionStore>;
@@ -15,13 +13,56 @@ describe('SessionStore', () => {
     session = TestBed.inject(SessionStore);
   });
 
-  it('is signed out on a cold start', () => {
-    // There is no sign-in flow yet and the self-hosted API does not require a credential,
-    // so the interceptor sends nothing and the registry serves the request. That is the
-    // correct single-user behaviour, not an oversight.
+  it('is signed out and knows nothing about the instance on a cold start', () => {
     expect(session.credential()).toBeNull();
     expect(session.actor()).toBeNull();
     expect(session.scopes()).toEqual([]);
+
+    // `claimed` is null, not false: "we have not asked yet" and "there are no accounts" are
+    // different states, and treating the first as the second would render every write
+    // affordance on a registry that is about to refuse them.
+    expect(session.claimed()).toBeNull();
+    expect(session.canWriteSchemas()).toBe(false);
+    expect(session.needsSignIn()).toBe(false);
+  });
+
+  it('offers schema writes on an unclaimed instance with no session', () => {
+    // The API grants owner scopes to an unauthenticated caller until an account exists, so
+    // hiding every button on a registry that would accept the write is a worse first run
+    // than the buttons being there.
+    session.observeInstance({ claimed: false, actor: null, scopes: [] });
+
+    expect(session.canWriteSchemas()).toBe(true);
+    expect(session.needsSignIn()).toBe(false);
+  });
+
+  it('asks for a sign-in on a claimed instance with no session', () => {
+    session.observeInstance({ claimed: true, actor: null, scopes: [] });
+
+    expect(session.needsSignIn()).toBe(true);
+    expect(session.canWriteSchemas()).toBe(false);
+  });
+
+  it('derives write permission from the scopes the API granted', () => {
+    session.signIn({ credential: 't', actor: 'analyst', scopes: ['subject:read'] });
+    expect(session.canWriteSchemas()).toBe(false);
+
+    session.signIn({ credential: 't', actor: 'ops', scopes: ['subject:write'] });
+    expect(session.canWriteSchemas()).toBe(true);
+  });
+
+  it('keeps knowing the instance is claimed after a session expires', () => {
+    // Whether the instance has accounts is a fact about the server, not about this session.
+    // Forgetting it would send the user back to a first-run experience they have left — and
+    // worse, would re-enable the unclaimed write affordances.
+    session.observeInstance({ claimed: true, actor: null, scopes: [] });
+    session.signIn({ credential: 't', actor: 'ops', scopes: ['subject:admin'] });
+
+    session.expire();
+
+    expect(session.claimed()).toBe(true);
+    expect(session.canWriteSchemas()).toBe(false);
+    expect(session.needsSignIn()).toBe(true);
   });
 
   it('records the credential, the actor and the scopes the API granted', () => {
@@ -36,7 +77,7 @@ describe('SessionStore', () => {
 
   it('drops the scopes as well as the credential when the session expires', () => {
     // The one that matters. `expire()` is called by the auth interceptor on a 401, and a
-    // session that kept its scopes would keep rendering the write affordances M4.2 gates on
+    // session that kept its scopes would keep rendering the write affordances gated on
     // them — offering buttons to somebody the registry has just stopped recognising.
     session.signIn({ credential: 'token-abc', actor: 'ci', scopes: ['subject:admin'] });
 

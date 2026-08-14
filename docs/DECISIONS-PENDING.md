@@ -386,24 +386,30 @@ way rather than leaving both.
 > is a new write path from every publisher in the estate, and that deserves to be designed
 > rather than appended.
 
-### 26. The web app cannot sign in yet, and the unclaimed-instance escape hatch is what hides it
+### 26. A reload signs you out, and there is still no browser E2E
 
-M8's API half is done: sign-in, members, keys, and a scope check on every mutating route. The
-Angular app still sends no credential — `SessionStore` has a `signIn` method nothing calls, and
-the auth interceptor sends nothing.
+**Resolved in part.** The web app signs in, holds the credential, and gates its affordances on
+real scopes. Two things remain.
 
-Today that works, because an instance with no accounts answers as an owner. **The moment
-somebody runs `POST /v1/auth/bootstrap`, the web app stops being able to write anything**, and
-the failure looks like a broken UI rather than a missing sign-in screen.
+**A reload drops the session.** The credential is held in memory only — deliberately, because a
+token in `localStorage` is readable by any script that runs on the page, and this project has
+already declined to ship one XSS hole (ADR-006). The cost is that F5 signs you out, which is
+irritating enough that somebody will eventually "fix" it the wrong way.
 
-> **This is the sequencing hazard ADR-018 predicted in writing** — "the web app is M4 and real
-> roles are M8… retrofitting the check across finished screens in M8 is how a write path gets
-> missed." The server-side check is in place, so no write path is *ungated*; what is missing is
-> the screen that lets a legitimate user pass it.
+> **Options:** (a) an httpOnly, SameSite=Strict cookie issued by `/v1/auth/signin` alongside the
+> bearer credential — the browser holds it, script cannot read it, and CSRF is handled by the
+> SameSite attribute plus the fact that every mutating route already requires a non-cookie
+> header; (b) a refresh token, which is a second credential format and everything M8 avoided by
+> making a session a short-lived API key; (c) leave it and document it.
 >
-> **Recommendation:** finish it before anything else in M8 — a sign-in page, the interceptor
-> attaching the credential, and `canWriteSchemas` reading real scopes. The E2E non-admin test
-> M8.3 asks for is blocked on the same work.
+> **Recommendation:** (a), and note that it is the one piece of M8 where the "sessions are just
+> API keys" simplification stops paying for itself.
+
+**There is no browser E2E.** `if-scope.spec.ts` and `scope-guard.spec.ts` cover each half in
+isolation, and the API's `AuthorizationTests` cover the server. Nothing drives a real browser
+through "sign in as a reader, confirm the button is absent, paste the URL anyway". That needs
+Playwright, which the project has never had — a real dependency decision rather than an
+oversight.
 
 ### 27. `AllowAnonymousUntilClaimed` is on by default
 
@@ -616,6 +622,13 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | `AllowAnonymousUntilClaimed` defaults to **on**, and disables itself once an account exists | M8.2 | **See #27.** Never applies to a request that presented a credential and failed to verify |
 | Scope enforcement is an endpoint filter with a structural test, not a check in each handler | M8.2 | Low, and it is what makes the convention real: a forgotten check is silent and works for everyone |
 | `StampTenant` now stamps **shadow** properties only | M8.1, `ConcordatDbContext` | Low, and a fix: M8's `Membership` and `ApiKey` carry a real strongly-typed `TenantId` with the same name, and matching on the name alone threw on the first sign-in |
+| A key stores the actor it attributes requests to, rather than deriving one | [M8.2](plan/M8-identity.md) | Low, needs a migration. Deriving would mean a user lookup on every authenticated request — the SDK's hot path — or string-munging a label, which breaks the first time somebody names a key `session for the demo` |
+| M7.4's `unknown` audit actor replaced by the real caller wherever one exists | M8.2 | Low, and the point of M8: those handlers said `unknown` because there was nobody to name |
+| The web app probes `/v1/auth/status` in an app initializer, and a failure is swallowed | M8.2 | Low. Without the probe the app cannot tell "signed out" from "nobody has signed up"; refusing to render when the registry is not up yet leaves the user with nothing |
+| The sign-in screen doubles as first-run setup | M8.2 | Low. The two differ by one fact the server already knows, and a separate `/setup` route would be reachable after setup and have to redirect |
+| Sign-out drops the credential locally and does not revoke the session key | M8.2 | Low. It expires on its own; revoking would mean one row deleted per tab closed. A user who needs it gone sooner revokes it from the keys screen |
+| `*cdIfScope` and `scopeGuard` live in `core/auth`, not `shared/ui` | M8.2 | Low, and forced by the boundary lint: `shared` may not depend on `core`, and both read the session store |
+| An unrecognised scope from a newer server is dropped client-side | M8.2, `AuthApi` | Low, and the safe direction: it hides an affordance rather than showing one. The server remains the authority |
 
 ---
 

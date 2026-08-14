@@ -156,7 +156,11 @@ public static class IdentityEndpoints
             caller.Scopes.Granted,
             now,
             now + options.Value.SessionLifetime,
-            ApiKeyKind.Session);
+            ApiKeyKind.Session,
+            // The person, not the key. Otherwise every change made through the web app is
+            // attributed to "key:session for alice@example.com" and the audit trail stops
+            // naming anybody.
+            caller.Actor);
 
         if (session.IsFailure)
         {

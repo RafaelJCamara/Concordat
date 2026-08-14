@@ -49,9 +49,10 @@ issue endpoint mints themselves `subject:admin`.
       membership carries `subject:read`
 - [x] Every mutating endpoint checks scope server-side → `403 insufficient_scope`
 - [x] Approve/reject is `subject:admin` — the author of a breaking change cannot wave it through
-- [ ] Replace [M4.2](M4-web-app.md#m42-access-control)'s admin stub with real role
-      resolution — **the API half is done**; the Angular side still has to call
-      `/v1/auth/signin` and populate `SessionStore`, which is M8's remaining frontend work
+- [x] Replace [M4.2](M4-web-app.md#m42-access-control)'s admin stub with real role
+      resolution — a sign-in screen, an app initializer that probes `/v1/auth/status`,
+      `canWriteSchemas` derived from real scopes, a `scopeGuard` and the `*cdIfScope`
+      directive
 
 **Enforcement is an endpoint filter, declared next to the route.** A check inside each
 handler is one a handler can forget, and the failure is silent: the endpoint works, for
@@ -80,8 +81,10 @@ somebody actually has to manage.
 - [x] Every mutating endpoint rejects a `subject:read` principal — for API keys and sessions alike
 - [x] The read surface stays fully available to non-admins
 - [x] A structural test that no mutating route ships without a declared scope
-- [ ] E2E as a non-admin: no write affordance renders; direct URL to a write route
-      redirects — **blocked on the frontend sign-in work above**
+- [x] No write affordance renders for a non-admin, and a direct URL to a write route
+      redirects — covered by `if-scope.spec.ts` and `scope-guard.spec.ts`
+- [ ] A browser-driven E2E pass over the two together — the unit tests cover each half;
+      what is missing is Playwright, which the project has never had
 
 ---
 
@@ -90,11 +93,17 @@ somebody actually has to manage.
 A non-admin can browse everything and change nothing, and that holds against curl, not
 just the UI.
 
-**Met on the API.** `AuthorizationTests.AReaderCanChangeNothing` drives eight distinct
-write paths as a `READER` over real HTTP and asserts `403 insufficient_scope` on every one;
-`AReaderCanBrowseEverything` asserts the read surface is untouched. What remains is the
-web app calling `/v1/auth/signin` — the server-side boundary ADR-018 insists on is in
-place, and the UI gating is a presentation of it.
+**Met.** `AuthorizationTests.AReaderCanChangeNothing` drives eight distinct write paths as
+a `READER` over real HTTP and asserts `403 insufficient_scope` on every one;
+`AReaderCanBrowseEverything` asserts the read surface is untouched. The web app signs in
+against the same endpoints and hides what the server would refuse — a presentation of the
+boundary, not a substitute for it.
+
+**The audit trail now names people.** M7.4 attributed environment, broker and contract
+changes to `unknown`, because there was no identity to name; those handlers read
+`ICallerContext` now. A session credential carries the signing-in user's own actor rather
+than `key:session for alice@example.com`, so a change made through the web app reads as
+`alice@example.com` in the trail.
 
 ---
 

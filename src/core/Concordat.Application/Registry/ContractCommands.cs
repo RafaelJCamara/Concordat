@@ -118,6 +118,7 @@ public sealed class CreateContractHandler(
     IEnvironmentRepository environments,
     IContractRepository contracts,
     IAuditLog audit,
+    ICallerContext caller,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
     : ICommandHandler<CreateContractCommand, Contract>
@@ -166,7 +167,7 @@ public sealed class CreateContractHandler(
         audit.Append(AuditEntry.Record(
             environment.Value.Id,
             AuditAction.ContractCreated,
-            GovernanceActor.Unknown,
+            caller.Current.Actor,
             created.Value.Name,
             clock.GetUtcNow(),
             WireTokens.For(created.Value.Enforcement)));
@@ -182,6 +183,7 @@ public sealed class AddPublishBindingHandler(
     IEnvironmentRepository environments,
     IContractRepository contracts,
     IAuditLog audit,
+    ICallerContext caller,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
     : ICommandHandler<AddPublishBindingCommand, Contract>
@@ -234,7 +236,7 @@ public sealed class AddPublishBindingHandler(
         audit.Append(AuditEntry.Record(
             found.Value.EnvironmentId,
             AuditAction.ContractBindingAdded,
-            GovernanceActor.Unknown,
+            caller.Current.Actor,
             found.Value.Name,
             clock.GetUtcNow(),
             $"publish {command.Exchange.Trim()} / {pattern.Value} -> " +
@@ -250,6 +252,7 @@ public sealed class AddConsumeBindingHandler(
     IEnvironmentRepository environments,
     IContractRepository contracts,
     IAuditLog audit,
+    ICallerContext caller,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
     : ICommandHandler<AddConsumeBindingCommand, Contract>
@@ -294,7 +297,7 @@ public sealed class AddConsumeBindingHandler(
         audit.Append(AuditEntry.Record(
             found.Value.EnvironmentId,
             AuditAction.ContractBindingAdded,
-            GovernanceActor.Unknown,
+            caller.Current.Actor,
             found.Value.Name,
             clock.GetUtcNow(),
             $"consume {command.Queue.Trim()} -> " +
@@ -310,6 +313,7 @@ public sealed class SetContractEnforcementHandler(
     IEnvironmentRepository environments,
     IContractRepository contracts,
     IAuditLog audit,
+    ICallerContext caller,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
     : ICommandHandler<SetContractEnforcementCommand, Contract>
@@ -340,7 +344,7 @@ public sealed class SetContractEnforcementHandler(
         audit.Append(AuditEntry.Record(
             found.Value.EnvironmentId,
             AuditAction.ContractEnforcementChanged,
-            GovernanceActor.Unknown,
+            caller.Current.Actor,
             found.Value.Name,
             clock.GetUtcNow(),
             WireTokens.For(found.Value.Enforcement)));

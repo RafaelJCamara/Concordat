@@ -15,6 +15,12 @@ import type { Routes } from '@angular/router';
  */
 export const routes: Routes = [
   {
+    path: 'sign-in',
+    title: 'Sign in · Concordat',
+    loadComponent: () =>
+      import('./features/identity/feature/sign-in-page').then((m) => m.SignInPage),
+  },
+  {
     path: 'subjects',
     title: 'Subjects · Concordat',
     loadComponent: () =>

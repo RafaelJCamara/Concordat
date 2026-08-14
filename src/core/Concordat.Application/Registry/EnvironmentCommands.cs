@@ -82,6 +82,7 @@ public sealed class CreateEnvironmentHandler(
     IEnvironmentRepository environments,
     IEnvironmentResolver resolver,
     IAuditLog audit,
+    ICallerContext caller,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
     : ICommandHandler<CreateEnvironmentCommand, Environment>
@@ -142,7 +143,7 @@ public sealed class CreateEnvironmentHandler(
         audit.Append(AuditEntry.Record(
             created.Value.Id,
             AuditAction.EnvironmentCreated,
-            GovernanceActor.Unknown,
+            caller.Current.Actor,
             created.Value.Name.Value,
             clock.GetUtcNow(),
             $"registration {created.Value.RegistrationPolicy}, default " +
@@ -157,7 +158,9 @@ public sealed class CreateEnvironmentHandler(
 
 /// <summary>Handles <see cref="UpdateEnvironmentCommand"/>.</summary>
 public sealed class UpdateEnvironmentHandler(
-    IEnvironmentRepository environments, IAuditLog audit, IUnitOfWork unitOfWork, TimeProvider clock)
+    IEnvironmentRepository environments,
+    IAuditLog audit,
+    ICallerContext caller, IUnitOfWork unitOfWork, TimeProvider clock)
     : ICommandHandler<UpdateEnvironmentCommand, Environment>
 {
     /// <inheritdoc />
@@ -212,7 +215,7 @@ public sealed class UpdateEnvironmentHandler(
         audit.Append(AuditEntry.Record(
             environment.Id,
             AuditAction.EnvironmentUpdated,
-            GovernanceActor.Unknown,
+            caller.Current.Actor,
             environment.Name.Value,
             clock.GetUtcNow(),
             $"registration {environment.RegistrationPolicy}, default " +
@@ -226,7 +229,9 @@ public sealed class UpdateEnvironmentHandler(
 
 /// <summary>Handles <see cref="AddBrokerCommand"/>.</summary>
 public sealed class AddBrokerHandler(
-    IEnvironmentRepository environments, IAuditLog audit, IUnitOfWork unitOfWork, TimeProvider clock)
+    IEnvironmentRepository environments,
+    IAuditLog audit,
+    ICallerContext caller, IUnitOfWork unitOfWork, TimeProvider clock)
     : ICommandHandler<AddBrokerCommand, Environment>
 {
     /// <inheritdoc />
@@ -260,7 +265,7 @@ public sealed class AddBrokerHandler(
         audit.Append(AuditEntry.Record(
             found.Value.Id,
             AuditAction.BrokerAdded,
-            GovernanceActor.Unknown,
+            caller.Current.Actor,
             broker.Value.DisplayName,
             clock.GetUtcNow(),
             $"{broker.Value.Uri} vhost {broker.Value.VirtualHost}"));
@@ -272,7 +277,9 @@ public sealed class AddBrokerHandler(
 
 /// <summary>Handles <see cref="RemoveBrokerCommand"/>.</summary>
 public sealed class RemoveBrokerHandler(
-    IEnvironmentRepository environments, IAuditLog audit, IUnitOfWork unitOfWork, TimeProvider clock)
+    IEnvironmentRepository environments,
+    IAuditLog audit,
+    ICallerContext caller, IUnitOfWork unitOfWork, TimeProvider clock)
     : ICommandHandler<RemoveBrokerCommand, Environment>
 {
     /// <inheritdoc />
@@ -304,7 +311,7 @@ public sealed class RemoveBrokerHandler(
         audit.Append(AuditEntry.Record(
             found.Value.Id,
             AuditAction.BrokerRemoved,
-            GovernanceActor.Unknown,
+            caller.Current.Actor,
             label,
             clock.GetUtcNow()));
 
@@ -496,6 +503,7 @@ public sealed class SetBrokerCredentialHandler(
     IEnvironmentRepository environments,
     ICredentialStore credentials,
     IAuditLog audit,
+    ICallerContext caller,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
     : ICommandHandler<SetBrokerCredentialCommand, Environment>
@@ -542,7 +550,7 @@ public sealed class SetBrokerCredentialHandler(
         audit.Append(AuditEntry.Record(
             found.Value.Id,
             AuditAction.BrokerCredentialSet,
-            GovernanceActor.Unknown,
+            caller.Current.Actor,
             broker.DisplayName,
             clock.GetUtcNow()));
 
@@ -556,6 +564,7 @@ public sealed class RemoveBrokerCredentialHandler(
     IEnvironmentRepository environments,
     ICredentialStore credentials,
     IAuditLog audit,
+    ICallerContext caller,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
     : ICommandHandler<RemoveBrokerCredentialCommand, Environment>
@@ -591,7 +600,7 @@ public sealed class RemoveBrokerCredentialHandler(
             audit.Append(AuditEntry.Record(
                 found.Value.Id,
                 AuditAction.BrokerCredentialRemoved,
-                GovernanceActor.Unknown,
+                caller.Current.Actor,
                 broker.DisplayName,
                 clock.GetUtcNow()));
         }

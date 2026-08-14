@@ -63,7 +63,7 @@ public sealed class Authenticator(
             CredentialKind.ApiKey,
             key.TenantId,
             key.ScopeSet(),
-            ActorId.Create($"key:{key.Label}").Value,
+            key.Actor,
             key.UserId,
             key.KeyId);
     }

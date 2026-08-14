@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Concordat.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ConcordatDbContext))]
-    [Migration("20260814110826_Identity")]
+    [Migration("20260814113021_Identity")]
     partial class Identity
     {
         /// <inheritdoc />
@@ -292,6 +292,12 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("api_key_id");
 
+                    b.Property<string>("Actor")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("actor");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -306,8 +312,11 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("key_id");
 
-                    b.Property<int>("Kind")
-                        .HasColumnType("integer");
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
 
                     b.Property<string>("Label")
                         .IsRequired()
