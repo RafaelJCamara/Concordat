@@ -89,10 +89,13 @@ internal sealed class SubjectConfiguration : IEntityTypeConfiguration<Subject>
         // registrations against one subject would otherwise both allocate the same ordinal and
         // one would silently win.
         //
-        // Note the sharp edge: xmin only changes when the SUBJECT ROW is updated. Inserting a
-        // child schema_version row alone does not bump it. RegisterVersion happens to dirty the
-        // root because it moves LatestPointer — but any future mutator that only touches
-        // children would slip past this guard.
+        // The sharp edge this used to carry: xmin only changes when the SUBJECT ROW is updated,
+        // and inserting or editing a child schema_version row alone does not bump it. That made
+        // RegisterVersion safe only by accident (it moves LatestPointer) and left Reject
+        // unguarded entirely. M7.4 closed it — Subject.Revision is incremented by every mutator,
+        // so there is always a root UPDATE for the token to ride on.
+        builder.Property(s => s.Revision).HasColumnName("revision");
+
         builder.Property<uint>("xmin")
             .HasColumnName("xmin")
             .HasColumnType("xid")

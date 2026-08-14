@@ -1,5 +1,6 @@
 using Concordat.Application.Abstractions;
 using Concordat.Application.Registry;
+using Concordat.Domain.Governance;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 using Concordat.Formats.Abstractions;
@@ -136,6 +137,29 @@ internal sealed class RecordingUnitOfWork : IUnitOfWork
         Saves++;
         return Task.FromResult(0);
     }
+}
+
+/// <summary>Collects audit entries, so a test can assert what a handler recorded (M7.4).</summary>
+/// <remarks>
+/// Entries are held rather than discarded because "what did this write to the trail" is a
+/// behaviour worth asserting on: an audit log is the one output nobody notices is wrong until
+/// somebody needs it.
+/// </remarks>
+internal sealed class RecordingAuditLog : IAuditLog
+{
+    private readonly List<AuditEntry> _entries = [];
+
+    /// <summary>Everything appended, in the order it was appended.</summary>
+    public IReadOnlyList<AuditEntry> Entries => _entries;
+
+    /// <summary>The actions appended, for terse assertions.</summary>
+    public IReadOnlyList<AuditAction> Actions => [.. _entries.Select(e => e.Action)];
+
+    public void Append(AuditEntry entry) => _entries.Add(entry);
+
+    public Task<IReadOnlyList<AuditEntry>> QueryAsync(
+        AuditFilter filter, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AuditEntry>>(_entries);
 }
 
 /// <summary>Mints one stable <see cref="EnvironmentId"/> per environment name.</summary>

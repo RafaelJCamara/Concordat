@@ -102,6 +102,19 @@ public static class WireTokens
         VersionStatus.Active => "ACTIVE",
         VersionStatus.AwaitingApproval => "AWAITING_APPROVAL",
         VersionStatus.Rejected => "REJECTED",
+        VersionStatus.Dismissed => "DISMISSED",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Unknown version status."),
+    };
+
+    /// <summary>Maps an enforcement mode to its wire token.</summary>
+    /// <param name="mode">The mode.</param>
+    /// <returns>The stable token.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The mode is not a known member.</exception>
+    public static string For(EnforcementMode mode) => mode switch
+    {
+        EnforcementMode.Off => "OFF",
+        EnforcementMode.Monitor => "MONITOR",
+        EnforcementMode.Enforce => "ENFORCE",
+        _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unknown enforcement mode."),
     };
 }

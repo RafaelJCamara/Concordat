@@ -1,4 +1,6 @@
+using Concordat.Domain.Governance;
 using Concordat.Domain.Registry;
+using Concordat.Domain.Results;
 
 namespace Concordat.Domain.Tests;
 
@@ -63,6 +65,54 @@ public class WireTokenTests
     [InlineData(VersionStatus.Rejected, "REJECTED")]
     public void VersionStatusTokens(VersionStatus status, string expected) =>
         Assert.Equal(expected, WireTokens.For(status));
+
+    [Theory]
+    [InlineData(EnforcementMode.Off, "OFF")]
+    [InlineData(EnforcementMode.Monitor, "MONITOR")]
+    [InlineData(EnforcementMode.Enforce, "ENFORCE")]
+    public void EnforcementTokens(EnforcementMode mode, string expected) =>
+        Assert.Equal(expected, WireTokens.For(mode));
+
+    [Theory]
+    [InlineData(AuditAction.SubjectCreated, "SUBJECT_CREATED")]
+    [InlineData(AuditAction.VersionSubmitted, "VERSION_SUBMITTED")]
+    [InlineData(AuditAction.VersionDismissed, "VERSION_DISMISSED")]
+    [InlineData(AuditAction.BrokerCredentialRemoved, "BROKER_CREDENTIAL_REMOVED")]
+    [InlineData(AuditAction.ContractEnforcementChanged, "CONTRACT_ENFORCEMENT_CHANGED")]
+    [InlineData(AuditAction.ServiceRegistered, "SERVICE_REGISTERED")]
+    public void AuditActionTokens(AuditAction action, string expected) =>
+        Assert.Equal(expected, AuditTokens.For(action));
+
+    [Fact]
+    public void EveryAuditActionHasATokenAndParsesBack()
+    {
+        // The audit catalogue is a lookup rather than a switch, so a missing member is a silent
+        // KeyNotFoundException at query time instead of a compile error.
+        foreach (var action in Enum.GetValues<AuditAction>())
+        {
+            var token = AuditTokens.For(action);
+            Assert.False(string.IsNullOrEmpty(token));
+
+            Assert.True(AuditTokens.Parse(token, out var parsed).IsSuccess);
+            Assert.Equal(action, parsed);
+        }
+    }
+
+    [Fact]
+    public void AnUnknownAuditActionIsRefusedButAnAbsentOneIsNot()
+    {
+        // No filter means "everything", which is the common case for an audit query; a typo
+        // means the caller believes they are filtering and is not.
+        Assert.True(AuditTokens.Parse(null, out var none).IsSuccess);
+        Assert.Null(none);
+
+        Assert.True(AuditTokens.Parse("   ", out var blank).IsSuccess);
+        Assert.Null(blank);
+
+        var wrong = AuditTokens.Parse("SUBJECT_DELETED", out _);
+        Assert.True(wrong.IsFailure);
+        Assert.Equal(ConcordatCodes.AuditFilterInvalid, wrong.Error!.Code);
+    }
 
     [Fact]
     public void MultiWordTokensAreNotJustTheUppercasedMemberName()

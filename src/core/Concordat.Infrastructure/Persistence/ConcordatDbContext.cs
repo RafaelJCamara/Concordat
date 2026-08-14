@@ -1,5 +1,6 @@
 using Concordat.Application.Abstractions;
 using Concordat.Domain.Contracts;
+using Concordat.Domain.Governance;
 using Concordat.Domain.Registry;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -69,6 +70,13 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
     /// <summary>Contracts, scoped to the current tenant (M7.3).</summary>
     public DbSet<Contract> Contracts => Set<Contract>();
 
+    /// <summary>Declared producer and consumer intent, scoped to the current tenant (M7.4).</summary>
+    public DbSet<ServiceRegistration> Services => Set<ServiceRegistration>();
+
+    /// <summary>The audit trail, scoped to the current tenant (M7.4).</summary>
+    /// <remarks>Append-only: nothing in the model or the repository issues an update or a delete.</remarks>
+    public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
+
     /// <summary>The tenant this context instance is bound to.</summary>
     internal TenantId CurrentTenant => _tenantContext.Current;
 
@@ -82,6 +90,8 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.ApplyConfiguration(new EnvironmentConfiguration());
         modelBuilder.ApplyConfiguration(new StoredCredentialConfiguration());
         modelBuilder.ApplyConfiguration(new ContractConfiguration());
+        modelBuilder.ApplyConfiguration(new ServiceRegistrationConfiguration());
+        modelBuilder.ApplyConfiguration(new AuditEntryConfiguration());
 
         // Isolation by construction rather than by remembering a predicate. Every query
         // against Subjects is filtered whether or not the author thought about tenancy, which
@@ -100,6 +110,14 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<Contract>().HasQueryFilter(
             c => EF.Property<Guid>(c, ContractConfiguration.TenantIdProperty) == CurrentTenant.Value);
+
+        modelBuilder.Entity<ServiceRegistration>().HasQueryFilter(
+            s => EF.Property<Guid>(s, ServiceRegistrationConfiguration.TenantIdProperty) ==
+                 CurrentTenant.Value);
+
+        modelBuilder.Entity<AuditEntry>().HasQueryFilter(
+            e => EF.Property<Guid>(e, AuditEntryConfiguration.TenantIdProperty) ==
+                 CurrentTenant.Value);
 
         base.OnModelCreating(modelBuilder);
     }

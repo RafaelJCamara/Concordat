@@ -1,4 +1,5 @@
 using Concordat.Application.Abstractions;
+using Concordat.Domain.Governance;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 using Environment = Concordat.Domain.Registry.Environment;
@@ -80,6 +81,7 @@ public sealed record GetEnvironmentQuery(string? Name) : IQuery<Environment>;
 public sealed class CreateEnvironmentHandler(
     IEnvironmentRepository environments,
     IEnvironmentResolver resolver,
+    IAuditLog audit,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
     : ICommandHandler<CreateEnvironmentCommand, Environment>
@@ -136,6 +138,17 @@ public sealed class CreateEnvironmentHandler(
         }
 
         environments.Add(created.Value);
+
+        audit.Append(AuditEntry.Record(
+            created.Value.Id,
+            AuditAction.EnvironmentCreated,
+            GovernanceActor.Unknown,
+            created.Value.Name.Value,
+            clock.GetUtcNow(),
+            $"registration {created.Value.RegistrationPolicy}, default " +
+            $"{WireTokens.For(created.Value.DefaultCompatibilityPolicy.Mode)}/" +
+            $"{WireTokens.For(created.Value.DefaultCompatibilityPolicy.Surface)}"));
+
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return Result<Environment>.Success(created.Value);
@@ -144,7 +157,7 @@ public sealed class CreateEnvironmentHandler(
 
 /// <summary>Handles <see cref="UpdateEnvironmentCommand"/>.</summary>
 public sealed class UpdateEnvironmentHandler(
-    IEnvironmentRepository environments, IUnitOfWork unitOfWork)
+    IEnvironmentRepository environments, IAuditLog audit, IUnitOfWork unitOfWork, TimeProvider clock)
     : ICommandHandler<UpdateEnvironmentCommand, Environment>
 {
     /// <inheritdoc />
@@ -196,6 +209,16 @@ public sealed class UpdateEnvironmentHandler(
             environment.SetRegistrationPolicy(registration!.Value);
         }
 
+        audit.Append(AuditEntry.Record(
+            environment.Id,
+            AuditAction.EnvironmentUpdated,
+            GovernanceActor.Unknown,
+            environment.Name.Value,
+            clock.GetUtcNow(),
+            $"registration {environment.RegistrationPolicy}, default " +
+            $"{WireTokens.For(environment.DefaultCompatibilityPolicy.Mode)}/" +
+            $"{WireTokens.For(environment.DefaultCompatibilityPolicy.Surface)}"));
+
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return Result<Environment>.Success(environment);
     }
@@ -203,7 +226,7 @@ public sealed class UpdateEnvironmentHandler(
 
 /// <summary>Handles <see cref="AddBrokerCommand"/>.</summary>
 public sealed class AddBrokerHandler(
-    IEnvironmentRepository environments, IUnitOfWork unitOfWork)
+    IEnvironmentRepository environments, IAuditLog audit, IUnitOfWork unitOfWork, TimeProvider clock)
     : ICommandHandler<AddBrokerCommand, Environment>
 {
     /// <inheritdoc />
@@ -234,6 +257,14 @@ public sealed class AddBrokerHandler(
             return Result<Environment>.Failure(added.Error!);
         }
 
+        audit.Append(AuditEntry.Record(
+            found.Value.Id,
+            AuditAction.BrokerAdded,
+            GovernanceActor.Unknown,
+            broker.Value.DisplayName,
+            clock.GetUtcNow(),
+            $"{broker.Value.Uri} vhost {broker.Value.VirtualHost}"));
+
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return Result<Environment>.Success(found.Value);
     }
@@ -241,7 +272,7 @@ public sealed class AddBrokerHandler(
 
 /// <summary>Handles <see cref="RemoveBrokerCommand"/>.</summary>
 public sealed class RemoveBrokerHandler(
-    IEnvironmentRepository environments, IUnitOfWork unitOfWork)
+    IEnvironmentRepository environments, IAuditLog audit, IUnitOfWork unitOfWork, TimeProvider clock)
     : ICommandHandler<RemoveBrokerCommand, Environment>
 {
     /// <inheritdoc />
@@ -258,11 +289,24 @@ public sealed class RemoveBrokerHandler(
             return found;
         }
 
+        // Captured before removal: afterwards there is nothing left to name in the entry, and
+        // "which broker was removed" is the only thing anyone will ask this row.
+        var label = found.Value.Brokers
+            .FirstOrDefault(b => b.Id == command.BrokerId)?.DisplayName
+            ?? command.BrokerId.ToString();
+
         var removed = found.Value.RemoveBroker(command.BrokerId);
         if (removed.IsFailure)
         {
             return Result<Environment>.Failure(removed.Error!);
         }
+
+        audit.Append(AuditEntry.Record(
+            found.Value.Id,
+            AuditAction.BrokerRemoved,
+            GovernanceActor.Unknown,
+            label,
+            clock.GetUtcNow()));
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return Result<Environment>.Success(found.Value);
@@ -451,7 +495,9 @@ public sealed record RemoveBrokerCredentialCommand(string? EnvironmentName, Guid
 public sealed class SetBrokerCredentialHandler(
     IEnvironmentRepository environments,
     ICredentialStore credentials,
-    IUnitOfWork unitOfWork)
+    IAuditLog audit,
+    IUnitOfWork unitOfWork,
+    TimeProvider clock)
     : ICommandHandler<SetBrokerCredentialCommand, Environment>
 {
     /// <inheritdoc />
@@ -490,6 +536,16 @@ public sealed class SetBrokerCredentialHandler(
 
         broker.SetCredentialRef(reference);
 
+        // The detail carries the broker and nothing else. Not the username, not the reference,
+        // and obviously not the secret: this is the one entry whose whole purpose is to record
+        // that a credential changed, in a table designed to be read widely.
+        audit.Append(AuditEntry.Record(
+            found.Value.Id,
+            AuditAction.BrokerCredentialSet,
+            GovernanceActor.Unknown,
+            broker.DisplayName,
+            clock.GetUtcNow()));
+
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return Result<Environment>.Success(found.Value);
     }
@@ -499,7 +555,9 @@ public sealed class SetBrokerCredentialHandler(
 public sealed class RemoveBrokerCredentialHandler(
     IEnvironmentRepository environments,
     ICredentialStore credentials,
-    IUnitOfWork unitOfWork)
+    IAuditLog audit,
+    IUnitOfWork unitOfWork,
+    TimeProvider clock)
     : ICommandHandler<RemoveBrokerCredentialCommand, Environment>
 {
     /// <inheritdoc />
@@ -529,6 +587,13 @@ public sealed class RemoveBrokerCredentialHandler(
             // unreachable ciphertext row behind for as long as the database lives.
             await credentials.RemoveAsync(reference, cancellationToken).ConfigureAwait(false);
             broker.SetCredentialRef(null);
+
+            audit.Append(AuditEntry.Record(
+                found.Value.Id,
+                AuditAction.BrokerCredentialRemoved,
+                GovernanceActor.Unknown,
+                broker.DisplayName,
+                clock.GetUtcNow()));
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

@@ -19,6 +19,18 @@ public enum VersionStatus
     /// what was attempted survives.
     /// </summary>
     Rejected = 3,
+
+    /// <summary>
+    /// A proposal that stopped being proposed: the change was reverted before anyone reviewed
+    /// it (M7.4).
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not <see cref="Rejected"/>. Rejection is a reviewer's judgement that the
+    /// change was wrong, and it is what an approvals queue, a notification and an audit trail
+    /// all report. A dismissal says only that nobody is asking any more — recording it as a
+    /// rejection would attribute a decision to a reviewer who never made one.
+    /// </remarks>
+    Dismissed = 4,
 }
 
 /// <summary>
@@ -123,6 +135,17 @@ public sealed class SchemaVersion
         Status = VersionStatus.Rejected;
         DecidedAt = at;
         DecidedBy = by;
+    }
+
+    /// <remarks>
+    /// <see cref="DecidedBy"/> is left null on purpose: nobody decided. The pair of a
+    /// <see cref="VersionStatus.Dismissed"/> status and a null decider is what distinguishes an
+    /// abandoned proposal from a reviewed one in every report that reads this row.
+    /// </remarks>
+    internal void Dismiss(DateTimeOffset at)
+    {
+        Status = VersionStatus.Dismissed;
+        DecidedAt = at;
     }
 
     internal void MarkDeprecated() => Deprecated = true;

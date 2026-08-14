@@ -62,6 +62,113 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                     b.ToTable("contract", (string)null);
                 });
 
+            modelBuilder.Entity("Concordat.Domain.Governance.AuditEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("audit_id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("action");
+
+                    b.Property<string>("Actor")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("actor");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("detail");
+
+                    b.Property<Guid?>("EnvironmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("environment_id");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("target");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "At")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_audit_tenant_at");
+
+                    b.HasIndex("TenantId", "EnvironmentId", "At")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_audit_tenant_environment_at");
+
+                    b.HasIndex("TenantId", "Target", "At")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_audit_tenant_target_at");
+
+                    b.ToTable("audit_entry", (string)null);
+                });
+
+            modelBuilder.Entity("Concordat.Domain.Governance.ServiceRegistration", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("service_id");
+
+                    b.Property<string>("Consumes")
+                        .IsRequired()
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)")
+                        .HasColumnName("consumes");
+
+                    b.Property<Guid>("EnvironmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("environment_id");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen_at");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Produces")
+                        .IsRequired()
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)")
+                        .HasColumnName("produces");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "EnvironmentId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_service_tenant_environment_name");
+
+                    b.ToTable("service_registration", (string)null);
+                });
+
             modelBuilder.Entity("Concordat.Domain.Registry.Environment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -190,6 +297,10 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("owner");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")

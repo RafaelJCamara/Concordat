@@ -1,4 +1,5 @@
 using Concordat.Application.Abstractions;
+using Concordat.Domain.Governance;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 using Concordat.Formats.Abstractions;
@@ -22,7 +23,7 @@ public sealed record CreateSubjectCommand(
 
 /// <summary>Handles <see cref="CreateSubjectCommand"/>.</summary>
 public sealed class CreateSubjectHandler(
-    ISubjectRepository subjects, IUnitOfWork unitOfWork, TimeProvider clock)
+    ISubjectRepository subjects, IAuditLog audit, IUnitOfWork unitOfWork, TimeProvider clock)
     : ICommandHandler<CreateSubjectCommand, Subject>
 {
     /// <inheritdoc />
@@ -68,6 +69,15 @@ public sealed class CreateSubjectHandler(
         }
 
         subjects.Add(subject.Value);
+
+        audit.Append(AuditEntry.Record(
+            command.EnvironmentId,
+            AuditAction.SubjectCreated,
+            owner.Value,
+            name.Value.Value,
+            clock.GetUtcNow(),
+            $"{WireTokens.For(command.Format)}, {WireTokens.For(command.ContentModel)}"));
+
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return subject;

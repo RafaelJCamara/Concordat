@@ -126,15 +126,13 @@ promote.SetAction(async (parse, token) =>
     try
     {
         using var sourceHttp = NewHttpClient(parse);
-        using var targetHttp = NewHttpClient(parse);
 
         return await PushCommand.PromoteAsync(
             new RegistryApi(sourceHttp, parse.GetValue(fromEnvOption)!),
-            new RegistryApi(targetHttp, parse.GetValue(toEnvOption)!),
+            parse.GetValue(toEnvOption)!,
             output,
             parse.GetValue(subjectArgument)!,
             parse.GetValue(ordinalOption)!,
-            parse.GetValue(ownerOption)!,
             parse.GetValue(byOption)!,
             token).ConfigureAwait(false);
     }
@@ -156,6 +154,37 @@ diff.SetAction((parse, token) => Run(parse, (api, output) =>
     InspectCommands.DiffAsync(
         api, output, parse.GetValue(subjectArgument)!,
         parse.GetValue(fromOrdinal), parse.GetValue(toOrdinal), token)));
+
+// ---- impact ----
+var impactFileOption = new Option<string?>("--file")
+{
+    Description = "A candidate schema to analyse before registering it.",
+};
+
+var impactVersionOption = new Option<int?>("--version")
+{
+    Description = "A registered ordinal to analyse. Defaults to the subject's latest.",
+};
+
+var warnOnlyOption = new Option<bool>("--warn-only")
+{
+    Description = "Report breakage without failing. For brownfield estates being worked through.",
+};
+
+var impact = new Command("impact", "Show which registered consumers a change would break.");
+impact.Add(subjectArgument);
+impact.Add(impactFileOption);
+impact.Add(impactVersionOption);
+impact.Add(warnOnlyOption);
+impact.SetAction((parse, token) => Run(parse, (api, output) =>
+    ImpactCommand.RunAsync(
+        api,
+        output,
+        parse.GetValue(subjectArgument)!,
+        parse.GetValue(impactFileOption),
+        parse.GetValue(impactVersionOption),
+        parse.GetValue(warnOnlyOption),
+        token)));
 
 // ---- export ----
 var export = new Command("export", "Write an environment's contracts to disk.");
@@ -262,6 +291,7 @@ root.Add(lint);
 root.Add(infer);
 root.Add(push);
 root.Add(promote);
+root.Add(impact);
 root.Add(diff);
 root.Add(export);
 

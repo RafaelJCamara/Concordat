@@ -37,6 +37,7 @@ public static class ProblemDetailsMapping
         ConcordatCodes.EnvironmentNotFound => StatusCodes.Status404NotFound,
         ConcordatCodes.BrokerNotFound => StatusCodes.Status404NotFound,
         ConcordatCodes.ContractNotFound => StatusCodes.Status404NotFound,
+        ConcordatCodes.ServiceNotFound => StatusCodes.Status404NotFound,
 
         // State conflicts: the request was well-formed but the world says no.
         ConcordatCodes.SubjectAlreadyExists => StatusCodes.Status409Conflict,
@@ -46,6 +47,9 @@ public static class ProblemDetailsMapping
 
         // The request is well-formed; it is the existing bindings that refuse it.
         ConcordatCodes.BindingConflict => StatusCodes.Status409Conflict,
+
+        // The source version exists but is not something that may be promoted.
+        ConcordatCodes.PromotionSourceNotActive => StatusCodes.Status409Conflict,
         ConcordatCodes.SubjectRetired => StatusCodes.Status409Conflict,
         ConcordatCodes.LifecycleTransitionInvalid => StatusCodes.Status409Conflict,
         ConcordatCodes.VersionNotAwaitingApproval => StatusCodes.Status409Conflict,

@@ -103,6 +103,70 @@ public sealed record VersionDetail(
 /// <param name="Schema">The canonical text.</param>
 public sealed record SchemaDetail(string SchemaId, string Format, string Schema);
 
+/// <summary>Request body for promoting a version (M7.4).</summary>
+/// <param name="ToEnvironment">Where it is going.</param>
+/// <param name="Version">Which version, or null for the source's latest.</param>
+/// <param name="PromotedBy">Who is promoting.</param>
+public sealed record PromoteRequest(string ToEnvironment, int? Version, string? PromotedBy);
+
+/// <summary>What the registry did with a promotion (M7.4).</summary>
+/// <param name="Subject">The subject.</param>
+/// <param name="FromEnvironment">Where it came from.</param>
+/// <param name="ToEnvironment">Where it went.</param>
+/// <param name="SourceOrdinal">The version promoted.</param>
+/// <param name="TargetOrdinal">The ordinal it landed on.</param>
+/// <param name="SchemaId">The content-addressed id, identical in both environments.</param>
+/// <param name="Status"><c>ACTIVE</c>, or <c>AWAITING_APPROVAL</c> when the target disagrees.</param>
+/// <param name="Created">False when the target was already at this content.</param>
+/// <param name="SubjectCreated">Whether the target subject was created by this promotion.</param>
+public sealed record PromoteResult(
+    string Subject,
+    string FromEnvironment,
+    string ToEnvironment,
+    int SourceOrdinal,
+    int TargetOrdinal,
+    string SchemaId,
+    string Status,
+    bool Created,
+    bool SubjectCreated);
+
+/// <summary>Request body for asking who breaks (M7.4).</summary>
+/// <param name="Schema">An unregistered candidate, or null to analyse a stored version.</param>
+/// <param name="Version">Which stored version, when no candidate is supplied.</param>
+public sealed record ImpactRequest(string? Schema, int? Version);
+
+/// <summary>What a change does to one registered consumer (M7.4).</summary>
+/// <param name="Service">The service name.</param>
+/// <param name="Selector">What it declared.</param>
+/// <param name="ReaderOrdinal">The version its verdict was computed against.</param>
+/// <param name="Breaks">Whether the change stops it reading new messages.</param>
+/// <param name="Certainty"><c>CHECKED</c>, <c>FOLLOWS_LATEST</c> or <c>UNRESOLVABLE</c>.</param>
+/// <param name="Stale">Whether nothing has been heard from it in a long time.</param>
+/// <param name="Reasons">The divergences that break it.</param>
+public sealed record ConsumerImpact(
+    string Service,
+    string Selector,
+    int? ReaderOrdinal,
+    bool Breaks,
+    string Certainty,
+    bool Stale,
+    IReadOnlyList<string> Reasons);
+
+/// <summary>The registry's answer to "who breaks?" (M7.4).</summary>
+/// <param name="Subject">The subject analysed.</param>
+/// <param name="CandidateOrdinal">The version analysed, or null for an unregistered candidate.</param>
+/// <param name="CandidateSchemaId">The candidate's content-addressed id.</param>
+/// <param name="BreakingCount">How many registered consumers break.</param>
+/// <param name="Consumers">Every registered consumer, breaking ones first.</param>
+/// <param name="Contracts">The contracts whose bindings carry this subject.</param>
+public sealed record ImpactResult(
+    string Subject,
+    int? CandidateOrdinal,
+    string? CandidateSchemaId,
+    int BreakingCount,
+    IReadOnlyList<ConsumerImpact> Consumers,
+    IReadOnlyList<string> Contracts);
+
 /// <summary>The tokens the registry uses for a version's status.</summary>
 public static class VersionStatuses
 {
@@ -202,6 +266,58 @@ public sealed class RegistryApi(HttpClient http, string environment)
 
         await EnsureAsync(response, cancellationToken).ConfigureAwait(false);
         return true;
+    }
+
+    /// <summary>Promotes a version into another environment (M7.4).</summary>
+    /// <param name="subject">The subject.</param>
+    /// <param name="toEnvironment">Where it is going.</param>
+    /// <param name="ordinal">Which version, or null for the source's latest.</param>
+    /// <param name="by">Who is promoting.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>What the registry did.</returns>
+    /// <remarks>
+    /// One server-side call, replacing the four-call client-side composition this command used
+    /// to be. The composition was not merely chattier: it created the target subject with a
+    /// hard-coded JSON format, so promoting an Avro or Protobuf subject into a fresh
+    /// environment produced a subject of the wrong language that then rejected its own schema.
+    /// </remarks>
+    public async Task<PromoteResult> PromoteAsync(
+        string subject,
+        string toEnvironment,
+        int? ordinal,
+        string by,
+        CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(
+            HttpMethod.Post,
+            $"{Root}/subjects/{Uri.EscapeDataString(subject)}/promote",
+            JsonContent.Create(
+                new PromoteRequest(toEnvironment, ordinal, by),
+                RegistryJson.Default.PromoteRequest),
+            cancellationToken).ConfigureAwait(false);
+
+        return await ReadAsync(response, RegistryJson.Default.PromoteResult, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>Asks which registered consumers a change would break (M7.4).</summary>
+    /// <param name="subject">The subject.</param>
+    /// <param name="schema">An unregistered candidate, or null to analyse a stored version.</param>
+    /// <param name="ordinal">Which stored version, when no candidate is supplied.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The report.</returns>
+    public async Task<ImpactResult> ImpactAsync(
+        string subject, string? schema, int? ordinal, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(
+            HttpMethod.Post,
+            $"{Root}/subjects/{Uri.EscapeDataString(subject)}/impact",
+            JsonContent.Create(
+                new ImpactRequest(schema, ordinal), RegistryJson.Default.ImpactRequest),
+            cancellationToken).ConfigureAwait(false);
+
+        return await ReadAsync(response, RegistryJson.Default.ImpactResult, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Lists subjects in the environment.</summary>
@@ -338,9 +454,15 @@ public sealed class RegistryApi(HttpClient http, string environment)
             // A proxy returning HTML. Fall through to the status code.
         }
 
+        // A 4xx is an answer, not an outage. Collapsing both into "registry unavailable" told a
+        // pipeline to retry a request the registry had already deliberately refused, and hid a
+        // missing subject behind an infrastructure exit code. 5xx and transport failures keep
+        // exit 3, which is the one a retry is actually appropriate for.
+        var status = (int)response.StatusCode;
+
         throw new RegistryException(
-            ExitCodes.RegistryUnavailable,
+            status is >= 400 and < 500 ? ExitCodes.ContractViolation : ExitCodes.RegistryUnavailable,
             code ?? "registry_refused",
-            detail ?? $"The registry answered {(int)response.StatusCode} {response.ReasonPhrase}.");
+            detail ?? $"The registry answered {status} {response.ReasonPhrase}.");
     }
 }

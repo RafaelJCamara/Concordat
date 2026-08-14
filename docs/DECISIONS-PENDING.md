@@ -327,6 +327,42 @@ addressable.
 > a human-facing governance artefact where `Orders — EU` is a reasonable thing to want to
 > write, unlike a subject name, which is a wire identifier.
 
+### 23. A subject can be registered in an environment that does not exist, and then cannot be promoted
+
+`IEnvironmentResolver` derives an `EnvironmentId` by hashing the name (M1.6, recorded below),
+so `POST /v1/environments/dev/subjects` works whether or not anyone ever created `dev`. M7.4 is
+where that stops being harmless: **promotion and impact analysis both require a real
+`Environment` row**, because they read the target's compatibility policy and a derived id has
+no policy to read. The CLI's own tests had to start creating environments to keep passing.
+
+So an estate can be in a state where subjects register happily and promotion refuses with
+`environment_not_found`, which reads as a bug rather than a missing setup step.
+
+> **Options:** (a) auto-create the `Environment` row on first use, with defaults — makes the
+> derived path a real path; (b) refuse registration into an environment that does not exist,
+> which is the honest model but breaks the zero-setup first run the quickstart relies on;
+> (c) leave it, and make the error message say "create the environment first".
+>
+> **Recommendation:** (a). The derived id is already deterministic, so auto-creating a row with
+> that id is not a migration — it is filling in the record that was always implied. It also
+> retires the "needs an M7 migration" note below rather than deferring it again.
+
+### 24. The audit trail records successful changes only
+
+By construction: entries are appended to the same unit of work as the change, so a refused
+request — which never reaches a commit — leaves nothing behind. That is what makes the trail
+incapable of disagreeing with the data, and it is the right trade today.
+
+**It stops being the right trade in [M8](plan/M8-identity.md).** An authorization denial is
+exactly what an auditor opens the log to find, and `403 insufficient_scope` will produce no row
+at all. Recording refusals needs a second write path that is explicitly *not* transactional
+with the thing that did not happen, which is a different mechanism, not a bigger switch
+statement.
+
+> **Recommendation:** decide it with M8 rather than now, but decide it *deliberately* — the
+> tempting shortcut is to append refusals on the same path, which reintroduces exactly the
+> "audit row survives a rolled-back change" failure this design avoids.
+
 ### 15. Hard-delete semantics — before v1 ships
 
 M1.5 implements soft delete (`Subject.Retire()`) and never deletes schemas, which is what
@@ -481,6 +517,22 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | `resolve` answers an unmatched route with `{contract: null, enforcement: "OFF"}` rather than omitting it | M7.3 | Low, but it is the contract with the SDK: the answers are positional, and "ungoverned" must be distinguishable from "not asked" |
 | A binding's subjects are one `subject@selector` text column, not a child table | M7.3, `ContractConfiguration` | Low, needs a migration. The value comparer is load-bearing — without it EF compares by reference and an edited binding is silently never written |
 | `resolve` is `POST`, not `GET` with a query string | M7.3 | Low. A whole topology does not fit in a URL, and the request is a body-shaped question even though it is a read |
+| Impact analysis is evaluated **FORWARD**, not under the subject's own policy | [M7.4](plan/M7-governance.md) | Low, and it is the feature. Registration asks "can the new schema read old data"; impact asks the opposite question about a different party. Getting this backwards would report every added required field as breaking every consumer |
+| The surface comes from the subject's effective policy; only the mode is forced | M7.4 | Low. A subject governed at `WIRE` tolerates JSON-name changes by design, and reporting its consumers as broken by one would contradict the verdict the registry gave the change |
+| A `latest` consumer is reported as `FOLLOWS_LATEST`, never as safe or broken | M7.4 | Low, but user-visible: it is a third answer, and tools have to handle it |
+| A range selector is judged at its floor | M7.4 | Low. `>=1` claims to handle version 1 onward, so version 1 is the reader that has to survive |
+| A service registration is keyed on (environment, name); instances are not recorded | M7.4 | Low. Recording instances would turn a rolling deploy into fifty rows that all say the same thing |
+| Registrations go stale after **30 days**, reported not hidden | M7.4 | Low, and it is a reporting hint only — never a reason to drop a consumer from the report |
+| Audit entries are written in the same transaction as the change; refusals are not recorded | M7.4 | **Revisit at M8** — see #24 |
+| Health checks are deliberately not audited | M7.4 | Low. A probe on a timer would produce most of the rows in the table |
+| A breaking promotion lands as `AWAITING_APPROVAL` rather than being refused | M7.4 | Low, but user-visible. ADR-017 applied consistently; refusing would make promotion the one operation whose breaking changes cannot be reviewed |
+| Promotion **creates** the target subject when absent, carrying the source's format, owner and content model | M7.4 | Low, and it contradicts M1.6's "no implicit creation" on purpose: promotion is precisely the flow where the target legitimately does not exist yet. It also removes a real bug — the CLI's client-side promotion hard-coded JSON |
+| A schema-id mismatch across environments **throws** rather than returning a failure | M7.4 | Low. It means content addressing is broken, which is a defect in the registry, not something the caller can fix by asking differently |
+| `VersionStatus.Dismissed` is a fourth state, not a reuse of `Rejected` | M7.4 | Low, needs a migration. Rejection is a reviewer's judgement; a dismissal says only that nobody is asking any more, and it names no decider |
+| Dismissed **and** rejected semver labels are excluded from the increasing-label check | M7.4 | Low, and required: a withdrawn `2.0.0` would otherwise strand the subject's version line forever |
+| `Subject.Revision` exists to dirty the root row so `xmin` engages | M7.4 | Low, needs a migration. It closed a hole that already existed: `Reject` touches only a child row and slipped past optimistic concurrency entirely |
+| A CLI `4xx` is now exit **1**, not exit 3 | M7.4, `RegistryApi.EnsureAsync` | Low, but it changes what a pipeline does. Exit 3 means "retry, the registry is down"; a deliberate refusal was telling CI to retry until timeout |
+| `concordat impact` gates by default; `--warn-only` opts out | M7.4 | Low, and it matches `check`. A warning in a log nobody reads is not a gate |
 
 ---
 

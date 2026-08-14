@@ -1,3 +1,4 @@
+using System.Globalization;
 using Concordat.Domain.Registry;
 
 namespace Concordat.Cli.Commands;
@@ -143,21 +144,27 @@ public static class PushCommand
     /// <summary>
     /// <c>concordat promote</c> — copies a subject's version from one environment to another.
     /// </summary>
-    /// <param name="source">The environment to read from.</param>
-    /// <param name="target">The environment to write to.</param>
+    /// <param name="source">The registry client, bound to the source environment.</param>
     /// <param name="output">Where results go.</param>
     /// <param name="subject">The subject.</param>
+    /// <param name="targetEnvironment">The environment to promote into.</param>
     /// <param name="ordinal">The ordinal to promote, or <c>latest</c>.</param>
-    /// <param name="owner">Owner recorded if the subject is new in the target.</param>
     /// <param name="by">Who is promoting.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>An <see cref="ExitCodes"/> value.</returns>
     /// <remarks>
     /// <para>
-    /// Promotion is a composition of existing operations rather than a new endpoint, and it
-    /// works because schema ids are content-addressed (ADR-015): the id in <c>prod</c> is the
-    /// same id as in <c>staging</c>, so a message published before promotion stays valid after
-    /// it. The command asserts that rather than assuming it.
+    /// <b>One server-side call as of M7.4</b>, where this used to be a four-call client-side
+    /// composition. The composition was not merely chattier: it created the target subject with
+    /// a hard-coded JSON format, so promoting an Avro or Protobuf subject into a fresh
+    /// environment produced a subject of the wrong language which then rejected its own schema.
+    /// It also had no transaction, so a failure between the create and the register left a
+    /// subject with no versions.
+    /// </para>
+    /// <para>
+    /// The registry re-checks the schema against the target's history under the target's policy
+    /// and asserts that the content-addressed id (ADR-015) did not change — a message published
+    /// before the promotion stays valid after it.
     /// </para>
     /// <para>
     /// It deliberately promotes <em>one</em> subject, not a whole environment. Bulk promotion
@@ -167,67 +174,46 @@ public static class PushCommand
     /// </remarks>
     public static async Task<int> PromoteAsync(
         RegistryApi source,
-        RegistryApi target,
+        string targetEnvironment,
         Output output,
         string subject,
         string ordinal,
-        string owner,
         string by,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(source);
-        ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(output);
 
-        var version = await source.GetVersionAsync(subject, ordinal, cancellationToken).ConfigureAwait(false);
+        int? wanted = null;
 
-        if (version is null)
+        if (!string.Equals(ordinal, "latest", StringComparison.OrdinalIgnoreCase))
         {
-            return output.Fail(
-                ExitCodes.ContractViolation,
-                "version_not_found",
-                $"'{subject}' has no version '{ordinal}' in the source environment.");
+            if (!int.TryParse(ordinal, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed))
+            {
+                return output.Fail(
+                    ExitCodes.UsageError,
+                    "version_selector_invalid",
+                    $"'{ordinal}' is not a version. Expected an ordinal or 'latest'.");
+            }
+
+            wanted = parsed;
         }
 
-        // A version carries its schema id, not its text, so the document is a second call.
-        var schema = await source.GetSchemaTextAsync(version.SchemaId, cancellationToken)
+        var result = await source.PromoteAsync(subject, targetEnvironment, wanted, by, cancellationToken)
             .ConfigureAwait(false);
-
-        if (string.IsNullOrWhiteSpace(schema))
-        {
-            return output.Fail(
-                ExitCodes.RegistryUnavailable,
-                "schema_unresolvable",
-                $"The source knows v{version.Ordinal} of '{subject}' but not schema {version.SchemaId}.");
-        }
-
-        await target.CreateSubjectAsync(subject, WireTokens.FormatJson, owner, cancellationToken)
-            .ConfigureAwait(false);
-
-        var result = await target.RegisterAsync(
-            subject, schema, version.SemanticVersion, by, cancellationToken).ConfigureAwait(false);
-
-        // Content addressing is what makes promotion safe. If the ids ever differed, a message
-        // in flight during a promotion would be pinned to an id the target had never heard of,
-        // so this is asserted rather than trusted.
-        if (!string.Equals(result.SchemaId, version.SchemaId, StringComparison.Ordinal))
-        {
-            return output.Fail(
-                ExitCodes.InternalError,
-                "schema_id_mismatch",
-                $"Promotion changed the schema id, from {version.SchemaId} to {result.SchemaId}. " +
-                "Identical content must produce an identical id (ADR-015); this indicates the two " +
-                "environments are canonicalising differently.");
-        }
 
         output.Document(
             new PromoteReport(
-                true, subject, result.SchemaId, version.Ordinal, result.Ordinal,
+                true, result.Subject, result.SchemaId, result.SourceOrdinal, result.TargetOrdinal,
                 result.Status, result.Created),
             CliJson.Default.PromoteReport);
 
+        var created = result.SubjectCreated ? "  (subject created in target)" : string.Empty;
+
         output.Line(
-            $"{subject}  v{version.Ordinal} → v{result.Ordinal}  {result.SchemaId}  {result.Status}");
+            $"{result.Subject}  {result.FromEnvironment} v{result.SourceOrdinal} → " +
+            $"{result.ToEnvironment} v{result.TargetOrdinal}  {result.SchemaId}  " +
+            $"{result.Status}{created}");
 
         return ExitCodes.Success;
     }

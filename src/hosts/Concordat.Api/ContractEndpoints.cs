@@ -348,13 +348,7 @@ public sealed record ContractResponse(
     }
 
     // Explicit, not the uppercased member name -- the class of bug M6.1 found across the API.
-    internal static string EnforcementToken(EnforcementMode mode) => mode switch
-    {
-        EnforcementMode.Off => "OFF",
-        EnforcementMode.Monitor => "MONITOR",
-        EnforcementMode.Enforce => "ENFORCE",
-        _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null),
-    };
+    internal static string EnforcementToken(EnforcementMode mode) => WireTokens.For(mode);
 }
 
 /// <summary>What a contract says about one route or queue.</summary>

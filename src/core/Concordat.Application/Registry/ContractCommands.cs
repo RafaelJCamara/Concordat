@@ -1,5 +1,6 @@
 using Concordat.Application.Abstractions;
 using Concordat.Domain.Contracts;
+using Concordat.Domain.Governance;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 
@@ -116,6 +117,7 @@ public sealed record ResolveContractsQuery(
 public sealed class CreateContractHandler(
     IEnvironmentRepository environments,
     IContractRepository contracts,
+    IAuditLog audit,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
     : ICommandHandler<CreateContractCommand, Contract>
@@ -160,6 +162,15 @@ public sealed class CreateContractHandler(
         }
 
         contracts.Add(created.Value);
+
+        audit.Append(AuditEntry.Record(
+            environment.Value.Id,
+            AuditAction.ContractCreated,
+            GovernanceActor.Unknown,
+            created.Value.Name,
+            clock.GetUtcNow(),
+            WireTokens.For(created.Value.Enforcement)));
+
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return created;
@@ -170,7 +181,9 @@ public sealed class CreateContractHandler(
 public sealed class AddPublishBindingHandler(
     IEnvironmentRepository environments,
     IContractRepository contracts,
-    IUnitOfWork unitOfWork)
+    IAuditLog audit,
+    IUnitOfWork unitOfWork,
+    TimeProvider clock)
     : ICommandHandler<AddPublishBindingCommand, Contract>
 {
     /// <inheritdoc />
@@ -218,6 +231,15 @@ public sealed class AddPublishBindingHandler(
             return Result<Contract>.Failure(added.Error!);
         }
 
+        audit.Append(AuditEntry.Record(
+            found.Value.EnvironmentId,
+            AuditAction.ContractBindingAdded,
+            GovernanceActor.Unknown,
+            found.Value.Name,
+            clock.GetUtcNow(),
+            $"publish {command.Exchange.Trim()} / {pattern.Value} -> " +
+            $"{string.Join(", ", refs.Select(r => $"{r.Subject.Value}@{r.Selector}"))}"));
+
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return found;
     }
@@ -227,7 +249,9 @@ public sealed class AddPublishBindingHandler(
 public sealed class AddConsumeBindingHandler(
     IEnvironmentRepository environments,
     IContractRepository contracts,
-    IUnitOfWork unitOfWork)
+    IAuditLog audit,
+    IUnitOfWork unitOfWork,
+    TimeProvider clock)
     : ICommandHandler<AddConsumeBindingCommand, Contract>
 {
     /// <inheritdoc />
@@ -267,6 +291,15 @@ public sealed class AddConsumeBindingHandler(
             return Result<Contract>.Failure(added.Error!);
         }
 
+        audit.Append(AuditEntry.Record(
+            found.Value.EnvironmentId,
+            AuditAction.ContractBindingAdded,
+            GovernanceActor.Unknown,
+            found.Value.Name,
+            clock.GetUtcNow(),
+            $"consume {command.Queue.Trim()} -> " +
+            $"{string.Join(", ", refs.Select(r => $"{r.Subject.Value}@{r.Selector}"))}"));
+
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return found;
     }
@@ -276,7 +309,9 @@ public sealed class AddConsumeBindingHandler(
 public sealed class SetContractEnforcementHandler(
     IEnvironmentRepository environments,
     IContractRepository contracts,
-    IUnitOfWork unitOfWork)
+    IAuditLog audit,
+    IUnitOfWork unitOfWork,
+    TimeProvider clock)
     : ICommandHandler<SetContractEnforcementCommand, Contract>
 {
     /// <inheritdoc />
@@ -301,6 +336,14 @@ public sealed class SetContractEnforcementHandler(
         }
 
         found.Value.SetEnforcement(mode ?? EnforcementMode.Monitor);
+
+        audit.Append(AuditEntry.Record(
+            found.Value.EnvironmentId,
+            AuditAction.ContractEnforcementChanged,
+            GovernanceActor.Unknown,
+            found.Value.Name,
+            clock.GetUtcNow(),
+            WireTokens.For(found.Value.Enforcement)));
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return found;

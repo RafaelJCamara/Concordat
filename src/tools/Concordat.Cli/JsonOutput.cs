@@ -64,6 +64,21 @@ public sealed record PromoteReport(
     string Status,
     bool Created);
 
+/// <summary>The result of <c>concordat impact</c>.</summary>
+/// <param name="Ok">False when a consumer breaks, so a pipeline can gate on it.</param>
+/// <param name="Subject">The subject analysed.</param>
+/// <param name="SchemaId">The candidate's content-addressed id.</param>
+/// <param name="BreakingCount">How many registered consumers break.</param>
+/// <param name="Consumers">Every registered consumer, breaking ones first.</param>
+/// <param name="Contracts">The contracts whose bindings carry this subject.</param>
+public sealed record ImpactReport(
+    bool Ok,
+    string Subject,
+    string? SchemaId,
+    int BreakingCount,
+    IReadOnlyList<ConsumerImpact> Consumers,
+    IReadOnlyList<string> Contracts);
+
 /// <summary>One contract written by <c>concordat export</c>.</summary>
 /// <param name="Subject">The subject.</param>
 /// <param name="Path">Where it was written.</param>
@@ -150,6 +165,7 @@ public sealed record CreateSubjectRequest(string Name, string Format, string Own
 [JsonSerializable(typeof(LintReport))]
 [JsonSerializable(typeof(PushReport))]
 [JsonSerializable(typeof(PromoteReport))]
+[JsonSerializable(typeof(ImpactReport))]
 [JsonSerializable(typeof(ExportReport))]
 [JsonSerializable(typeof(InferReport))]
 [JsonSerializable(typeof(DiffResult))]
@@ -172,4 +188,8 @@ public sealed partial class CliJson : JsonSerializerContext;
 [JsonSerializable(typeof(VersionDetail))]
 [JsonSerializable(typeof(SchemaDetail))]
 [JsonSerializable(typeof(List<SubjectSummary>))]
+[JsonSerializable(typeof(PromoteRequest))]
+[JsonSerializable(typeof(PromoteResult))]
+[JsonSerializable(typeof(ImpactRequest))]
+[JsonSerializable(typeof(ImpactResult))]
 public sealed partial class RegistryJson : JsonSerializerContext;

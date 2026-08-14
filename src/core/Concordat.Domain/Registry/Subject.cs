@@ -11,7 +11,21 @@ namespace Concordat.Domain.Registry;
 /// allocated. Registration is idempotent at the tip so a retried publish does not inflate the
 /// version history.
 /// </param>
-public sealed record RegistrationOutcome(SchemaVersion Version, bool Created);
+/// <param name="Dismissed">
+/// The ordinals of proposals abandoned by this registration, if any (M7.4). Empty in the
+/// normal case.
+/// </param>
+public sealed record RegistrationOutcome(
+    SchemaVersion Version, bool Created, IReadOnlyList<int> Dismissed)
+{
+    /// <summary>An outcome that abandoned nothing.</summary>
+    /// <param name="version">The version.</param>
+    /// <param name="created">Whether an ordinal was allocated.</param>
+    public RegistrationOutcome(SchemaVersion version, bool created)
+        : this(version, created, [])
+    {
+    }
+}
 
 /// <summary>
 /// A versioned contract for one message type, and the aggregate root that owns every
@@ -108,6 +122,26 @@ public sealed class Subject
 
     /// <summary>The lifecycle state.</summary>
     public SubjectLifecycle Lifecycle { get; private set; }
+
+    /// <summary>
+    /// How many times this subject has been mutated.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Its job is to make the root row dirty, and that is not incidental.</b> Optimistic
+    /// concurrency is enforced by PostgreSQL's <c>xmin</c>, which only changes when the
+    /// <em>subject</em> row is updated — inserting or editing a child <c>schema_version</c> row
+    /// alone does not bump it. <see cref="RegisterVersion"/> used to be safe only by accident,
+    /// because it happened to move the latest pointer; <see cref="Reject"/> and
+    /// <see cref="DismissPending"/> touch nothing but children and would have slipped past the
+    /// guard entirely, letting two concurrent decisions on one subject both commit.
+    /// </para>
+    /// <para>
+    /// A counter rather than a timestamp so it needs no clock, and so it says something true
+    /// on its own: two reads of the same subject with the same revision saw the same state.
+    /// </para>
+    /// </remarks>
+    public int Revision { get; private set; }
 
     /// <summary>When the subject was created.</summary>
     public DateTimeOffset CreatedAt { get; }
@@ -236,7 +270,16 @@ public sealed class Subject
         {
             // Idempotent at the tip: a retried publish of the current schema must not allocate
             // an ordinal. Re-registering an *older* schema is a genuine revert and does.
-            return Result<RegistrationOutcome>.Success(new RegistrationOutcome(tip, Created: false));
+            //
+            // It is also the moment a pending proposal stops being proposed (M7.4). The
+            // submitted schema is back to what is already approved, so nothing is asking for
+            // the pending change any more -- and because this branch returns without touching
+            // state, a reviewer would otherwise be left holding a proposal no repository
+            // contains.
+            var abandoned = DismissPending(registeredAt.ToUniversalTime());
+
+            return Result<RegistrationOutcome>.Success(
+                new RegistrationOutcome(tip, Created: false, Dismissed: abandoned));
         }
 
         var semverCheck = VerifySemanticVersion(semanticVersion, isBreaking);
@@ -255,13 +298,54 @@ public sealed class Subject
             registeredBy);
 
         _versions.Add(version);
+        Touch();
 
         if (!isBreaking)
         {
             MoveLatest(version.Ordinal, registeredAt.ToUniversalTime(), registeredBy);
         }
 
-        return Result<RegistrationOutcome>.Success(new RegistrationOutcome(version, Created: true));
+        return Result<RegistrationOutcome>.Success(
+            new RegistrationOutcome(version, Created: true, Dismissed: []));
+    }
+
+    /// <summary>
+    /// Abandons every proposal still waiting for a reviewer (M7.4).
+    /// </summary>
+    /// <param name="at">When.</param>
+    /// <returns>The ordinals abandoned, in ordinal order. Empty when nothing was pending.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Called only when the submitted schema is already this subject's active tip.</b> The
+    /// wider rule — abandon a proposal whenever any other schema registers — was deliberately
+    /// not taken: a second, unrelated, compatible change is not a withdrawal of the first, and
+    /// silently discarding a reviewer's queue on an ordinary registration would be worse than
+    /// leaving it stale.
+    /// </para>
+    /// <para>
+    /// Public because promotion and the revert path both need it, and because a governance
+    /// operator eventually needs to clear a queue by hand. It moves no pointer: a dismissed
+    /// proposal was never the tip.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<int> DismissPending(DateTimeOffset at)
+    {
+        var pending = _versions.Where(v => v.Status is VersionStatus.AwaitingApproval).ToList();
+
+        if (pending.Count is 0)
+        {
+            return [];
+        }
+
+        var utc = at.ToUniversalTime();
+
+        foreach (var version in pending)
+        {
+            version.Dismiss(utc);
+        }
+
+        Touch();
+        return [.. pending.Select(v => v.Ordinal)];
     }
 
     /// <summary>Approves a pending breaking version, making it active (ADR-017).</summary>
@@ -284,6 +368,7 @@ public sealed class Subject
 
         var at = approvedAt.ToUniversalTime();
         pending.Value.Approve(at, approvedBy);
+        Touch();
 
         if (Latest is null || ordinal > Latest.Ordinal)
         {
@@ -307,6 +392,7 @@ public sealed class Subject
         }
 
         pending.Value.Reject(rejectedAt.ToUniversalTime(), rejectedBy);
+        Touch();
         return Result.Success();
     }
 
@@ -323,6 +409,7 @@ public sealed class Subject
         }
 
         Owner = owner;
+        Touch();
         return Result.Success();
     }
 
@@ -338,6 +425,7 @@ public sealed class Subject
         }
 
         Lifecycle = SubjectLifecycle.Deprecated;
+        Touch();
         return Result.Success();
     }
 
@@ -353,6 +441,7 @@ public sealed class Subject
         }
 
         Lifecycle = SubjectLifecycle.Retired;
+        Touch();
         return Result.Success();
     }
 
@@ -369,6 +458,7 @@ public sealed class Subject
         }
 
         CompatibilityPolicy = policy;
+        Touch();
         return Result.Success();
     }
 
@@ -389,6 +479,7 @@ public sealed class Subject
         }
 
         ContentModel = contentModel;
+        Touch();
         return Result.Success();
     }
 
@@ -408,6 +499,10 @@ public sealed class Subject
 
     private int NextOrdinal() => _versions.Count == 0 ? 1 : _versions[^1].Ordinal + 1;
 
+    // Every mutator calls this. See Revision for why: it is what puts the root row in the
+    // UPDATE statement, and the UPDATE is what carries the concurrency token.
+    private void Touch() => Revision++;
+
     private void MoveLatest(int ordinal, DateTimeOffset at, ActorId by) =>
         Latest = new LatestPointer(ordinal, at, by);
 
@@ -425,7 +520,8 @@ public sealed class Subject
         return version.Status is not VersionStatus.AwaitingApproval
             ? Result<SchemaVersion>.Failure(
                 ConcordatCodes.VersionNotAwaitingApproval,
-                $"Version {ordinal} of '{Name}' is {version.Status}, not awaiting approval.")
+                $"Version {ordinal} of '{Name}' is {WireTokens.For(version.Status)}, not " +
+                "awaiting approval.")
             : Result<SchemaVersion>.Success(version);
     }
 
@@ -450,8 +546,13 @@ public sealed class Subject
             return Result.Success();
         }
 
+        // Stated as what counts rather than what does not, so a status added later has to be
+        // considered rather than silently inherited. Rejected and Dismissed labels are both
+        // withdrawn claims: a 2.0.0 nobody approved must not force the next real change past
+        // it. Pending labels do count, because they are still being asked for.
         var previous = _versions
-            .Where(v => v.SemanticVersion is not null && v.Status is not VersionStatus.Rejected)
+            .Where(v => v.SemanticVersion is not null &&
+                        v.Status is VersionStatus.Active or VersionStatus.AwaitingApproval)
             .Select(v => v.SemanticVersion!.Value)
             .DefaultIfEmpty()
             .Max();

@@ -15,6 +15,7 @@ public class SubjectCommandHandlerTests
     private readonly FakeSubjects _subjects = new();
     private readonly FakeSchemas _schemas = new();
     private readonly RecordingUnitOfWork _unitOfWork = new();
+    private readonly RecordingAuditLog _audit = new();
     private readonly FakeTimeProvider _clock = new(Build.At);
 
     private Task<Result<Subject>> CreateAsync(
@@ -22,19 +23,19 @@ public class SubjectCommandHandlerTests
         string owner = "alice",
         CompatibilityPolicy? policy = null,
         ContentModel contentModel = ContentModel.Open) =>
-        new CreateSubjectHandler(_subjects, _unitOfWork, _clock).HandleAsync(
+        new CreateSubjectHandler(_subjects, _audit, _unitOfWork, _clock).HandleAsync(
             new CreateSubjectCommand(
                 _environment, name, SchemaFormat.Json, owner, policy, contentModel),
             CancellationToken.None);
 
     private Task<Result<Subject>> UpdateAsync(
         string name = Name, string? owner = null, bool deprecate = false) =>
-        new UpdateSubjectHandler(_subjects, _unitOfWork).HandleAsync(
+        new UpdateSubjectHandler(_subjects, _audit, _unitOfWork, _clock).HandleAsync(
             new UpdateSubjectCommand(_environment, name, owner, deprecate),
             CancellationToken.None);
 
     private Task<Result<Subject>> RetireAsync(string name = Name) =>
-        new RetireSubjectHandler(_subjects, _unitOfWork).HandleAsync(
+        new RetireSubjectHandler(_subjects, _audit, _unitOfWork, _clock).HandleAsync(
             new RetireSubjectCommand(_environment, name), CancellationToken.None);
 
     // ------------------------------------------------------------------ create

@@ -71,6 +71,7 @@ app.MapOpenApi();
 
 app.MapEnvironmentEndpoints();
 app.MapContractEndpoints();
+app.MapGovernanceEndpoints();
 app.MapSubjectEndpoints();
 app.MapSchemaEndpoints();
 app.MapBootstrapEndpoint();

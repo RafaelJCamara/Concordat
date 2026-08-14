@@ -5,6 +5,101 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/v1/audit": {
+      "get": {
+        "tags": [
+          "Governance"
+        ],
+        "summary": "Read the audit trail, newest first",
+        "description": "Records what happened, in the same transaction as the change itself. A refused request never reaches a commit, so it leaves no entry.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditResponse"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/environments/{env}/bootstrap": {
       "post": {
         "tags": [
@@ -929,6 +1024,363 @@
           },
           "404": {
             "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/services": {
+      "post": {
+        "tags": [
+          "Governance"
+        ],
+        "summary": "Declare a service's producer and consumer intent",
+        "description": "Called by an SDK at startup and by CI on deploy. An upsert keyed on the service name: fifty pods reporting the same intent are one row, because the alternative reports fifty affected consumers where there is one.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterServiceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Governance"
+        ],
+        "summary": "List the services registered in an environment",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ServiceResponse"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/services/{service}": {
+      "get": {
+        "tags": [
+          "Governance"
+        ],
+        "summary": "Read one service registration",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "service",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/subjects/{subject}/impact": {
+      "get": {
+        "tags": [
+          "Governance"
+        ],
+        "summary": "Who breaks if this subject changes",
+        "description": "Analyses a version already in the registry. The check runs FORWARD — can a consumer still holding its declared version read data written under this one — which is the opposite of the direction registration asks.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImpactResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Governance"
+        ],
+        "summary": "Who breaks if I register this schema",
+        "description": "The form CI calls before pushing: the schema is not registered, and nothing is written by asking.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImpactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImpactResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/subjects/{subject}/promote": {
+      "post": {
+        "tags": [
+          "Governance"
+        ],
+        "summary": "Promote a version into another environment",
+        "description": "Re-checks the schema against the target environment's history under the target's policy — a version compatible in dev says nothing about prod. The schema id does not change, so an in-flight envelope stays resolvable.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2079,6 +2531,43 @@
         },
         "description": "Request to add a publish binding."
       },
+      "AuditResponse": {
+        "required": [
+          "at",
+          "action",
+          "actor",
+          "target",
+          "detail"
+        ],
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "description": "When, in UTC.",
+            "format": "date-time"
+          },
+          "action": {
+            "type": "string",
+            "description": "The stable action token."
+          },
+          "actor": {
+            "type": "string",
+            "description": "Who did it."
+          },
+          "target": {
+            "type": "string",
+            "description": "What it happened to."
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "One line of context, or null."
+          }
+        },
+        "description": "One line of the audit trail."
+      },
       "BootstrapResponse": {
         "required": [
           "subjects",
@@ -2378,6 +2867,64 @@
         },
         "description": "A consume binding."
       },
+      "ConsumerImpactResponse": {
+        "required": [
+          "service",
+          "selector",
+          "readerOrdinal",
+          "breaks",
+          "certainty",
+          "lastSeenAt",
+          "stale",
+          "reasons"
+        ],
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string",
+            "description": "The service name."
+          },
+          "selector": {
+            "type": "string",
+            "description": "What it declared."
+          },
+          "readerOrdinal": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The version its verdict was computed against.",
+            "format": "int32"
+          },
+          "breaks": {
+            "type": "boolean",
+            "description": "Whether the change stops it reading new messages."
+          },
+          "certainty": {
+            "type": "string",
+            "description": "`CHECKED`, `FOLLOWS_LATEST` or `UNRESOLVABLE`."
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "description": "When it last declared itself.",
+            "format": "date-time"
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "Whether nothing has been heard from it in a long time."
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The divergences that break it."
+          }
+        },
+        "description": "What a change does to one registered consumer."
+      },
       "ContractResponse": {
         "required": [
           "name",
@@ -2635,6 +3182,87 @@
         },
         "description": "An environment and its brokers."
       },
+      "ImpactRequest": {
+        "type": "object",
+        "properties": {
+          "schema": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The schema as authored. Nothing is written by asking."
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "A registered version to analyse instead, when no schema is supplied.",
+            "format": "int32"
+          }
+        },
+        "description": "Request to analyse an unregistered candidate."
+      },
+      "ImpactResponse": {
+        "required": [
+          "subject",
+          "candidateOrdinal",
+          "candidateSchemaId",
+          "breakingCount",
+          "consumers",
+          "contracts"
+        ],
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "The subject analysed."
+          },
+          "candidateOrdinal": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The version analysed, or null for an unregistered candidate.",
+            "format": "int32"
+          },
+          "candidateSchemaId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The candidate's content-addressed id."
+          },
+          "breakingCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many registered consumers break.",
+            "format": "int32"
+          },
+          "consumers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsumerImpactResponse"
+            },
+            "description": "Every registered consumer, breaking ones first."
+          },
+          "contracts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The contracts whose bindings carry this subject."
+          }
+        },
+        "description": "The impact of a change."
+      },
       "LookupSchemaRequest": {
         "required": [
           "format",
@@ -2766,6 +3394,107 @@
           }
         }
       },
+      "PromoteRequest": {
+        "required": [
+          "toEnvironment"
+        ],
+        "type": "object",
+        "properties": {
+          "toEnvironment": {
+            "type": "string",
+            "description": "Where it is going."
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Which version, or omit for the source's latest.",
+            "format": "int32"
+          },
+          "promotedBy": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Who is promoting."
+          }
+        },
+        "description": "Request to promote a version."
+      },
+      "PromotionResponse": {
+        "required": [
+          "subject",
+          "fromEnvironment",
+          "toEnvironment",
+          "sourceOrdinal",
+          "targetOrdinal",
+          "schemaId",
+          "status",
+          "created",
+          "subjectCreated",
+          "divergences"
+        ],
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "The subject."
+          },
+          "fromEnvironment": {
+            "type": "string",
+            "description": "Where it came from."
+          },
+          "toEnvironment": {
+            "type": "string",
+            "description": "Where it went."
+          },
+          "sourceOrdinal": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The version promoted.",
+            "format": "int32"
+          },
+          "targetOrdinal": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The ordinal it landed on.",
+            "format": "int32"
+          },
+          "schemaId": {
+            "type": "string",
+            "description": "The content-addressed id, identical in both environments."
+          },
+          "status": {
+            "type": "string",
+            "description": "`ACTIVE`, or `AWAITING_APPROVAL` when the target disagrees."
+          },
+          "created": {
+            "type": "boolean",
+            "description": "False when the target already had this schema at its tip."
+          },
+          "subjectCreated": {
+            "type": "boolean",
+            "description": "Whether the target subject was created by this promotion."
+          },
+          "divergences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BreakingChangeResponse"
+            },
+            "description": "Everything the target's engine found, including divergences its policy tolerated — the same\r\nshape registration returns, because a promotion is a registration."
+          }
+        },
+        "description": "What a promotion produced."
+      },
       "PublishBindingResponse": {
         "required": [
           "exchange",
@@ -2862,6 +3591,46 @@
           }
         },
         "description": "One outgoing reference."
+      },
+      "RegisterServiceRequest": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The service name, unique within the environment."
+          },
+          "produces": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/SubjectRefInput"
+            },
+            "description": "The subjects it publishes."
+          },
+          "consumes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/SubjectRefInput"
+            },
+            "description": "The subjects it reads, and at which versions."
+          },
+          "reportedBy": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Who reported it — the SDK, or a CI job."
+          }
+        },
+        "description": "Request to declare a service's intent."
       },
       "RegisterVersionRequest": {
         "required": [
@@ -3096,6 +3865,52 @@
           }
         },
         "description": "One place a schema is in use."
+      },
+      "ServiceResponse": {
+        "required": [
+          "name",
+          "produces",
+          "consumes",
+          "firstSeenAt",
+          "lastSeenAt",
+          "stale"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The service name."
+          },
+          "produces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubjectRefResponse"
+            },
+            "description": "The subjects it publishes."
+          },
+          "consumes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubjectRefResponse"
+            },
+            "description": "The subjects it reads."
+          },
+          "firstSeenAt": {
+            "type": "string",
+            "description": "When it first declared itself.",
+            "format": "date-time"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "description": "When it last declared itself.",
+            "format": "date-time"
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "Whether nothing has been heard from it in a long time."
+          }
+        },
+        "description": "A service's declared intent."
       },
       "SetBrokerCredentialRequest": {
         "required": [
@@ -3366,6 +4181,9 @@
     }
   },
   "tags": [
+    {
+      "name": "Governance"
+    },
     {
       "name": "Bootstrap"
     },

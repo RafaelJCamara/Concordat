@@ -1,4 +1,5 @@
 using Concordat.Application.Abstractions;
+using Concordat.Domain.Governance;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 using Concordat.Formats.Abstractions;
@@ -128,7 +129,8 @@ public sealed record UpdateSubjectCommand(
     : ICommand<Subject>;
 
 /// <summary>Handles <see cref="UpdateSubjectCommand"/>.</summary>
-public sealed class UpdateSubjectHandler(ISubjectRepository subjects, IUnitOfWork unitOfWork)
+public sealed class UpdateSubjectHandler(
+    ISubjectRepository subjects, IAuditLog audit, IUnitOfWork unitOfWork, TimeProvider clock)
     : ICommandHandler<UpdateSubjectCommand, Subject>
 {
     /// <inheritdoc />
@@ -169,6 +171,17 @@ public sealed class UpdateSubjectHandler(ISubjectRepository subjects, IUnitOfWor
             }
         }
 
+        // "unknown" rather than a fabricated identity: the command carries no actor, and M8 is
+        // where one starts existing. An audit row that names the wrong person is worse than one
+        // that admits it does not know.
+        audit.Append(AuditEntry.Record(
+            command.EnvironmentId,
+            AuditAction.SubjectUpdated,
+            ActorId.Create(command.Owner is { Length: > 0 } ? command.Owner : "unknown").Value,
+            subject.Value.Name.Value,
+            clock.GetUtcNow(),
+            command.Deprecate ? "deprecated" : "owner changed"));
+
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return subject;
     }
@@ -207,7 +220,8 @@ public sealed record RetireSubjectCommand(EnvironmentId EnvironmentId, string Su
 /// <see cref="SubjectLifecycle.Retired"/> instead of disappearing. Hard delete needs the
 /// registered-consumer check and the audit entry DESIGN §4 requires, both of which are M7.
 /// </remarks>
-public sealed class RetireSubjectHandler(ISubjectRepository subjects, IUnitOfWork unitOfWork)
+public sealed class RetireSubjectHandler(
+    ISubjectRepository subjects, IAuditLog audit, IUnitOfWork unitOfWork, TimeProvider clock)
     : ICommandHandler<RetireSubjectCommand, Subject>
 {
     /// <inheritdoc />
@@ -230,6 +244,13 @@ public sealed class RetireSubjectHandler(ISubjectRepository subjects, IUnitOfWor
         {
             return Result<Subject>.Failure(retired.Error!);
         }
+
+        audit.Append(AuditEntry.Record(
+            command.EnvironmentId,
+            AuditAction.SubjectRetired,
+            subject.Value.Owner,
+            subject.Value.Name.Value,
+            clock.GetUtcNow()));
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return subject;

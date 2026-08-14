@@ -1,6 +1,8 @@
 using Concordat.Application.Abstractions;
+using Concordat.Application.Governance;
 using Concordat.Application.Registry;
 using Concordat.Domain.Contracts;
+using Concordat.Domain.Governance;
 using Concordat.Domain.Registry;
 using Concordat.Formats.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
@@ -129,6 +131,20 @@ public static class DependencyInjection
             IQueryHandler<GetSchemaUsagesQuery, IReadOnlyList<SchemaUsage>>, GetSchemaUsagesHandler>();
         services.AddScoped<IQueryHandler<DiffVersionsQuery, DiffResult>, DiffVersionsHandler>();
         services.AddScoped<IQueryHandler<BootstrapQuery, BootstrapResult>, BootstrapHandler>();
+
+        // M7.4 governance.
+        services.AddScoped<
+            ICommandHandler<RegisterServiceCommand, ServiceRegistration>, RegisterServiceHandler>();
+        services.AddScoped<
+            IQueryHandler<ListServicesQuery, IReadOnlyList<ServiceRegistration>>,
+            ListServicesHandler>();
+        services.AddScoped<
+            IQueryHandler<GetServiceQuery, ServiceRegistration>, GetServiceHandler>();
+        services.AddScoped<IQueryHandler<AnalyseImpactQuery, ImpactReport>, AnalyseImpactHandler>();
+        services.AddScoped<
+            ICommandHandler<PromoteVersionCommand, PromotionResult>, PromoteVersionHandler>();
+        services.AddScoped<
+            IQueryHandler<QueryAuditQuery, IReadOnlyList<AuditEntry>>, QueryAuditHandler>();
 
         return services;
     }

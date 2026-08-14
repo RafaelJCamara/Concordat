@@ -1,4 +1,5 @@
 using Concordat.Application.Abstractions;
+using Concordat.Domain.Governance;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 using Concordat.Formats.Abstractions;
@@ -48,6 +49,7 @@ public sealed class RegisterVersionHandler(
     ISubjectRepository subjects,
     ISchemaRepository schemas,
     ICompatibilityEvaluator evaluator,
+    IAuditLog audit,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
     : ICommandHandler<RegisterVersionCommand, RegisterVersionResult>
@@ -119,6 +121,8 @@ public sealed class RegisterVersionHandler(
             return Result<RegisterVersionResult>.Failure(registered.Error!);
         }
 
+        Audit(command.EnvironmentId, subject, registered.Value, actor.Value);
+
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         var version = registered.Value.Version;
@@ -130,6 +134,55 @@ public sealed class RegisterVersionHandler(
             registered.Value.Created,
             evaluated.Value.Report,
             evaluated.Value.Portability));
+    }
+
+    /// <summary>
+    /// Records what the registration actually did (M7.4).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>An idempotent retry writes nothing.</b> A CI job that reruns its pipeline registers
+    /// the same schema again and nothing happens; an entry for it would bury the trail in rows
+    /// that describe no change, which is the failure mode that makes an audit log stop being
+    /// read.
+    /// </para>
+    /// <para>
+    /// <b>A revert writes one entry, not two.</b> Nothing was registered — the schema was
+    /// already the tip — but proposals were abandoned, and that is the event a reviewer needs
+    /// to find when a queue empties on its own.
+    /// </para>
+    /// </remarks>
+    private void Audit(
+        EnvironmentId environmentId, Subject subject, RegistrationOutcome outcome, ActorId actor)
+    {
+        var at = clock.GetUtcNow();
+
+        if (outcome.Dismissed.Count > 0)
+        {
+            audit.Append(AuditEntry.Record(
+                environmentId,
+                AuditAction.VersionDismissed,
+                actor,
+                subject.Name.Value,
+                at,
+                $"version {string.Join(", ", outcome.Dismissed)} abandoned: the submitted " +
+                "schema is already the approved tip, so nothing is proposing the change."));
+        }
+
+        if (!outcome.Created)
+        {
+            return;
+        }
+
+        var submitted = outcome.Version.Status is VersionStatus.AwaitingApproval;
+
+        audit.Append(AuditEntry.Record(
+            environmentId,
+            submitted ? AuditAction.VersionSubmitted : AuditAction.VersionRegistered,
+            actor,
+            subject.Name.Value,
+            at,
+            $"version {outcome.Version.Ordinal}, schema {outcome.Version.SchemaId}"));
     }
 
     private async Task<IReadOnlyList<PriorSchema>> LoadPriorsAsync(

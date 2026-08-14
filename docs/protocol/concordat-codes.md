@@ -38,6 +38,11 @@ token and an operator can alert across a fleet.
 | `routing_key_pattern_invalid` | A routing key pattern was not a valid AMQP topic pattern. |
 | `version_selector_invalid` | A version selector was not `latest`, an ordinal, or `>=N`. |
 | `binding_conflict` | Two bindings overlap and carry different subjects with no precedence to separate them. |
+| `service_name_invalid` | A service name was empty, too long, or outside the permitted grammar. |
+| `service_not_found` | No service with the given name is registered in the environment. |
+| `audit_filter_invalid` | An audit query carried a filter value that could not be understood. |
+| `promotion_target_invalid` | A promotion named a target environment that is the source environment. |
+| `promotion_source_not_active` | A promotion named a source version that is not active — a proposal, a rejection or a dismissal. |
 | `actor_id_invalid` | An actor identifier was empty or too long. |
 | `reference_invalid` | A schema reference was malformed. |
 | `duplicate_reference_name` | Two references in one schema shared a name. |
@@ -75,7 +80,7 @@ token and an operator can alert across a fleet.
 | `changelog_too_long` | A changelog exceeded the permitted length. |
 | `schema_unresolvable` | A client could not resolve a schema, so the operation could not be enforced. |
 
-**51 codes.**
+**56 codes.**
 
 ## Rules for implementers
 

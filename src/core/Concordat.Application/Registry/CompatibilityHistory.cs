@@ -43,6 +43,21 @@ namespace Concordat.Application.Registry;
 /// aggregate would then refuse would be a worse bug than the one this fixes.
 /// </para>
 /// </remarks>
+/// <summary>
+/// Who to attribute an action to when the command carries nobody.
+/// </summary>
+/// <remarks>
+/// Several environment and broker commands predate any notion of identity — M8 is where users,
+/// API keys and memberships start existing. Until then the audit trail says "unknown" rather
+/// than naming a plausible-looking actor, because a row that attributes a credential rotation
+/// to the wrong person is worse than one that admits it does not know who did it.
+/// </remarks>
+internal static class GovernanceActor
+{
+    /// <summary>The placeholder actor, valid and deliberately uninformative.</summary>
+    public static ActorId Unknown { get; } = ActorId.Create("unknown").Value;
+}
+
 internal static class CompatibilityHistory
 {
     /// <summary>The versions a proposal is checked against.</summary>

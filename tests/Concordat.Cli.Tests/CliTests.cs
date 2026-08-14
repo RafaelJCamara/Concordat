@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Http.Json;
+using Concordat.Api;
 using Concordat.Api.IntegrationTests;
 using Concordat.Cli.Commands;
 
@@ -67,6 +70,22 @@ public class CliTests(ApiFactory api) : IDisposable
 
     private RegistryApi Api(string environment = "cli-test") =>
         new(api.CreateClient(), environment);
+
+    /// <summary>Creates a real environment row, not just a derived id.</summary>
+    /// <remarks>
+    /// Most commands do not need one: <c>IEnvironmentResolver</c> derives an id by hashing the
+    /// name, so a subject can be registered in an environment that has no row. Promotion is the
+    /// first operation that genuinely cannot work that way — it re-checks against the
+    /// <em>target's</em> compatibility policy, and a derived id has no policy to read.
+    /// </remarks>
+    private async Task<string> NewEnvironmentAsync(string name)
+    {
+        var response = await api.CreateClient().PostAsJsonAsync(
+            "/v1/environments", new CreateEnvironmentRequest(name), ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return name;
+    }
 
     private string NewDirectory(params (string Subject, string Body)[] contracts)
     {
@@ -257,8 +276,8 @@ public class CliTests(ApiFactory api) : IDisposable
         // still in flight stays valid after its subject is promoted to prod, because the id it
         // was pinned to is the same id there.
         var subject = $"cli.Promote{Guid.NewGuid():N}";
-        var staging = $"cli-staging-{Guid.NewGuid():N}";
-        var production = $"cli-prod-{Guid.NewGuid():N}";
+        var staging = await NewEnvironmentAsync($"cli-staging-{Guid.NewGuid():N}");
+        var production = await NewEnvironmentAsync($"cli-prod-{Guid.NewGuid():N}");
 
         using var pushCapture = new Capture();
         await PushCommand.RunAsync(
@@ -267,7 +286,7 @@ public class CliTests(ApiFactory api) : IDisposable
 
         using var capture = new Capture();
         var code = await PushCommand.PromoteAsync(
-            Api(staging), Api(production), capture.Output(), subject, "latest", "team", "test", default);
+            Api(staging), production, capture.Output(), subject, "latest", "test", default);
 
         Assert.Equal(ExitCodes.Success, code);
 
@@ -282,20 +301,153 @@ public class CliTests(ApiFactory api) : IDisposable
     [Fact]
     public async Task PromotingAMissingSubjectIsAViolationNotAnOutage()
     {
+        // Exit 3 means "retry, the registry is down". A subject that does not exist is a
+        // deliberate answer, and telling CI to retry it would loop until the timeout.
+        var source = await NewEnvironmentAsync($"cli-a-{Guid.NewGuid():N}");
+        var target = await NewEnvironmentAsync($"cli-b-{Guid.NewGuid():N}");
+
         using var capture = new Capture();
 
-        var code = await PushCommand.PromoteAsync(
-            Api($"cli-a-{Guid.NewGuid():N}"),
-            Api($"cli-b-{Guid.NewGuid():N}"),
-            capture.Output(),
-            $"cli.Missing{Guid.NewGuid():N}",
-            "latest",
-            "team",
-            "test",
-            default);
+        var code = await Run(() => PushCommand.PromoteAsync(
+            Api(source), target, capture.Output(), $"cli.Missing{Guid.NewGuid():N}",
+            "latest", "test", default));
 
         Assert.Equal(ExitCodes.ContractViolation, code);
-        Assert.DoesNotContain("registry", capture.Stderr, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PromotingIntoTheSameEnvironmentIsRefused()
+    {
+        var environment = await NewEnvironmentAsync($"cli-same-{Guid.NewGuid():N}");
+        var subject = $"cli.Same{Guid.NewGuid():N}";
+
+        using var push = new Capture();
+        await PushCommand.RunAsync(
+            Api(environment), push.Output(), NewDirectory((subject, Original)),
+            "team", "test", dryRun: false, default);
+
+        using var capture = new Capture();
+
+        var code = await Run(() => PushCommand.PromoteAsync(
+            Api(environment), environment, capture.Output(), subject, "latest", "test", default));
+
+        Assert.Equal(ExitCodes.ContractViolation, code);
+    }
+
+    [Fact]
+    public async Task ImpactNamesTheConsumerAChangeWouldBreak()
+    {
+        var environment = await NewEnvironmentAsync($"cli-impact-{Guid.NewGuid():N}");
+        var subject = $"cli.Impact{Guid.NewGuid():N}";
+
+        using var push = new Capture();
+        await PushCommand.RunAsync(
+            Api(environment), push.Output(), NewDirectory((subject, Original)),
+            "team", "test", dryRun: false, default);
+
+        await api.CreateClient().PostAsJsonAsync(
+            $"/v1/environments/{environment}/services",
+            new RegisterServiceRequest(
+                "orders-api", null, [new Application.Registry.SubjectRefInput(subject, "1")], "ci"),
+            ApiFactory.Json);
+
+        var directory = NewDirectory((subject, """
+            {"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}
+            """));
+
+        using var capture = new Capture();
+
+        var code = await ImpactCommand.RunAsync(
+            Api(environment),
+            capture.Output(),
+            subject,
+            Path.Combine(directory, $"{subject}.json"),
+            null,
+            warnOnly: false,
+            default);
+
+        // 'id' went from integer to string: a consumer pinned to version 1 stops being able to
+        // read what is written, which is exactly what this command exists to catch before it
+        // reaches a broker.
+        Assert.Equal(ExitCodes.ContractViolation, code);
+        Assert.Contains("orders-api", capture.Stdout, StringComparison.Ordinal);
+        Assert.Contains("BREAKS", capture.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ImpactWithNoRegisteredConsumersSaysSoRatherThanPassingSilently()
+    {
+        // An estate where nobody has registered looks identical to one where nobody is
+        // affected, and the difference matters enough to say out loud.
+        var environment = await NewEnvironmentAsync($"cli-quiet-{Guid.NewGuid():N}");
+        var subject = $"cli.Quiet{Guid.NewGuid():N}";
+
+        using var push = new Capture();
+        await PushCommand.RunAsync(
+            Api(environment), push.Output(), NewDirectory((subject, Original)),
+            "team", "test", dryRun: false, default);
+
+        using var capture = new Capture();
+
+        var code = await ImpactCommand.RunAsync(
+            Api(environment), capture.Output(), subject, null, null, warnOnly: false, default);
+
+        Assert.Equal(ExitCodes.Success, code);
+        Assert.Contains("no registered consumers", capture.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ImpactCanWarnInsteadOfGating()
+    {
+        var environment = await NewEnvironmentAsync($"cli-warn-{Guid.NewGuid():N}");
+        var subject = $"cli.Warn{Guid.NewGuid():N}";
+
+        using var push = new Capture();
+        await PushCommand.RunAsync(
+            Api(environment), push.Output(), NewDirectory((subject, Original)),
+            "team", "test", dryRun: false, default);
+
+        await api.CreateClient().PostAsJsonAsync(
+            $"/v1/environments/{environment}/services",
+            new RegisterServiceRequest(
+                "reader", null, [new Application.Registry.SubjectRefInput(subject, "1")], "ci"),
+            ApiFactory.Json);
+
+        var directory = NewDirectory((subject, """
+            {"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}
+            """));
+
+        using var capture = new Capture();
+
+        var code = await ImpactCommand.RunAsync(
+            Api(environment),
+            capture.Output(),
+            subject,
+            Path.Combine(directory, $"{subject}.json"),
+            null,
+            warnOnly: true,
+            default);
+
+        Assert.Equal(ExitCodes.Success, code);
+        Assert.Contains("BREAKS", capture.Stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>Runs a command, mapping a refusal to its exit code the way the shell does.</summary>
+    /// <remarks>
+    /// <c>Program.cs</c> catches <see cref="RegistryException"/> at the command boundary. These
+    /// tests call the command functions directly, so they have to do the same or a deliberate
+    /// refusal reads as an unhandled crash.
+    /// </remarks>
+    private static async Task<int> Run(Func<Task<int>> command)
+    {
+        try
+        {
+            return await command();
+        }
+        catch (RegistryException ex)
+        {
+            return ex.ExitCode;
+        }
     }
 
     [Fact]

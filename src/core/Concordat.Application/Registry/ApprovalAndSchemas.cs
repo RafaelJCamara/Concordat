@@ -1,4 +1,5 @@
 using Concordat.Application.Abstractions;
+using Concordat.Domain.Governance;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 
@@ -19,7 +20,7 @@ public sealed record DecideVersionCommand(
 
 /// <summary>Handles <see cref="DecideVersionCommand"/>.</summary>
 public sealed class DecideVersionHandler(
-    ISubjectRepository subjects, IUnitOfWork unitOfWork, TimeProvider clock)
+    ISubjectRepository subjects, IAuditLog audit, IUnitOfWork unitOfWork, TimeProvider clock)
     : ICommandHandler<DecideVersionCommand, Subject>
 {
     /// <inheritdoc />
@@ -58,6 +59,14 @@ public sealed class DecideVersionHandler(
         {
             return Result<Subject>.Failure(decision.Error!);
         }
+
+        audit.Append(AuditEntry.Record(
+            command.EnvironmentId,
+            command.Approve ? AuditAction.VersionApproved : AuditAction.VersionRejected,
+            actor.Value,
+            name.Value.Value,
+            clock.GetUtcNow(),
+            $"version {command.Ordinal}"));
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return Result<Subject>.Success(subject);

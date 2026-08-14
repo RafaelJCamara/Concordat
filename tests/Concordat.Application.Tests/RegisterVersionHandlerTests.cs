@@ -28,11 +28,13 @@ public class RegisterVersionHandlerTests
     private readonly RecordingEvaluator _evaluator = new(new CompatibilityEvaluator(new JsonFormats()));
     private readonly FakeTimeProvider _clock = new(Build.At);
 
+    private readonly RecordingAuditLog _audit = new();
+
     private RegisterVersionHandler Handler() =>
-        new(_subjects, _schemas, _evaluator, _unitOfWork, _clock);
+        new(_subjects, _schemas, _evaluator, _audit, _unitOfWork, _clock);
 
     private RegisterVersionHandler Handler(ICompatibilityEvaluator evaluator) =>
-        new(_subjects, _schemas, evaluator, _unitOfWork, _clock);
+        new(_subjects, _schemas, evaluator, _audit, _unitOfWork, _clock);
 
     private Task<Result<RegisterVersionResult>> RegisterAsync(
         string? body,

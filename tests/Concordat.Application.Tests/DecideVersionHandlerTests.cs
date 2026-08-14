@@ -19,11 +19,12 @@ public class DecideVersionHandlerTests
     private readonly FakeSubjects _subjects = new();
     private readonly FakeSchemas _schemas = new();
     private readonly RecordingUnitOfWork _unitOfWork = new();
+    private readonly RecordingAuditLog _audit = new();
     private readonly FakeTimeProvider _clock = new(Build.At);
 
     private Task<Result<Subject>> DecideAsync(
         int ordinal, bool approve, string name = Name, string decidedBy = "bob") =>
-        new DecideVersionHandler(_subjects, _unitOfWork, _clock).HandleAsync(
+        new DecideVersionHandler(_subjects, _audit, _unitOfWork, _clock).HandleAsync(
             new DecideVersionCommand(_environment, name, ordinal, decidedBy, approve),
             CancellationToken.None);
 

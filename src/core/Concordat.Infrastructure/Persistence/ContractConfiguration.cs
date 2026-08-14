@@ -9,14 +9,8 @@ namespace Concordat.Infrastructure.Persistence;
 /// Maps the <see cref="Contract"/> aggregate and its bindings (M7.3).
 /// </summary>
 /// <remarks>
-/// <b>A binding's subjects are stored as one text column, not a child table.</b> They are a
-/// value-object list owned entirely by the binding: nothing queries them independently, they
-/// have no identity, and they are always read and written together. A child table would add a
-/// join and two more shadow keys to model something that is conceptually one field. The format
-/// is <c>subject@selector</c> joined by commas, which is unambiguous because a subject name
-/// cannot contain <c>@</c> or <c>,</c> under its own grammar, and readable in a database
-/// client — which matters more than it sounds for a table operators will inspect when a
-/// contract behaves unexpectedly.
+/// A binding's subjects are stored as one text column rather than a child table; see
+/// <see cref="SubjectRefColumn"/> for why, and for the value comparer that makes edits save.
 /// </remarks>
 internal sealed class ContractConfiguration : IEntityTypeConfiguration<Contract>
 {
@@ -74,7 +68,7 @@ internal sealed class ContractConfiguration : IEntityTypeConfiguration<Contract>
                     .HasMaxLength(256).IsRequired();
             });
 
-            SubjectList(publish.Property(b => b.Subjects));
+            SubjectRefColumn.Configure(publish.Property(b => b.Subjects));
         });
 
         builder.OwnsMany(c => c.Consumes, consume =>
@@ -91,43 +85,10 @@ internal sealed class ContractConfiguration : IEntityTypeConfiguration<Contract>
                     .HasMaxLength(256).IsRequired();
             });
 
-            SubjectList(consume.Property(b => b.Subjects));
+            SubjectRefColumn.Configure(consume.Property(b => b.Subjects));
         });
 
         builder.Navigation(c => c.Publishes).AutoInclude();
         builder.Navigation(c => c.Consumes).AutoInclude();
     }
-
-    /// <summary>Maps a subject list to one text column.</summary>
-    /// <remarks>
-    /// The comparer is not optional. Without it EF compares the collection by reference, so a
-    /// binding whose subjects changed would be silently considered unmodified and never
-    /// written — the kind of bug that only appears on the second save.
-    /// </remarks>
-    private static void SubjectList(PropertyBuilder<IReadOnlyList<SubjectRef>> property) =>
-        property
-            .HasColumnName("subjects")
-            .HasMaxLength(4096)
-            .IsRequired()
-            .HasConversion(
-                refs => Serialise(refs),
-                text => Deserialise(text),
-                new Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer<IReadOnlyList<SubjectRef>>(
-                    (left, right) => Serialise(left!) == Serialise(right!),
-                    refs => Serialise(refs).GetHashCode(StringComparison.Ordinal),
-                    refs => Deserialise(Serialise(refs))));
-
-    private static string Serialise(IReadOnlyList<SubjectRef> refs) =>
-        string.Join(',', refs.Select(r => $"{r.Subject.Value}@{r.Selector}"));
-
-    private static IReadOnlyList<SubjectRef> Deserialise(string text) =>
-        text.Length is 0
-            ? []
-            : [.. text.Split(',').Select(entry =>
-            {
-                var at = entry.LastIndexOf('@');
-                return new SubjectRef(
-                    SubjectName.Create(entry[..at]).Value,
-                    VersionSelector.Parse(entry[(at + 1)..]).Value);
-            })];
 }

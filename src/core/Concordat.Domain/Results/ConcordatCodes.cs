@@ -68,6 +68,32 @@ public static class ConcordatCodes
     /// </remarks>
     public const string BindingConflict = "binding_conflict";
 
+    // --------------------------------------------------------------- governance (M7.4)
+
+    /// <summary>A service name was empty, too long, or outside the permitted grammar.</summary>
+    public const string ServiceNameInvalid = "service_name_invalid";
+
+    /// <summary>No service with the given name is registered in the environment.</summary>
+    public const string ServiceNotFound = "service_not_found";
+
+    /// <summary>An audit query carried a filter value that could not be understood.</summary>
+    public const string AuditFilterInvalid = "audit_filter_invalid";
+
+    /// <summary>A promotion named a target environment that is the source environment.</summary>
+    public const string PromotionTargetInvalid = "promotion_target_invalid";
+
+    /// <summary>
+    /// A promotion named a source version that is not active — a proposal, a rejection or a
+    /// dismissal.
+    /// </summary>
+    /// <remarks>
+    /// Promotion moves something the source environment has already accepted. Promoting a
+    /// version still awaiting approval would launder it into the target, where it would be
+    /// judged only against the target's history and never against the review it was waiting
+    /// for.
+    /// </remarks>
+    public const string PromotionSourceNotActive = "promotion_source_not_active";
+
     /// <summary>An actor identifier was empty or too long.</summary>
     public const string ActorIdInvalid = "actor_id_invalid";
 
