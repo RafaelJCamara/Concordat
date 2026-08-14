@@ -46,6 +46,347 @@
         }
       }
     },
+    "/v1/environments": {
+      "get": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "List environments",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EnvironmentResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Create an environment",
+        "description": "An environment named 'prod', 'production' or 'live' defaults to CI_ONLY registration; everything else defaults to OPEN. An over-permissive production registry is polluted silently and permanently, while an over-strict scratch one produces a clear error and a config change.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEnvironmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}": {
+      "get": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Get an environment and its brokers",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Change an environment's description or policies",
+        "description": "Changing the default compatibility policy takes effect immediately for every subject that has not set its own — which is the point of inheritance, and worth knowing before changing it on an environment with traffic.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEnvironmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/brokers": {
+      "post": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Register a broker",
+        "description": "A broker's identity is its host, port and virtual host together, so the same host may appear more than once under different virtual hosts. Display names must be unique, because they are how an operator tells entries apart.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddBrokerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/brokers/{brokerId}/check": {
+      "post": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Test a broker connection and record the result",
+        "description": "Completes a real AMQP handshake against the specific virtual host, rather than probing the port: a socket that accepts tells you a load balancer answered, not that the virtual host exists or the credentials work. An unreachable broker is recorded and returned, never an error — a registry that failed because a broker was down would have adopted someone else's outage.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "brokerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/environments/{env}/brokers/{brokerId}": {
+      "delete": {
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Remove a broker",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "brokerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/environments/{env}/subjects": {
       "post": {
         "tags": [
@@ -1073,6 +1414,31 @@
   },
   "components": {
     "schemas": {
+      "AddBrokerRequest": {
+        "required": [
+          "displayName",
+          "uri"
+        ],
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "description": "A human label, unique in the environment."
+          },
+          "uri": {
+            "type": "string",
+            "description": "An `amqp` or `amqps` endpoint."
+          },
+          "virtualHost": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The virtual host; defaults to `/`."
+          }
+        },
+        "description": "Request to register a broker."
+      },
       "BootstrapResponse": {
         "required": [
           "subjects",
@@ -1185,6 +1551,67 @@
         },
         "description": "One way a proposal diverges from a prior version."
       },
+      "BrokerResponse": {
+        "required": [
+          "brokerId",
+          "displayName",
+          "uri",
+          "virtualHost",
+          "useTls",
+          "hasCredentials",
+          "status",
+          "lastCheckedAt",
+          "lastError"
+        ],
+        "type": "object",
+        "properties": {
+          "brokerId": {
+            "type": "string",
+            "description": "Its identity.",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string",
+            "description": "The operator-facing label."
+          },
+          "uri": {
+            "type": "string",
+            "description": "The endpoint."
+          },
+          "virtualHost": {
+            "type": "string",
+            "description": "The virtual host."
+          },
+          "useTls": {
+            "type": "boolean",
+            "description": "Whether the scheme is `amqps`."
+          },
+          "hasCredentials": {
+            "type": "boolean",
+            "description": "Whether a credential is stored. <b>Never the credential itself</b> — credentials are\r\nwrite-only over the API (ADR-012)."
+          },
+          "status": {
+            "type": "string",
+            "description": "`UNKNOWN`, `REACHABLE` or `UNREACHABLE`."
+          },
+          "lastCheckedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "When the last health check ran.",
+            "format": "date-time"
+          },
+          "lastError": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Why the last check failed."
+          }
+        },
+        "description": "One registered broker."
+      },
       "BundledSchemaResponse": {
         "required": [
           "schemaId",
@@ -1275,6 +1702,47 @@
           }
         },
         "description": "The result of a dry-run compatibility check."
+      },
+      "CreateEnvironmentRequest": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Lowercase letters, digits and hyphens."
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "What it is for."
+          },
+          "compatibilityMode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Default who-breaks axis; omit for the standard default."
+          },
+          "compatibilitySurface": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Default what-breaks axis; required when a mode is given."
+          },
+          "registrationPolicy": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "`OPEN`, `CI_ONLY` or `CLOSED`."
+          }
+        },
+        "description": "Request to create an environment."
       },
       "CreateSubjectRequest": {
         "required": [
@@ -1386,6 +1854,51 @@
           }
         },
         "description": "The difference between two versions."
+      },
+      "EnvironmentResponse": {
+        "required": [
+          "name",
+          "description",
+          "defaultCompatibilityPolicy",
+          "registrationPolicy",
+          "createdAt",
+          "brokers"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The name that appears in every route."
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "What it is for."
+          },
+          "defaultCompatibilityPolicy": {
+            "description": "What subjects inherit when they set none.",
+            "$ref": "#/components/schemas/PolicyResponse"
+          },
+          "registrationPolicy": {
+            "type": "string",
+            "description": "Who may register schemas here."
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When it was created.",
+            "format": "date-time"
+          },
+          "brokers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrokerResponse"
+            },
+            "description": "The registered brokers."
+          }
+        },
+        "description": "An environment and its brokers."
       },
       "LookupSchemaRequest": {
         "required": [
@@ -1767,6 +2280,40 @@
         },
         "description": "A subject and its versions."
       },
+      "UpdateEnvironmentRequest": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "A new description."
+          },
+          "compatibilityMode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "A new default who-breaks axis."
+          },
+          "compatibilitySurface": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "A new default what-breaks axis."
+          },
+          "registrationPolicy": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "A new registration policy."
+          }
+        },
+        "description": "Request to change an environment. Omitted members are left alone."
+      },
       "UpdateSubjectRequest": {
         "type": "object",
         "properties": {
@@ -1850,6 +2397,9 @@
   "tags": [
     {
       "name": "Bootstrap"
+    },
+    {
+      "name": "Environments"
     },
     {
       "name": "Subjects"

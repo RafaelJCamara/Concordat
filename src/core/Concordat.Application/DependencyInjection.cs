@@ -71,6 +71,25 @@ public static class DependencyInjection
         services.AddScoped<
             ICommandHandler<RegisterVersionCommand, RegisterVersionResult>, RegisterVersionHandler>();
         services.AddScoped<ICommandHandler<CreateSubjectCommand, Subject>, CreateSubjectHandler>();
+
+        // M7.1 environments and brokers.
+        services.AddScoped<
+            ICommandHandler<CreateEnvironmentCommand, Domain.Registry.Environment>,
+            CreateEnvironmentHandler>();
+        services.AddScoped<
+            ICommandHandler<UpdateEnvironmentCommand, Domain.Registry.Environment>,
+            UpdateEnvironmentHandler>();
+        services.AddScoped<
+            ICommandHandler<AddBrokerCommand, Domain.Registry.Environment>, AddBrokerHandler>();
+        services.AddScoped<
+            ICommandHandler<RemoveBrokerCommand, Domain.Registry.Environment>, RemoveBrokerHandler>();
+        services.AddScoped<
+            ICommandHandler<CheckBrokerCommand, Domain.Registry.Environment>, CheckBrokerHandler>();
+        services.AddScoped<
+            IQueryHandler<GetEnvironmentQuery, Domain.Registry.Environment>, GetEnvironmentHandler>();
+        services.AddScoped<
+            IQueryHandler<ListEnvironmentsQuery, IReadOnlyList<Domain.Registry.Environment>>,
+            ListEnvironmentsHandler>();
         services.AddScoped<ICommandHandler<DecideVersionCommand, Subject>, DecideVersionHandler>();
         services.AddScoped<ICommandHandler<UpdateSubjectCommand, Subject>, UpdateSubjectHandler>();
         services.AddScoped<ICommandHandler<RetireSubjectCommand, Subject>, RetireSubjectHandler>();

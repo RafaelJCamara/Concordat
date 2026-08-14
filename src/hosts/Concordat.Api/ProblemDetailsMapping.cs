@@ -34,9 +34,13 @@ public static class ProblemDetailsMapping
         ConcordatCodes.SubjectNotFound => StatusCodes.Status404NotFound,
         ConcordatCodes.VersionNotFound => StatusCodes.Status404NotFound,
         ConcordatCodes.SchemaNotFound => StatusCodes.Status404NotFound,
+        ConcordatCodes.EnvironmentNotFound => StatusCodes.Status404NotFound,
+        ConcordatCodes.BrokerNotFound => StatusCodes.Status404NotFound,
 
         // State conflicts: the request was well-formed but the world says no.
         ConcordatCodes.SubjectAlreadyExists => StatusCodes.Status409Conflict,
+        ConcordatCodes.EnvironmentAlreadyExists => StatusCodes.Status409Conflict,
+        ConcordatCodes.BrokerAlreadyExists => StatusCodes.Status409Conflict,
         ConcordatCodes.SubjectRetired => StatusCodes.Status409Conflict,
         ConcordatCodes.LifecycleTransitionInvalid => StatusCodes.Status409Conflict,
         ConcordatCodes.VersionNotAwaitingApproval => StatusCodes.Status409Conflict,

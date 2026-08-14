@@ -2,6 +2,8 @@ using Concordat.Application.Abstractions;
 using Concordat.Domain.Registry;
 using Microsoft.EntityFrameworkCore;
 
+using Environment = Concordat.Domain.Registry.Environment;
+
 namespace Concordat.Infrastructure.Persistence;
 
 /// <inheritdoc />
@@ -88,4 +90,27 @@ internal sealed class UnitOfWork(ConcordatDbContext context) : IUnitOfWork
     /// <inheritdoc />
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken) =>
         context.SaveChangesAsync(cancellationToken);
+}
+
+/// <inheritdoc />
+internal sealed class EnvironmentRepository(ConcordatDbContext context) : IEnvironmentRepository
+{
+    /// <inheritdoc />
+    public Task<Environment?> FindAsync(
+        EnvironmentName name, CancellationToken cancellationToken) =>
+        context.Environments.SingleOrDefaultAsync(e => e.Name == name, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<Environment?> FindAsync(EnvironmentId id, CancellationToken cancellationToken) =>
+        context.Environments.SingleOrDefaultAsync(e => e.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Environment>> ListAsync(CancellationToken cancellationToken) =>
+        await context.Environments
+            .OrderBy(e => e.Name)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public void Add(Environment environment) => context.Environments.Add(environment);
 }

@@ -1,0 +1,426 @@
+using Concordat.Application.Abstractions;
+using Concordat.Domain.Registry;
+using Concordat.Domain.Results;
+using Environment = Concordat.Domain.Registry.Environment;
+
+namespace Concordat.Application.Registry;
+
+/// <summary>Creates an environment (M7.1).</summary>
+/// <param name="Name">The name that will appear in every route.</param>
+/// <param name="Description">What it is for.</param>
+/// <param name="CompatibilityMode">The default policy's who-breaks axis, or null.</param>
+/// <param name="CompatibilitySurface">The default policy's what-breaks axis, or null.</param>
+/// <param name="RegistrationPolicy">Who may register, or null to choose by name.</param>
+public sealed record CreateEnvironmentCommand(
+    string? Name,
+    string? Description,
+    string? CompatibilityMode,
+    string? CompatibilitySurface,
+    string? RegistrationPolicy) : ICommand<Environment>;
+
+/// <summary>Changes an environment's settings.</summary>
+/// <param name="Name">Which environment.</param>
+/// <param name="Description">A new description, or null to leave it.</param>
+/// <param name="CompatibilityMode">A new default mode, or null to leave it.</param>
+/// <param name="CompatibilitySurface">A new default surface, or null to leave it.</param>
+/// <param name="RegistrationPolicy">A new registration policy, or null to leave it.</param>
+public sealed record UpdateEnvironmentCommand(
+    string? Name,
+    string? Description,
+    string? CompatibilityMode,
+    string? CompatibilitySurface,
+    string? RegistrationPolicy) : ICommand<Environment>;
+
+/// <summary>Registers a broker in an environment.</summary>
+/// <param name="EnvironmentName">Which environment.</param>
+/// <param name="DisplayName">A human label, unique in the environment.</param>
+/// <param name="Uri">An <c>amqp</c> or <c>amqps</c> endpoint.</param>
+/// <param name="VirtualHost">The virtual host, or null for <c>/</c>.</param>
+public sealed record AddBrokerCommand(
+    string? EnvironmentName,
+    string? DisplayName,
+    string? Uri,
+    string? VirtualHost) : ICommand<Environment>;
+
+/// <summary>Removes a broker from an environment.</summary>
+/// <param name="EnvironmentName">Which environment.</param>
+/// <param name="BrokerId">Which broker.</param>
+public sealed record RemoveBrokerCommand(string? EnvironmentName, Guid BrokerId)
+    : ICommand<Environment>;
+
+/// <summary>Lists environments.</summary>
+public sealed record ListEnvironmentsQuery : IQuery<IReadOnlyList<Environment>>;
+
+/// <summary>Reads one environment.</summary>
+/// <param name="Name">Its name.</param>
+public sealed record GetEnvironmentQuery(string? Name) : IQuery<Environment>;
+
+/// <summary>Handles <see cref="CreateEnvironmentCommand"/>.</summary>
+/// <remarks>
+/// <para>
+/// <b>The id is derived from the name, not generated.</b> Before M7 the
+/// <c>/v1/environments/{env}/…</c> routes worked without this aggregate because
+/// <c>DerivedEnvironmentResolver</c> hashed the name to a stable id, and every subject ever
+/// registered carries one of those ids.
+/// </para>
+/// <para>
+/// Generating a fresh id here would orphan all of them: the subject rows would point at an
+/// environment that no longer had a row, and nothing would say so. Adopting the derived id
+/// instead makes the aggregate's arrival invisible to existing data — which is why the
+/// recorded M7 commitment offered exactly these two options, and this is the one that needs no
+/// migration and cannot half-apply.
+/// </para>
+/// <para>
+/// The cost is that environment ids are a function of their names, so two tenants both naming
+/// an environment <c>prod</c> would collide on the primary key. That is fine while tenancy is
+/// implicit and single, and it is a real constraint on M9 — recorded there rather than
+/// discovered there.
+/// </para>
+/// </remarks>
+public sealed class CreateEnvironmentHandler(
+    IEnvironmentRepository environments,
+    IEnvironmentResolver resolver,
+    IUnitOfWork unitOfWork,
+    TimeProvider clock)
+    : ICommandHandler<CreateEnvironmentCommand, Environment>
+{
+    /// <inheritdoc />
+    public async Task<Result<Environment>> HandleAsync(
+        CreateEnvironmentCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var name = EnvironmentName.Create(command.Name);
+        if (name.IsFailure)
+        {
+            return Result<Environment>.Failure(name.Error!);
+        }
+
+        var policyParsed = EnvironmentPolicies.ParseCompatibility(
+            command.CompatibilityMode, command.CompatibilitySurface, out var policy);
+
+        if (policyParsed.IsFailure)
+        {
+            return Result<Environment>.Failure(policyParsed.Error!);
+        }
+
+        var registrationParsed = EnvironmentPolicies.ParseRegistration(
+            command.RegistrationPolicy, out var registration);
+
+        if (registrationParsed.IsFailure)
+        {
+            return Result<Environment>.Failure(registrationParsed.Error!);
+        }
+
+        var existing = await environments.FindAsync(name.Value, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (existing is not null)
+        {
+            return Result<Environment>.Failure(
+                ConcordatCodes.EnvironmentAlreadyExists,
+                $"An environment named '{name.Value}' already exists.");
+        }
+
+        var created = Environment.Create(
+            command.Name,
+            clock.GetUtcNow(),
+            command.Description,
+            policy,
+            registration,
+            resolver.Resolve(name.Value.Value));
+
+        if (created.IsFailure)
+        {
+            return Result<Environment>.Failure(created.Error!);
+        }
+
+        environments.Add(created.Value);
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return Result<Environment>.Success(created.Value);
+    }
+}
+
+/// <summary>Handles <see cref="UpdateEnvironmentCommand"/>.</summary>
+public sealed class UpdateEnvironmentHandler(
+    IEnvironmentRepository environments, IUnitOfWork unitOfWork)
+    : ICommandHandler<UpdateEnvironmentCommand, Environment>
+{
+    /// <inheritdoc />
+    public async Task<Result<Environment>> HandleAsync(
+        UpdateEnvironmentCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var found = await EnvironmentPolicies.RequireAsync(
+            environments, command.Name, cancellationToken).ConfigureAwait(false);
+
+        if (found.IsFailure)
+        {
+            return found;
+        }
+
+        var environment = found.Value;
+
+        if (command.Description is not null)
+        {
+            environment.Describe(command.Description);
+        }
+
+        // Both axes or neither: a policy is a pair, and applying half of one would leave the
+        // environment in a state nobody asked for.
+        if (command.CompatibilityMode is not null || command.CompatibilitySurface is not null)
+        {
+            var parsed = EnvironmentPolicies.ParseCompatibility(
+                command.CompatibilityMode, command.CompatibilitySurface, out var policy);
+
+            if (parsed.IsFailure)
+            {
+                return Result<Environment>.Failure(parsed.Error!);
+            }
+
+            environment.SetDefaultCompatibilityPolicy(policy!.Value);
+        }
+
+        if (command.RegistrationPolicy is not null)
+        {
+            var parsed = EnvironmentPolicies.ParseRegistration(
+                command.RegistrationPolicy, out var registration);
+
+            if (parsed.IsFailure)
+            {
+                return Result<Environment>.Failure(parsed.Error!);
+            }
+
+            environment.SetRegistrationPolicy(registration!.Value);
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return Result<Environment>.Success(environment);
+    }
+}
+
+/// <summary>Handles <see cref="AddBrokerCommand"/>.</summary>
+public sealed class AddBrokerHandler(
+    IEnvironmentRepository environments, IUnitOfWork unitOfWork)
+    : ICommandHandler<AddBrokerCommand, Environment>
+{
+    /// <inheritdoc />
+    public async Task<Result<Environment>> HandleAsync(
+        AddBrokerCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var found = await EnvironmentPolicies.RequireAsync(
+            environments, command.EnvironmentName, cancellationToken).ConfigureAwait(false);
+
+        if (found.IsFailure)
+        {
+            return found;
+        }
+
+        var broker = BrokerConnection.Create(
+            command.DisplayName, command.Uri, command.VirtualHost);
+
+        if (broker.IsFailure)
+        {
+            return Result<Environment>.Failure(broker.Error!);
+        }
+
+        var added = found.Value.AddBroker(broker.Value);
+        if (added.IsFailure)
+        {
+            return Result<Environment>.Failure(added.Error!);
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return Result<Environment>.Success(found.Value);
+    }
+}
+
+/// <summary>Handles <see cref="RemoveBrokerCommand"/>.</summary>
+public sealed class RemoveBrokerHandler(
+    IEnvironmentRepository environments, IUnitOfWork unitOfWork)
+    : ICommandHandler<RemoveBrokerCommand, Environment>
+{
+    /// <inheritdoc />
+    public async Task<Result<Environment>> HandleAsync(
+        RemoveBrokerCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var found = await EnvironmentPolicies.RequireAsync(
+            environments, command.EnvironmentName, cancellationToken).ConfigureAwait(false);
+
+        if (found.IsFailure)
+        {
+            return found;
+        }
+
+        var removed = found.Value.RemoveBroker(command.BrokerId);
+        if (removed.IsFailure)
+        {
+            return Result<Environment>.Failure(removed.Error!);
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return Result<Environment>.Success(found.Value);
+    }
+}
+
+/// <summary>Handles <see cref="ListEnvironmentsQuery"/>.</summary>
+public sealed class ListEnvironmentsHandler(IEnvironmentRepository environments)
+    : IQueryHandler<ListEnvironmentsQuery, IReadOnlyList<Environment>>
+{
+    /// <inheritdoc />
+    public async Task<Result<IReadOnlyList<Environment>>> HandleAsync(
+        ListEnvironmentsQuery query, CancellationToken cancellationToken) =>
+        Result<IReadOnlyList<Environment>>.Success(
+            await environments.ListAsync(cancellationToken).ConfigureAwait(false));
+}
+
+/// <summary>Handles <see cref="GetEnvironmentQuery"/>.</summary>
+public sealed class GetEnvironmentHandler(IEnvironmentRepository environments)
+    : IQueryHandler<GetEnvironmentQuery, Environment>
+{
+    /// <inheritdoc />
+    public Task<Result<Environment>> HandleAsync(
+        GetEnvironmentQuery query, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        return EnvironmentPolicies.RequireAsync(environments, query.Name, cancellationToken);
+    }
+}
+
+/// <summary>Parsing shared by the environment handlers.</summary>
+internal static class EnvironmentPolicies
+{
+    /// <summary>Loads an environment by name, or fails with a code the API can map.</summary>
+    public static async Task<Result<Environment>> RequireAsync(
+        IEnvironmentRepository environments, string? name, CancellationToken cancellationToken)
+    {
+        var parsed = EnvironmentName.Create(name);
+        if (parsed.IsFailure)
+        {
+            return Result<Environment>.Failure(parsed.Error!);
+        }
+
+        var environment = await environments.FindAsync(parsed.Value, cancellationToken)
+            .ConfigureAwait(false);
+
+        return environment is null
+            ? Result<Environment>.Failure(
+                ConcordatCodes.EnvironmentNotFound,
+                $"No environment named '{parsed.Value.Value}'.")
+            : Result<Environment>.Success(environment);
+    }
+
+    /// <summary>Parses a policy pair, where both members are optional together.</summary>
+    public static Result ParseCompatibility(
+        string? mode, string? surface, out CompatibilityPolicy? policy)
+    {
+        policy = null;
+
+        if (mode is null && surface is null)
+        {
+            return Result.Success();
+        }
+
+        if (mode is null || surface is null)
+        {
+            return Result.Failure(
+                ConcordatCodes.EnvironmentNameInvalid,
+                "A compatibility policy needs both a mode and a surface (ADR-016).");
+        }
+
+        if (!Enum.TryParse<CompatibilityMode>(
+                mode.Replace("_", "", StringComparison.Ordinal), true, out var parsedMode))
+        {
+            return Result.Failure(
+                ConcordatCodes.EnvironmentNameInvalid, $"Unknown compatibility mode '{mode}'.");
+        }
+
+        if (!Enum.TryParse<CompatibilitySurface>(
+                surface.Replace("_", "", StringComparison.Ordinal), true, out var parsedSurface))
+        {
+            return Result.Failure(
+                ConcordatCodes.EnvironmentNameInvalid, $"Unknown compatibility surface '{surface}'.");
+        }
+
+        policy = new CompatibilityPolicy(parsedMode, parsedSurface);
+        return Result.Success();
+    }
+
+    /// <summary>Parses a registration policy.</summary>
+    public static Result ParseRegistration(string? value, out RegistrationPolicy? policy)
+    {
+        policy = null;
+
+        if (value is null)
+        {
+            return Result.Success();
+        }
+
+        if (!Enum.TryParse<RegistrationPolicy>(
+                value.Replace("_", "", StringComparison.Ordinal), true, out var parsed))
+        {
+            return Result.Failure(
+                ConcordatCodes.EnvironmentNameInvalid,
+                $"Unknown registration policy '{value}'. Expected OPEN, CI_ONLY or CLOSED.");
+        }
+
+        policy = parsed;
+        return Result.Success();
+    }
+}
+
+/// <summary>Runs a health check against one broker and records the outcome.</summary>
+/// <param name="EnvironmentName">Which environment.</param>
+/// <param name="BrokerId">Which broker.</param>
+public sealed record CheckBrokerCommand(string? EnvironmentName, Guid BrokerId)
+    : ICommand<Environment>;
+
+/// <summary>Handles <see cref="CheckBrokerCommand"/>.</summary>
+/// <remarks>
+/// The outcome is persisted rather than merely returned, so the answer survives the request
+/// and an operator listing environments sees when each broker was last reachable without
+/// re-probing every one of them.
+/// </remarks>
+public sealed class CheckBrokerHandler(
+    IEnvironmentRepository environments,
+    IBrokerHealthProbe probe,
+    IUnitOfWork unitOfWork,
+    TimeProvider clock)
+    : ICommandHandler<CheckBrokerCommand, Environment>
+{
+    /// <inheritdoc />
+    public async Task<Result<Environment>> HandleAsync(
+        CheckBrokerCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var found = await EnvironmentPolicies.RequireAsync(
+            environments, command.EnvironmentName, cancellationToken).ConfigureAwait(false);
+
+        if (found.IsFailure)
+        {
+            return found;
+        }
+
+        var broker = found.Value.Broker(command.BrokerId);
+        if (broker is null)
+        {
+            return Result<Environment>.Failure(
+                ConcordatCodes.BrokerNotFound, "No broker with that id in this environment.");
+        }
+
+        var result = await probe.ProbeAsync(broker, cancellationToken).ConfigureAwait(false);
+
+        broker.RecordCheck(result.Reachable, clock.GetUtcNow(), result.Error);
+
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return Result<Environment>.Success(found.Value);
+    }
+}

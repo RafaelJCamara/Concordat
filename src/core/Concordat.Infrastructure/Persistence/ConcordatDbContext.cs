@@ -106,11 +106,21 @@ public sealed class ConcordatDbContext : DbContext
     {
         var tenant = _tenantContext.Current.Value;
 
-        foreach (var entry in ChangeTracker.Entries<Subject>())
+        // Every added entity that declares the tenant shadow property, rather than a loop per
+        // aggregate. The per-aggregate version was already wrong once: M7.1's Environment was
+        // written with an empty tenant and then hidden by its own query filter — precisely the
+        // failure described above, and invisible until a read came back empty. A third
+        // aggregate arriving in M7.3 would have repeated it.
+        foreach (var entry in ChangeTracker.Entries())
         {
-            if (entry.State is EntityState.Added)
+            if (entry.State is not EntityState.Added)
             {
-                entry.Property<Guid>(SubjectConfiguration.TenantIdProperty).CurrentValue = tenant;
+                continue;
+            }
+
+            if (entry.Metadata.FindProperty(SubjectConfiguration.TenantIdProperty) is not null)
+            {
+                entry.Property(SubjectConfiguration.TenantIdProperty).CurrentValue = tenant;
             }
         }
     }

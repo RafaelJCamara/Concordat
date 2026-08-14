@@ -26,6 +26,7 @@
       AMQP, so substituting any one of them would remove the only thing being tested.
     -->
     <ProjectReference Include="..\..\src\hosts\Concordat.Api\Concordat.Api.csproj" />
+    <ProjectReference Include="..\..\src\core\Concordat.Infrastructure\Concordat.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\clients\Concordat.Client\Concordat.Client.csproj" />
     <ProjectReference Include="..\..\src\clients\Concordat.RabbitMq\Concordat.RabbitMq.csproj" />
     <ProjectReference Include="..\..\src\formats\Concordat.Formats.Json\Concordat.Formats.Json.csproj" />
