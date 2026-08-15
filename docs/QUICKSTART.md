@@ -33,6 +33,14 @@ ConnectionStrings__Concordat="Host=localhost;Port=55432;Database=concordat;Usern
   dotnet run --project src/hosts/Concordat.Migrator
 ```
 
+On **PowerShell**, `VAR=value command` is not a thing — it is parsed as a command name and fails
+without saying why. Set it first, in the same session:
+
+```powershell
+$env:ConnectionStrings__Concordat = "Host=localhost;Port=55432;Database=concordat;Username=postgres;Password=postgres"
+dotnet run --project src/hosts/Concordat.Migrator
+```
+
 Migrations run as a separate process rather than on API startup, so two API instances starting
 together cannot race each other into the same migration.
 
@@ -57,6 +65,16 @@ curl http://localhost:5062/health/ready
 database: a registry that cannot reach Postgres is not ready, but restarting it will not help.
 
 ## 4. Run the sample
+
+> **This needs an unclaimed registry.** An instance with no accounts answers every request as an
+> owner, which is what makes step 4 work with no credentials anywhere in it (ADR-008). Once
+> somebody has claimed it — including the end-to-end suite, which bootstraps its own owner — every
+> write needs a credential and the sample stops on its first one with `401 (Unauthorized)`.
+>
+> Check with `curl http://localhost:5062/v1/auth/status`. If it says `"claimed": true`, either
+> point this at a fresh database or reset with
+> `docker compose -f deploy/compose/docker-compose.yml down -v` and re-run step 2. See
+> [RUNNING.md](RUNNING.md#4-claim-the-instance--read-this-before-anything-writes).
 
 ```bash
 dotnet run --project samples/Quickstart

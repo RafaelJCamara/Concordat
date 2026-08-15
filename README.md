@@ -61,6 +61,7 @@ Everything is Apache-2.0, including the Cloud code.
 | | |
 |---|---|
 | [**docs/BROKER-PERMISSIONS.md**](docs/BROKER-PERMISSIONS.md) | **Read before deploying.** The one RabbitMQ permission the middleware needs, why it is a requirement rather than a preference, and what to do if your estate withholds it |
+| [docs/RUNNING.md](docs/RUNNING.md) | **Start here to run it.** Every process and every test suite, in order, for PowerShell and bash, with the traps named where you would hit them |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | Run the stack locally and publish through it, ending with a message refused for breaking its contract |
 | [**docs/protocol/**](docs/protocol/README.md) | **The protocol.** The five normative artifacts, and everything needed to write a client in any language |
 | [docs/DESIGN.md](docs/DESIGN.md) | Full architecture: domain model, envelope spec, API surface, SDK bindings, decisions |
