@@ -26,8 +26,17 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/registry/feature/subject-list-page').then((m) => m.SubjectListPage),
   },
-  { path: '', pathMatch: 'full', redirectTo: 'subjects' },
-  // Unknown paths land on the subject list rather than a bespoke 404: until there are
-  // enough screens for a wrong URL to be interesting, a dead end costs more than a redirect.
-  { path: '**', redirectTo: 'subjects' },
+  {
+    // The landing screen, on `/` rather than `/dashboard`. An overview is what the root of
+    // an application is for, and a root that only redirects costs every visitor a
+    // navigation to reach the page they were always going to get.
+    path: '',
+    pathMatch: 'full',
+    title: 'Dashboard · Concordat',
+    loadComponent: () =>
+      import('./features/registry/feature/dashboard-page').then((m) => m.DashboardPage),
+  },
+  // Unknown paths land on the overview rather than a bespoke 404: until there are enough
+  // screens for a wrong URL to be interesting, a dead end costs more than a redirect.
+  { path: '**', redirectTo: '' },
 ];

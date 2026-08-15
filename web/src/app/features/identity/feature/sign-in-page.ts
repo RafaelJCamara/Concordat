@@ -4,6 +4,7 @@ import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmCardImports } from '@spartan-ng/helm/card';
 import { SessionStore } from '../../../core/auth/session-store';
+import { Icon } from '../../../shared/ui/icon/icon';
 import { SignInStore } from '../application/sign-in-store';
 
 /**
@@ -17,9 +18,29 @@ import { SignInStore } from '../application/sign-in-store';
   selector: 'cd-sign-in-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [SignInStore],
-  imports: [HlmCardImports, HlmAlertImports, HlmButton],
+  imports: [HlmCardImports, HlmAlertImports, HlmButton, Icon],
   template: `
-    <section class="mx-auto w-full max-w-md space-y-4 p-6">
+    <!--
+      Centred in the window rather than sitting at the top of a column. The shell drops the
+      sidebar on this route, so this page is the whole viewport, and a form pinned to the
+      top of an otherwise empty screen reads as a page that failed to finish loading.
+    -->
+    <section class="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center gap-6 p-6">
+      <!--
+        The wordmark, which every other screen gets from the sidebar. Without it this is an
+        unlabelled password box, and an unlabelled password box is the shape of a phishing
+        page — the one screen where saying which product is asking actually matters.
+      -->
+      <div class="flex items-center justify-center gap-3">
+        <span class="bg-primary/10 text-primary flex size-9 items-center justify-center rounded-lg">
+          <cd-icon name="rabbit" size="1.375rem" />
+        </span>
+        <span>
+          <span class="text-foreground block leading-tight font-semibold">Concordat</span>
+          <span class="text-muted-foreground block text-xs leading-tight">Schema registry</span>
+        </span>
+      </div>
+
       <div hlmCard class="p-6">
         <header class="space-y-1">
           <h1 class="text-2xl font-semibold tracking-tight">

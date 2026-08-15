@@ -1,32 +1,49 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
+import { filter, map } from 'rxjs';
 import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
-import { HlmSeparator } from '@spartan-ng/helm/separator';
 import { SessionStore } from './core/auth/session-store';
 import { SessionApi } from './core/auth/session-api';
 import { ActiveEnvironmentStore } from './core/config/active-environment-store';
 import { ThemeStore } from './core/config/theme-store';
+import { AppSidebar, type NavItem } from './shared/ui/app-sidebar/app-sidebar';
+import { Icon } from './shared/ui/icon/icon';
 import { ThemeToggle } from './shared/ui/theme-toggle/theme-toggle';
+
+/**
+ * The navigation, in the order the sidebar draws it.
+ *
+ * Two rows, because there are two screens. Contracts, Approvals and Audit are M4.3 and get a
+ * row each on the day they get a route — see `NavItem` for why they are not here already.
+ *
+ * The list lives in the composition root rather than inside `AppSidebar`: a shared
+ * presentational component that knows the app's route table is not shared, it is this app's
+ * sidebar wearing a shared component's name.
+ */
+const NAV_ITEMS: readonly NavItem[] = [
+  { label: 'Dashboard', icon: 'layout-dashboard', route: '/' },
+  { label: 'Subjects', icon: 'file-json', route: '/subjects' },
+];
 
 /**
  * The application shell.
  *
  * The one component that is allowed to wire `core/` stores into `shared/ui` components:
  * everything below it either owns its own store (a feature) or takes inputs (shared UI).
+ *
+ * The layout is the prototype's: a full-height sidebar on the left and one scrolling column
+ * on the right, with no top bar. Everything a top bar would have carried — environment,
+ * account, theme — sits in the sidebar footer instead, so the main column begins on the
+ * page's own heading. That is the most recognisable thing about the design and the first
+ * thing a header would take away.
  */
 @Component({
   selector: 'cd-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    RouterOutlet,
-    RouterLink,
-    RouterLinkActive,
-    HlmAlertImports,
-    HlmButton,
-    HlmSeparator,
-    ThemeToggle,
-  ],
+  imports: [RouterOutlet, RouterLink, HlmAlertImports, HlmButton, AppSidebar, Icon, ThemeToggle],
+  host: { class: 'bg-background text-foreground flex min-h-dvh w-full' },
   template: `
     <a
       href="#main"
@@ -35,64 +52,84 @@ import { ThemeToggle } from './shared/ui/theme-toggle/theme-toggle';
       Skip to content
     </a>
 
-    <header class="flex items-center gap-4 px-6 py-3">
-      <span class="font-semibold tracking-tight">Concordat</span>
-
-      <nav aria-label="Main" class="flex items-center gap-3 text-sm">
-        <a
-          routerLink="/subjects"
-          routerLinkActive="text-foreground"
-          class="text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Subjects
-        </a>
-      </nav>
-
-      <div class="ms-auto flex items-center gap-3">
-        <span class="text-muted-foreground font-mono text-xs">
-          {{ environments.name() }}
-        </span>
-
-        @if (session.isSignedIn()) {
-          <span class="text-muted-foreground text-xs">{{ session.actor() }}</span>
-          <button
-            type="button"
-            class="text-muted-foreground hover:text-foreground text-sm transition-colors"
-            (click)="signOut()"
+    @if (!chromeless()) {
+      <cd-app-sidebar
+        [items]="navItems"
+        [collapsed]="collapsed()"
+        (toggled)="collapsed.set(!collapsed())"
+      >
+        <div cdSidebarFooter class="space-y-2">
+          <!--
+            The environment, and the reason it is the most prominent thing down here: every
+            number on every screen is scoped to it, so "which environment am I looking at"
+            is the question that makes the difference between a routine change and an
+            outage. It reads as a label rather than a control because switching is not
+            wired yet (M4.3).
+          -->
+          <div
+            class="text-muted-foreground flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
+            [class.justify-center]="collapsed()"
+            [attr.title]="collapsed() ? 'Environment ' + environments.name() : null"
           >
-            Sign out
-          </button>
-        } @else if (session.needsSignIn()) {
-          <a
-            routerLink="/sign-in"
-            class="text-muted-foreground hover:text-foreground text-sm transition-colors"
-          >
-            Sign in
-          </a>
-        }
+            <cd-icon name="database" size="0.875rem" />
+            @if (!collapsed()) {
+              <span class="text-foreground truncate font-mono">{{ environments.name() }}</span>
+            }
+          </div>
 
-        <cd-theme-toggle [appearance]="theme.appearance()" (chosen)="theme.choose($event)" />
-      </div>
-    </header>
+          @if (session.isSignedIn()) {
+            <button
+              type="button"
+              class="text-muted-foreground hover:bg-sidebar-accent hover:text-foreground flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors"
+              [class.justify-center]="collapsed()"
+              [attr.title]="collapsed() ? 'Sign out (' + session.actor() + ')' : null"
+              (click)="signOut()"
+            >
+              <cd-icon name="log-out" size="0.875rem" />
+              @if (!collapsed()) {
+                <span class="truncate">{{ session.actor() }}</span>
+                <span class="ms-auto shrink-0">Sign out</span>
+              }
+            </button>
+          } @else if (session.needsSignIn()) {
+            <a
+              routerLink="/sign-in"
+              class="text-muted-foreground hover:bg-sidebar-accent hover:text-foreground flex items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors"
+              [class.justify-center]="collapsed()"
+              [attr.title]="collapsed() ? 'Sign in' : null"
+            >
+              <cd-icon name="key-round" size="0.875rem" />
+              @if (!collapsed()) {
+                <span>Sign in</span>
+              }
+            </a>
+          }
 
-    <hlm-separator />
-
-    @if (session.claimed() === false) {
-      <!--
-        Said out loud rather than left to be discovered. An unclaimed registry answers every
-        request as an owner, so it is open to anyone who can reach it — and nothing else in
-        the product would ever mention that.
-      -->
-      <div hlmAlert variant="destructive" class="mx-6 mt-4">
-        <h2 hlmAlertTitle>This registry is unclaimed</h2>
-        <p hlmAlertDescription>
-          Anyone who can reach it can change anything. Create the first account to close it.
-        </p>
-        <a hlmBtn hlmAlertAction variant="outline" size="sm" routerLink="/sign-in">Set up</a>
-      </div>
+          @if (!collapsed()) {
+            <div class="px-1">
+              <cd-theme-toggle [appearance]="theme.appearance()" (chosen)="theme.choose($event)" />
+            </div>
+          }
+        </div>
+      </cd-app-sidebar>
     }
 
-    <main id="main">
+    <main id="main" class="min-w-0 flex-1 overflow-x-hidden">
+      @if (session.claimed() === false) {
+        <!--
+          Said out loud rather than left to be discovered. An unclaimed registry answers every
+          request as an owner, so it is open to anyone who can reach it — and nothing else in
+          the product would ever mention that.
+        -->
+        <div hlmAlert variant="destructive" class="mx-6 mt-6">
+          <h2 hlmAlertTitle>This registry is unclaimed</h2>
+          <p hlmAlertDescription>
+            Anyone who can reach it can change anything. Create the first account to close it.
+          </p>
+          <a hlmBtn hlmAlertAction variant="outline" size="sm" routerLink="/sign-in">Set up</a>
+        </div>
+      }
+
       <router-outlet />
     </main>
   `,
@@ -104,6 +141,35 @@ export class App {
   protected readonly theme = inject(ThemeStore);
   protected readonly environments = inject(ActiveEnvironmentStore);
   protected readonly session = inject(SessionStore);
+
+  protected readonly navItems = NAV_ITEMS;
+
+  /** View state, and nowhere else's business — see the note on `AppSidebar`. */
+  protected readonly collapsed = signal(false);
+
+  /**
+   * The URL, as a signal.
+   *
+   * Seeded with `router.url` rather than left undefined because the first `NavigationEnd`
+   * fires after the shell's first render: without the seed a reload onto `/sign-in` paints
+   * the sidebar for one frame and then removes it.
+   */
+  private readonly url = toSignal(
+    this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      map((event) => event.urlAfterRedirects),
+    ),
+    { initialValue: this.router.url },
+  );
+
+  /**
+   * Whether to drop the shell and give the page the whole window.
+   *
+   * Only sign-in. A navigation rail is an offer to go somewhere, and every destination on
+   * it answers 401 until this form is filled in — so on this one screen the sidebar is five
+   * links to nowhere framing the single thing the user is actually able to do.
+   */
+  protected readonly chromeless = computed(() => this.url().startsWith('/sign-in'));
 
   /**
    * Drops the credential locally and clears the session cookie.

@@ -25,9 +25,30 @@ interface SubjectRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [HlmTableImports, HlmBadge, RelativeTimePipe],
   template: `
-    <div hlmTableContainer>
-      <table hlmTable>
-        <caption hlmCaption>
+    <!--
+      The card is the prototype's row treatment: every list on every screen there sits on a
+      raised, hairline-bordered panel rather than directly on the page. A bare table reads
+      as a report; the panel is most of what makes it read as an application.
+    -->
+    <div hlmTableContainer class="border-border bg-card rounded-xl border">
+      <!--
+        Helm's cells carry p-2, which is right for a table on a plain page and leaves the
+        outermost column flush against the panel's edge once there is one. The two rules
+        below inset only the first and last cell, so the grid keeps its own rhythm inside.
+      -->
+      <table
+        hlmTable
+        class="[&_td:first-child]:ps-4 [&_td:last-child]:pe-4 [&_th:first-child]:ps-4 [&_th:last-child]:pe-4"
+      >
+        <!--
+          Kept visible rather than made screen-reader-only. It is the only place that says
+          "Latest" is a pointer the server gates rather than the highest number present
+          (ADR-017), which is the one thing about this table a reader can otherwise get
+          wrong. The mt-0 cancels the helm default's top margin, which was written for a
+          caption sitting outside a panel; caption-bottom on the table puts it below the
+          rows, so it reads as the panel's footer.
+        -->
+        <caption hlmCaption class="border-border mt-0 border-t px-4 py-3 text-left">
           Subjects in this environment, with the version the
           <code class="font-mono">latest</code>
           pointer resolves to.
