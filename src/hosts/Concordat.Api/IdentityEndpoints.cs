@@ -62,8 +62,12 @@ public static class IdentityEndpoints
                 "The only route that accepts the session cookie, and it accepts nothing else. " +
                 "Its whole power is handing back a credential the browser already holds, so " +
                 "every other route still needs an Authorization header -- which is what makes " +
-                "CSRF structurally impossible rather than merely mitigated.")
+                "CSRF structurally impossible rather than merely mitigated. " +
+                "204 when there is no cookie at all, 401 only when one was presented and did " +
+                "not verify: a signed-out visitor is not an authentication failure, and " +
+                "answering 401 made every signed-out page load log a console error.")
             .Produces<SignInResponse>()
+            .Produces(StatusCodes.Status204NoContent)
             .ProducesProblem(StatusCodes.Status401Unauthorized);
 
         auth.MapPost("/signout", SignOut)
@@ -257,8 +261,16 @@ public static class IdentityEndpoints
 
         if (string.IsNullOrEmpty(credential))
         {
-            return ProblemDetailsMapping.From(new DomainError(
-                ConcordatCodes.Unauthenticated, "There is no session to resume."));
+            // NO COOKIE IS NOT AN AUTHENTICATION FAILURE.
+            //
+            // The caller is not trying to authenticate; it is asking whether it already is, and
+            // "no" is an ordinary answer. 401 was the first shape and it made every signed-out
+            // page load log a console error, because the app must probe on startup -- it cannot
+            // read an httpOnly cookie to find out whether probing is worthwhile. A browser test
+            // asserting a clean console is what surfaced it.
+            //
+            // The same absent-versus-invalid distinction this codebase draws everywhere else.
+            return TypedResults.NoContent();
         }
 
         var caller = await authenticator

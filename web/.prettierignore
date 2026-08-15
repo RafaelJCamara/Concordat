@@ -8,3 +8,9 @@ package-lock.json
 # `ng g @spartan-ng/cli:ui` throws away, and a `format:check` failure nobody caused.
 src/app/shared/ui/*/src
 src/app/core/http/concordat-codes.generated.ts
+
+# Playwright run output, not source.
+test-results/
+playwright-report/
+blob-report/
+.playwright-mcp/

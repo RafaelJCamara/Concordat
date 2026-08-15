@@ -24,11 +24,19 @@ describe('SCHEMA_FORMATS', () => {
 });
 
 describe('VERSION_STATUSES', () => {
-  it('names exactly the three states of the approval gate', () => {
-    // ADR-017. A fourth status added server-side must reach this list before the UI can
-    // render it — `toSubject` refuses an unknown one rather than guessing, which is why a
-    // stale list fails loudly instead of mislabelling the gate.
-    expect(VERSION_STATUSES).toEqual(['ACTIVE', 'AWAITING_APPROVAL', 'REJECTED']);
+  it('names exactly the four states of the approval gate', () => {
+    // ADR-017. The original version of this test said "the three states" and predicted its own
+    // failure: "a fourth status added server-side must reach this list before the UI can render
+    // it — a stale list fails loudly instead of mislabelling the gate."
+    //
+    // Both halves were right and it happened anyway. DISMISSED shipped with M7, nothing carried
+    // it here, and "fails loudly" turned out to mean the ENTIRE subject list failed rather than
+    // one row being flagged — because the guard refuses an unknown token for the whole payload.
+    // A browser found it in ten seconds; 1,489 .NET and 187 Angular tests had not.
+    //
+    // `WireTokenTests.VersionStatusesMatchWhatTheFrontendPublishes` now compares this list
+    // against the .NET enum, so the prediction has something enforcing it.
+    expect(VERSION_STATUSES).toEqual(['ACTIVE', 'AWAITING_APPROVAL', 'REJECTED', 'DISMISSED']);
   });
 });
 

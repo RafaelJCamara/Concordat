@@ -43,18 +43,38 @@ describe('SessionApi', () => {
     request.flush({ credential: 'cdt_x', actor: 'alice', scopes: ['subject:read'] });
   });
 
-  it('drops a scope this build does not know', (context) =>
+  it('drops a scope this build does not know', () =>
     new Promise<void>((done) => {
       api.resume().subscribe((session) => {
         // An unrecognised string compared against a closed union would silently never match,
         // so the affordance would be hidden anyway — dropping it makes that deliberate.
-        expect(session.scopes).toEqual(['subject:read']);
+        expect(session?.scopes).toEqual(['subject:read']);
         done();
       });
 
       http
         .expectOne((r) => r.url.endsWith('/auth/resume'))
-        .flush({ credential: 'cdt_x', actor: 'alice', scopes: ['subject:read', 'subject:teleport'] });
+        .flush({
+          credential: 'cdt_x',
+          actor: 'alice',
+          scopes: ['subject:read', 'subject:teleport'],
+        });
+    }));
+
+  it('treats a 204 as "no session" rather than a failure', () =>
+    new Promise<void>((done) => {
+      // The app must probe on every startup -- it cannot read an httpOnly cookie to find out
+      // whether probing is worthwhile -- so treating signed-out as an error logged a console
+      // error on every signed-out page load of a perfectly healthy app. A browser test
+      // asserting a clean console is what surfaced it.
+      api.resume().subscribe((session) => {
+        expect(session).toBeNull();
+        done();
+      });
+
+      http
+        .expectOne((r) => r.url.endsWith('/auth/resume'))
+        .flush(null, { status: 204, statusText: 'No Content' });
     }));
 
   it('signs out with credentials attached, because script cannot delete an httpOnly cookie', () => {

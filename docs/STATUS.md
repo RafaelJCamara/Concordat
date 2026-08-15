@@ -48,6 +48,28 @@ the product. The image now installs `curl` for this alone. Azure Container Apps 
 affected — its probes are HTTP requests made by the platform, not commands run inside the
 container — which is exactly why CI and the Bicep deployment never caught it.
 
+### What the first browser run found
+
+**The subject list was broken against a real registry**, and had been since M7.
+
+`VersionStatus.Dismissed` shipped with M7 and `web/src/app/domain/registry/wire-tokens.ts` never
+learned it. The web app's unknown-token guard is strict by design — an unrecognised token means a
+newer server, and guessing would be worse — so one dismissed version failed the *entire* page:
+
+> The registry sent 'DISMISSED' for 'status', which this build does not recognise.
+
+**1,489 .NET tests and 187 Angular tests were green throughout.** Each side was correct about
+itself; nothing checked that the two agreed at runtime, because nothing loaded a page. The
+frontend spec even predicted it in a comment — *"a fourth status added server-side must reach
+this list"* — and nothing enforced the prediction. `WireTokenTests` now compares all three shared
+vocabularies against the .NET enums.
+
+A second, smaller find from the same run: `/v1/auth/resume` answered **401** when there was no
+cookie, so every signed-out page load of a healthy app logged a console error. The app has to
+probe on startup — it cannot read an httpOnly cookie to know whether probing is worthwhile — so
+"no session" is an ordinary answer, not an authentication failure. It answers 204 now, and 401
+only when a cookie was presented and rejected.
+
 ### Two things that path does not cover
 
 - **The web app is not in the compose stack.** There is no way to bring up the UI alongside the
@@ -148,7 +170,7 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | ~~A page reload signs you out~~ | **Closed 2026-08-14** by decision 26 — an httpOnly `SameSite=Strict` cookie and a `/auth/resume` route that is the only thing accepting it. The credential still never touches `localStorage`. |
 | ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Still on, and now audible** (decision 27). The API logs a warning naming both ways to close it and repeats hourly until claimed; the web app shows a banner. Verified against a real container. |
-| **No browser E2E over sign-in + guards** | Unit tests cover each half; nothing drives the two together. Needs Playwright — a dependency decision M4.5 has to make, and the remaining half of decision 26. |
+| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, 11 tests in `web/e2e/`. It found the subject list broken on its first run — see below. The one M4.5 test still absent is "direct URL to a write route redirects", because there is no write route to paste. |
 | **`Tenant` is not an aggregate** | There is exactly one, `TenantId.SelfHosted`. Cloud multi-tenancy is tested but single-rowed. |
 | ~~The derived-environment-id decision is unmade~~ | **Closed 2026-08-14.** Adopted, by creating rows that carry the derived id. No migration, and no orphaned subjects. |
 

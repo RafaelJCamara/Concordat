@@ -23,7 +23,10 @@ Build now, not in M8 — retrofitting across finished screens is how a write pat
 
 - [x] `canWriteSchemas` computed on the session store, derived from API-returned scopes
 - [x] `*cdIfScope` structural directive for affordances
-- [x] `scopeGuard` on write routes; direct navigation redirects to the read view
+- [ ] `scopeGuard` on write routes; direct navigation redirects to the read view — **the guard is
+      built and unit-tested, and is referenced by no route.** Marked done here until 2026-08-15,
+      when the Playwright suite went to write the redirect test and found there was nothing to
+      redirect *from*: `app.routes.ts` has two entries and `**` catches the rest. Lands with M4.3
 - [x] ~~Stub returning admin~~ — **superseded, and better.** The stub was never built; the
       API's unclaimed-instance caller (M8.2) does the same job on the server, so the UI and
       the server agree by construction rather than by two people remembering to.
@@ -67,8 +70,13 @@ rather than deleted, because "why is there no zod here?" is a question worth ans
 
 ## M4.5 Tests
 
-- [ ] Playwright E2E against a real API
-- [ ] Non-admin E2E: no write affordance renders; direct URL to a write route redirects
+- [x] Playwright E2E against a real API — `web/e2e/`, 11 tests. Found the subject list
+      broken on its first run (see [STATUS.md](../STATUS.md))
+- [x] Non-admin E2E: no write affordance renders — a reader signs in and the button is absent,
+      an owner signs in and it is there
+- [ ] Direct URL to a write route redirects — **cannot be written yet**: there is no write route,
+      and `scopeGuard` is referenced by no route at all. Goes in with M4.3's pages; writing it now
+      would assert the `**` wildcard and pass while proving nothing
 
 ---
 

@@ -2020,7 +2020,7 @@
           "Identity"
         ],
         "summary": "Recover the credential from the session cookie",
-        "description": "The only route that accepts the session cookie, and it accepts nothing else. Its whole power is handing back a credential the browser already holds, so every other route still needs an Authorization header -- which is what makes CSRF structurally impossible rather than merely mitigated.",
+        "description": "The only route that accepts the session cookie, and it accepts nothing else. Its whole power is handing back a credential the browser already holds, so every other route still needs an Authorization header -- which is what makes CSRF structurally impossible rather than merely mitigated. 204 when there is no cookie at all, 401 only when one was presented and did not verify: a signed-out visitor is not an authentication failure, and answering 401 made every signed-out page load log a console error.",
         "responses": {
           "200": {
             "description": "OK",
@@ -2031,6 +2031,9 @@
                 }
               }
             }
+          },
+          "204": {
+            "description": "No Content"
           },
           "401": {
             "description": "Unauthorized",

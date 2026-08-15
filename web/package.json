@@ -2,7 +2,7 @@
   "name": "concordat-web",
   "version": "0.0.0",
   "private": true,
-  "description": "The Concordat web application (DESIGN §9).",
+  "description": "The Concordat web application (DESIGN \u00a79).",
   "license": "Apache-2.0",
   "engines": {
     "node": "^22.22.3 || ^24.15.0 || >=26.0.0"
@@ -17,7 +17,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "codes:generate": "node tools/generate-concordat-codes.mjs",
-    "codes:check": "node tools/generate-concordat-codes.mjs --check"
+    "codes:check": "node tools/generate-concordat-codes.mjs --check",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed",
+    "e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@angular/cdk": "^22.1.0",
@@ -41,6 +44,7 @@
     "@angular/cli": "^22.1.4",
     "@angular/compiler-cli": "^22.1.0",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4.1.12",
     "@types/luxon": "^3.7.1",
     "angular-eslint": "^22.1.0",

@@ -21,6 +21,46 @@ namespace Concordat.Domain.Tests;
 /// </remarks>
 public class WireTokenTests
 {
+    // --------------------------------------- the frontend shares these vocabularies
+
+    /// <summary>
+    /// Every version status the registry can emit is one the web app knows.
+    /// </summary>
+    /// <remarks>
+    /// <b>Added after a browser found the gap the hard way.</b> <c>DISMISSED</c> shipped with M7
+    /// and <c>web/src/app/domain/registry/wire-tokens.ts</c> never learned it — and because the
+    /// web app's unknown-token guard is strict, a single dismissed version failed the entire
+    /// subject list with "the registry sent 'DISMISSED', which this build does not recognise".
+    /// Every unit test on both sides passed throughout.
+    /// <para>
+    /// Compared by hand, like the scope vocabulary in <c>IdentityTests</c>: the two are separate
+    /// builds, so nothing else makes a change here fail over there.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void VersionStatusesMatchWhatTheFrontendPublishes() =>
+        // Sorted on both sides, so adding a member in the middle of the enum is not a failure.
+        Assert.Equal(
+            ["ACTIVE", "AWAITING_APPROVAL", "DISMISSED", "REJECTED"],
+            Enum.GetValues<VersionStatus>().Select(WireTokens.For)
+                .Order(StringComparer.Ordinal).ToArray());
+
+    /// <summary>Every subject lifecycle the registry can emit is one the web app knows.</summary>
+    [Fact]
+    public void SubjectLifecyclesMatchWhatTheFrontendPublishes() =>
+        Assert.Equal(
+            ["ACTIVE", "DEPRECATED", "RETIRED"],
+            Enum.GetValues<SubjectLifecycle>().Select(WireTokens.For)
+                .Order(StringComparer.Ordinal).ToArray());
+
+    /// <summary>Every schema format the registry can emit is one the web app knows.</summary>
+    [Fact]
+    public void SchemaFormatsMatchWhatTheFrontendPublishes() =>
+        Assert.Equal(
+            ["avro", "json", "protobuf"],
+            Enum.GetValues<SchemaFormat>().Select(WireTokens.For)
+                .Order(StringComparer.Ordinal).ToArray());
+
     [Theory]
     [InlineData(SchemaFormat.Json, "json")]
     [InlineData(SchemaFormat.Avro, "avro")]

@@ -50,16 +50,30 @@ export class SessionApi {
    * The credential is held in memory only — `localStorage` is readable by any script on the
    * page, and ADR-006 already declined that trade. This is what stops a reload signing you out
    * without putting the token anywhere script can reach.
+   *
+   * Resolves to `null` when there is no session, rather than erroring. The app must probe on
+   * every startup — it cannot read an httpOnly cookie to find out whether probing is worthwhile
+   * — so treating "signed out" as a failure logged a console error on every signed-out page
+   * load of a perfectly healthy app.
    */
-  resume(): Observable<ResumedSession> {
+  resume(): Observable<ResumedSession | null> {
     return this.http
-      .post<SignInDto>(`${apiRoot(this.config)}/auth/resume`, null, { withCredentials: true })
+      .post<SignInDto | null>(`${apiRoot(this.config)}/auth/resume`, null, {
+        withCredentials: true,
+      })
       .pipe(
-        map((dto) => ({
-          credential: dto.credential,
-          actor: dto.actor,
-          scopes: known(dto.scopes),
-        })),
+        // 204 with no body is "nothing to resume", which is the ordinary signed-out answer
+        // rather than a failure. The API answers 401 only when a cookie was presented and did
+        // not verify.
+        map((dto) =>
+          dto
+            ? {
+                credential: dto.credential,
+                actor: dto.actor,
+                scopes: known(dto.scopes),
+              }
+            : null,
+        ),
       );
   }
 

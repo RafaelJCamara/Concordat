@@ -133,6 +133,100 @@ jobs:
         working-directory: web
         run: npm run build
 
+  e2e:
+    name: browser end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # Its own job, and it needs the whole product: the API image, PostgreSQL, and the dev
+    # server. That is the point -- the first browser to load this app against a running
+    # registry found the subject list broken, with every unit test on both sides green.
+    #
+    # Separate from `web` so a lint failure is not reported as an E2E failure, and so the
+    # fast job still answers in two minutes.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: concordat
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      ConnectionStrings__Concordat: 'Host=localhost;Database=concordat;Username=postgres;Password=postgres'
+      CONCORDAT_WEB_URL: http://localhost:4300
+      CONCORDAT_REGISTRY: http://localhost:5062
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.3'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      # From source rather than the published image: this job's purpose is to catch the two
+      # halves disagreeing, and testing yesterday's image against today's frontend would let
+      # exactly that disagreement through.
+      - name: Migrate
+        run: dotnet run --project src/hosts/Concordat.Migrator -c Release
+
+      - name: Start the registry
+        run: |
+          dotnet run --project src/hosts/Concordat.Api -c Release --urls http://localhost:5062 &
+          for _ in $(seq 1 60); do
+            curl -fsS http://localhost:5062/health/ready >/dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          echo "::error::the registry never became ready"
+          exit 1
+
+      - name: Start the web app
+        working-directory: web
+        run: |
+          npm start -- --port 4300 &
+          for _ in $(seq 1 60); do
+            curl -fsS http://localhost:4300 >/dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          echo "::error::the dev server never came up"
+          exit 1
+
+      - name: End-to-end
+        working-directory: web
+        run: npm run e2e
+
+      - name: Upload the trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            web/playwright-report/
+            web/test-results/
+          retention-days: 7
+
   protocol-docs:
     name: protocol docs gate
     runs-on: ubuntu-latest

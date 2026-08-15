@@ -501,11 +501,18 @@ Three details worth knowing:
 are the callers and neither may import a feature. The boundaries lint caught that, which is what
 it is for.
 
-> **Still open: there is no browser E2E.** `if-scope.spec.ts` and `scope-guard.spec.ts` cover
-> each half in isolation and the API's `AuthorizationTests` cover the server. Nothing drives a
-> real browser through "sign in as a reader, confirm the button is absent, paste the URL
-> anyway". That needs Playwright, which this project has never had — a dependency decision
-> rather than an oversight, and it is [M4.5](plan/M4-web-app.md)'s to make.
+**The browser E2E half is now done too, 2026-08-15.** Playwright is in, `web/e2e/` holds 11
+tests, and the reload case above is one of them — the only way to prove a *browser* keeps the
+cookie across a real navigation and that the app asks for it before the first render.
+
+It earned its place in the first ten seconds: the subject list was **broken** against a real
+registry, because `VersionStatus.Dismissed` shipped with M7 and `wire-tokens.ts` never learned
+it. 1,489 .NET and 187 Angular tests were green throughout. See [STATUS.md](STATUS.md).
+
+> **One of M4.5's two named tests is deliberately absent**: "direct URL to a write route
+> redirects". There is no write route — `app.routes.ts` has two entries and `**` redirects
+> everything else, and `scopeGuard` is built and referenced by nothing. Writing it would assert
+> the wildcard and pass while proving nothing. It goes in with M4.3's pages.
 
 ### 27. ~~`AllowAnonymousUntilClaimed` is on by default~~ — done
 

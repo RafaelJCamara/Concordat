@@ -62,13 +62,19 @@ export function provideSessionInitializer() {
     );
 
     return sessions.resume().pipe(
-        tap((resumed) => session.signIn(resumed)),
-        // Still asked, because signing in does not answer whether the INSTANCE is claimed --
-        // and that is what the unclaimed banner and the scope guard read.
-        switchMap(() => status$),
-        // No cookie, an expired one, or a registry that cannot be reached. All three mean the
-        // same thing here: carry on and let /auth/status say what it can.
-        catchError(() => status$),
-      );
+      tap((resumed) => {
+        // null is "nothing to resume", the ordinary signed-out answer. Only a genuine
+        // failure reaches catchError below.
+        if (resumed) {
+          session.signIn(resumed);
+        }
+      }),
+      // Still asked, because signing in does not answer whether the INSTANCE is claimed --
+      // and that is what the unclaimed banner and the scope guard read.
+      switchMap(() => status$),
+      // No cookie, an expired one, or a registry that cannot be reached. All three mean the
+      // same thing here: carry on and let /auth/status say what it can.
+      catchError(() => status$),
+    );
   });
 }

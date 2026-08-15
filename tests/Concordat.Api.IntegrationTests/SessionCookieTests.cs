@@ -83,13 +83,35 @@ public class SessionCookieTests(CloudApiFactory factory)
     }
 
     [Fact]
-    public async Task ResumeWithoutACookieIsUnauthorisedRatherThanAnonymous()
+    public async Task ResumeWithoutACookieIsNoContentRatherThanAnError()
     {
-        // In Cloud there is no unclaimed-instance owner to fall back to, and falling back at all
-        // would turn "your session ended" into "you are somebody else".
+        // NO COOKIE IS NOT AN AUTHENTICATION FAILURE, and this was 401 until a browser test
+        // asserting a clean console caught it. The app must probe on every startup -- it cannot
+        // read an httpOnly cookie to find out whether probing is worthwhile -- so 401 meant
+        // every signed-out page load of a perfectly healthy app logged a console error.
+        //
+        // The caller is not trying to authenticate; it is asking whether it already is, and
+        // "no" is an ordinary answer. Same absent-versus-invalid distinction as everywhere else.
         var http = factory.CreateClient();
 
         var resumed = await http.PostAsync("/v1/auth/resume", null);
+
+        Assert.Equal(HttpStatusCode.NoContent, resumed.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResumeWithACookieThatDoesNotVerifyIsUnauthorised()
+    {
+        // The other half. A cookie that WAS presented and did not verify is a real failure --
+        // expired, revoked, or from a registry since rebuilt -- and must not be confused with
+        // never having had one. Falling back would turn "your session ended" into "you are
+        // somebody else".
+        var http = factory.CreateClient();
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/v1/auth/resume");
+        request.Headers.Add("Cookie", $"{SessionCookie.Name}=cdt_notarealkey_atall");
+
+        var resumed = await http.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Unauthorized, resumed.StatusCode);
     }
@@ -104,9 +126,13 @@ public class SessionCookieTests(CloudApiFactory factory)
 
         // Script cannot delete an httpOnly cookie, which is why signing out needs the server at
         // all -- the property that makes the cookie safe is the one that makes this a round trip.
+        //
+        // 204 rather than 401: the cookie is GONE, so this is the ordinary no-session answer.
+        // A 401 here would mean the cookie survived and was merely rejected, which is a
+        // different and much worse outcome.
         var resumed = await http.PostAsync("/v1/auth/resume", null);
 
-        Assert.Equal(HttpStatusCode.Unauthorized, resumed.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, resumed.StatusCode);
     }
 
     [Fact]

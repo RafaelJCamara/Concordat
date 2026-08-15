@@ -12,8 +12,16 @@ export const SCHEMA_FORMATS = ['json', 'avro', 'protobuf'] as const;
 /** A schema language, spelled as the API spells it. */
 export type SchemaFormat = (typeof SCHEMA_FORMATS)[number];
 
-/** Where a version sits in the approval gate (ADR-017). */
-export const VERSION_STATUSES = ['ACTIVE', 'AWAITING_APPROVAL', 'REJECTED'] as const;
+/**
+ * Where a version sits in the approval gate (ADR-017).
+ *
+ * `DISMISSED` is a pending version whose change was reverted before anyone reviewed it — the
+ * registry closes it rather than leaving a proposal nobody will ever act on. It was added with
+ * M7 and this list did not learn it until 2026-08-15, which broke the subject list outright for
+ * any environment containing one: the unknown-token guard is strict, so one dismissed version
+ * failed the whole page. `WireTokenTests` now compares this list against the .NET enum.
+ */
+export const VERSION_STATUSES = ['ACTIVE', 'AWAITING_APPROVAL', 'REJECTED', 'DISMISSED'] as const;
 
 /** A version's status. */
 export type VersionStatus = (typeof VERSION_STATUSES)[number];
