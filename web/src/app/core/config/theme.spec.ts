@@ -52,29 +52,30 @@ describe('readStoredAppearance', () => {
     expect(readStoredAppearance(workingStorage({ 'concordat.appearance': 'dark' }))).toBe('dark');
   });
 
-  it('defaults to system when nothing is stored', () => {
-    // `system` and not `light`. A first-time visitor whose OS is dark should get a dark
-    // page, not a white flash followed by a choice they never made.
-    expect(readStoredAppearance(workingStorage())).toBe('system');
+  it('defaults to dark when nothing is stored', () => {
+    // `dark` and not `system`. The design is a dark developer theme and the light palette
+    // is an addition to it, so a first visit should show the interface the product was
+    // drawn as — not hand most visitors, whose OS is light, a variant no screenshot shows.
+    expect(readStoredAppearance(workingStorage())).toBe('dark');
   });
 
-  it('defaults to system when the stored value is not a choice', () => {
+  it('defaults to dark when the stored value is not a choice', () => {
     // Someone else's key, a truncated write, or a value from a build that had more options.
     expect(readStoredAppearance(workingStorage({ 'concordat.appearance': 'midnight' }))).toBe(
-      'system',
+      'dark',
     );
   });
 
-  it('defaults to system when storage is unavailable', () => {
-    expect(readStoredAppearance(null)).toBe('system');
+  it('defaults to dark when storage is unavailable', () => {
+    expect(readStoredAppearance(null)).toBe('dark');
   });
 
-  it('defaults to system when reading storage throws', () => {
+  it('defaults to dark when reading storage throws', () => {
     // Safari in private browsing, or a third-party-cookie policy on an embedded page. An
     // unreadable preference is not a reason to fail to render — and this is called from
     // `main.ts` before bootstrap, so an exception here means a blank page, not a stack
     // trace in a component.
-    expect(readStoredAppearance(blockedStorage())).toBe('system');
+    expect(readStoredAppearance(blockedStorage())).toBe('dark');
   });
 });
 

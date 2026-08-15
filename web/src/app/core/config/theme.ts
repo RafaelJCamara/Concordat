@@ -20,7 +20,19 @@ const STORAGE_KEY = 'concordat.appearance';
 const APPEARANCES: readonly Appearance[] = ['light', 'dark', 'system'];
 
 /**
- * The stored choice, defaulting to `system`.
+ * What a visitor gets before they have chosen anything.
+ *
+ * `dark`, not `system`. The design is a dark developer theme (ADR-006) — the prototype
+ * shipped no light palette at all, and the teal-on-near-black is the product's face. The
+ * light theme DESIGN §9 adds exists for the people who want it, and defaulting to
+ * `system` would hand it instead to every first-time visitor on a light OS, which is most
+ * of them. They would see a version of the interface nobody designed and no screenshot
+ * shows. A deliberate choice still wins, and still survives a reload.
+ */
+const DEFAULT_APPEARANCE: Appearance = 'dark';
+
+/**
+ * The stored choice, defaulting to {@link DEFAULT_APPEARANCE}.
  *
  * Storage access is wrapped because it throws, not returns null, when the browser has
  * blocked it — Safari in private browsing, or a third-party-cookie policy on an embedded
@@ -29,9 +41,9 @@ const APPEARANCES: readonly Appearance[] = ['light', 'dark', 'system'];
 export function readStoredAppearance(storage: Storage | null): Appearance {
   try {
     const stored = storage?.getItem(STORAGE_KEY);
-    return isAppearance(stored) ? stored : 'system';
+    return isAppearance(stored) ? stored : DEFAULT_APPEARANCE;
   } catch {
-    return 'system';
+    return DEFAULT_APPEARANCE;
   }
 }
 

@@ -1,83 +1,97 @@
 /* =============================================================================
- * PLACEHOLDER TOKENS — pending the prototype's real `index.css`.
+ * The design system, ported from the React prototype's `index.css` (ADR-006).
  * =============================================================================
  *
- * ADR-006 says to port the React prototype's token set verbatim. The prototype is
- * maintained in a separate repository and was not available when this scaffold was
- * built, so what follows is a stand-in: a palette designed to the same token contract
- * (shadcn/spartan names, OKLCH values) and checked for contrast, but not the intended
- * one. Replacing it is meant to be a values-only edit to this one file — nothing else
- * in the app names a colour.
+ * The dark block below is the prototype's palette verbatim — same hues, same
+ * saturations, same lightnesses — re-spelled from the `--primary: 173 80% 50%` triple
+ * form into complete `hsl(...)` colours. That re-spelling is forced, not stylistic:
+ * Tailwind v3 wrapped every token at the point of use (`hsl(var(--primary))`), whereas
+ * Spartan's preset bridges `--primary` straight onto `--color-primary`, so a bare triple
+ * would reach the browser as an invalid colour. The numbers are untouched.
  *
- * When the real tokens arrive:
- *   - The prototype ships `:root { ... }` and `.dark { ... }` blocks in exactly this
- *     shape, so the swap is a paste, not a translation.
- *   - It is dark-only. The light block below is the addition DESIGN §9 asks for and has
- *     no counterpart to copy from; keep it and re-derive it from the new dark values.
- *   - Anything the prototype does not define — `--success`, `--warning`, `--chart-*` —
- *     still needs a value, so do not delete those lines wholesale.
+ * "Dark developer theme" is the whole visual identity: a near-black navy ground, one
+ * saturated teal doing all the pointing, and a green-teal accent a few degrees off it. It
+ * is a registry console people leave open next to a terminal all day, and it is meant to
+ * sit in that company without glaring.
  *
- * Structure. `:root` is light and `.dark` is dark, because that is the switch Spartan's
- * preset compiles against: `@custom-variant dark (&:is(.dark *))`. The generated helm
- * components use `dark:` utilities (`dark:bg-input/30`, `dark:hover:bg-muted/50`), so
- * driving the tokens from `prefers-color-scheme` instead would leave those utilities
- * keyed to the OS while the tokens followed the user's choice — a page half in each
- * theme. `ThemeStore` puts `.dark` on `<html>`; `main.ts` does it before bootstrap so
- * there is no flash.
+ * Structure. `.dark` is the prototype's palette and `:root` is the light theme DESIGN §9
+ * adds. That split is the switch Spartan's preset compiles against
+ * (`@custom-variant dark (&:is(.dark *))`), and the generated helm components use `dark:`
+ * utilities (`dark:bg-input/30`, `dark:hover:bg-muted/50`); driving the tokens off
+ * `prefers-color-scheme` instead would leave those utilities keyed to the OS while the
+ * tokens followed the user's choice — a page half in each theme. `ThemeStore` puts
+ * `.dark` on `<html>`; `main.ts` does it before bootstrap so there is no flash.
  *
- * Contrast. Every text-on-surface pair below meets WCAG 2.1 AA (4.5:1), verified by
- * converting the OKLCH values to sRGB and computing the ratio. The pairs that were
- * tightest, and are worth re-checking after any edit: `warning-foreground` on
- * `warning` in light (4.8:1) and `destructive-foreground` on `destructive` in dark
- * (5.1:1).
+ * The light theme has no counterpart in the prototype and is derived from these values
+ * rather than invented beside them: the same teal hue (173) darkened to 27% so white text
+ * clears AA on it, and the same cool-navy hue family (222/215/210) run up to near-white
+ * for the surfaces. It reads as the same product with the lights on.
+ *
+ * Contrast. Every text-on-surface pair meets WCAG 2.1 AA (4.5:1), computed by converting
+ * to sRGB and taking the ratio. The tightest, worth re-checking after any edit:
+ * `--muted-foreground` on `--background` in dark (7.0:1), `--primary-foreground` on
+ * `--primary` in light (5.1:1), and `--warning` used as text on `--card` in dark (8.8:1).
+ * The prototype's own `--warning`/`--info` were only ever used as fills or as text on
+ * dark, which is why they survive the port unchanged.
  * ========================================================================== */
 
 :root {
   color-scheme: light;
 
+  /*
+   * The prototype loads both from Google Fonts. Inter carries the UI and JetBrains Mono
+   * carries schema text — see `index.html`, where they are `<link>`ed so the Angular build
+   * can inline them, and the local stack after each name is what renders if that fetch
+   * never lands.
+   */
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
   /* Schema documents are read here constantly. A monospace stack is load-bearing, not decoration. */
   --font-mono:
-    ui-monospace, 'JetBrains Mono', 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+    'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
 
-  --radius: 0.5rem;
+  --radius: 0.625rem;
 
-  --background: oklch(0.995 0.002 265);
-  --foreground: oklch(0.2 0.02 265);
+  --background: hsl(210 40% 98%);
+  --foreground: hsl(222 47% 11%);
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.02 265);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(222 47% 11%);
 
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.02 265);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(222 47% 11%);
 
-  --primary: oklch(0.5 0.17 262);
-  --primary-foreground: oklch(0.99 0 0);
+  /* The prototype's teal, darkened until white text clears AA on it. Same hue, same saturation. */
+  --primary: hsl(173 80% 27%);
+  --primary-foreground: hsl(0 0% 100%);
 
-  --secondary: oklch(0.965 0.008 265);
-  --secondary-foreground: oklch(0.25 0.02 265);
+  --secondary: hsl(210 40% 94%);
+  --secondary-foreground: hsl(222 47% 11%);
 
-  --muted: oklch(0.965 0.008 265);
-  --muted-foreground: oklch(0.5 0.02 265);
+  --muted: hsl(210 40% 95%);
+  --muted-foreground: hsl(215 20% 40%);
 
-  --accent: oklch(0.945 0.012 265);
-  --accent-foreground: oklch(0.22 0.02 265);
+  --accent: hsl(160 84% 26%);
+  --accent-foreground: hsl(0 0% 100%);
 
-  --destructive: oklch(0.55 0.21 27);
-  --destructive-foreground: oklch(0.99 0 0);
+  --destructive: hsl(0 72% 44%);
+  --destructive-foreground: hsl(0 0% 100%);
 
   /*
-   * Not in the shadcn contract, and added deliberately. This is a registry UI: nearly
-   * every row carries a status — ACTIVE, AWAITING_APPROVAL, REJECTED, DEPRECATED,
-   * compatible / breaking. Without tokens for "fine" and "needs a look", those states
-   * get expressed as ad-hoc Tailwind palette classes and drift from screen to screen,
-   * which is exactly the coherence a token set exists to protect.
+   * Not in the shadcn contract, and in the prototype for the same reason they are kept
+   * here: this is a registry UI: nearly every row carries a status — ACTIVE,
+   * AWAITING_APPROVAL, REJECTED, DEPRECATED, compatible / breaking. Without tokens for
+   * "fine" and "needs a look", those states get expressed as ad-hoc Tailwind palette
+   * classes and drift from screen to screen, which is exactly the coherence a token set
+   * exists to protect.
    */
-  --success: oklch(0.51 0.115 155);
-  --success-foreground: oklch(0.99 0 0);
-  --warning: oklch(0.55 0.112 72);
-  --warning-foreground: oklch(0.99 0 0);
+  --success: hsl(160 84% 26%);
+  --success-foreground: hsl(0 0% 100%);
+  --warning: hsl(38 92% 32%);
+  --warning-foreground: hsl(0 0% 100%);
+  --info: hsl(217 91% 42%);
+  --info-foreground: hsl(0 0% 100%);
 
   /*
    * `--border` is decorative — card edges, table rules, dividers — and is deliberately
@@ -86,77 +100,121 @@
    * look like the same kind of token and are not, which is why most design systems ship
    * an input border nobody can see.
    */
-  --border: oklch(0.9 0.01 265);
-  --input: oklch(0.62 0.018 265);
-  --ring: oklch(0.5 0.17 262);
+  --border: hsl(214 32% 88%);
+  --input: hsl(215 20% 62%);
+  --ring: hsl(173 80% 27%);
 
   /* Ordered so the first three carry the common three-series chart without collision. */
-  --chart-1: oklch(0.5 0.17 262);
-  --chart-2: oklch(0.51 0.115 155);
-  --chart-3: oklch(0.55 0.112 72);
-  --chart-4: oklch(0.55 0.21 27);
-  --chart-5: oklch(0.52 0.16 310);
+  --chart-1: hsl(173 80% 27%);
+  --chart-2: hsl(160 84% 26%);
+  --chart-3: hsl(38 92% 32%);
+  --chart-4: hsl(0 72% 44%);
+  --chart-5: hsl(217 91% 42%);
 
-  --sidebar: oklch(0.98 0.005 265);
-  --sidebar-foreground: oklch(0.2 0.02 265);
-  --sidebar-primary: oklch(0.5 0.17 262);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.945 0.012 265);
-  --sidebar-accent-foreground: oklch(0.22 0.02 265);
-  --sidebar-border: oklch(0.9 0.01 265);
-  --sidebar-ring: oklch(0.5 0.17 262);
+  --sidebar: hsl(210 40% 96%);
+  --sidebar-foreground: hsl(222 47% 20%);
+  --sidebar-primary: hsl(173 80% 27%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(210 40% 92%);
+  --sidebar-accent-foreground: hsl(222 47% 11%);
+  --sidebar-border: hsl(214 32% 88%);
+  --sidebar-ring: hsl(173 80% 27%);
+
+  /* Syntax colours, darkened from the dark theme's for legibility on a white page. */
+  --syntax-keyword: hsl(280 65% 42%);
+  --syntax-string: hsl(95 60% 26%);
+  --syntax-number: hsl(32 95% 34%);
+  --syntax-property: hsl(200 85% 34%);
+  --syntax-boolean: hsl(173 80% 27%);
+
+  --gradient-primary: linear-gradient(135deg, hsl(173 80% 27%) 0%, hsl(160 84% 26%) 100%);
+  --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 40% 98%) 100%);
+  --gradient-sidebar: linear-gradient(180deg, hsl(210 40% 97%) 0%, hsl(210 40% 95%) 100%);
+
+  --shadow-glow: 0 0 20px -5px hsl(173 80% 27% / 0.25);
+  --shadow-card: 0 4px 24px -4px hsl(222 47% 40% / 0.12);
+  --shadow-elevated: 0 8px 32px -8px hsl(222 47% 40% / 0.18);
 }
 
+/* The prototype's palette. Values as published; only the `hsl()` wrapper is new. */
 .dark {
   color-scheme: dark;
 
-  --background: oklch(0.145 0.012 265);
-  --foreground: oklch(0.968 0.004 265);
+  --background: hsl(222 47% 6%);
+  --foreground: hsl(210 40% 96%);
 
-  --card: oklch(0.196 0.014 265);
-  --card-foreground: oklch(0.968 0.004 265);
+  --card: hsl(222 47% 8%);
+  --card-foreground: hsl(210 40% 96%);
 
-  --popover: oklch(0.196 0.014 265);
-  --popover-foreground: oklch(0.968 0.004 265);
+  --popover: hsl(222 47% 10%);
+  --popover-foreground: hsl(210 40% 96%);
 
-  --primary: oklch(0.68 0.155 258);
-  --primary-foreground: oklch(0.16 0.03 258);
+  --primary: hsl(173 80% 50%);
+  --primary-foreground: hsl(222 47% 6%);
 
-  --secondary: oklch(0.27 0.018 265);
-  --secondary-foreground: oklch(0.968 0.004 265);
+  --secondary: hsl(222 30% 14%);
+  --secondary-foreground: hsl(210 40% 96%);
 
-  --muted: oklch(0.27 0.018 265);
-  --muted-foreground: oklch(0.72 0.02 265);
+  --muted: hsl(222 30% 12%);
+  --muted-foreground: hsl(215 20% 55%);
 
-  --accent: oklch(0.3 0.02 265);
-  --accent-foreground: oklch(0.968 0.004 265);
+  --accent: hsl(160 84% 39%);
+  --accent-foreground: hsl(222 47% 6%);
 
-  --destructive: oklch(0.63 0.2 25);
-  --destructive-foreground: oklch(0.15 0.04 25);
+  --destructive: hsl(0 72% 51%);
+  --destructive-foreground: hsl(210 40% 98%);
 
-  --success: oklch(0.72 0.16 155);
-  --success-foreground: oklch(0.16 0.04 155);
-  --warning: oklch(0.8 0.15 85);
-  --warning-foreground: oklch(0.2 0.03 85);
+  --success: hsl(160 84% 39%);
+  --success-foreground: hsl(222 47% 6%);
+  --warning: hsl(38 92% 50%);
+  --warning-foreground: hsl(222 47% 6%);
+  --info: hsl(217 91% 60%);
+  --info-foreground: hsl(222 47% 6%);
 
-  --border: oklch(0.34 0.018 265);
-  --input: oklch(0.5 0.02 265);
-  --ring: oklch(0.68 0.155 258);
+  --border: hsl(222 30% 18%);
+  /*
+   * The one number the port does not carry across. The prototype sets `--input` to the
+   * same value as `--secondary` (222 30% 14%), which against an 8%-lightness card is a
+   * 1.2:1 edge — a text field with no visible boundary, failing WCAG 1.4.11. It reads as
+   * an oversight rather than a choice: the prototype's own inputs are only ever seen
+   * inside dialogs where the surrounding fill implies the box. Raised to the lightness
+   * that clears 3:1 and left at the same hue.
+   */
+  --input: hsl(222 30% 42%);
+  --ring: hsl(173 80% 50%);
 
-  --chart-1: oklch(0.68 0.155 258);
-  --chart-2: oklch(0.72 0.16 155);
-  --chart-3: oklch(0.8 0.15 85);
-  --chart-4: oklch(0.63 0.2 25);
-  --chart-5: oklch(0.7 0.14 310);
+  --chart-1: hsl(173 80% 50%);
+  --chart-2: hsl(160 84% 39%);
+  --chart-3: hsl(38 92% 50%);
+  --chart-4: hsl(0 72% 51%);
+  --chart-5: hsl(217 91% 60%);
 
-  --sidebar: oklch(0.17 0.013 265);
-  --sidebar-foreground: oklch(0.968 0.004 265);
-  --sidebar-primary: oklch(0.68 0.155 258);
-  --sidebar-primary-foreground: oklch(0.16 0.03 258);
-  --sidebar-accent: oklch(0.3 0.02 265);
-  --sidebar-accent-foreground: oklch(0.968 0.004 265);
-  --sidebar-border: oklch(0.34 0.018 265);
-  --sidebar-ring: oklch(0.68 0.155 258);
+  /*
+   * The prototype spells this `--sidebar-background`; Spartan's preset reads `--sidebar`.
+   * Same colour, and the only renamed token in the set.
+   */
+  --sidebar: hsl(222 47% 5%);
+  --sidebar-foreground: hsl(210 40% 85%);
+  --sidebar-primary: hsl(173 80% 50%);
+  --sidebar-primary-foreground: hsl(222 47% 6%);
+  --sidebar-accent: hsl(222 30% 12%);
+  --sidebar-accent-foreground: hsl(210 40% 96%);
+  --sidebar-border: hsl(222 30% 15%);
+  --sidebar-ring: hsl(173 80% 50%);
+
+  --syntax-keyword: hsl(280 65% 68%);
+  --syntax-string: hsl(95 60% 55%);
+  --syntax-number: hsl(32 95% 60%);
+  --syntax-property: hsl(200 85% 65%);
+  --syntax-boolean: hsl(173 80% 50%);
+
+  --gradient-primary: linear-gradient(135deg, hsl(173 80% 50%) 0%, hsl(160 84% 39%) 100%);
+  --gradient-card: linear-gradient(180deg, hsl(222 47% 10%) 0%, hsl(222 47% 8%) 100%);
+  --gradient-sidebar: linear-gradient(180deg, hsl(222 47% 7%) 0%, hsl(222 47% 5%) 100%);
+
+  --shadow-glow: 0 0 20px -5px hsl(173 80% 50% / 0.3);
+  --shadow-card: 0 4px 24px -4px hsl(222 47% 2% / 0.5);
+  --shadow-elevated: 0 8px 32px -8px hsl(222 47% 2% / 0.6);
 }
 
 /*
@@ -169,12 +227,19 @@
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-syntax-keyword: var(--syntax-keyword);
+  --color-syntax-string: var(--syntax-string);
+  --color-syntax-number: var(--syntax-number);
+  --color-syntax-property: var(--syntax-property);
+  --color-syntax-boolean: var(--syntax-boolean);
 }
 
 @layer base {
@@ -190,10 +255,18 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family: var(--font-mono);
+  }
+
   /*
    * Respect a reduced-motion preference globally rather than per component. Spartan's
    * primitives animate overlays and accordions by default, and remembering to opt each
-   * one out is the kind of thing that gets missed on the twentieth component.
+   * one out is the kind of thing that gets missed on the twentieth component. This also
+   * covers the utilities below, which is why none of them repeat the guard.
    */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -204,5 +277,74 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+/* -----------------------------------------------------------------------------
+ * The prototype's utility layer.
+ *
+ * Five classes, each carrying a bit of the visual identity that no token can hold on its
+ * own: the glow behind a primary action, the teal-to-green wash on a wordmark, and the
+ * three animations that make the interface feel live rather than printed. `@utility` is
+ * the Tailwind v4 spelling of what the prototype declared in `@layer utilities`.
+ * -------------------------------------------------------------------------- */
+
+@utility glass {
+  background-color: color-mix(in oklab, var(--card) 80%, transparent);
+  backdrop-filter: blur(24px);
+  border: 1px solid color-mix(in oklab, var(--border) 50%, transparent);
+}
+
+@utility glow-primary {
+  box-shadow: var(--shadow-glow);
+}
+
+@utility gradient-text {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+@utility animate-glow {
+  animation: cd-glow 2s ease-in-out infinite alternate;
+}
+
+@utility animate-fade-in {
+  animation: cd-fade-in 0.3s ease-out forwards;
+}
+
+@utility animate-pulse-dot {
+  animation: cd-pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes cd-glow {
+  from {
+    box-shadow: 0 0 10px -5px color-mix(in oklab, var(--primary) 30%, transparent);
+  }
+  to {
+    box-shadow: 0 0 20px -5px color-mix(in oklab, var(--primary) 50%, transparent);
+  }
+}
+
+@keyframes cd-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cd-pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
   }
 }

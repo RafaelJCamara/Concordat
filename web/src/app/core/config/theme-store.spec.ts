@@ -57,10 +57,13 @@ describe('ThemeStore', () => {
     return TestBed.inject(ThemeStore);
   }
 
-  it('starts on system so a first visit matches the OS', () => {
-    media.matches = true;
+  it('starts on dark so a first visit sees the designed theme', () => {
+    // Even on a light OS. The design is a dark developer theme and the light palette is an
+    // addition to it, so `system` as a default would show most first-time visitors an
+    // interface no screenshot of this product shows.
+    media.matches = false;
 
-    expect(store().appearance()).toBe('system');
+    expect(store().appearance()).toBe('dark');
     expect(store().resolved()).toBe('dark');
   });
 
@@ -76,6 +79,7 @@ describe('ThemeStore', () => {
     // `system` expects the page to turn dark when their OS does at dusk; reading `matches`
     // at construction would leave them on the theme they had at breakfast.
     const theme = store();
+    theme.choose('system');
     expect(theme.resolved()).toBe('light');
 
     media.announce(true);
@@ -128,7 +132,7 @@ describe('ThemeStore', () => {
     // The effect reads `resolved()`, which depends on both inputs. If it tracked only the
     // stored choice, a `system` user's OS flip would update the store and leave the page
     // rendered in the old theme.
-    store();
+    store().choose('system');
     TestBed.tick();
     expect(document.documentElement.classList.contains('dark')).toBe(false);
 
