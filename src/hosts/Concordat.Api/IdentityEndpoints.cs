@@ -1,9 +1,9 @@
 using Concordat.Application.Abstractions;
-using Microsoft.AspNetCore.Http.HttpResults;
 using Concordat.Application.Identity;
 using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Options;
 
 namespace Concordat.Api;

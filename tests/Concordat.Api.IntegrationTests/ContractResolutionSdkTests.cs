@@ -183,7 +183,7 @@ public class ContractResolutionSdkTests(ApiFactory factory)
 
         // A second contract over the same route, stricter, naming a different subject.
         var second = $"a-{Guid.CreateVersion7():N}"[..20];   // sorts before `first`, so a
-                                                            // first-by-name bug would pick it
+                                                             // first-by-name bug would pick it
         var created = await http.PostAsJsonAsync(
             $"/v1/environments/{environment}/contracts",
             new CreateContractRequest(second, "ENFORCE"),

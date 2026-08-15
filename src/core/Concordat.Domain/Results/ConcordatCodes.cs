@@ -42,7 +42,9 @@ public static class ConcordatCodes
     public const string CredentialInvalid = "credential_invalid";
 
     /// <summary>
-    /// The environment's registration policy does not admit this caller.
+    /// The environment's registration policy does not admit this caller. Answered <b>403</b>, not
+    /// 400: the request is well formed and the credential is valid — what refused it is a property
+    /// of the environment.
     /// </summary>
     /// <remarks>
     /// Separate from an authorisation failure, and deliberately so: the credential is valid and
@@ -79,17 +81,18 @@ public static class ConcordatCodes
     public const string BindingConflict = "binding_conflict";
 
     /// <summary>
-    /// A message carried a subject the contract governing that route does not permit.
+    /// A message carried a subject the contract governing that route does not permit. Raised by
+    /// the SDK, not the registry.
     /// </summary>
     /// <remarks>
-    /// Raised by the SDK, not the registry: it is the whole point of resolving contracts at the
-    /// client. A payload can be perfectly valid against its own schema and still be the wrong
-    /// message on that route, and nothing except the contract can tell the difference.
+    /// Raising it at the client is the whole point of resolving contracts there. A payload can be
+    /// perfectly valid against its own schema and still be the wrong message on that route, and
+    /// nothing except the contract can tell the difference.
     /// </remarks>
     public const string ContractSubjectNotPermitted = "contract_subject_not_permitted";
 
     /// <summary>
-    /// The subject is permitted on the route, but not at the version being sent.
+    /// The subject is permitted on the route, but not at the version being sent. Raised by the SDK.
     /// </summary>
     /// <remarks>
     /// A binding pinned to <c>orders.created@3</c> against a subject whose latest is 7. The
@@ -99,7 +102,8 @@ public static class ConcordatCodes
     public const string ContractVersionNotPermitted = "contract_version_not_permitted";
 
     /// <summary>
-    /// The route is governed and permits several subjects, and the message declared none.
+    /// The route is governed and permits several subjects, and the message declared none — so the
+    /// subject cannot be chosen without guessing. Raised by the SDK.
     /// </summary>
     /// <remarks>
     /// Not a violation and not resolvable. A single-subject binding lets the SDK supply the
@@ -114,12 +118,12 @@ public static class ConcordatCodes
     public const string ServiceNameInvalid = "service_name_invalid";
 
     /// <summary>
-    /// A client-reported enforcement violation was missing something the registry needs.
+    /// A client-reported enforcement violation was missing something the registry needs. Its own
+    /// code rather than <c>invalid_request</c>: reports arrive fire-and-forget, so nobody reads
+    /// the response and the code is what makes a rejected report legible in a log.
     /// </summary>
     /// <remarks>
-    /// Its own code rather than <c>invalid_request</c>: this arrives on a fire-and-forget path
-    /// from an SDK, so nobody is reading the response. The code is what makes a rejected report
-    /// legible in a log rather than a silent hole in the metric.
+    /// Without it a rejected report is a silent hole in the metric rather than a line in a log.
     /// </remarks>
     public const string ViolationReportInvalid = "violation_report_invalid";
 
@@ -270,17 +274,26 @@ public static class ConcordatCodes
     /// <summary>A semantic version label was not <c>MAJOR.MINOR.PATCH</c>.</summary>
     public const string SemverInvalid = "semver_invalid";
 
-    /// <summary>Pre-release and build metadata are not supported in v1.</summary>
+    /// <summary>
+    /// The environment does not accept pre-release labels. Configurable per environment
+    /// (<c>allowPreReleaseVersions</c>), off by default — the label itself is valid.
+    /// </summary>
+    /// <remarks>
+    /// Whether a label PARSES and whether an environment ACCEPTS it are different questions
+    /// (decision #8). Grammar lives in <c>SemanticVersion</c>, policy on the environment, so a
+    /// team emitting <c>-rc</c> labels is not prevented from labelling a version anywhere at all.
+    /// </remarks>
     public const string SemverPrereleaseUnsupported = "semver_prerelease_unsupported";
 
     /// <summary>
-    /// A label carried build metadata, which this registry does not accept.
+    /// A label carried build metadata. Refused everywhere: SemVer ignores it for precedence, so
+    /// two labels carrying different metadata compare equal while being different strings, and
+    /// the registry requires each label to increase.
     /// </summary>
     /// <remarks>
     /// Its own code rather than <see cref="SemverInvalid"/>, because the reason is specific and
-    /// actionable: SemVer ignores build metadata for precedence, so two labels carrying
-    /// different metadata compare equal — and the registry requires each label to increase on
-    /// the last. A grammar that can express something the ordering cannot see is a trap.
+    /// actionable. Unlike a pre-release label this is not configurable: a grammar that can
+    /// express something the ordering cannot see is a trap.
     /// </remarks>
     public const string SemverBuildMetadataUnsupported = "semver_build_metadata_unsupported";
 

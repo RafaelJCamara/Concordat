@@ -5,9 +5,9 @@ using Concordat.Domain.Governance;
 using Concordat.Domain.Identity;
 using Concordat.Infrastructure;
 using Concordat.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.AspNetCore.Hosting;
 
 namespace Concordat.Api.IntegrationTests;
 
