@@ -1,7 +1,0 @@
-{
-  "name": "generic-type-is-refused-not-mangled",
-  "why": "Concordat does not spell generic type names. Any spelling would be an invention every SDK must reproduce character for character, and a Go or Python SDK has no CLR generic syntax to reproduce it from — the exact cross-language split ADR-019 exists to prevent. Refusing is honest and actionable; mangling would be silent and unrepeatable. Publish a named type instead.",
-  "messageType": "System.Collections.Generic.List`1[[Acme.Orders.Order, Acme.Contracts]], System.Private.CoreLib",
-  "outcome": "unusable",
-  "error": "subject_name_invalid"
-}

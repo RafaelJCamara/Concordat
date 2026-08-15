@@ -67,7 +67,7 @@ Everything is Apache-2.0, including the Cloud code.
 | [docs/PLAN.md](docs/PLAN.md) | Delivery plan: milestones M0–M9 broken into numbered work packages with exit criteria |
 | [docs/DECISIONS-PENDING.md](docs/DECISIONS-PENDING.md) | Open decisions, decisions taken on the owner's behalf, and a log of what is settled |
 | [docs/STATUS.md](docs/STATUS.md) | **What is missing.** What runs today and was verified running, what is not built, what is half-built, and what is waiting on an account somebody has to open |
-| [docs/adr/](docs/adr/README.md) | The 24 architecture decision records. Canonical — the table in DESIGN.md is a digest of them |
+| [docs/adr/](docs/adr/README.md) | The 25 architecture decision records. Canonical — the table in DESIGN.md is a digest of them |
 
 > **Writing a client?** Start at [docs/protocol/](docs/protocol/README.md), not DESIGN.md.
 > ADR-019's acceptance test is that you never need to read a line of this repository's C#; if

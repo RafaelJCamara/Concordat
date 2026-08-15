@@ -231,18 +231,34 @@ is a trap, not a feature.
 > **The UI toggle is owed.** The setting is on `POST`/`PATCH /v1/environments` and on the
 > environment response; the checkbox lands with M4.3's settings pages, which do not exist yet.
 
-### 10. Generic message types are unsupported — before v1 ships
+### 10. ~~Generic message types are unsupported~~ — spelled, normatively
 
-M2.3 **refuses** a generic type name rather than inventing a spelling for it, because any
-spelling becomes a rule five SDKs must reproduce character for character, and Go and Python
-have no CLR generic syntax to reproduce it from.
+**Resolved 2026-08-15.** A closed generic is now spelled `Outer_of_Arg`, with `_and_` between
+further arguments. [ADR-025](adr/025-generic-subject-spelling.md) records it; four corpus
+fixtures make it normative.
 
-That is right for the protocol and a hard stop for anyone whose publishers send
-`Envelope<OrderCreated>`. Raw RabbitMQ.Client publishers rarely do, which is why this is a
-gap rather than a blocker under ADR-020 — but if **your** code does, it moves up.
+**The original reasoning refused the wrong thing.** "Any spelling becomes a rule five SDKs must
+reproduce character for character" is true, and the conclusion drawn from it — refuse generics —
+does not follow. What had to be refused was *deriving the spelling from one language's type
+system*. So the rule is defined over the outer type's name and the argument names in order, which
+every language with generics can produce, rather than over
+``List`1[[Acme.Order, Asm, Version=…]]``, which only .NET can.
 
-> **Options:** ship refusing them; require an explicit subject for generic types; or define a
-> normative spelling in the corpus and make every SDK implement it.
+**The hybrid the owner proposed is safe in exactly one form**, and this is it. "Let each language
+that has generics derive its own spelling, and document the limitation elsewhere" is the version
+that breaks: the same logical contract becomes a different subject per language, a .NET publisher
+registers one string and a Go consumer looks up another, and nothing reports it. That is a silent
+interop break rather than a documented limitation. One normative spelling gives the same
+behaviour with none of that.
+
+**Open generics are still refused** — `Envelope<T>` names no contract, so there is nothing to
+validate a payload against — and the message names the closed form rather than complaining about
+the grammar.
+
+> **The spelling itself is the reviewable part.** It is now protocol: changing it later is a
+> breaking change for anyone who has registered a generic subject. `Envelope_of_Order` collides
+> with a type literally so named, which is the same rare, visible trade decision 11 accepted for
+> nested types.
 
 ### 11. ~~Nested and top-level types collide~~ — kept
 

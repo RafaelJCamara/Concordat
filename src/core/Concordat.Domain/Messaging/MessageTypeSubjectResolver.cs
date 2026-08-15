@@ -18,6 +18,12 @@ namespace Concordat.Domain.Messaging;
 /// The stable contract in RabbitMQ is <em>what a message is</em>, not where it went, and the
 /// type is the only identifier a publisher and a consumer both possess.
 /// </para>
+/// <para>
+/// <b>A closed generic resolves</b> to the normative spelling <c>Outer_of_Arg</c> (ADR-025) —
+/// so a publisher sending <c>Envelope&lt;OrderCreated&gt;</c> gets a subject rather than a
+/// refusal, and a Go or Python consumer of the same logical contract derives the same string
+/// from its own generic type.
+/// </para>
 /// </remarks>
 public sealed class MessageTypeSubjectResolver : ISubjectResolver
 {
@@ -44,19 +50,21 @@ public sealed class MessageTypeSubjectResolver : ISubjectResolver
             return SubjectResolution.Resolved(subject.Value);
         }
 
-        // A generic type name is the one invalid case a .NET publisher hits by accident, so it
-        // gets an answer rather than a grammar complaint. It is REFUSED rather than mangled:
-        // inventing a spelling for `List`1[[Acme.Order]]` would commit every other SDK to
-        // reproducing that invention exactly, which is the cross-language split ADR-019 exists
-        // to prevent. Publish a named type instead.
+        // A generic name that still carries CLR syntax after normalisation is one the spelling
+        // could not parse -- an open generic, or a malformed name. It gets an answer rather than
+        // a grammar complaint, because it is the one invalid case a .NET publisher hits by
+        // accident. A CLOSED generic is spelled rather than refused (ADR-025): the spelling is
+        // defined over the outer and argument names in order, which every language with generics
+        // can produce, rather than over CLR syntax, which only .NET can.
         if (normalized.Contains('`', StringComparison.Ordinal)
             || normalized.Contains('[', StringComparison.Ordinal))
         {
             return SubjectResolution.Unusable(
                 ConcordatCodes.SubjectNameInvalid,
-                $"'{context.MessageType}' looks like a generic type. Concordat does not spell " +
-                "generic type names, because every SDK would have to spell them identically. " +
-                "Publish a named type, or set properties.type explicitly.");
+                $"'{context.MessageType}' looks like a generic type this build cannot spell — " +
+                "an open generic, or a name it could not parse. A closed generic such as " +
+                "Envelope<OrderCreated> is spelled 'Envelope_of_OrderCreated'. Publish a closed " +
+                "type, or set properties.type explicitly.");
         }
 
         return SubjectResolution.Unusable(

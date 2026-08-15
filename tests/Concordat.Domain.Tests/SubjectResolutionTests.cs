@@ -36,15 +36,28 @@ public class SubjectResolutionTests
     }
 
     [Fact]
-    public void AGenericTypeIsToldWhatToDoInstead()
+    public void AClosedGenericIsSpelledRatherThanRefused()
     {
-        // The one invalid case a .NET publisher hits by accident, so it earns a real answer
-        // rather than a grammar complaint about backticks.
+        // ADR-025. The spelling is defined over the outer and argument NAMES in order -- which
+        // every language with generics can produce -- rather than over CLR syntax, which only
+        // .NET can. Refusing generics was refusing the wrong thing: what had to be refused was
+        // deriving the spelling from one language's type system, because each SDK inventing its
+        // own would give the same logical contract a different subject per language.
         var resolution = Resolve("Acme.Envelope`1[[Acme.Order, Acme]]");
+
+        Assert.True(resolution.IsResolved);
+        Assert.Equal("Acme.Envelope_of_Acme.Order", resolution.Subject!.Value);
+    }
+
+    [Fact]
+    public void AnOpenGenericIsToldWhatToDoInstead()
+    {
+        // An open generic names no contract -- there is nothing to validate a payload against.
+        var resolution = Resolve("Acme.Envelope`1");
 
         Assert.True(resolution.IsUnusable);
         Assert.Contains("generic type", resolution.Error!.Message, StringComparison.Ordinal);
-        Assert.Contains("Publish a named type", resolution.Error.Message, StringComparison.Ordinal);
+        Assert.Contains("Envelope_of_OrderCreated", resolution.Error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

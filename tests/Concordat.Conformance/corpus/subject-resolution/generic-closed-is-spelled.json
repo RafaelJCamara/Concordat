@@ -1,0 +1,7 @@
+{
+  "name": "generic-closed-is-spelled",
+  "why": "ADR-025. A closed generic is spelled Outer_of_Arg, and the spelling is defined over NAMES rather than over syntax: the outer type's normalised name and the argument names in declaration order. That is what every language with generics can produce. Deriving from CLR syntax - backticks, arity markers, assembly-qualified brackets - would be reproducible only in .NET, and each SDK inventing its own spelling would give the same logical contract a different subject per language: a silent interop break rather than a documented limitation. Note the argument's assembly qualifier is stripped by the ordinary comma rule before it is joined.",
+  "messageType": "System.Collections.Generic.List`1[[Acme.Orders.Order, Acme.Contracts]], System.Private.CoreLib",
+  "outcome": "resolved",
+  "subject": "System.Collections.Generic.List_of_Acme.Orders.Order"
+}

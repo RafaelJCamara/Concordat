@@ -1,0 +1,7 @@
+{
+  "name": "generic-nested-argument",
+  "why": "The rule recurses, because a type argument is itself a type name. An SDK implementing this by string manipulation on the outer brackets alone will get this fixture wrong.",
+  "messageType": "Acme.Envelope`1[[Acme.List`1[[Acme.Order, Asm]], Asm]]",
+  "outcome": "resolved",
+  "subject": "Acme.Envelope_of_Acme.List_of_Acme.Order"
+}

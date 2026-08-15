@@ -1,0 +1,7 @@
+{
+  "name": "generic-open-is-refused",
+  "why": "An open generic names no contract - there is nothing to validate a payload against - so it is refused where a closed one is spelled. The message names the closed form rather than complaining about the grammar, because this is the case a .NET publisher hits by accident.",
+  "messageType": "Acme.Envelope`1",
+  "outcome": "unusable",
+  "error": "subject_name_invalid"
+}

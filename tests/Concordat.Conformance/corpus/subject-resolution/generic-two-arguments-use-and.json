@@ -1,0 +1,7 @@
+{
+  "name": "generic-two-arguments-use-and",
+  "why": "Arity needs no explicit marker: the separators carry the structure. X<Y, Z> is X_of_Y_and_Z while X<Y<Z>> is X_of_Y_of_Z, so the two are distinguishable without encoding a count that every SDK would have to format identically.",
+  "messageType": "Acme.Pair`2[[Acme.A, Asm],[Acme.B, Asm]]",
+  "outcome": "resolved",
+  "subject": "Acme.Pair_of_Acme.A_and_Acme.B"
+}
