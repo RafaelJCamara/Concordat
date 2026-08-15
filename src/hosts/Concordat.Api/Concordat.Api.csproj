@@ -26,6 +26,32 @@
     <ProjectReference Include="..\..\formats\Concordat.Formats.Protobuf\Concordat.Formats.Protobuf.csproj" />
   </ItemGroup>
 
+  <!--
+    Roslyn writes each referenced project's XML documentation file using the platform's own
+    newline, and those doc comments become `description` values in the document below. So a
+    summary spanning two lines arrives here as an escaped \r\n on Windows and an escaped \n on
+    Linux — sequences INSIDE JSON strings, not line endings, which is why .gitattributes cannot
+    normalise them and why the drift gate could not be satisfied on both platforms at once: the
+    committed document matched whichever OS last regenerated it and failed on the other. CI runs
+    on Linux and the repository stores LF, so LF wins here too.
+  -->
+  <UsingTask TaskName="NormaliseEscapedNewlines" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Document ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        var text = System.IO.File.ReadAllText(Document);
+        var normalised = text.Replace("\\r\\n", "\\n");
+        if (!string.Equals(text, normalised, System.StringComparison.Ordinal))
+        {
+            System.IO.File.WriteAllText(Document, normalised);
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
   <Target Name="NameOpenApiDocumentForTheProtocol" AfterTargets="Build"
           Condition="Exists('$(OpenApiDocumentsDirectory)\$(AssemblyName).json')">
     <!--
@@ -35,6 +61,8 @@
     -->
     <Move SourceFiles="$(OpenApiDocumentsDirectory)\$(AssemblyName).json"
           DestinationFiles="$(OpenApiDocumentsDirectory)\openapi.v1.json" />
+
+    <NormaliseEscapedNewlines Document="$(OpenApiDocumentsDirectory)\openapi.v1.json" />
   </Target>
 
   <ItemGroup>

@@ -3757,7 +3757,7 @@
           },
           "hasCredentials": {
             "type": "boolean",
-            "description": "Whether a credential is stored. <b>Never the credential itself</b> — credentials are\r\nwrite-only over the API (ADR-012)."
+            "description": "Whether a credential is stored. <b>Never the credential itself</b> — credentials are\nwrite-only over the API (ADR-012)."
           },
           "status": {
             "type": "string",
@@ -4288,7 +4288,7 @@
           },
           "allowPreReleaseVersions": {
             "type": "boolean",
-            "description": "Whether a version here may carry a pre-release label such as `2.0.0-rc.1` (decision 8).\r\nOff by default; the natural shape is dev and staging permitting them and production not, so\r\na candidate can be exercised everywhere it should be and cannot reach production wearing its\r\nrc suffix."
+            "description": "Whether a version here may carry a pre-release label such as `2.0.0-rc.1` (decision 8).\nOff by default; the natural shape is dev and staging permitting them and production not, so\na candidate can be exercised everywhere it should be and cannot reach production wearing its\nrc suffix."
           },
           "createdAt": {
             "type": "string",
@@ -4428,7 +4428,7 @@
           },
           "secret": {
             "type": "string",
-            "description": "The full credential. <b>This is the only time it is ever returned</b> — the server stores\r\nonly a hash and cannot show it again."
+            "description": "The full credential. <b>This is the only time it is ever returned</b> — the server stores\nonly a hash and cannot show it again."
           }
         },
         "description": "A newly issued key and its one-time secret."
@@ -4785,7 +4785,7 @@
             "items": {
               "$ref": "#/components/schemas/BreakingChangeResponse"
             },
-            "description": "Everything the target's engine found, including divergences its policy tolerated — the same\r\nshape registration returns, because a promotion is a registration."
+            "description": "Everything the target's engine found, including divergences its policy tolerated — the same\nshape registration returns, because a promotion is a registration."
           }
         },
         "description": "What a promotion produced."
@@ -5008,7 +5008,7 @@
             "items": {
               "$ref": "#/components/schemas/PortabilityResponse"
             },
-            "description": "Where the schema relies on behaviour that differs between SDKs (M6.1). Warnings only, and\r\nnever a reason the registration failed — but the moment the author is most able to act."
+            "description": "Where the schema relies on behaviour that differs between SDKs (M6.1). Warnings only, and\nnever a reason the registration failed — but the moment the author is most able to act."
           }
         },
         "description": "The outcome of registering a version."
@@ -5034,7 +5034,7 @@
             "items": {
               "type": "string"
             },
-            "description": "What a credential must carry to register here, so a caller debugging a refusal can compare\r\nit against their own key instead of guessing which of the three policies is in force."
+            "description": "What a credential must carry to register here, so a caller debugging a refusal can compare\nit against their own key instead of guessing which of the three policies is in force."
           }
         },
         "description": "Who may register schemas in an environment, and what that requires of them."
@@ -5390,7 +5390,7 @@
               "null",
               "string"
             ],
-            "description": "Which organisation to sign in to, by slug. Only needed by someone who belongs to more than\r\none — which is nobody on a self-hosted deployment."
+            "description": "Which organisation to sign in to, by slug. Only needed by someone who belongs to more than\none — which is nobody on a self-hosted deployment."
           }
         },
         "description": "Request to sign in."
@@ -5642,7 +5642,7 @@
               "null",
               "boolean"
             ],
-            "description": "A new pre-release policy, or null to leave it. Turning it off does not invalidate labels\r\nalready registered — versions are immutable and their labels are history."
+            "description": "A new pre-release policy, or null to leave it. Turning it off does not invalidate labels\nalready registered — versions are immutable and their labels are history."
           }
         },
         "description": "Request to change an environment. Omitted members are left alone."
@@ -5928,7 +5928,7 @@
               "integer",
               "string"
             ],
-            "description": "How many were unusable and dropped. <b>Non-zero means a reporting client is malformed</b>,\r\nand it is here because nothing else would ever say so — this runs fire-and-forget, so no\r\nSDK is reading the status code.",
+            "description": "How many were unusable and dropped. <b>Non-zero means a reporting client is malformed</b>,\nand it is here because nothing else would ever say so — this runs fire-and-forget, so no\nSDK is reading the status code.",
             "format": "int32"
           }
         },
