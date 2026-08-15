@@ -273,6 +273,17 @@ public static class ConcordatCodes
     /// <summary>Pre-release and build metadata are not supported in v1.</summary>
     public const string SemverPrereleaseUnsupported = "semver_prerelease_unsupported";
 
+    /// <summary>
+    /// A label carried build metadata, which this registry does not accept.
+    /// </summary>
+    /// <remarks>
+    /// Its own code rather than <see cref="SemverInvalid"/>, because the reason is specific and
+    /// actionable: SemVer ignores build metadata for precedence, so two labels carrying
+    /// different metadata compare equal — and the registry requires each label to increase on
+    /// the last. A grammar that can express something the ordering cannot see is a trap.
+    /// </remarks>
+    public const string SemverBuildMetadataUnsupported = "semver_build_metadata_unsupported";
+
     /// <summary>A semantic version label did not increase on the previous label.</summary>
     public const string SemverNotIncreasing = "semver_not_increasing";
 

@@ -1,7 +1,0 @@
-{
-  "name": "avro-doc-is-stripped-but-defaults-and-aliases-are-not",
-  "why": "Avro's Parsing Canonical Form strips 'default' and 'aliases'. Concordat cannot, because the canonical text is what the registry stores and serves: a schema without its defaults cannot read data written under an older version, which is the one job an Avro reader schema has. Only 'doc' is dropped. An implementation that follows PCF literally here will serve unusable schemas and mis-judge every added field.",
-  "format": "avro",
-  "input": "{\"type\":\"record\",\"name\":\"User\",\"namespace\":\"acme\",\"doc\":\"a user\",\"aliases\":[\"Old\"],\"fields\":[{\"name\":\"id\",\"type\":\"string\",\"doc\":\"the id\"},{\"name\":\"nickname\",\"type\":\"string\",\"default\":\"\"}]}",
-  "canonical": "{\"name\":\"acme.User\",\"type\":\"record\",\"fields\":[{\"name\":\"id\",\"type\":\"string\"},{\"name\":\"nickname\",\"type\":\"string\",\"default\":\"\"}],\"aliases\":[\"acme.Old\"]}"
-}

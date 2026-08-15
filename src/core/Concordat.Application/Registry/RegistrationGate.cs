@@ -38,6 +38,15 @@ namespace Concordat.Application.Registry;
 /// </remarks>
 internal static class RegistrationGate
 {
+    /// <summary>What the gate found.</summary>
+    /// <param name="Environment">
+    /// The environment, or null when the caller built a command by hand and supplied no name.
+    /// A carrier record rather than a nullable type argument, because <c>Result&lt;T&gt;</c>
+    /// constrains <c>T</c> to <c>notnull</c> — deliberately, so that a successful result never
+    /// carries nothing.
+    /// </param>
+    public sealed record Admission(Environment? Environment);
+
     /// <summary>Admits or refuses a write, ensuring the environment exists.</summary>
     /// <param name="environments">The environment repository.</param>
     /// <param name="caller">Who is asking.</param>
@@ -45,8 +54,12 @@ internal static class RegistrationGate
     /// <param name="environmentName">The name from the route, or null on a legacy call path.</param>
     /// <param name="clock">Time source.</param>
     /// <param name="cancellationToken">Cancellation.</param>
-    /// <returns>Success, or the refusal to return to the caller.</returns>
-    public static async Task<Result> AdmitAsync(
+    /// <returns>
+    /// The environment, or the refusal to return to the caller. The environment comes back
+    /// because the caller usually needs it for the next question too — the pre-release policy
+    /// lives on it, and loading it twice would be two round trips for one row.
+    /// </returns>
+    public static async Task<Result<Admission>> AdmitAsync(
         IEnvironmentRepository environments,
         ICallerContext caller,
         EnvironmentId environmentId,
@@ -64,7 +77,7 @@ internal static class RegistrationGate
                 // No name to create from. Only a caller that built the command by hand can get
                 // here; every route carries the name. Allowing it keeps that path behaving as it
                 // did rather than refusing on a technicality the caller cannot act on.
-                return Result.Success();
+                return Result<Admission>.Success(new Admission(null));
             }
 
             var created = Environment.Create(
@@ -72,7 +85,7 @@ internal static class RegistrationGate
 
             if (created.IsFailure)
             {
-                return Result.Failure(created.Error!);
+                return Result<Admission>.Failure(created.Error!);
             }
 
             environment = created.Value;
@@ -82,6 +95,10 @@ internal static class RegistrationGate
             environments.Add(environment);
         }
 
-        return environment.MayRegister(caller.Current.Scopes);
+        var permitted = environment.MayRegister(caller.Current.Scopes);
+
+        return permitted.IsFailure
+            ? Result<Admission>.Failure(permitted.Error!)
+            : Result<Admission>.Success(new Admission(environment));
     }
 }

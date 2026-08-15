@@ -3,8 +3,10 @@
 A schema registry and contract-enforcement platform for RabbitMQ — what Confluent Schema
 Registry is to Kafka, but built for AMQP 0-9-1 and usable from any language.
 
-> **Status: design phase.** No implementation yet. The architecture and the reasoning
-> behind it live in **[docs/DESIGN.md](docs/DESIGN.md)**.
+> **Status: building.** The registry, the compatibility engine, the .NET SDK, the CLI and the
+> Azure deployment all run — see **[docs/STATUS.md](docs/STATUS.md)** for what works, what is
+> missing, and what was last verified running rather than merely tested. The architecture and
+> the reasoning behind it live in **[docs/DESIGN.md](docs/DESIGN.md)**.
 
 ## The problem
 
@@ -58,13 +60,14 @@ Everything is Apache-2.0, including the Cloud code.
 
 | | |
 |---|---|
+| [**docs/BROKER-PERMISSIONS.md**](docs/BROKER-PERMISSIONS.md) | **Read before deploying.** The one RabbitMQ permission the middleware needs, why it is a requirement rather than a preference, and what to do if your estate withholds it |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | Run the stack locally and publish through it, ending with a message refused for breaking its contract |
 | [**docs/protocol/**](docs/protocol/README.md) | **The protocol.** The five normative artifacts, and everything needed to write a client in any language |
 | [docs/DESIGN.md](docs/DESIGN.md) | Full architecture: domain model, envelope spec, API surface, SDK bindings, decisions |
 | [docs/PLAN.md](docs/PLAN.md) | Delivery plan: milestones M0–M9 broken into numbered work packages with exit criteria |
 | [docs/DECISIONS-PENDING.md](docs/DECISIONS-PENDING.md) | Open decisions, decisions taken on the owner's behalf, and a log of what is settled |
 | [docs/STATUS.md](docs/STATUS.md) | **What is missing.** What runs today and was verified running, what is not built, what is half-built, and what is waiting on an account somebody has to open |
-| [docs/adr/](docs/adr/README.md) | The 23 architecture decision records. Canonical — the table in DESIGN.md is a digest of them |
+| [docs/adr/](docs/adr/README.md) | The 24 architecture decision records. Canonical — the table in DESIGN.md is a digest of them |
 
 > **Writing a client?** Start at [docs/protocol/](docs/protocol/README.md), not DESIGN.md.
 > ADR-019's acceptance test is that you never need to read a line of this repository's C#; if

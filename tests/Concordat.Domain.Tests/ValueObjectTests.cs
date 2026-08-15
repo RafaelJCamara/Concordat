@@ -115,15 +115,86 @@ public class SemanticVersionTests
     }
 
     [Theory]
-    [InlineData("2.0.0-rc.1")]
-    [InlineData("2.0.0+build.5")]
-    public void Create_WithPrereleaseOrBuild_FailsWithDedicatedCode(string value)
+    [InlineData("2.0.0-rc.1", "rc.1")]
+    [InlineData("2.0.0-alpha", "alpha")]
+    [InlineData("2.0.0-0.3.7", "0.3.7")]
+    [InlineData("2.0.0-x-y-z.-", "x-y-z.-")]
+    public void Create_WithPrerelease_Parses(string value, string expected)
     {
+        // Decision 8. The label parses everywhere; whether an ENVIRONMENT accepts it is policy,
+        // decided at registration. Folding the policy into the parser meant a team whose
+        // pipeline emits -rc labels could not label a version at all, anywhere, ever.
+        var result = SemanticVersion.Create(value);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Equal(expected, result.Value.PreRelease);
+        Assert.True(result.Value.IsPreRelease);
+        Assert.Equal(value, result.Value.ToString());
+    }
+
+    [Theory]
+    [InlineData("2.0.0+build.5")]
+    [InlineData("2.0.0-rc.1+build.5")]
+    public void Create_WithBuildMetadata_FailsWithItsOwnCode(string value)
+    {
+        // Still refused, and for a reason worth its own code: SemVer ignores build metadata for
+        // precedence, so 1.0.0+a and 1.0.0+b compare EQUAL while being different strings -- and
+        // this registry requires each label to increase on the last. A grammar that can express
+        // something the ordering cannot see is a trap.
         var result = SemanticVersion.Create(value);
 
         Assert.True(result.IsFailure);
-        Assert.Equal(ConcordatCodes.SemverPrereleaseUnsupported, result.Error!.Code);
+        Assert.Equal(ConcordatCodes.SemverBuildMetadataUnsupported, result.Error!.Code);
     }
+
+    [Theory]
+    [InlineData("2.0.0-")]
+    [InlineData("2.0.0-01")]
+    [InlineData("2.0.0-rc..1")]
+    [InlineData("2.0.0-rc.1$")]
+    public void Create_WithAMalformedPrerelease_IsInvalid(string value)
+    {
+        // '01' is refused because SemVer compares numeric identifiers numerically -- so 01 and 1
+        // would be different strings that compare equal, the same trap as build metadata.
+        var result = SemanticVersion.Create(value);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ConcordatCodes.SemverInvalid, result.Error!.Code);
+    }
+
+    [Fact]
+    public void APrerelease_PrecedesItsOwnRelease()
+    {
+        // The rule that makes "each label must increase" do what a release-candidate pipeline
+        // expects: rc.1, rc.2, then the release.
+        var rc1 = SemanticVersion.Create("2.0.0-rc.1").Value;
+        var rc2 = SemanticVersion.Create("2.0.0-rc.2").Value;
+        var release = SemanticVersion.Create("2.0.0").Value;
+
+        Assert.True(rc1 < rc2);
+        Assert.True(rc2 < release);
+        Assert.True(rc1 < release);
+    }
+
+    [Fact]
+    public void NumericPrereleaseIdentifiers_CompareNumericallyNotAsText()
+    {
+        // rc.10 follows rc.9. Plain string ordering gets this backwards, and it is exactly the
+        // sequence a release-candidate pipeline produces.
+        Assert.True(
+            SemanticVersion.Create("2.0.0-rc.9").Value < SemanticVersion.Create("2.0.0-rc.10").Value);
+    }
+
+    [Fact]
+    public void MorePrereleaseIdentifiers_FollowFewer_WhenTheSharedOnesAreEqual() =>
+        Assert.True(
+            SemanticVersion.Create("2.0.0-rc.1").Value <
+            SemanticVersion.Create("2.0.0-rc.1.1").Value);
+
+    [Fact]
+    public void ANumericIdentifier_PrecedesAnAlphanumericOne() =>
+        Assert.True(
+            SemanticVersion.Create("2.0.0-1").Value < SemanticVersion.Create("2.0.0-alpha").Value);
 
     [Theory]
     [InlineData("1.2")]

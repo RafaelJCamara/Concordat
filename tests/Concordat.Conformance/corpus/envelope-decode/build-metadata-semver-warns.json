@@ -1,0 +1,22 @@
+{
+  "expected": {
+    "schemaId": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+    "warnings": [
+      "semver_build_metadata_unsupported"
+    ],
+    "kind": "HEADERS"
+  },
+  "headers": {
+    "concordat-v": {
+      "string": "1"
+    },
+    "concordat-schema-id": {
+      "string": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4"
+    },
+    "concordat-semver": {
+      "string": "2.0.0+build.5"
+    }
+  },
+  "why": "Build metadata is refused everywhere. SemVer ignores it for precedence, so 1.0.0+a and 1.0.0+b compare equal while being different strings, and this registry requires each label to increase on the last. Warned rather than rejected, like every other advisory header: a human label must never quarantine a structurally valid payload.",
+  "name": "build-metadata-semver-warns"
+}

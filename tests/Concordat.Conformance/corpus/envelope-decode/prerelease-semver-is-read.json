@@ -1,0 +1,20 @@
+{
+  "expected": {
+    "schemaId": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4",
+    "semver": "2.0.0-rc.1",
+    "kind": "HEADERS"
+  },
+  "headers": {
+    "concordat-v": {
+      "string": "1"
+    },
+    "concordat-schema-id": {
+      "string": "7f3a9c2ea1b84d5c9e07f2b3c4d5e6b4"
+    },
+    "concordat-semver": {
+      "string": "2.0.0-rc.1"
+    }
+  },
+  "why": "Whether an environment ACCEPTS a pre-release label is registry policy, decided at registration and configurable per environment. What a message may CARRY is a different question: a consumer reading a message stamped by a publisher whose environment permits rc labels must see the label rather than a warning about it. Build metadata is still refused, because SemVer ignores it for precedence - so two labels carrying different metadata compare equal while being different strings.",
+  "name": "prerelease-semver-is-read"
+}

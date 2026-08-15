@@ -4072,6 +4072,11 @@
               "string"
             ],
             "description": "`OPEN`, `CI_ONLY` or `CLOSED`."
+          },
+          "allowPreReleaseVersions": {
+            "type": "boolean",
+            "description": "Whether a version here may carry a pre-release label such as `2.0.0-rc.1` (decision 8).",
+            "default": false
           }
         },
         "description": "Request to create an environment."
@@ -4253,6 +4258,7 @@
           "description",
           "defaultCompatibilityPolicy",
           "registrationPolicy",
+          "allowPreReleaseVersions",
           "createdAt",
           "brokers"
         ],
@@ -4276,6 +4282,10 @@
           "registrationPolicy": {
             "type": "string",
             "description": "Who may register schemas here."
+          },
+          "allowPreReleaseVersions": {
+            "type": "boolean",
+            "description": "Whether a version here may carry a pre-release label such as `2.0.0-rc.1` (decision 8).\r\nOff by default; the natural shape is dev and staging permitting them and production not, so\r\na candidate can be exercised everywhere it should be and cannot reach production wearing its\r\nrc suffix."
           },
           "createdAt": {
             "type": "string",
@@ -5623,6 +5633,13 @@
               "string"
             ],
             "description": "A new registration policy."
+          },
+          "allowPreReleaseVersions": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "A new pre-release policy, or null to leave it. Turning it off does not invalidate labels\r\nalready registered — versions are immutable and their labels are history."
           }
         },
         "description": "Request to change an environment. Omitted members are left alone."

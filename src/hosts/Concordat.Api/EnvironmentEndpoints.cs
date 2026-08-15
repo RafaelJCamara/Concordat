@@ -160,7 +160,8 @@ public static class EnvironmentEndpoints
                 request.Description,
                 request.CompatibilityMode,
                 request.CompatibilitySurface,
-                request.RegistrationPolicy),
+                request.RegistrationPolicy,
+                request.AllowPreReleaseVersions),
             cancellationToken).ConfigureAwait(false);
 
         return result.IsFailure
@@ -184,7 +185,8 @@ public static class EnvironmentEndpoints
                 request.Description,
                 request.CompatibilityMode,
                 request.CompatibilitySurface,
-                request.RegistrationPolicy),
+                request.RegistrationPolicy,
+                request.AllowPreReleaseVersions),
             cancellationToken).ConfigureAwait(false);
 
         return result.IsFailure
@@ -320,23 +322,32 @@ public static class EnvironmentEndpoints
 /// <param name="CompatibilityMode">Default who-breaks axis; omit for the standard default.</param>
 /// <param name="CompatibilitySurface">Default what-breaks axis; required when a mode is given.</param>
 /// <param name="RegistrationPolicy"><c>OPEN</c>, <c>CI_ONLY</c> or <c>CLOSED</c>.</param>
+/// <param name="AllowPreReleaseVersions">
+/// Whether a version here may carry a pre-release label such as <c>2.0.0-rc.1</c> (decision 8).
+/// </param>
 public sealed record CreateEnvironmentRequest(
     string Name,
     string? Description = null,
     string? CompatibilityMode = null,
     string? CompatibilitySurface = null,
-    string? RegistrationPolicy = null);
+    string? RegistrationPolicy = null,
+    bool AllowPreReleaseVersions = false);
 
 /// <summary>Request to change an environment. Omitted members are left alone.</summary>
 /// <param name="Description">A new description.</param>
 /// <param name="CompatibilityMode">A new default who-breaks axis.</param>
 /// <param name="CompatibilitySurface">A new default what-breaks axis.</param>
 /// <param name="RegistrationPolicy">A new registration policy.</param>
+/// <param name="AllowPreReleaseVersions">
+/// A new pre-release policy, or null to leave it. Turning it off does not invalidate labels
+/// already registered — versions are immutable and their labels are history.
+/// </param>
 public sealed record UpdateEnvironmentRequest(
     string? Description = null,
     string? CompatibilityMode = null,
     string? CompatibilitySurface = null,
-    string? RegistrationPolicy = null);
+    string? RegistrationPolicy = null,
+    bool? AllowPreReleaseVersions = null);
 
 /// <summary>Request to set a broker's credentials.</summary>
 /// <param name="Username">The AMQP user.</param>
@@ -438,6 +449,12 @@ public sealed record RegistrationPolicyResponse(
 /// <param name="Description">What it is for.</param>
 /// <param name="DefaultCompatibilityPolicy">What subjects inherit when they set none.</param>
 /// <param name="RegistrationPolicy">Who may register schemas here.</param>
+/// <param name="AllowPreReleaseVersions">
+/// Whether a version here may carry a pre-release label such as <c>2.0.0-rc.1</c> (decision 8).
+/// Off by default; the natural shape is dev and staging permitting them and production not, so
+/// a candidate can be exercised everywhere it should be and cannot reach production wearing its
+/// rc suffix.
+/// </param>
 /// <param name="CreatedAt">When it was created.</param>
 /// <param name="Brokers">The registered brokers.</param>
 public sealed record EnvironmentResponse(
@@ -445,6 +462,7 @@ public sealed record EnvironmentResponse(
     string? Description,
     PolicyResponse DefaultCompatibilityPolicy,
     string RegistrationPolicy,
+    bool AllowPreReleaseVersions,
     DateTimeOffset CreatedAt,
     IReadOnlyList<BrokerResponse> Brokers)
 {
@@ -460,6 +478,7 @@ public sealed record EnvironmentResponse(
             environment.Description,
             PolicyResponse.From(environment.DefaultCompatibilityPolicy),
             RegistrationToken(environment.RegistrationPolicy),
+            environment.AllowPreReleaseVersions,
             environment.CreatedAt,
             [.. environment.Brokers.Select(BrokerResponse.From)]);
     }

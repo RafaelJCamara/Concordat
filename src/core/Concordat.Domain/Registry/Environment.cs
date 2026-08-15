@@ -115,6 +115,10 @@ public sealed class Environment
     /// <param name="id">
     /// An explicit id, used only by the migration that adopts derived ids. Omit it otherwise.
     /// </param>
+    /// <param name="allowPreReleaseVersions">
+    /// Whether a version here may carry a pre-release label. Off by default — see
+    /// <see cref="AllowPreReleaseVersions"/>.
+    /// </param>
     /// <returns>The environment, or the first validation failure.</returns>
     /// <remarks>
     /// <b>An environment named like production defaults to <see cref="RegistrationPolicy.CiOnly"/>.</b>
@@ -129,7 +133,8 @@ public sealed class Environment
         string? description = null,
         CompatibilityPolicy? defaultCompatibilityPolicy = null,
         RegistrationPolicy? registrationPolicy = null,
-        EnvironmentId? id = null)
+        EnvironmentId? id = null,
+        bool allowPreReleaseVersions = false)
     {
         var parsed = EnvironmentName.Create(name);
         if (parsed.IsFailure)
@@ -152,7 +157,10 @@ public sealed class Environment
             defaultCompatibilityPolicy ?? CompatibilityPolicy.Default,
             registrationPolicy ?? DefaultRegistrationPolicyFor(parsed.Value),
             createdAt.ToUniversalTime(),
-            []));
+            [])
+        {
+            AllowPreReleaseVersions = allowPreReleaseVersions,
+        });
     }
 
     /// <summary>Adds a broker.</summary>
@@ -234,6 +242,32 @@ public sealed class Environment
     /// <summary>Changes who may register schemas here.</summary>
     /// <param name="policy">The new policy.</param>
     public void SetRegistrationPolicy(RegistrationPolicy policy) => RegistrationPolicy = policy;
+
+    /// <summary>Whether a version here may carry a pre-release label such as <c>2.0.0-rc.1</c>.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Off by default, and per environment rather than global</b> (decision 8). Some teams
+    /// treat a release candidate as a real contract their consumers build against, and refusing
+    /// the label outright meant they could not label a version at all. Others want production
+    /// to carry only released labels — and both are reasonable, which is why this is a setting
+    /// rather than a rule.
+    /// </para>
+    /// <para>
+    /// The natural shape is <c>dev</c> and <c>staging</c> permitting them and <c>prod</c> not,
+    /// so a candidate can be exercised everywhere it should be and cannot be promoted into
+    /// production still wearing its rc suffix.
+    /// </para>
+    /// </remarks>
+    public bool AllowPreReleaseVersions { get; private set; }
+
+    /// <summary>Changes whether pre-release labels are accepted here.</summary>
+    /// <param name="allowed">Whether to accept them.</param>
+    /// <remarks>
+    /// <b>Turning it off does not invalidate labels already registered.</b> Versions are
+    /// immutable and their labels are history; re-judging the past on a policy change would
+    /// make the audit trail disagree with the data. It governs new registrations only.
+    /// </remarks>
+    public void SetPreReleasePolicy(bool allowed) => AllowPreReleaseVersions = allowed;
 
     /// <summary>
     /// Whether this caller may register a schema directly against this environment.

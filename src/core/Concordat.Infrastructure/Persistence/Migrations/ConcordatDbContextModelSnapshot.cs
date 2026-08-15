@@ -649,6 +649,10 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("environment_id");
 
+                    b.Property<bool>("AllowPreReleaseVersions")
+                        .HasColumnType("boolean")
+                        .HasColumnName("allow_prerelease_versions");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");

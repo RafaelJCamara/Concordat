@@ -25,9 +25,16 @@ public class SchemaIdTests
             IdOf("""{"fields":[],"name":"X","type":"record"}"""));
 
     [Fact]
-    public void SchemasDifferingOnlyInDoc_ShareAnId() =>
-        // 'doc' is the only attribute dropped, so a comment edit does not mint a new id.
-        Assert.Equal(
+    public void SchemasDifferingOnlyInDoc_HaveDifferentIds() =>
+        // Decision #17, and the accepted cost of it: editing a comment mints a new id and
+        // therefore a new version. That version is compatible with its predecessor so nothing
+        // breaks, but the history carries an entry whose only change is prose.
+        //
+        // The alternative was dropping `doc` for being presentational, which shipped until
+        // 2026-08-15. An id is a claim about a DOCUMENT, not about the subset of it this build
+        // considers meaningful -- and once one attribute is dropped on that argument, every
+        // later attribute needs the same judgement made about it by five SDKs, identically.
+        Assert.NotEqual(
             IdOf("""{"type":"record","name":"X","fields":[]}"""),
             IdOf("""{"type":"record","name":"X","doc":"some docs","fields":[]}"""));
 

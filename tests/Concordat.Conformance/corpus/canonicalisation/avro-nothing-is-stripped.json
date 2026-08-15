@@ -1,0 +1,7 @@
+{
+  "name": "avro-nothing-is-stripped",
+  "why": "Avro's Parsing Canonical Form strips 'default', 'aliases' and 'doc'. Concordat strips none of them. The first two are not optional: the canonical text is what the registry stores and serves, and a schema without its defaults cannot read data written under an older version, which is the one job an Avro reader schema has. 'doc' is kept for a different reason - an id is a claim about a document, not about the subset of it an implementation considers meaningful, and once one attribute is dropped for being presentational then every later attribute needs the same judgement made about it by every SDK, identically. The cost is that editing a comment mints a new id. An implementation following PCF literally will serve unusable schemas, mis-judge every added field, and disagree with every other SDK about ids.",
+  "format": "avro",
+  "input": "{\"type\":\"record\",\"name\":\"User\",\"namespace\":\"acme\",\"doc\":\"a user\",\"aliases\":[\"Old\"],\"fields\":[{\"name\":\"id\",\"type\":\"string\",\"doc\":\"the id\"},{\"name\":\"nickname\",\"type\":\"string\",\"default\":\"\"}]}",
+  "canonical": "{\"name\":\"acme.User\",\"type\":\"record\",\"fields\":[{\"name\":\"id\",\"type\":\"string\",\"doc\":\"the id\"},{\"name\":\"nickname\",\"type\":\"string\",\"default\":\"\"}],\"aliases\":[\"acme.Old\"],\"doc\":\"a user\"}"
+}

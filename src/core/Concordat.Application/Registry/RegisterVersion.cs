@@ -118,6 +118,25 @@ public sealed class RegisterVersionHandler(
                 return Result<RegisterVersionResult>.Failure(parsed.Error!);
             }
 
+            // A pre-release label parses everywhere and is admitted per environment (decision 8).
+            // Some teams treat a release candidate as a real contract their consumers build
+            // against; others want production carrying released labels only. Both are reasonable,
+            // which is why this is a setting rather than a rule -- and why refusing the label in
+            // the parser, as this did until now, meant the first sort of team could not label a
+            // version at all, anywhere.
+            //
+            // An environment with no row has no policy and refuses, matching the default: the
+            // permissive answer has to be something somebody switched on.
+            if (parsed.Value.IsPreRelease &&
+                admitted.Value.Environment?.AllowPreReleaseVersions is not true)
+            {
+                return Result<RegisterVersionResult>.Failure(
+                    ConcordatCodes.SemverPrereleaseUnsupported,
+                    $"'{command.SemanticVersion}' is a pre-release label and environment " +
+                    $"'{command.EnvironmentName ?? "(unnamed)"}' does not accept them. Turn it " +
+                    "on for this environment, or label the version without the suffix.");
+            }
+
             semver = parsed.Value;
         }
 

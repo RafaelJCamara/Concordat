@@ -33,10 +33,23 @@ namespace Concordat.Formats.Avro;
 ///   </description></item>
 /// </list>
 /// <para>
-/// So the rule here is <b>lossless normalisation</b>: every attribute that can change how data
-/// is read or resolved survives, and only <c>doc</c> — the one purely presentational
-/// attribute — is dropped, so that a comment edit does not mint a new schema id. See
-/// DECISIONS-PENDING #17; this is reversible until the first Avro schema is stored.
+/// So the rule here is <b>lossless normalisation: nothing is dropped at all</b>. Every
+/// attribute survives, including <c>doc</c>, and the transformation is confined to ordering,
+/// whitespace and fullname resolution — form, never content.
+/// </para>
+/// <para>
+/// <b><c>doc</c> was dropped until 2026-08-15</b>, on the grounds that no reader, writer or
+/// resolver consults it and a comment edit should not mint a second id. Decision #17 settled
+/// the other way, and the reasoning is worth keeping: an id is a claim about a <em>document</em>,
+/// not about the subset of it this build happens to consider meaningful. Once one attribute is
+/// dropped for being presentational, every later attribute needs the same judgement made about
+/// it — by five SDKs, identically, forever. "Everything" is the only rule that does not
+/// require a committee.
+/// </para>
+/// <para>
+/// <b>The cost is real and was accepted:</b> editing a comment now produces a new schema id and
+/// therefore a new version. That version is compatible with its predecessor, so nothing breaks
+/// — but the history carries an entry whose only change is prose.
 /// </para>
 /// <para>
 /// <b>For a schema that uses none of the attributes PCF would have stripped, the output is
@@ -90,17 +103,20 @@ public sealed class AvroSchemaCanonicalizer : ISchemaCanonicalizer
     };
 
     /// <summary>
-    /// The only attribute dropped outright.
+    /// Nothing is dropped (decision #17).
     /// </summary>
     /// <remarks>
-    /// Purely presentational: no Avro reader, writer or resolver consults it. Dropping it is
-    /// what keeps a comment edit from producing a second schema id for the same schema, which
-    /// is the near-duplicate accumulation DESIGN §4 wants canonicalisation to prevent.
+    /// <para>
+    /// Kept as an empty set rather than deleted, because the shape of the question outlives the
+    /// answer: if a future attribute ever has to be excluded, this is where it goes and this is
+    /// where the justification has to be written. An empty set says "we considered dropping
+    /// things and decided not to"; no set at all says nothing.
+    /// </para>
+    /// <para>
+    /// <c>doc</c> lived here until 2026-08-15. See the type remarks for why it left.
+    /// </para>
     /// </remarks>
-    private static readonly HashSet<string> DroppedAttributes = new(StringComparer.Ordinal)
-    {
-        "doc",
-    };
+    private static readonly HashSet<string> DroppedAttributes = new(StringComparer.Ordinal);
 
     /// <inheritdoc />
     public SchemaFormat Format => SchemaFormat.Avro;

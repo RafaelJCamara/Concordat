@@ -77,7 +77,8 @@ token and an operator can alert across a fleet.
 | `schema_references_unsupported` | The schema depends on a definition outside itself, which v1 does not support for this format (ADR-023). |
 | `schema_dialect_unsupported` | The schema declares a JSON Schema dialect Concordat does not implement (M6.1). |
 | `semver_invalid` | A semantic version label was not `MAJOR.MINOR.PATCH`. |
-| `semver_prerelease_unsupported` | Pre-release and build metadata are not supported in v1. |
+| `semver_prerelease_unsupported` | The environment does not accept pre-release labels. Configurable per environment (`allowPreReleaseVersions`), off by default — the label itself is valid. |
+| `semver_build_metadata_unsupported` | A label carried build metadata. Refused everywhere: SemVer ignores it for precedence, so two labels carrying different metadata compare equal while being different strings, and the registry requires each label to increase. |
 | `semver_not_increasing` | A semantic version label did not increase on the previous label. |
 | `semver_label_understates_breakage` | A breaking change was labelled MINOR or PATCH. ADR-004: the label is verified. |
 | `verdict_policy_mismatch` | A compatibility verdict was evaluated against a different policy than the subject's. |
@@ -104,7 +105,7 @@ token and an operator can alert across a fleet.
 | `changelog_too_long` | A changelog exceeded the permitted length. |
 | `schema_unresolvable` | A client could not resolve a schema, so the operation could not be enforced. |
 
-**80 codes.**
+**81 codes.**
 
 ## Rules for implementers
 

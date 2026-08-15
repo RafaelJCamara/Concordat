@@ -251,7 +251,39 @@ public class EnvelopeReaderTests
         // Quarantining a structurally valid payload over a human label would be a
         // self-inflicted outage.
         var headers = Minimal();
+        headers["concordat-semver"] = "2.0.0.0";
+
+        var result = EnvelopeReader.Read(headers);
+
+        Assert.True(result.IsEnveloped);
+        Assert.Null(result.Envelope!.Semver);
+        Assert.NotEmpty(result.Envelope.Warnings);
+    }
+
+    [Fact]
+    public void APreReleaseSemver_IsReadRatherThanWarnedAbout()
+    {
+        // Decision 8. Whether an environment ACCEPTS a pre-release label is registry policy,
+        // decided at registration; what a message may CARRY is not the same question. A
+        // consumer reading a message stamped 2.0.0-rc.1 by a publisher whose environment
+        // permits it should see the label, not a warning about it.
+        var headers = Minimal();
         headers["concordat-semver"] = "2.0.0-rc.1";
+
+        var result = EnvelopeReader.Read(headers);
+
+        Assert.True(result.IsEnveloped);
+        Assert.Equal("2.0.0-rc.1", result.Envelope!.Semver?.ToString());
+        Assert.Empty(result.Envelope.Warnings);
+    }
+
+    [Fact]
+    public void ASemverCarryingBuildMetadata_StillWarns()
+    {
+        // Build metadata stays refused: SemVer ignores it for precedence, so two labels
+        // carrying different metadata compare equal while being different strings.
+        var headers = Minimal();
+        headers["concordat-semver"] = "2.0.0+build.5";
 
         var result = EnvelopeReader.Read(headers);
 

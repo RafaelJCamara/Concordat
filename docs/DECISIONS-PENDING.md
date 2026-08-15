@@ -108,96 +108,26 @@ against it and stamping it. That is a coherent design and a different product de
 > **If you want the other reading**, `GET /subjects/{s}/versions/{ordinal}` already exists; the
 > work is a `GetVersionAsync` on the client and a branch in `SchemaEnforcer`.
 
-### 17. Avro's Parsing Canonical Form is lossy, and the architecture stores the canonical form
+### 17. ~~Avro's Parsing Canonical Form is lossy~~ — hash the full document
 
-**Option (B) below is implemented and shipped.** M5.2 was blocked on this and you were not
-available to decide, so I took the call rather than stall the milestone — and this entry stays
-open because it is yours, not mine. **Overturning it is free until the first Avro schema is
-stored**, and costs a preimage version bump plus a migration afterwards. It is an ADR-015
-amendment if you keep it.
+**Resolved 2026-08-15 by the owner: hash the whole thing.** Option (B) had already stopped
+stripping `default` and `aliases`; `doc` was the last attribute still dropped, and it is dropped
+no longer. The Avro canonical form is now pure normalisation — ordering, whitespace, fullname
+resolution — and nothing is removed.
 
-Avro's Parsing Canonical Form is defined by the specification's `[STRIP]` rule: keep only
-`type`, `name`, `fields`, `symbols`, `items`, `values` and `size`, and drop everything else.
-That deliberately discards **`default` and `aliases`** (and `doc`). DESIGN §4 names PCF as
-Avro's canonical form, and `Concordat.Formats.Avro` implements it exactly.
+The reasoning that carried it: **an id is a claim about a document, not about the subset of it
+this build considers meaningful.** Once one attribute is dropped for being presentational, every
+later attribute needs the same judgement made about it, by five SDKs, identically, forever.
+"Everything" is the only rule that does not require a committee.
 
-The architecture, settled in M1 when JSON Schema was the only format, stores *the canonical
-form*: `CompatibilityEvaluator` canonicalises, then hands the canonical text to
-`Schema.Create` as the stored body **and** to `ICompatibilityChecker.Check`, and
-`RegisterVersionHandler` builds each `PriorSchema` from that same stored body. The authored
-body is never persisted.
+**The cost is real and was accepted:** editing a comment mints a new schema id and therefore a
+new version. That version is compatible with its predecessor so nothing breaks, but the history
+carries an entry whose only change is prose. `SchemasDifferingOnlyInDoc_HaveDifferentIds` pins it
+so nobody rediscovers it as a bug.
 
-For JSON Schema this was invisible, because its canonicalisation is lossless — sort keys,
-strip whitespace, normalise `$id`/`$ref`. **Avro is the first format whose canonicalisation is
-lossy by design**, and the two attributes it drops are exactly the ones Avro's schema
-resolution runs on:
-
-- a reader whose schema has a field the writer lacks **uses that field's `default`**, and
-  **signals an error if there is none** — this is what makes "add a field" the safe, ordinary
-  Avro change;
-- `aliases` on the reader's schema are what let a renamed record or field still resolve.
-
-Two consequences, and the second is worse than the first:
-
-1. **The remaining M5.2 checklist cannot be built correctly.** "Resolution rules: defaults,
-   aliases, union widening, enum symbols" — two of those four inputs are gone before the
-   checker is ever called. A checker working from PCF has to report every added field as
-   backward-breaking, including the ones carrying a default, which is precisely the
-   unusable-under-its-own-defaults behaviour Concordat exists to beat Confluent at.
-2. **The registry cannot serve a usable Avro schema.** A consumer fetching a schema by id gets
-   a body with no defaults, so it cannot read data written under an older version — the one
-   job an Avro reader schema exists to do. That is data loss at registration time, not a
-   reporting gap.
-
-Underneath both sits an identity question: under PCF a schema **with** a field default and the
-same schema **without** one hash to the same id, yet they resolve differently against the same
-bytes. Content addressing is supposed to mean *same id ⇒ same meaning*, and for Avro under PCF
-it does not.
-
-> **Options:**
->
-> - **(A) Store the authored body; canonicalise only to compute the id.** What Confluent does.
->   Fixes serving and checking together, and Avro ids stay exactly as they are today. It does
->   **not** fix the identity question: two bodies differing only in a default still collide on
->   one id, so the registry has to pick one and can hand back defaults the author never wrote.
->   Changes the meaning of `Schema.Body` and the contract of `PriorSchema`, both shared with
->   JSON, and needs a migration.
->
-> - **(B) Make Avro canonicalisation lossless-enough — normalise (sort, resolve fullnames,
->   strip whitespace and `doc`) but keep `default` and `aliases`.** One transformation, one
->   stored body, no second column, no collision rule, and the checker gets what it needs.
->   Schemas that resolve differently get different ids, which is what content addressing should
->   mean. The cost is that Concordat's Avro canonical form is no longer the spec's PCF — but
->   Concordat ids were never Avro fingerprints anyway (128-bit truncated SHA-256 over a
->   versioned preimage, versus Avro's 64-bit CRC), so nothing that interoperates today stops.
->
-> - **(C) Keep PCF and refuse Avro schemas that use `default` or `aliases`.** Nothing
->   architectural changes; registration rejects them with a clear error, the way M2.3 refused
->   generic type names rather than invent a spelling. But it rules out the ordinary Avro
->   evolution pattern, which leaves Avro support close to decorative.
->
-> **Chosen: (B), and built.** It is the only option that makes all three things true at once —
-> the checker implements the real resolution rules, the registry serves a schema consumers can
-> actually read with, and equal ids mean equal meaning. It was also far cheapest to do
-> immediately: no Avro schema has been registered yet (registration still throws
-> `NotSupportedException` for Avro, since the reference extractor does not exist), so there was
-> no migration and no id churn.
->
-> **What shipped:** `doc` is the only attribute stripped. `default`, `aliases`, `logicalType`,
-> `order` and any future attribute survive, normalised. For a schema that uses none of the
-> attributes PCF would have stripped, the output is byte-identical to PCF, and
-> `MatchesParsingCanonicalForm_WhenNothingSemanticWouldBeStripped` pins that so the deviation
-> stays confined to where PCF loses information.
->
-> **What to weigh if you overturn it:** the cost of (B) is that Concordat's Avro canonical form
-> is not the spec's PCF, so anyone comparing Concordat's canonical text against another tool's
-> PCF output sees a difference for schemas using defaults or aliases. Schema *ids* were never
-> comparable across tools anyway — Concordat uses a 128-bit truncated SHA-256 over a versioned
-> preimage, Avro uses a 64-bit CRC — so nothing that interoperates today is affected.
-
----
-
-## Blocking nothing today, but getting more expensive
+**No migration and no id churn**, because nothing has registered an Avro schema yet — which is
+exactly the window this decision was recorded to be settled inside. The preimage version is
+unbumped deliberately: `format` is part of the preimage, so JSON Schema ids are untouched.
 
 ### 1. Rename the GitHub repository `Signet` → `Concordat` — one step left, and it is yours
 
@@ -273,11 +203,33 @@ exactly the argument for running it. A broker upgrade that quietly stopped prese
 code change to trigger it. Its measurements are now load-bearing on a decision, too: they are
 what scoped binary framing out of v1.
 
-### 8. Semver pre-release support
+### 8. ~~Semver pre-release support~~ — per environment
 
-M1.1 rejects `2.0.0-rc.1` with a dedicated code. A team whose pipeline emits pre-release labels
-**cannot label a version at all** until this lands. Known gap, not a bug — but if your own
-pipeline does that, it moves up.
+**Resolved 2026-08-15 by the owner: configurable, off by default.** Some teams treat a release
+candidate as a real contract their consumers build against; others want production carrying
+released labels only. Both are reasonable, which is why this is a setting rather than a rule.
+
+- **`SemanticVersion` parses pre-releases everywhere**, with full SemVer 2.0.0 precedence — a
+  pre-release precedes its own release, numeric identifiers compare numerically so `rc.10`
+  follows `rc.9`, and more identifiers beat fewer. Folding the policy into the parser was the old
+  behaviour and meant a team emitting `-rc` labels could not label a version *at all, anywhere*.
+- **`Environment.AllowPreReleaseVersions` decides**, off by default. The natural shape is dev and
+  staging permitting them and production not, so a candidate is exercised everywhere it should be
+  and cannot reach production still wearing its suffix.
+- **Turning it off does not invalidate labels already registered.** Versions are immutable and
+  their labels are history; re-judging the past on a policy change would make the audit trail
+  disagree with the data.
+- **A message may always carry one.** What an environment *accepts at registration* and what a
+  message *carries on the wire* are different questions — the envelope reader now reads
+  `2.0.0-rc.1` rather than warning about it.
+
+**Build metadata is still refused**, with its own code. SemVer ignores it for precedence, so
+`1.0.0+a` and `1.0.0+b` compare equal while being different strings — and this registry requires
+each label to increase on the last. A grammar that can express something the ordering cannot see
+is a trap, not a feature.
+
+> **The UI toggle is owed.** The setting is on `POST`/`PATCH /v1/environments` and on the
+> environment response; the checkbox lands with M4.3's settings pages, which do not exist yet.
 
 ### 10. Generic message types are unsupported — before v1 ships
 
@@ -348,19 +300,22 @@ Tested against the real API rather than a fake handler, which is what the `Handl
 `ConcordatTestOptions` is for — and it doubles as the seam a corporate proxy or a self-signed
 registry certificate needs.
 
-### 14. The quarantine exchange is declared by the application — confirm
+### 14. ~~The quarantine exchange is declared by the application~~ — confirmed, and documented
 
-`ConcordatRabbitMqOptions.DeclareQuarantineExchange` defaults to **on**, so the middleware
-declares `concordat.quarantine` itself the first time it needs it. The alternative is that the
-first quarantine in production fails on a missing exchange — the worst possible moment to
-discover a topology gap.
+**Resolved 2026-08-15 by the owner: applications have exchange rights, and the documentation must
+say so plainly.** The default stands, and it is now stated as a *requirement* rather than left as
+an assumption.
 
-That assumes applications hold `exchange.declare` rights. In estates where topology is owned by
-infrastructure-as-code and applications deliberately cannot declare, this must be turned off
-and the exchange provisioned ahead of time.
+[`docs/BROKER-PERMISSIONS.md`](BROKER-PERMISSIONS.md) is new and linked first from the README,
+from the quickstart, and from `DeclareQuarantineExchange` itself. It gives the exact
+`set_permissions` invocation, says what Concordat never needs so nobody grants more than
+necessary, and covers the IaC-owned case — where turning the flag off **and** provisioning the
+exchange are both required, because doing only the first looks fine until the first violation.
 
-> **Which is your estate?** It changes the recommended default in the deployment docs, not the
-> code.
+The argument for the default, written down where somebody deciding will see it: quarantine only
+runs once a message has already violated its contract under `ENFORCE`. So an undeclared exchange
+is discovered *during an incident*, in a path nobody has exercised — a second failure stacked on
+the one being handled. Declaring costs one idempotent `exchange.declare` per process.
 
 ### 19. ~~The envelope spec describes payload framing that does not exist~~ — amended
 

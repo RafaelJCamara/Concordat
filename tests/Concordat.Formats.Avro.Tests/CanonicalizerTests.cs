@@ -33,7 +33,15 @@ public class CanonicalizerTests
 
     [Fact]
     public void PrimitiveInObjectForm_ReducesToTheBareForm_WhenNothingSurvives() =>
-        Assert.Equal("\"long\"", Canonical("""{"type":"long","doc":"when it happened"}"""));
+        Assert.Equal("\"long\"", Canonical("""{"type":"long"}"""));
+
+    [Fact]
+    public void PrimitiveInObjectForm_KeepsItsObjectForm_WhenItCarriesDoc() =>
+        // Since decision #17, `doc` survives -- so there IS something left and the object form
+        // is the honest canonical text. Under the old rule this reduced to "long".
+        Assert.Equal(
+            """{"type":"long","doc":"when it happened"}""",
+            Canonical("""{"type":"long","doc":"when it happened"}"""));
 
     [Fact]
     public void LogicalType_IsKept_NotStripped() =>
@@ -112,11 +120,14 @@ public class CanonicalizerTests
             Canonical("""{"size":16,"namespace":"acme","name":"Fx","type":"fixed"}"""));
 
     [Fact]
-    public void Doc_IsTheOnlyThingStripped()
+    public void NothingIsStripped()
     {
         // 'default' and 'aliases' decide how data resolves, so discarding them - which is what
         // Parsing Canonical Form does - would leave the registry serving a schema that cannot
-        // read older data. See DECISIONS-PENDING #17.
+        // read older data. Since decision #17 `doc` survives too: an id is a claim about a
+        // DOCUMENT, not about the subset of it this build considers meaningful, and once one
+        // attribute is dropped for being presentational every later one needs the same
+        // judgement made about it by five SDKs identically.
         var canonical = Canonical(
             """
             {
@@ -130,7 +141,7 @@ public class CanonicalizerTests
             """);
 
         Assert.Equal(
-            """{"name":"acme.X","type":"record","fields":[{"name":"a","type":"string","aliases":["oldA"],"default":"d","order":"ascending"}],"aliases":["acme.OldX"]}""",
+            """{"name":"acme.X","type":"record","fields":[{"name":"a","type":"string","aliases":["oldA"],"default":"d","doc":"field doc","order":"ascending"}],"aliases":["acme.OldX"],"doc":"docs"}""",
             canonical);
     }
 
@@ -232,6 +243,9 @@ public class CanonicalizerTests
         // The deviation is confined to what PCF would lose. A schema using none of the
         // attributes PCF strips canonicalises to exactly PCF, which is what keeps this form
         // recognisable to anyone who knows Avro.
+        //
+        // `doc` is now one of those attributes (decision #17), so the input here carries none.
+        // A schema WITH doc deliberately no longer matches PCF -- see the test below.
         const string pcf =
             """{"name":"acme.User","type":"record","fields":[{"name":"id","type":"string"},{"name":"age","type":"int"}]}""";
 
@@ -239,9 +253,25 @@ public class CanonicalizerTests
             pcf,
             Canonical(
                 """
+                {"type":"record","name":"User","namespace":"acme",
+                 "fields":[{"name":"id","type":"string"},{"name":"age","type":"int"}]}
+                """));
+    }
+
+    [Fact]
+    public void DivergesFromParsingCanonicalForm_WhenTheSchemaCarriesDoc()
+    {
+        // The cost of decision #17, pinned so nobody rediscovers it as a bug. PCF strips `doc`;
+        // this form keeps it, so anyone diffing Concordat's canonical text against another
+        // tool's PCF output sees a difference here. Schema IDS were never comparable across
+        // tools anyway -- 128-bit truncated SHA-256 over a versioned preimage versus Avro's
+        // 64-bit CRC -- so nothing that interoperates is affected.
+        Assert.Equal(
+            """{"name":"acme.User","type":"record","fields":[{"name":"id","type":"string"}],"doc":"a user"}""",
+            Canonical(
+                """
                 {"type":"record","name":"User","namespace":"acme","doc":"a user",
-                 "fields":[{"name":"id","type":"string","doc":"the id"},
-                           {"name":"age","type":"int"}]}
+                 "fields":[{"name":"id","type":"string"}]}
                 """));
     }
 

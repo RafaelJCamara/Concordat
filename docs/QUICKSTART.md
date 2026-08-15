@@ -1,5 +1,11 @@
 # Quickstart — run Concordat and publish through it
 
+> **Before you deploy this anywhere real:** the middleware declares its own quarantine exchange,
+> so your application needs `configure` on `concordat.quarantine`. That is a requirement, not a
+> preference — see [BROKER-PERMISSIONS.md](BROKER-PERMISSIONS.md). The compose stack below grants
+> it, so the quickstart works as written.
+
+
 Ten minutes, ending with a message refused because it broke its contract.
 
 Everything here uses the published REST surface and the .NET SDK. Nothing reaches into

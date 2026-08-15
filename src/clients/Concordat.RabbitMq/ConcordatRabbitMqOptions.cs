@@ -29,9 +29,25 @@ public sealed class ConcordatRabbitMqOptions
     /// Whether the middleware declares the quarantine exchange itself.
     /// </summary>
     /// <remarks>
-    /// On by default, because the alternative is that the first quarantine in production fails
-    /// on a missing exchange — the worst possible moment to discover a topology gap. Turn it
-    /// off where topology is owned by infrastructure-as-code and applications lack the rights.
+    /// <para>
+    /// <b>On by default, and that makes <c>configure</c> on <c>concordat.quarantine</c> a
+    /// requirement rather than a preference</b> (decision 14). See
+    /// <see href="https://github.com/RafaelJCamara/Concordat/blob/main/docs/BROKER-PERMISSIONS.md">
+    /// BROKER-PERMISSIONS.md</see>.
+    /// </para>
+    /// <para>
+    /// The alternative is assuming the exchange exists, and the first quarantine in production
+    /// then fails on a missing one. Consider when that happens: quarantine only runs once a
+    /// message has already violated its contract under <c>ENFORCE</c>, so the exchange is needed
+    /// for the first time during an incident, in a path nobody has exercised — a second failure
+    /// stacked on the one being handled. Declaring costs one idempotent <c>exchange.declare</c>
+    /// per process.
+    /// </para>
+    /// <para>
+    /// <b>Turning this off requires provisioning the exchange yourself</b>, as a durable fanout.
+    /// Turning it off without doing so looks fine until the first violation, which is the exact
+    /// failure the default avoids.
+    /// </para>
     /// </remarks>
     public bool DeclareQuarantineExchange { get; set; } = true;
 

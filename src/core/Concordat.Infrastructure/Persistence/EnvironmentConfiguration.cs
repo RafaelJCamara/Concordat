@@ -49,6 +49,8 @@ internal sealed class EnvironmentConfiguration : IEntityTypeConfiguration<Enviro
             .HasMaxLength(16)
             .IsRequired();
 
+        builder.Property(e => e.AllowPreReleaseVersions).HasColumnName("allow_prerelease_versions");
+
         builder.Property(e => e.CreatedAt).HasColumnName("created_at");
 
         builder.Property<Guid>(TenantIdProperty).HasColumnName("tenant_id");

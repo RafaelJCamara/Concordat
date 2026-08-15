@@ -12,12 +12,14 @@ namespace Concordat.Application.Registry;
 /// <param name="CompatibilityMode">The default policy's who-breaks axis, or null.</param>
 /// <param name="CompatibilitySurface">The default policy's what-breaks axis, or null.</param>
 /// <param name="RegistrationPolicy">Who may register, or null to choose by name.</param>
+/// <param name="AllowPreReleaseVersions">Whether pre-release labels are accepted here.</param>
 public sealed record CreateEnvironmentCommand(
     string? Name,
     string? Description,
     string? CompatibilityMode,
     string? CompatibilitySurface,
-    string? RegistrationPolicy) : ICommand<Environment>;
+    string? RegistrationPolicy,
+    bool AllowPreReleaseVersions = false) : ICommand<Environment>;
 
 /// <summary>Changes an environment's settings.</summary>
 /// <param name="Name">Which environment.</param>
@@ -25,12 +27,14 @@ public sealed record CreateEnvironmentCommand(
 /// <param name="CompatibilityMode">A new default mode, or null to leave it.</param>
 /// <param name="CompatibilitySurface">A new default surface, or null to leave it.</param>
 /// <param name="RegistrationPolicy">A new registration policy, or null to leave it.</param>
+/// <param name="AllowPreReleaseVersions">A new pre-release policy, or null to leave it.</param>
 public sealed record UpdateEnvironmentCommand(
     string? Name,
     string? Description,
     string? CompatibilityMode,
     string? CompatibilitySurface,
-    string? RegistrationPolicy) : ICommand<Environment>;
+    string? RegistrationPolicy,
+    bool? AllowPreReleaseVersions = null) : ICommand<Environment>;
 
 /// <summary>Registers a broker in an environment.</summary>
 /// <param name="EnvironmentName">Which environment.</param>
@@ -148,7 +152,8 @@ public sealed class CreateEnvironmentHandler(
             command.Description,
             policy,
             registration,
-            resolver.Resolve(name.Value.Value));
+            resolver.Resolve(name.Value.Value),
+            command.AllowPreReleaseVersions);
 
         if (created.IsFailure)
         {
@@ -227,6 +232,14 @@ public sealed class UpdateEnvironmentHandler(
             }
 
             environment.SetRegistrationPolicy(registration!.Value);
+        }
+
+        if (command.AllowPreReleaseVersions is { } allowPreRelease)
+        {
+            // Turning it off does not invalidate labels already registered. Versions are
+            // immutable and their labels are history; re-judging the past on a policy change
+            // would make the audit trail disagree with the data.
+            environment.SetPreReleasePolicy(allowPreRelease);
         }
 
         audit.Append(AuditEntry.Record(
