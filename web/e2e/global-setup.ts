@@ -1,4 +1,10 @@
-import { ensureEnvironment, ensureOwner, ensureReader, ensureSubject } from './registry';
+import {
+  ensureEnvironment,
+  ensureHeldVersion,
+  ensureOwner,
+  ensureReader,
+  ensureSubject,
+} from './registry';
 
 const REGISTRY = process.env.CONCORDAT_REGISTRY ?? 'http://localhost:5062';
 const WEB = process.env.CONCORDAT_WEB_URL ?? 'http://localhost:4300';
@@ -28,6 +34,11 @@ export default async function globalSetup(): Promise<void> {
   // One real subject, so the list has a row. See ensureSubject for why an empty table would
   // make every assertion here vacuous.
   await ensureSubject(owner, 'dev', 'acme.e2e.OrderCreated');
+
+  // And a second whose tip is held at the approval gate, so the screens that render a status
+  // have a real `AWAITING_APPROVAL` to render rather than only the happy one. See
+  // ensureHeldVersion: this is the shape of the defect that shipped once already.
+  await ensureHeldVersion(owner, 'dev', 'acme.e2e.PaymentTaken');
 }
 
 async function reachable(url: string, what: string, howToStart: string): Promise<void> {

@@ -26,6 +26,22 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   fullyParallel: false,
 
+  expect: {
+    /*
+     * 15s rather than the 5s default, because of what this suite runs against.
+     *
+     * `ng serve` compiles a lazy route's chunk the first time a browser asks for it, so the
+     * first navigation to each screen pays a build that no later test sees. The write route
+     * rendered in 614ms warm and took over five seconds cold, and failed on precisely that —
+     * the page was correct and fully rendered in the failure snapshot.
+     *
+     * Raising the timeout is the right fix where weakening the assertion would be wrong: the
+     * product is not slow, the dev toolchain is, and every screen added from here would
+     * otherwise need the same per-test workaround discovered the same way.
+     */
+    timeout: 15_000,
+  },
+
   // Serial, deliberately. Every test signs in against one shared registry, and claiming an
   // instance is a one-way operation — parallel workers would race over a single global state.
   workers: 1,

@@ -187,3 +187,91 @@ export async function ensureSubject(
     throw new Error(`Registering a version failed with ${version.status}.`);
   }
 }
+
+/**
+ * Makes sure a subject exists with a second version held at the approval gate.
+ *
+ * <b>`AWAITING_APPROVAL` is the state most like the one that broke this app.</b> `DISMISSED`
+ * shipped server-side, the frontend vocabulary never learned it, and one such version failed
+ * the entire subject list — with every unit test on both sides green, because nothing rendered
+ * a real registry's answer. Every screen that shows a status therefore needs a real held
+ * version to render, not a hand-built fixture that agrees with the frontend by construction.
+ *
+ * The breaking change is a newly-required field, which is the clearest one to read in a
+ * divergence list: it names a path, an axis and a surface, and the message says what would
+ * actually break.
+ *
+ * <b>It reads the subject before writing, and that is not defensiveness.</b> The obvious
+ * implementation — call `ensureSubject`, then post the breaking schema, and treat 409 as
+ * "already there" — grows the subject by two versions on every run, which the second run of
+ * this suite caught. Re-posting the *base* schema while a breaking proposal is pending is a
+ * revert, so the registry dismisses the pending version; re-posting the breaking schema then
+ * opens a fresh one. Neither call answers 409, because both are legitimate state changes.
+ * Idempotence here has to mean "look first", not "tolerate a conflict".
+ */
+export async function ensureHeldVersion(
+  ownerCredential: string,
+  environment: string,
+  subject: string,
+): Promise<void> {
+  const authorization = { authorization: `Bearer ${ownerCredential}` };
+
+  const created = await call(`/v1/environments/${environment}/subjects`, {
+    method: 'POST',
+    headers: authorization,
+    body: JSON.stringify({ name: subject, format: 'json', owner: 'e2e' }),
+  });
+
+  if (!created.ok && created.status !== 409) {
+    throw new Error(`Creating subject '${subject}' failed with ${created.status}.`);
+  }
+
+  const existing = await call(`/v1/environments/${environment}/subjects/${subject}`, {
+    headers: authorization,
+  });
+
+  if (!existing.ok) {
+    throw new Error(`Reading subject '${subject}' failed with ${existing.status}.`);
+  }
+
+  const versions = ((await existing.json()) as { versions: { status: string }[] }).versions;
+
+  // Already arranged by an earlier run. Writing anything now is what grows the list.
+  if (versions.some((version) => version.status === 'AWAITING_APPROVAL')) {
+    return;
+  }
+
+  if (versions.length === 0) {
+    await register(
+      ownerCredential,
+      environment,
+      subject,
+      '{"type":"object","properties":{"id":{"type":"string"}}}',
+    );
+  }
+
+  await register(
+    ownerCredential,
+    environment,
+    subject,
+    '{"type":"object","properties":{"id":{"type":"string"},"total":{"type":"number"}},' +
+      '"required":["total"]}',
+  );
+}
+
+async function register(
+  ownerCredential: string,
+  environment: string,
+  subject: string,
+  schema: string,
+): Promise<void> {
+  const response = await call(`/v1/environments/${environment}/subjects/${subject}/versions`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${ownerCredential}` },
+    body: JSON.stringify({ schema, registeredBy: 'e2e' }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Registering against '${subject}' failed with ${response.status}.`);
+  }
+}

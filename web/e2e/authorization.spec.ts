@@ -1,5 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { OWNER, READER } from './registry';
+import { signIn } from './sign-in';
 
 /**
  * M4.5's named test: a reader sees no write affordance.
@@ -14,14 +15,6 @@ import { OWNER, READER } from './registry';
  * boundary — the server refuses the same request with 403 regardless of what renders. What it
  * buys is that the UI does not offer an action the server will refuse.
  */
-async function signIn(page: Page, who: typeof OWNER | typeof READER): Promise<void> {
-  await page.goto('/sign-in');
-  await page.getByRole('textbox', { name: 'Email' }).fill(who.email);
-  await page.getByRole('textbox', { name: 'Password' }).fill(who.password);
-  await page.getByRole('button', { name: /sign in|create owner account/i }).click();
-  await expect(page.getByText(who.email)).toBeVisible();
-}
-
 test.describe('write affordances', () => {
   test('a reader is offered none', async ({ page }) => {
     await signIn(page, READER);

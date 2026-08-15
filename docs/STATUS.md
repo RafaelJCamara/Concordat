@@ -141,6 +141,23 @@ from the subject list rather than fetched, which is honest at this size and has 
 server-side the day that list is paginated. Recent breaking changes and enforcement coverage
 wait on endpoints that do not exist yet, so it is marked `[~]` rather than done.
 
+**Verified in a browser 2026-08-15**, against the compose `registry` profile on a wiped
+database: the subject list, subject detail, version detail and the register form, plus a
+version the registry is genuinely holding at the approval gate — a real `AWAITING_APPROVAL`
+from the compatibility engine rather than a fixture that agrees with the frontend by
+construction. The register form was driven end to end by submitting the document already at
+the tip, so the write path is exercised while the suite stays idempotent. Three consecutive
+runs leave the registry byte-identical.
+
+That pass cost two defects, both in the suite rather than the product. `ng serve` compiles a
+lazy route's chunk on first request, so the first navigation to a new screen took over five
+seconds against a 5s assertion timeout and reported a fully-rendered page as missing. And the
+held-version fixture grew the subject by two versions per run: re-posting the base schema
+while a proposal is pending is a *revert*, so the registry dismissed the pending version and
+the next post opened a fresh one — neither call answering 409, because both were legitimate
+state changes. Idempotence there had to mean "read the subject first", not "tolerate a
+conflict".
+
 **Done 2026-08-15:** the design-system port — the prototype's tokens, a light theme, self-hosted
 fonts ([ADR-026](adr/026-self-hosted-web-fonts.md)), the sidebar shell, the icon set and the
 cards — and the Playwright suite that now pins it. The E2E suite stands at **26 tests across four
@@ -232,7 +249,7 @@ survive being wrong.
 | Conformance corpus | `Conformance` | 99, over 98 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 63 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
-| Browser end-to-end | `web/e2e` | 26 | A real Chromium against the real stack, design system included |
+| Browser end-to-end | `web/e2e` | 42 | A real Chromium against the real stack, design system included |
 
 Plus 188 Angular unit tests.
 
