@@ -16,6 +16,10 @@ import {
   COMPATIBILITY_MODES,
   COMPATIBILITY_SURFACES,
 } from '../../../domain/registry/compatibility';
+import type {
+  PortabilityFinding,
+  RegistrationOutcome,
+} from '../../../domain/registry/registration';
 import type { SchemaVersion, Subject } from '../../../domain/registry/subject';
 import {
   CONTENT_MODELS,
@@ -68,6 +72,34 @@ export interface DivergenceDto {
   readonly surface: string;
   readonly message: string;
   readonly conflictsWithVersion: number;
+}
+
+/** `PortabilityResponse`. */
+export interface PortabilityDto {
+  readonly path: string;
+  readonly kind: string;
+  /** Always `WARNING` on a successful registration; an error refuses it outright. */
+  readonly severity: string;
+  readonly message: string;
+}
+
+/** `RegisterVersionRequest`. */
+export interface RegisterVersionDto {
+  readonly schema: string;
+  readonly semanticVersion?: string | null;
+  readonly changelog?: string | null;
+  readonly registeredBy?: string;
+}
+
+/** `RegisterVersionResponse`. */
+export interface RegistrationDto {
+  readonly subject: string;
+  readonly ordinal: number;
+  readonly schemaId: string;
+  readonly status: string;
+  readonly created: boolean;
+  readonly divergences: readonly DivergenceDto[];
+  readonly portability: readonly PortabilityDto[];
 }
 
 export function toSubject(dto: SubjectDto): Subject {
@@ -124,6 +156,31 @@ export function toDivergence(dto: DivergenceDto): Divergence {
     message: dto.message,
     conflictsWithVersion: dto.conflictsWithVersion,
   };
+}
+
+export function toRegistrationOutcome(dto: RegistrationDto): RegistrationOutcome {
+  return {
+    subject: dto.subject,
+    ordinal: dto.ordinal,
+    schemaId: dto.schemaId,
+    status: wireToken('status', dto.status, VERSION_STATUSES) as VersionStatus,
+    created: dto.created,
+    divergences: dto.divergences.map(toDivergence),
+    portability: dto.portability.map(toPortability),
+  };
+}
+
+/**
+ * Reads a portability finding.
+ *
+ * `severity` is deliberately dropped rather than mapped. Everything that reaches this
+ * mapping registered successfully, and the API only emits `WARNING` on that path — an error
+ * refuses the registration and arrives as a Problem Details body instead. Carrying a field
+ * with one possible value would invite a template to branch on it and quietly render a
+ * second, unreachable state.
+ */
+export function toPortability(dto: PortabilityDto): PortabilityFinding {
+  return { path: dto.path, kind: dto.kind, message: dto.message };
 }
 
 /**

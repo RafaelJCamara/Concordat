@@ -57,6 +57,7 @@ const compositionRoot = [
       'src/app/app.spec.ts',
       'src/app/app.config.ts',
       'src/app/app.routes.ts',
+      'src/app/app.routes.spec.ts',
     ],
   },
 ];

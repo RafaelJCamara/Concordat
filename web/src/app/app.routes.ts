@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { schemaWriteGuard } from './core/auth/scope-guard';
 
 /**
  * The route table.
@@ -34,6 +35,22 @@ export const routes: Routes = [
     title: 'Subject · Concordat',
     loadComponent: () =>
       import('./features/registry/feature/subject-detail-page').then((m) => m.SubjectDetailPage),
+  },
+  {
+    /*
+     * **This must stay above `versions/:ordinal`.** The router matches in order, so with the
+     * two swapped, `/subjects/x/versions/new` matches the detail screen with `ordinal: 'new'`
+     * — which resolves to nothing and renders "no version 'new'", a 404 for the one route
+     * that is not missing.
+     *
+     * The app's first write route, and therefore the first `scopeGuard` is attached to. The
+     * guard was built and unit-tested in M4.2 and referenced by nothing until now.
+     */
+    path: 'subjects/:name/versions/new',
+    title: 'Register a version · Concordat',
+    canActivate: [schemaWriteGuard],
+    loadComponent: () =>
+      import('./features/registry/feature/new-version-page').then((m) => m.NewVersionPage),
   },
   {
     // `:ordinal` is a string, not a number, because the API accepts the literal `latest`

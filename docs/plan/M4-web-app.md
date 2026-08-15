@@ -23,10 +23,13 @@ Build now, not in M8 — retrofitting across finished screens is how a write pat
 
 - [x] `canWriteSchemas` computed on the session store, derived from API-returned scopes
 - [x] `*cdIfScope` structural directive for affordances
-- [ ] `scopeGuard` on write routes; direct navigation redirects to the read view — **the guard is
-      built and unit-tested, and is referenced by no route.** Marked done here until 2026-08-15,
-      when the Playwright suite went to write the redirect test and found there was nothing to
-      redirect *from*: `app.routes.ts` has two entries and `**` catches the rest. Lands with M4.3
+- [x] `scopeGuard` on write routes; direct navigation redirects to the read view. **Was marked
+      done, then unmarked on 2026-08-15** when the Playwright suite went to write the redirect
+      test and found there was nothing to redirect *from* — the guard was built, unit-tested
+      and referenced by no route at all. Genuinely done now that `NewVersionPage` gives it
+      something to guard: `/subjects/:name/versions/new` carries `schemaWriteGuard`, which is
+      named in `core/auth` rather than spelled per route so the route and the `*cdIfScope` on
+      the button that points at it read the same constant and cannot drift
 - [x] ~~Stub returning admin~~ — **superseded, and better.** The stub was never built; the
       API's unclaimed-instance caller (M8.2) does the same job on the server, so the UI and
       the server agree by construction rather than by two people remembering to.
@@ -62,8 +65,16 @@ sign-in screen that lets someone pass it, which is recorded as
       test on each of the two stores. The version screen needs two requests — a version carries
       a schema *id*, never its text — so it tracks two loading states and renders the header
       against the first while the document is still in flight
-- [ ] `NewVersionPage` — **split out of the line above.** It is the app's first write route,
-      so it also carries `scopeGuard`'s first wiring (M4.2) and M4.5's redirect test
+- [x] `NewVersionPage` — **split out of the line above**, and the app's first write route, so
+      it is also what finally wired `scopeGuard` to a route and unblocked M4.5's redirect
+      test. A breaking change is rendered as a *success that was held*, not as an error: the
+      registry accepted it, left `latest` unmoved and the proposal is reviewable, and a screen
+      that reported that as a failure would have people re-submitting a change that landed.
+      The three outcomes — registered, held, and already-the-tip (200, no ordinal allocated) —
+      are three distinct messages, because conflating any two of them misleads. The store uses
+      `exhaustMap` rather than `switchMap`: this is the one store that writes, and cancelling
+      an in-flight POST abandons only the browser's half of a request the registry still
+      processes
 - [ ] `ContractsPage` — bindings, enforcement mode, version selectors
 - [ ] `CompatibilityDiffPage`, `ImpactAnalysisPage`
 - [ ] `ApprovalsPage` — pending breaking changes with diff and impact; approve/reject (admin only)
@@ -101,9 +112,11 @@ rather than deleted, because "why is there no zod here?" is a question worth ans
       so nothing could notice they were all wrong
 - [x] Non-admin E2E: no write affordance renders — a reader signs in and the button is absent,
       an owner signs in and it is there
-- [ ] Direct URL to a write route redirects — **cannot be written yet**: there is no write route,
-      and `scopeGuard` is referenced by no route at all. Goes in with M4.3's pages; writing it now
-      would assert the `**` wildcard and pass while proving nothing
+- [x] Direct URL to a write route redirects — **closed**, now that `/subjects/:name/versions/new`
+      exists to paste. Three cases, and the first is what makes the other two mean anything: an
+      owner gets the screen, a reader is redirected to the read surface rather than to a dead
+      end, and a signed-out visitor reaches sign-in with `returnTo` set. Written earlier it
+      would have asserted the `**` wildcard and passed while proving nothing
 
 ---
 

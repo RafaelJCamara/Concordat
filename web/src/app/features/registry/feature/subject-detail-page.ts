@@ -3,7 +3,9 @@ import { RouterLink } from '@angular/router';
 import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmSkeleton } from '@spartan-ng/helm/skeleton';
+import { IfScope } from '../../../core/auth/if-scope';
 import { ActiveEnvironmentStore } from '../../../core/config/active-environment-store';
+import { SCHEMA_WRITE_SCOPES } from '../../../domain/identity/scope';
 import { Icon } from '../../../shared/ui/icon/icon';
 import { StatusBadge } from '../../../shared/ui/status-badge/status-badge';
 import { SubjectDetailStore } from '../application/subject-detail-store';
@@ -26,7 +28,16 @@ import { VersionTable } from '../ui/version-table';
   selector: 'cd-subject-detail-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [SubjectDetailStore],
-  imports: [RouterLink, HlmAlertImports, HlmButton, HlmSkeleton, Icon, StatusBadge, VersionTable],
+  imports: [
+    RouterLink,
+    HlmAlertImports,
+    HlmButton,
+    HlmSkeleton,
+    Icon,
+    IfScope,
+    StatusBadge,
+    VersionTable,
+  ],
   template: `
     <section class="mx-auto w-full max-w-6xl space-y-6 p-6 lg:p-8">
       <!--
@@ -78,11 +89,20 @@ import { VersionTable } from '../ui/version-table';
               </cd-status-badge>
             }
             <!--
-              The "New version" affordance lands with NewVersionPage, in the same commit as
-              its route. Adding the button first would point it at the wildcard route, which
-              silently redirects to the dashboard — a button that appears to work and quietly
-              does the wrong thing, which is worse than no button at all.
+              Absent for a non-admin rather than disabled (ADR-018). A disabled button invites
+              a support ticket asking to be given the permission; an absent one does not raise
+              the question. The route behind it carries the same scopes in its scopeGuard, and
+              the server refuses the request either way.
             -->
+            <a
+              *cdIfScope="schemaWriteScopes"
+              hlmBtn
+              class="glow-primary gap-2"
+              [routerLink]="['/subjects', subject.name, 'versions', 'new']"
+            >
+              <cd-icon name="plus" size="1rem" />
+              New version
+            </a>
           </div>
         </header>
 
@@ -143,6 +163,9 @@ export class SubjectDetailPage {
 
   protected readonly store = inject(SubjectDetailStore);
   protected readonly environments = inject(ActiveEnvironmentStore);
+
+  /** The scopes that permit registering a version, from the one list (ADR-018). */
+  protected readonly schemaWriteScopes = SCHEMA_WRITE_SCOPES;
 
   constructor() {
     // Reloads on the name changing and on an environment switch alike. Reading both signals

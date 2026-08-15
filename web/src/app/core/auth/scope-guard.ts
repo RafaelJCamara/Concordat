@@ -1,6 +1,6 @@
 import { inject } from '@angular/core';
 import { Router, type CanActivateFn } from '@angular/router';
-import { grants, type Scope } from '../../domain/identity/scope';
+import { grants, SCHEMA_WRITE_SCOPES, type Scope } from '../../domain/identity/scope';
 import { SessionStore } from './session-store';
 
 /**
@@ -38,3 +38,15 @@ export function scopeGuard(...required: readonly Scope[]): CanActivateFn {
     return router.createUrlTree(['/subjects']);
   };
 }
+
+/**
+ * The guard for routes that change a contract (ADR-018).
+ *
+ * Named here rather than spelled `scopeGuard(...SCHEMA_WRITE_SCOPES)` at each route, for two
+ * reasons. The route table is the composition root and may not import from `domain/` — the
+ * boundaries rule says so, and the point is that the wiring layer holds no policy of its own.
+ * And a scope list repeated per route is a list that eventually disagrees with itself: this
+ * is the same constant `*cdIfScope` reads on the affordance, so the button and the route it
+ * points at cannot drift apart.
+ */
+export const schemaWriteGuard: CanActivateFn = scopeGuard(...SCHEMA_WRITE_SCOPES);

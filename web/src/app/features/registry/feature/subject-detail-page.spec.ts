@@ -2,8 +2,10 @@ import { signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { describe, expect, it } from 'vitest';
+import { SessionStore } from '../../../core/auth/session-store';
 import { provideConcordatConfig } from '../../../core/config/app-config';
 import { ConcordatError } from '../../../core/http/problem-details';
+import type { Scope } from '../../../domain/identity/scope';
 import type { SchemaVersion, Subject } from '../../../domain/registry/subject';
 import { SubjectDetailStore } from '../application/subject-detail-store';
 import { SubjectDetailPage } from './subject-detail-page';
@@ -63,7 +65,10 @@ function storeIn(state: {
   } as unknown as InstanceType<typeof SubjectDetailStore>;
 }
 
-function render(state: Parameters<typeof storeIn>[0]): {
+function render(
+  state: Parameters<typeof storeIn>[0],
+  scopes: readonly Scope[] = [],
+): {
   fixture: ComponentFixture<SubjectDetailPage>;
   host: HTMLElement;
 } {
@@ -71,9 +76,15 @@ function render(state: Parameters<typeof storeIn>[0]): {
     providers: [provideRouter([]), provideConcordatConfig({ defaultEnvironment: 'dev' })],
   });
 
+  // `overrideComponent` has to come before the first `inject`, which instantiates the module
+  // and freezes the overrides.
   TestBed.overrideComponent(SubjectDetailPage, {
     set: { providers: [{ provide: SubjectDetailStore, useValue: storeIn(state) }] },
   });
+
+  // Signed in before the component renders, because `*cdIfScope` decides on first render and
+  // this page's write affordance is what several of these tests are about.
+  TestBed.inject(SessionStore).signIn({ credential: 't', actor: 'someone', scopes: [...scopes] });
 
   const fixture = TestBed.createComponent(SubjectDetailPage);
   fixture.componentRef.setInput('name', state.subject?.name ?? 'orders.created');
@@ -154,11 +165,31 @@ describe('SubjectDetailPage', () => {
     expect(host.querySelector('[aria-busy="true"]')).not.toBeNull();
   });
 
-  it('does not offer a write affordance yet, because there is no write route', () => {
-    // Guards against re-adding the button before `NewVersionPage` exists: it would point at
-    // the wildcard route and silently redirect to the dashboard.
-    const { host } = render({ subject: subject({ versions: [version(1)], latest: 1 }) });
+  describe('the write affordance', () => {
+    it('is absent for a reader, not disabled', () => {
+      // ADR-018. A disabled button invites a support ticket asking to be given the
+      // permission; an absent one does not raise the question.
+      const { host } = render({ subject: subject({ versions: [version(1)], latest: 1 }) }, [
+        'subject:read',
+      ]);
 
-    expect(host.textContent).not.toContain('New version');
+      expect(host.textContent).not.toContain('New version');
+    });
+
+    it('is there for someone who may register', () => {
+      const { host } = render({ subject: subject({ versions: [version(1)], latest: 1 }) }, [
+        'subject:admin',
+      ]);
+
+      expect(host.textContent).toContain('New version');
+    });
+
+    it('points at the write route, which the guard also protects', () => {
+      const { host } = render({ subject: subject({ versions: [version(1)], latest: 1 }) }, [
+        'subject:write',
+      ]);
+
+      expect(host.querySelector('a[href="/subjects/orders.created/versions/new"]')).not.toBeNull();
+    });
   });
 });

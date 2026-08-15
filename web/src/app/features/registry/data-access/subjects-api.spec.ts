@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type ConcordatConfig, provideConcordatConfig } from '../../../core/config/app-config';
+import type { RegistrationOutcome } from '../../../domain/registry/registration';
 import type { Subject } from '../../../domain/registry/subject';
 import { SubjectsApi } from './subjects-api';
 import type { SubjectDto } from './subject-dtos';
@@ -88,6 +89,127 @@ describe('SubjectsApi', () => {
       api.getSubject('dev', 'orders.created').subscribe();
 
       backend.expectOne('/v1/environments/dev/subjects/orders.created');
+    });
+  });
+
+  describe('registerVersion', () => {
+    const registration = {
+      subject: 'orders.created',
+      ordinal: 2,
+      schemaId: 'abc',
+      status: 'AWAITING_APPROVAL',
+      created: true,
+      divergences: [
+        {
+          path: '/properties/discount',
+          kind: 'required_field_added',
+          direction: 'BACKWARD',
+          surface: 'WIRE_JSON',
+          message: 'A required field was added.',
+          conflictsWithVersion: 1,
+        },
+      ],
+      portability: [
+        {
+          path: '/properties/amount',
+          kind: 'big_decimal',
+          severity: 'WARNING',
+          message: 'Floats.',
+        },
+      ],
+    };
+
+    it('posts to the subject’s versions collection', () => {
+      const { api, backend } = setUp();
+      api
+        .registerVersion('dev', 'orders.created', {
+          schema: '{}',
+          semanticVersion: null,
+          changelog: null,
+        })
+        .subscribe();
+
+      const request = backend.expectOne('/v1/environments/dev/subjects/orders.created/versions');
+
+      expect(request.request.method).toBe('POST');
+    });
+
+    it('does not send registeredBy, because the server knows who is calling', () => {
+      // M8.2 attributes the write to the caller's own identity. A client-supplied name would
+      // be a second, unverified answer to a question the server has already answered.
+      const { api, backend } = setUp();
+      api
+        .registerVersion('dev', 'orders.created', {
+          schema: '{}',
+          semanticVersion: '1.1.0',
+          changelog: 'note',
+        })
+        .subscribe();
+
+      const request = backend.expectOne('/v1/environments/dev/subjects/orders.created/versions');
+
+      expect(request.request.body).toEqual({
+        schema: '{}',
+        semanticVersion: '1.1.0',
+        changelog: 'note',
+      });
+    });
+
+    it('returns a breaking change as a successful outcome, not an error', () => {
+      // The registry accepted it and held it at the gate (ADR-017). Nothing on this path may
+      // treat divergences as a failure.
+      let outcome: RegistrationOutcome | null = null;
+      const { api, backend } = setUp();
+      api
+        .registerVersion('dev', 'orders.created', {
+          schema: '{}',
+          semanticVersion: null,
+          changelog: null,
+        })
+        .subscribe((value) => (outcome = value));
+
+      backend
+        .expectOne('/v1/environments/dev/subjects/orders.created/versions')
+        .flush(registration, { status: 201, statusText: 'Created' });
+
+      expect(outcome!.status).toBe('AWAITING_APPROVAL');
+      expect(outcome!.created).toBe(true);
+      expect(outcome!.divergences).toHaveLength(1);
+    });
+
+    it('drops the portability severity, which has one value on this path', () => {
+      let outcome: RegistrationOutcome | null = null;
+      const { api, backend } = setUp();
+      api
+        .registerVersion('dev', 'orders.created', {
+          schema: '{}',
+          semanticVersion: null,
+          changelog: null,
+        })
+        .subscribe((value) => (outcome = value));
+
+      backend
+        .expectOne('/v1/environments/dev/subjects/orders.created/versions')
+        .flush(registration);
+
+      expect(outcome!.portability[0]).toEqual({
+        path: '/properties/amount',
+        kind: 'big_decimal',
+        message: 'Floats.',
+      });
+    });
+
+    it('percent-encodes the subject name', () => {
+      const { api, backend } = setUp();
+      api
+        .registerVersion('dev', 'orders/created', {
+          schema: '{}',
+          semanticVersion: null,
+          changelog: null,
+        })
+        .subscribe();
+
+      backend.expectOne('/v1/environments/dev/subjects/orders%2Fcreated/versions');
     });
   });
 

@@ -54,27 +54,52 @@ test.describe('write affordances', () => {
 });
 
 /**
- * M4.5's other named test — "direct URL to a write route redirects" — is deliberately not here.
+ * M4.5's other named test: a direct URL to a write route redirects.
  *
- * <b>There is no write route to paste.</b> `app.routes.ts` has three entries — `sign-in`,
- * `subjects` and the dashboard on `` — every one of them a read, and `**` redirects everything
- * else to the dashboard. `scopeGuard` is built, unit-tested, and referenced by no route at all.
+ * <b>Owed since M4.2 and unwritable until now.</b> `scopeGuard` was built, unit-tested and
+ * referenced by no route at all, so there was nothing to paste: asserting that `/subjects/new`
+ * redirected would have passed on the `**` wildcard and proved nothing about the guard. A test
+ * that passes for the wrong reason is worse than a missing one, because the missing one is
+ * still on the list.
  *
- * Writing the test anyway would assert that `/subjects/new` redirects — and it would pass, on
- * the wildcard, while proving nothing about the guard. A test that passes for the wrong reason
- * is worse than a missing one, because the missing one is still on the list.
- *
- * It goes in with M4.3's pages, which is when the guard first has something to guard.
+ * `/subjects/:name/versions/new` is the app's first write route and the first thing the guard
+ * is attached to, so the test is finally about the guard rather than about the wildcard.
  */
-test.describe('the guarded-route test', () => {
-  test('is owed, and is not fakeable yet', async ({ page }) => {
-    await page.goto('/subjects');
+// The subject `global-setup.ts` guarantees, so the screen behind the guard has something
+// real to register against rather than rendering an error the assertions then trip over.
+const WRITE_ROUTE = '/subjects/acme.e2e.OrderCreated/versions/new';
 
-    // All this asserts is that a read route is reachable and not redirected away from — which
-    // is worth something, and is not the guard. It cannot be: `scopeGuard` is on no route, so
-    // there is nothing to navigate at that would exercise it. Asserting `/subjects/new`
-    // redirects would pass on the `**` wildcard and prove nothing.
-    const landed = await page.evaluate(() => window.location.pathname);
-    expect(landed).toBe('/subjects');
+test.describe('a direct URL to a write route', () => {
+  test('renders for someone who may write', async ({ page }) => {
+    // First, because it is what makes the two redirect assertions meaningful: a route that
+    // redirected for everybody would satisfy them while simply being broken.
+    await signIn(page, OWNER);
+    await page.goto(WRITE_ROUTE);
+
+    await expect(page.getByRole('heading', { name: 'Register a version' })).toBeVisible();
+    expect(await page.evaluate(() => window.location.pathname)).toBe(WRITE_ROUTE);
+  });
+
+  test('redirects a reader to the read surface', async ({ page }) => {
+    // Not to a 403 page. Somebody who followed a link from an incident channel to a route
+    // they cannot use is better served by the read surface they can use than by a dead end.
+    await signIn(page, READER);
+    await page.goto(WRITE_ROUTE);
+
+    await expect(page.getByRole('heading', { name: 'Subjects' })).toBeVisible();
+    expect(await page.evaluate(() => window.location.pathname)).toBe('/subjects');
+  });
+
+  test('sends a signed-out visitor to sign in, with somewhere to come back to', async ({
+    page,
+  }) => {
+    // The difference between a locked door and a locked door with a key slot. They may well
+    // be entitled to this route; they simply have not said who they are yet.
+    await page.context().clearCookies();
+    await page.goto(WRITE_ROUTE);
+
+    await expect(page).toHaveURL(
+      new RegExp(`/sign-in\\?returnTo=${encodeURIComponent(WRITE_ROUTE)}`),
+    );
   });
 });
