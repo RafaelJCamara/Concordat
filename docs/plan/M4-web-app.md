@@ -40,7 +40,19 @@ sign-in screen that lets someone pass it, which is recorded as
 
 ## M4.3 Pages
 
-- [ ] `Dashboard` — environment-scoped overview
+> **The sidebar grows with this list.** `NAV_ITEMS` in `app.ts` carries one row per screen
+> that exists — two today. Unbuilt screens are *not* shown as inert "Soon" rows: matching the
+> prototype's five-row rail with placeholders imitates the screenshot rather than the design,
+> and a row you can see and cannot use is a small recurring cost paid on every visit, where a
+> sparse rail is a cosmetic one that ends here. The roadmap is this list; it does not also
+> need to live in the chrome, where it would go stale in a second place. Add the row in the
+> same commit as the route.
+
+- [~] `Dashboard` — environment-scoped overview. **First slice shipped** on `/`: subject,
+      version and awaiting-approval counts, and the most recently registered subjects. Every
+      number is derived from the subject list rather than fetched, which is honest at this size
+      and has to move server-side the day that list is paginated. Recent breaking changes and
+      enforcement coverage wait on the endpoints behind them
 - [ ] `SubjectListPage`, `SubjectDetailPage` (`/subjects/:name`, **real routes not query params**), `VersionDetailPage`, `NewVersionPage`
 - [ ] `ContractsPage` — bindings, enforcement mode, version selectors
 - [ ] `CompatibilityDiffPage`, `ImpactAnalysisPage`
@@ -70,8 +82,13 @@ rather than deleted, because "why is there no zod here?" is a question worth ans
 
 ## M4.5 Tests
 
-- [x] Playwright E2E against a real API — `web/e2e/`, 11 tests. Found the subject list
+- [x] Playwright E2E against a real API — `web/e2e/`, 26 tests. Found the subject list
       broken on its first run (see [STATUS.md](../STATUS.md))
+- [x] Design-system E2E — `design-system.spec.ts` pins the ported palette, both themes, the
+      typography and the shell as **computed styles rather than pixel screenshots**, which are
+      exact and identical on Windows and on CI's Linux. It exists because the placeholder
+      palette survived a whole milestone with every other test green: nothing named a colour,
+      so nothing could notice they were all wrong
 - [x] Non-admin E2E: no write affordance renders — a reader signs in and the button is absent,
       an owner signs in and it is there
 - [ ] Direct URL to a write route redirects — **cannot be written yet**: there is no write route,

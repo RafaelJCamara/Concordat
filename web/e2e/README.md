@@ -49,9 +49,23 @@ race over a single global state.
 ## What is deliberately not here
 
 **"Direct URL to a write route redirects"**, the other test M4.5 names. There is no write route
-to paste: `app.routes.ts` has two entries, and `**` redirects everything else to the subject
-list. `scopeGuard` is built, unit-tested, and referenced by no route.
+to paste: `app.routes.ts` has three entries — the dashboard, the subject list and sign-in — all
+of them reads, and `**` redirects everything else to the dashboard. `scopeGuard` is built,
+unit-tested, and referenced by no route.
 
 Writing it anyway would assert that `/subjects/new` redirects — and it would pass, on the
 wildcard, proving nothing. A test that passes for the wrong reason is worse than a missing one,
 because the missing one is still on the list. It goes in with M4.3's pages.
+
+**A network stub.** `design-system.spec.ts` asserts the page makes _no_ cross-origin request
+at all ([ADR-026](../../docs/adr/026-self-hosted-web-fonts.md)), which only means something
+against real network conditions. Stubbing would make it tautological.
+
+**Pixel screenshots.** `design-system.spec.ts` pins the design with computed styles instead —
+token values, resolved colours, font stacks, the sidebar's two widths. `toHaveScreenshot` keeps
+one baseline per platform, and this suite runs on a developer's Windows machine and on
+`ubuntu-latest` in CI, which render text differently enough to differ on thousands of pixels.
+The choice was a suite that fails every CI run until someone commits Linux baselines from a
+container, or a `maxDiffPixelRatio` slack enough to sleep through a real regression. Computed
+styles are exact, identical on both, and name what broke: _"primary is no longer the
+prototype's teal"_ beats _"1,297 pixels differ"_.

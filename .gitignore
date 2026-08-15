@@ -67,3 +67,6 @@ web/test-results/
 web/playwright-report/
 web/blob-report/
 web/.playwright-mcp/
+# The MCP browser tools write beside the working directory, which is the repo root as often
+# as it is `web/`. Both spellings, so the artefacts land in .gitignore rather than in a diff.
+.playwright-mcp/

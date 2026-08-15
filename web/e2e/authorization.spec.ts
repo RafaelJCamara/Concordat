@@ -56,9 +56,9 @@ test.describe('write affordances', () => {
 /**
  * M4.5's other named test — "direct URL to a write route redirects" — is deliberately not here.
  *
- * <b>There is no write route to paste.</b> `app.routes.ts` has exactly two entries, `sign-in`
- * and `subjects`, and `**` redirects everything else to the subject list. `scopeGuard` is built,
- * unit-tested, and referenced by no route at all.
+ * <b>There is no write route to paste.</b> `app.routes.ts` has three entries — `sign-in`,
+ * `subjects` and the dashboard on `` — every one of them a read, and `**` redirects everything
+ * else to the dashboard. `scopeGuard` is built, unit-tested, and referenced by no route at all.
  *
  * Writing the test anyway would assert that `/subjects/new` redirects — and it would pass, on
  * the wildcard, while proving nothing about the guard. A test that passes for the wrong reason
@@ -70,9 +70,11 @@ test.describe('the guarded-route test', () => {
   test('is owed, and is not fakeable yet', async ({ page }) => {
     await page.goto('/subjects');
 
-    // Pinned so this stops passing the moment a third route appears, which is exactly when
-    // somebody should come back and write the real test.
-    const routes = await page.evaluate(() => window.location.pathname);
-    expect(routes).toBe('/subjects');
+    // All this asserts is that a read route is reachable and not redirected away from — which
+    // is worth something, and is not the guard. It cannot be: `scopeGuard` is on no route, so
+    // there is nothing to navigate at that would exercise it. Asserting `/subjects/new`
+    // redirects would pass on the `**` wildcard and prove nothing.
+    const landed = await page.evaluate(() => window.location.pathname);
+    expect(landed).toBe('/subjects');
   });
 });
