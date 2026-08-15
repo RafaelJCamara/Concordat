@@ -1,4 +1,13 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  DOCUMENT,
+  computed,
+  inject,
+  linkedSignal,
+  signal,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
@@ -26,6 +35,17 @@ const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Dashboard', icon: 'layout-dashboard', route: '/' },
   { label: 'Subjects', icon: 'file-json', route: '/subjects' },
 ];
+
+/**
+ * The width below which the open rail costs more than it gives.
+ *
+ * Tailwind's `md` boundary, and it is not a round number picked to look tidy: 256px of a
+ * 390px phone is two thirds of the window spent on two links. Everything downstream then
+ * fails in the way narrow columns fail — the page heading breaks mid-word, the search box
+ * renders three characters, the subject table becomes a scrollbar — and none of it is
+ * visible on the machine the screens are drawn on.
+ */
+const NARROW = '(max-width: 767px)';
 
 /**
  * The application shell.
@@ -80,7 +100,7 @@ const NAV_ITEMS: readonly NavItem[] = [
           @if (session.isSignedIn()) {
             <button
               type="button"
-              class="text-muted-foreground hover:bg-sidebar-accent hover:text-foreground flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors"
+              class="text-muted-foreground hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-ring flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors focus-visible:ring-2 focus-visible:outline-none"
               [class.justify-center]="collapsed()"
               [attr.title]="collapsed() ? 'Sign out (' + session.actor() + ')' : null"
               (click)="signOut()"
@@ -94,7 +114,7 @@ const NAV_ITEMS: readonly NavItem[] = [
           } @else if (session.needsSignIn()) {
             <a
               routerLink="/sign-in"
-              class="text-muted-foreground hover:bg-sidebar-accent hover:text-foreground flex items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors"
+              class="text-muted-foreground hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-ring flex items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors focus-visible:ring-2 focus-visible:outline-none"
               [class.justify-center]="collapsed()"
               [attr.title]="collapsed() ? 'Sign in' : null"
             >
@@ -144,8 +164,21 @@ export class App {
 
   protected readonly navItems = NAV_ITEMS;
 
-  /** View state, and nowhere else's business — see the note on `AppSidebar`. */
-  protected readonly collapsed = signal(false);
+  private readonly narrow = watchNarrow();
+
+  /**
+   * Whether the rail is showing icons only. View state, and nowhere else's business — see the
+   * note on `AppSidebar`.
+   *
+   * <b>A `linkedSignal` and not a plain one, so the window gets the first word and the reader
+   * gets the last.</b> It starts collapsed on a narrow viewport and re-collapses whenever the
+   * window crosses back under {@link NARROW}, which is what makes the app usable on a phone;
+   * between those crossings the toggle sets it freely, so someone who deliberately opens the
+   * rail on a small screen keeps it open. A plain signal seeded once would leave a rotated
+   * tablet in whichever state it booted in, and a `computed` would take the toggle away
+   * entirely on the screens that need it most.
+   */
+  protected readonly collapsed = linkedSignal(() => this.narrow());
 
   /**
    * The URL, as a signal.
@@ -191,4 +224,30 @@ export class App {
     this.session.expire();
     void this.router.navigateByUrl('/sign-in');
   }
+}
+
+/**
+ * Whether the window is currently narrower than {@link NARROW}, as a signal.
+ *
+ * Watched rather than read once, for the same reason `ThemeStore` watches
+ * `prefers-color-scheme`: a window is resized and a phone is rotated, and a layout that only
+ * consulted the viewport at bootstrap would be wrong for the rest of the session. Must be
+ * called from an injection context.
+ *
+ * `matchMedia` is reached through `DOCUMENT.defaultView` and treated as optional, because
+ * neither is guaranteed — the unit tests run in a jsdom that has no window until one is
+ * stubbed, and a shell that cannot be constructed cannot be asserted on.
+ */
+function watchNarrow() {
+  const view = inject(DOCUMENT).defaultView;
+  const query = view?.matchMedia(NARROW);
+  const narrow = signal(query?.matches ?? false);
+
+  if (query) {
+    const onChange = (event: MediaQueryListEvent) => narrow.set(event.matches);
+    query.addEventListener('change', onChange);
+    inject(DestroyRef).onDestroy(() => query.removeEventListener('change', onChange));
+  }
+
+  return narrow.asReadonly();
 }

@@ -239,6 +239,24 @@ test.describe('the shell', () => {
     await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(256);
   });
 
+  test('starts as a rail on a phone, and still opens if asked', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await visitFresh(page, '/');
+
+    // 256px of a 390px window is two thirds of it spent on two links, and everything
+    // downstream fails the way narrow columns fail: the heading breaks mid-word, the search
+    // box renders three characters. None of that is visible at the width screens are drawn at,
+    // which is why it is asserted at a width nobody develops on.
+    const sidebar = page.locator('cd-app-sidebar');
+    await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(64);
+
+    // The window gets the first word, not the last. Someone who deliberately opens the rail on
+    // a small screen keeps it open — a `computed` on the viewport would take the toggle away
+    // exactly where it is most likely to be wanted.
+    await page.getByRole('button', { name: 'Expand sidebar' }).click();
+    await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(256);
+  });
+
   test('is dropped entirely on sign-in', async ({ page }) => {
     await visitFresh(page, '/sign-in');
 

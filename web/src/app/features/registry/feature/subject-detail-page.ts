@@ -8,6 +8,7 @@ import { ActiveEnvironmentStore } from '../../../core/config/active-environment-
 import { SCHEMA_WRITE_SCOPES } from '../../../domain/identity/scope';
 import { Icon } from '../../../shared/ui/icon/icon';
 import { StatusBadge } from '../../../shared/ui/status-badge/status-badge';
+import { SubjectName } from '../../../shared/ui/subject-name/subject-name';
 import { SubjectDetailStore } from '../application/subject-detail-store';
 import { VersionTable } from '../ui/version-table';
 
@@ -36,6 +37,7 @@ import { VersionTable } from '../ui/version-table';
     Icon,
     IfScope,
     StatusBadge,
+    SubjectName,
     VersionTable,
   ],
   template: `
@@ -70,8 +72,8 @@ import { VersionTable } from '../ui/version-table';
       } @else if (store.subject(); as subject) {
         <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div class="min-w-0">
-            <h1 class="text-foreground truncate font-mono text-2xl font-bold tracking-tight">
-              {{ subject.name }}
+            <h1 class="text-foreground text-2xl font-bold tracking-tight">
+              <cd-subject-name [name]="subject.name" />
             </h1>
             <p class="text-muted-foreground mt-1">
               {{ subject.format }} · owned by {{ subject.owner }} ·

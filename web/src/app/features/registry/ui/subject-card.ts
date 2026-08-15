@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { latestVersion, pendingVersions, type Subject } from '../../../domain/registry/subject';
 import { Icon } from '../../../shared/ui/icon/icon';
 import { StatusBadge } from '../../../shared/ui/status-badge/status-badge';
+import { SubjectName } from '../../../shared/ui/subject-name/subject-name';
 import { RelativeTimePipe } from '../../../shared/pipes/relative-time-pipe';
 
 /**
@@ -22,7 +23,7 @@ import { RelativeTimePipe } from '../../../shared/pipes/relative-time-pipe';
 @Component({
   selector: 'cd-subject-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, StatusBadge, RelativeTimePipe],
+  imports: [Icon, StatusBadge, SubjectName, RelativeTimePipe],
   host: { class: 'block' },
   template: `
     <article
@@ -36,9 +37,17 @@ import { RelativeTimePipe } from '../../../shared/pipes/relative-time-pipe';
         </span>
 
         <div class="min-w-0 flex-1">
-          <div class="mb-1 flex items-center gap-2">
-            <h3 class="text-foreground truncate font-mono font-semibold">
-              {{ subject().name }}
+          <!--
+            Wrapping, and the heading deliberately keeps its min-content width. Two cards
+            abreast on a tablet leave this row about 120px, which is narrower than a leaf
+            segment: with the pill pinned beside it the name had to break mid-word and orphan
+            a letter on its own line. Letting the row wrap spends the width on the name and
+            drops the pill underneath, which is the right order — the pill says which version,
+            and the name says which subject.
+          -->
+          <div class="mb-1 flex flex-wrap items-start gap-2">
+            <h3 class="text-foreground font-semibold">
+              <cd-subject-name [name]="subject().name" />
             </h3>
             <span
               class="border-border text-muted-foreground shrink-0 rounded-full border px-2 py-0.5 font-mono text-xs"

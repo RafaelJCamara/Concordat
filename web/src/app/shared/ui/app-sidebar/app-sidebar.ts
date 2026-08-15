@@ -60,10 +60,17 @@ export interface NavItem {
     '[style.background]': '"var(--gradient-sidebar)"',
   },
   template: `
-    <!-- Wordmark. A link to the root, so the logo does what every logo is expected to do. -->
+    <!--
+      Wordmark. A link to the root, so the logo does what every logo is expected to do.
+
+      The focus ring here and on every control below is the app's own ring token, spelled the
+      way the cards, inputs and table links spell it. Left off, these fell back to the
+      browser's default outline — visible, so nothing looked broken, and a different shape and
+      colour from every other stop on the same tab order.
+    -->
     <a
       routerLink="/"
-      class="border-sidebar-border hover:bg-sidebar-accent flex h-16 items-center gap-3 border-b px-4 transition-colors"
+      class="border-sidebar-border hover:bg-sidebar-accent focus-visible:ring-ring flex h-16 items-center gap-3 border-b px-4 transition-colors focus-visible:ring-2 focus-visible:outline-none"
     >
       <span
         class="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded-lg"
@@ -88,7 +95,7 @@ export interface NavItem {
           [routerLinkActiveOptions]="{ exact: item.route === '/' }"
           [attr.aria-current]="active.isActive ? 'page' : null"
           [attr.title]="collapsed() ? item.label : null"
-          class="text-sidebar-foreground hover:bg-sidebar-accent group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-200"
+          class="text-sidebar-foreground hover:bg-sidebar-accent focus-visible:ring-ring group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-200 focus-visible:ring-2 focus-visible:outline-none"
           [class.justify-center]="collapsed()"
         >
           <cd-icon
@@ -130,7 +137,7 @@ export interface NavItem {
     <div class="border-sidebar-border border-t p-2">
       <button
         type="button"
-        class="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
+        class="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent focus-visible:ring-ring flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
         [attr.aria-label]="collapsed() ? 'Expand sidebar' : 'Collapse sidebar'"
         [attr.aria-expanded]="!collapsed()"
         (click)="toggled.emit()"

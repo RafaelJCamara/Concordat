@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { HlmBadge } from '@spartan-ng/helm/badge';
 import { HlmTableImports } from '@spartan-ng/helm/table';
 import { latestVersion, pendingVersions, type Subject } from '../../../domain/registry/subject';
 import { RelativeTimePipe } from '../../../shared/pipes/relative-time-pipe';
+import { StatusBadge } from '../../../shared/ui/status-badge/status-badge';
 
 interface SubjectRow {
   readonly subject: Subject;
@@ -28,7 +28,7 @@ interface SubjectRow {
 @Component({
   selector: 'cd-subject-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HlmTableImports, HlmBadge, RouterLink, RelativeTimePipe],
+  imports: [HlmTableImports, RouterLink, RelativeTimePipe, StatusBadge],
   template: `
     <!--
       The card is the prototype's row treatment: every list on every screen there sits on a
@@ -90,12 +90,21 @@ interface SubjectRow {
               <td hlmTd [title]="row.registeredAt?.toISOString() ?? ''">
                 {{ row.registeredAt | cdRelativeTime }}
               </td>
+              <!--
+                Through StatusBadge rather than helm's badge directly, which is not a styling
+                preference: this cell asked for the destructive variant on a held version, and
+                red is what this app paints REJECTED. The list screen — the one most people
+                arrive on — was telling them a change waiting for a decision had been refused.
+                A tone named for the reading cannot make that mistake quietly.
+              -->
               <td hlmTd class="space-x-1">
                 @if (row.subject.lifecycle !== 'ACTIVE') {
-                  <span hlmBadge variant="secondary">{{ row.subject.lifecycle }}</span>
+                  <cd-status-badge tone="neutral">{{ row.subject.lifecycle }}</cd-status-badge>
                 }
                 @if (row.pending > 0) {
-                  <span hlmBadge variant="destructive"> {{ row.pending }} awaiting approval </span>
+                  <cd-status-badge tone="warning">
+                    {{ row.pending }} awaiting approval
+                  </cd-status-badge>
                 }
               </td>
             </tr>

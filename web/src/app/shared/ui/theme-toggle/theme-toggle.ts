@@ -43,7 +43,7 @@ type Appearance = 'light' | 'dark' | 'system';
           [attr.aria-label]="option.label"
           [attr.aria-pressed]="appearance() === option.value"
           [title]="option.label"
-          class="flex size-7 items-center justify-center rounded-md transition-colors"
+          class="focus-visible:ring-ring flex size-7 items-center justify-center rounded-md transition-colors focus-visible:ring-2 focus-visible:outline-none"
           [class]="
             appearance() === option.value
               ? 'bg-background text-foreground shadow-sm'
