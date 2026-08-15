@@ -75,6 +75,55 @@ jobs:
           --results-directory ./TestResults
           --logger "trx;LogFileName=test-results.trx"
 
+      # A red Test step whose only annotation is "Process completed with exit code 1" cannot be
+      # acted on without opening the log, and the log is not readable to everyone who can see the
+      # run is red. The TRX files already carry the failing test names and their messages, so
+      # they are promoted to annotations, which appear on the run summary itself. Same reasoning
+      # as the e2e job's log upload: a failure nobody can read is a failure nobody can fix.
+      - name: Report the failing tests
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import glob, os, xml.etree.ElementTree as ET
+
+          NS = '{http://microsoft.com/schemas/VisualStudio/TeamTest/2010}'
+          trx = sorted(glob.glob('TestResults/**/*.trx', recursive=True))
+          print(f'{len(trx)} TRX file(s): {[os.path.basename(p) for p in trx]}')
+
+          def one_line(text, limit=700):
+              flat = ' '.join((text or '').split())
+              return flat[:limit]
+
+          total = 0
+          for path in trx:
+              try:
+                  root = ET.parse(path).getroot()
+              except ET.ParseError as exc:
+                  print(f'::warning::{path} is not parseable: {exc}')
+                  continue
+
+              for result in root.iter(f'{NS}UnitTestResult'):
+                  if result.get('outcome') != 'Failed':
+                      continue
+                  total += 1
+                  if total > 25:
+                      continue
+                  name = result.get('testName', '(unnamed)')
+                  message = one_line(''.join(
+                      node.text or '' for node in result.iter(f'{NS}Message')))
+                  stack = one_line(''.join(
+                      node.text or '' for node in result.iter(f'{NS}StackTrace')), 400)
+                  print(f'::error::FAILED {name} :: {message} :: {stack}')
+
+          # A project that dies before running a test writes no results at all, so the count of
+          # failures alone would report "0 failed" on a red step.
+          for run_info in (node for path in trx
+                           for node in ET.parse(path).getroot().iter(f'{NS}RunInfo')):
+              print(f'::error::RUN ERROR {one_line("".join(run_info.itertext()))}')
+
+          print(f'::error::{total} failed test(s) across {len(trx)} result file(s)')
+          PY
+
       # Non-blocking for now (M0.3). There is nothing worth measuring until the
       # compatibility engine lands in M1.3; wiring an external service before then
       # just adds a token to rotate.
