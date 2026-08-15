@@ -189,28 +189,42 @@ jobs:
       # From source rather than the published image: this job's purpose is to catch the two
       # halves disagreeing, and testing yesterday's image against today's frontend would let
       # exactly that disagreement through.
-      - name: Migrate
-        run: dotnet run --project src/hosts/Concordat.Migrator -c Release
+      #
+      # Built as its own step so that a compile error is reported as a compile error. Building
+      # inside the background step below would swallow it and surface it two minutes later as
+      # "the registry never became ready", which is true and useless.
+      - name: Build the hosts
+        run: |
+          dotnet build src/hosts/Concordat.Api -c Release
+          dotnet build src/hosts/Concordat.Migrator -c Release
 
+      - name: Migrate
+        run: dotnet run --project src/hosts/Concordat.Migrator -c Release --no-build
+
+      # Both servers log to a file that is uploaded on failure. A backgrounded process whose
+      # output goes nowhere leaves a red run with nothing in it to read.
       - name: Start the registry
         run: |
-          dotnet run --project src/hosts/Concordat.Api -c Release --urls http://localhost:5062 &
+          dotnet run --project src/hosts/Concordat.Api -c Release --no-build \
+            --urls http://localhost:5062 >"$RUNNER_TEMP/registry.log" 2>&1 &
           for _ in $(seq 1 60); do
             curl -fsS http://localhost:5062/health/ready >/dev/null 2>&1 && exit 0
             sleep 2
           done
           echo "::error::the registry never became ready"
+          tail -n 50 "$RUNNER_TEMP/registry.log" || true
           exit 1
 
       - name: Start the web app
         working-directory: web
         run: |
-          npm start -- --port 4300 &
+          npm start -- --port 4300 >"$RUNNER_TEMP/web.log" 2>&1 &
           for _ in $(seq 1 60); do
             curl -fsS http://localhost:4300 >/dev/null 2>&1 && exit 0
             sleep 2
           done
           echo "::error::the dev server never came up"
+          tail -n 50 "$RUNNER_TEMP/web.log" || true
           exit 1
 
       - name: End-to-end
@@ -225,6 +239,8 @@ jobs:
           path: |
             web/playwright-report/
             web/test-results/
+            ${{ runner.temp }}/registry.log
+            ${{ runner.temp }}/web.log
           retention-days: 7
 
   protocol-docs:
