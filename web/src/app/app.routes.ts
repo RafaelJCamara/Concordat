@@ -27,6 +27,24 @@ export const routes: Routes = [
       import('./features/registry/feature/subject-list-page').then((m) => m.SubjectListPage),
   },
   {
+    // `:name` is a dotted subject name, which the router hands over already decoded — so a
+    // subject containing a slash arrives here intact rather than as two segments, provided
+    // whoever built the link encoded it. `routerLink` with an array does that for us.
+    path: 'subjects/:name',
+    title: 'Subject · Concordat',
+    loadComponent: () =>
+      import('./features/registry/feature/subject-detail-page').then((m) => m.SubjectDetailPage),
+  },
+  {
+    // `:ordinal` is a string, not a number, because the API accepts the literal `latest`
+    // here and so does this screen. A `latest` link keeps meaning "whatever is current"
+    // after the next registration, which is the reason to paste one.
+    path: 'subjects/:name/versions/:ordinal',
+    title: 'Version · Concordat',
+    loadComponent: () =>
+      import('./features/registry/feature/version-detail-page').then((m) => m.VersionDetailPage),
+  },
+  {
     // The landing screen, on `/` rather than `/dashboard`. An overview is what the root of
     // an application is for, and a root that only redirects costs every visitor a
     // navigation to reach the page they were always going to get.

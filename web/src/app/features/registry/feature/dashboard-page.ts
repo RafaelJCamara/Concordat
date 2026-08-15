@@ -102,7 +102,17 @@ const RECENT_LIMIT = 6;
           } @else {
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
               @for (subject of recent(); track subject.name) {
-                <cd-subject-card [subject]="subject" />
+                <!--
+                  The anchor is here rather than inside the card, so ui/ stays router-free.
+                  The group class is what drives the card's hover treatment, and
+                  focus-visible sits on the anchor because that is the element taking focus.
+                -->
+                <a
+                  class="group focus-visible:ring-ring rounded-xl focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                  [routerLink]="['/subjects', subject.name]"
+                >
+                  <cd-subject-card [subject]="subject" />
+                </a>
               }
             </div>
           }

@@ -215,9 +215,15 @@ now advances a counter on the root.
 - [x] Events: version registered, breaking change submitted/approved/rejected, version
       promoted, subject deprecated
 - [x] Per-environment subscriptions, `GET|POST|DELETE /v1/environments/{env}/notifications`
-- [ ] `ENFORCEMENT_VIOLATION` is defined and **nothing emits it yet** — the violation happens
-      in the SDK, on the publisher's machine, and there is no endpoint for a client to report
-      one. See [decisions-pending #25](../DECISIONS-PENDING.md).
+- [x] `ENFORCEMENT_VIOLATION` — **closed 2026-08-14** by [decision 25](../DECISIONS-PENDING.md).
+      The violation happens in the SDK, on the publisher's machine, so the registry cannot
+      observe it and the client has to say so: `POST /v1/environments/{env}/violations`, with
+      `ViolationReporter` counting by fingerprint on the delivery path and `ConcordatClient
+      .FlushViolationsAsync` posting the batch off it. Upserted by fingerprint, and the
+      notification fires on first sight only — a broken publisher emits thousands a second and
+      an alert per message is an outage of its own. **Nothing schedules the flush**: a host
+      opts in by wrapping its observer and calling `FlushViolationsAsync` on a timer, which is
+      the one part of this a user still has to write themselves
 
 **The outbox exists because of the transaction, not because of the queue.** Sending an
 email or a webhook inside a request handler means a change can commit and its notification

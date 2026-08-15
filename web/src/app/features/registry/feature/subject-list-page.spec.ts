@@ -1,5 +1,6 @@
 import { signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { provideConcordatConfig } from '../../../core/config/app-config';
 import type { Subject } from '../../../domain/registry/subject';
@@ -74,7 +75,8 @@ describe('SubjectListPage', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideConcordatConfig({ defaultEnvironment: 'dev' })],
+      // The router is for `SubjectTable`'s links to the detail screen, not for this page.
+      providers: [provideRouter([]), provideConcordatConfig({ defaultEnvironment: 'dev' })],
     });
 
     // The page provides its own store, so a root-level provider would never be reached. This

@@ -13,10 +13,11 @@ import { RelativeTimePipe } from '../../../shared/pipes/relative-time-pipe';
  * carries the two facts that actually decide whether you click it: what format the contract
  * is in, and whether anything is waiting at the approval gate.
  *
- * <b>No hover lift and no pointer cursor, unlike the prototype's.</b> `SubjectDetailPage`
- * is M4.3; until there is somewhere to go, a card that highlights under the mouse is a
- * promise the app does not keep, and the click that produces nothing is more annoying than
- * the affordance was inviting. The hover treatment comes back with the route.
+ * <b>The hover treatment is back, now that `SubjectDetailPage` exists to receive the
+ * click.</b> It is driven by `group-hover` from whatever wraps the card, rather than by the
+ * card's own `:hover`: the anchor is the screen's to own — this layer still knows nothing
+ * about routing — and a card that lit up under the mouse without a wrapping link would be
+ * the same broken promise, made by a different file.
  */
 @Component({
   selector: 'cd-subject-card',
@@ -24,7 +25,9 @@ import { RelativeTimePipe } from '../../../shared/pipes/relative-time-pipe';
   imports: [Icon, StatusBadge, RelativeTimePipe],
   host: { class: 'block' },
   template: `
-    <article class="border-border bg-card relative h-full overflow-hidden rounded-xl border p-5">
+    <article
+      class="border-border bg-card group-hover:border-primary/40 group-hover:shadow-primary/5 relative h-full overflow-hidden rounded-xl border p-5 transition-all group-hover:-translate-y-0.5 group-hover:shadow-lg"
+    >
       <div class="flex items-start gap-4">
         <span
           class="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-lg"

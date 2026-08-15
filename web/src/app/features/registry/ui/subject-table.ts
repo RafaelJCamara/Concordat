@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { HlmBadge } from '@spartan-ng/helm/badge';
 import { HlmTableImports } from '@spartan-ng/helm/table';
 import { latestVersion, pendingVersions, type Subject } from '../../../domain/registry/subject';
@@ -15,15 +16,19 @@ interface SubjectRow {
 /**
  * The subject list, as a table.
  *
- * Presentational: inputs in, nothing else. No store, no HTTP, no router — the ESLint
- * boundaries rule enforces that, and the reason is that this is the layer a design change
- * rewrites. A component that also knows how to fetch cannot be restyled without a
- * regression test for fetching.
+ * Presentational: inputs in, nothing else. No store and no HTTP — the ESLint boundaries rule
+ * enforces both, and the reason is that this is the layer a design change rewrites. A
+ * component that also knows how to fetch cannot be restyled without a regression test for
+ * fetching.
+ *
+ * `routerLink` is the one exception, and it is markup rather than behaviour: see the note on
+ * `VersionTable` for why a table cell cannot take its anchor from the screen above it the way
+ * `SubjectCard` does.
  */
 @Component({
   selector: 'cd-subject-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HlmTableImports, HlmBadge, RelativeTimePipe],
+  imports: [HlmTableImports, HlmBadge, RouterLink, RelativeTimePipe],
   template: `
     <!--
       The card is the prototype's row treatment: every list on every screen there sits on a
@@ -66,7 +71,14 @@ interface SubjectRow {
         <tbody hlmTBody>
           @for (row of rows(); track row.subject.name) {
             <tr hlmTr>
-              <td hlmTd class="font-mono font-medium">{{ row.subject.name }}</td>
+              <td hlmTd class="font-mono font-medium">
+                <a
+                  [routerLink]="['/subjects', row.subject.name]"
+                  class="hover:text-primary focus-visible:ring-ring rounded-sm focus-visible:ring-2 focus-visible:outline-none"
+                >
+                  {{ row.subject.name }}
+                </a>
+              </td>
               <td hlmTd>{{ row.subject.format }}</td>
               <td hlmTd>{{ row.subject.owner }}</td>
               <td hlmTd>

@@ -83,8 +83,12 @@ somebody actually has to manage.
 - [x] A structural test that no mutating route ships without a declared scope
 - [x] No write affordance renders for a non-admin, and a direct URL to a write route
       redirects — covered by `if-scope.spec.ts` and `scope-guard.spec.ts`
-- [ ] A browser-driven E2E pass over the two together — the unit tests cover each half;
-      what is missing is Playwright, which the project has never had
+- [x] A browser-driven E2E pass over the two together — **closed 2026-08-15.** Playwright, in
+      `web/e2e/`, drives a real Chromium against a real API: `authorization.spec.ts` signs in as
+      a reader and asserts the write affordance is absent, then as an owner and asserts it is
+      there. It earned its keep on the first run by finding the subject list broken against a
+      real registry — the two halves had been correct about themselves and wrong about each
+      other since M7, because nothing loaded a page
 
 ---
 

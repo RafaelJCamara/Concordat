@@ -1,4 +1,5 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { SchemaVersion, Subject } from '../../../domain/registry/subject';
 import { SubjectTable } from './subject-table';
@@ -45,7 +46,10 @@ describe('SubjectTable', () => {
   }
 
   beforeEach(() => {
-    TestBed.configureTestingModule({ imports: [SubjectTable] });
+    // The router is here for `routerLink` on the subject name, which is the one piece of
+    // routing this presentational component owns — see the note on the component for why a
+    // table cell cannot take its anchor from the screen above it.
+    TestBed.configureTestingModule({ imports: [SubjectTable], providers: [provideRouter([])] });
     fixture = TestBed.createComponent(SubjectTable);
   });
 

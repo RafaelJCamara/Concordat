@@ -53,7 +53,17 @@ sign-in screen that lets someone pass it, which is recorded as
       number is derived from the subject list rather than fetched, which is honest at this size
       and has to move server-side the day that list is paginated. Recent breaking changes and
       enforcement coverage wait on the endpoints behind them
-- [ ] `SubjectListPage`, `SubjectDetailPage` (`/subjects/:name`, **real routes not query params**), `VersionDetailPage`, `NewVersionPage`
+- [x] `SubjectListPage`, `SubjectDetailPage` (`/subjects/:name`) and `VersionDetailPage`
+      (`/subjects/:name/versions/:ordinal`) — **real routes, not query params.** `:ordinal`
+      takes the literal `latest` as well as a number, matching the API, so a pasted link keeps
+      meaning "whatever is current". Both resolve `latest` through the subject's gated pointer
+      rather than `max(ordinal)` ([ADR-017](../adr/017-gated-latest-pointer.md)); a store that
+      derived it would show an unapproved schema as the live contract, and that is pinned by a
+      test on each of the two stores. The version screen needs two requests — a version carries
+      a schema *id*, never its text — so it tracks two loading states and renders the header
+      against the first while the document is still in flight
+- [ ] `NewVersionPage` — **split out of the line above.** It is the app's first write route,
+      so it also carries `scopeGuard`'s first wiring (M4.2) and M4.5's redirect test
 - [ ] `ContractsPage` — bindings, enforcement mode, version selectors
 - [ ] `CompatibilityDiffPage`, `ImpactAnalysisPage`
 - [ ] `ApprovalsPage` — pending breaking changes with diff and impact; approve/reject (admin only)

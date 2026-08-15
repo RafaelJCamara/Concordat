@@ -5,7 +5,6 @@
 // server sent, a domain type is what the app believes, and collapsing them means the first
 // wire change that needs a translation has nowhere to put one.
 
-import { ConcordatError } from '../../../core/http/problem-details';
 import type {
   CompatibilityDirection,
   CompatibilityMode,
@@ -28,6 +27,7 @@ import {
   type SubjectLifecycle,
   type VersionStatus,
 } from '../../../domain/registry/wire-tokens';
+import { wireTimestamp, wireToken } from './wire-token';
 
 /** `PolicyResponse`. Both members are null together when the subject inherits. */
 export interface PolicyDto {
@@ -73,10 +73,10 @@ export interface DivergenceDto {
 export function toSubject(dto: SubjectDto): Subject {
   return {
     name: dto.name,
-    format: token('format', dto.format, SCHEMA_FORMATS) as SchemaFormat,
+    format: wireToken('format', dto.format, SCHEMA_FORMATS) as SchemaFormat,
     owner: dto.owner,
-    lifecycle: token('lifecycle', dto.lifecycle, SUBJECT_LIFECYCLES) as SubjectLifecycle,
-    contentModel: token('contentModel', dto.contentModel, CONTENT_MODELS) as ContentModel,
+    lifecycle: wireToken('lifecycle', dto.lifecycle, SUBJECT_LIFECYCLES) as SubjectLifecycle,
+    contentModel: wireToken('contentModel', dto.contentModel, CONTENT_MODELS) as ContentModel,
     compatibilityPolicy: toPolicy(dto.compatibilityPolicy),
     latest: dto.latest,
     versions: dto.versions.map(toVersion),
@@ -88,9 +88,9 @@ export function toVersion(dto: VersionDto): SchemaVersion {
     ordinal: dto.ordinal,
     schemaId: dto.schemaId,
     semanticVersion: dto.semanticVersion,
-    status: token('status', dto.status, VERSION_STATUSES) as VersionStatus,
+    status: wireToken('status', dto.status, VERSION_STATUSES) as VersionStatus,
     changelog: dto.changelog,
-    registeredAt: timestamp(dto.registeredAt),
+    registeredAt: wireTimestamp(dto.registeredAt),
     registeredBy: dto.registeredBy,
     deprecated: dto.deprecated,
   };
@@ -103,7 +103,7 @@ export function toPolicy(dto: PolicyDto): CompatibilityPolicy {
   }
 
   return {
-    mode: token(
+    mode: wireToken(
       'compatibilityPolicy.mode',
       dto.mode ?? '',
       COMPATIBILITY_MODES,
@@ -116,7 +116,10 @@ export function toDivergence(dto: DivergenceDto): Divergence {
   return {
     path: dto.path,
     kind: dto.kind,
-    direction: token('direction', dto.direction, ['BACKWARD', 'FORWARD']) as CompatibilityDirection,
+    direction: wireToken('direction', dto.direction, [
+      'BACKWARD',
+      'FORWARD',
+    ]) as CompatibilityDirection,
     surface: toSurface('surface', dto.surface),
     message: dto.message,
     conflictsWithVersion: dto.conflictsWithVersion,
@@ -131,42 +134,5 @@ export function toDivergence(dto: DivergenceDto): Divergence {
  * leniency would mean a future divergence passed silently instead of failing here.
  */
 function toSurface(field: string, value: string): CompatibilitySurface {
-  return token(field, value, COMPATIBILITY_SURFACES) as CompatibilitySurface;
-}
-
-/**
- * Checks a wire token against the set this build knows.
- *
- * Throws rather than coercing. The tempting alternative — fall back to the first member —
- * would render a version awaiting approval as `ACTIVE` the day the registry gains a fourth
- * status, and a UI that quietly mislabels the approval gate is worse than one that refuses
- * to draw the row. The error names the version mismatch so the reader knows to upgrade
- * rather than to go looking for a bug.
- */
-function token(field: string, value: string, permitted: readonly string[]): string {
-  if (permitted.includes(value)) {
-    return value;
-  }
-
-  throw new ConcordatError({
-    status: 0,
-    code: 'registry_refused',
-    detail:
-      `The registry sent '${value}' for '${field}', which this build does not recognise. ` +
-      'It is probably newer than this web app; upgrade the web app to match.',
-  });
-}
-
-function timestamp(value: string): Date {
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    throw new ConcordatError({
-      status: 0,
-      code: 'registry_refused',
-      detail: `The registry sent '${value}' as a timestamp, which is not a date.`,
-    });
-  }
-
-  return parsed;
+  return wireToken(field, value, COMPATIBILITY_SURFACES) as CompatibilitySurface;
 }

@@ -85,19 +85,19 @@ only when a cookie was presented and rejected.
 | Milestone | Done |
 |---|---|
 | M0 foundations | 22 / 25 |
-| M1 registry core | 60 / 63 |
+| M1 registry core | 65 / 68 |
 | M2 .NET client | 32 / 41 |
 | M3 CLI | **19 / 19** |
-| M4 web app | 15 / 28 |
+| M4 web app | 16 / 29 |
 | M5 formats | 14 / 15 |
 | M6 SDKs | 5 / 24 |
-| M7 governance | 29 / 31 |
-| M8 identity | 12 / 15 |
+| M7 governance | **30 / 31** |
+| M8 identity | 13 / 15 |
 | M9 cloud | 11 / 16 |
-| **Total** | **219 / 277** |
+| **Total** | **227 / 283** |
 
-**Do not read that as a progress bar.** Auditing the 62 unchecked boxes found roughly 11 that
-are not work at all:
+**Do not read that as a progress bar.** Auditing the 56 remaining boxes found 12 that are not
+work at all:
 
 - **M2 has an archived scope list.** `## M2.2 notes (original scope)` preserves the original
   seven-item envelope scope, deliberately left unchecked as a historical record while the
@@ -108,10 +108,17 @@ are not work at all:
   annotated *"— M2.4"*, where it was in fact done.
 - **Three M4 items are moot.** They are corrections to a React prototype that was never ported.
   Detail below.
+- **One M5 item cannot be done** — splitting a `.proto` across files, which [ADR-023](adr/023-no-cross-subject-references-avro-protobuf.md)
+  scoped out rather than deferred.
 
-Real remaining work is therefore closer to **47 items**, and about 32 of those are M4 and M6.
+Real remaining work is therefore **16 items**, and 12 of those are M4. The rest of the arithmetic:
+**22 are deferred by an ADR** (M6's four SDKs, OIDC, SAML, Helm) and **5 are blocked on an account
+or a purchase** you have to make — see *Blocked on you* below. Sorted that way the picture is much
+narrower than 56: one milestone of real engineering, and a pile of decisions.
 
 M3 is the first milestone to reach 19/19, closed by `Concordat.Contracts.Testing` (decision 13).
+M7 reached 30/31 on 2026-08-15 — not by new work, but by an audit finding its last open box had
+described shipped code since decision 25 landed the day before.
 
 ---
 
@@ -119,20 +126,33 @@ M3 is the first milestone to reach 19/19, closed by `Concordat.Contracts.Testing
 
 ### M4 — the web application
 
-The honest count is **11**. Every API behind these exists, so this is Angular work rather than
+The honest count is **12**. Every API behind these exists, so this is Angular work rather than
 design work.
 
-**Genuinely missing:** Dashboard · SubjectDetail / VersionDetail / NewVersion pages ·
-ContractsPage · CompatibilityDiffPage · ImpactAnalysisPage · ApprovalsPage · AuditLogPage ·
-the settings split (environment, brokers, API keys, members) · notification forms that persist ·
-Monaco for schema editing · `ajv` for client-side validation · the "preserve" list of prototype
-behaviours (immutable-id confirmation, semver auto-increment, clone-previous-version, empty
-states).
+**Genuinely missing:** SubjectDetail / VersionDetail / NewVersion pages · ContractsPage ·
+CompatibilityDiffPage · ImpactAnalysisPage · ApprovalsPage · AuditLogPage · the settings split
+(environment, brokers, API keys, members) · notification forms that persist · Monaco for schema
+editing · `ajv` for client-side validation · the "preserve" list of prototype behaviours
+(immutable-id confirmation, semver auto-increment, clone-previous-version, empty states).
 
-**Done 2026-08-15:** the Playwright E2E suite, and the non-admin affordance test. The third
-M4.5 item — "direct URL to a write route redirects" — is blocked on M4.3 rather than unwritten:
-there is no write route to paste, and `scopeGuard` is referenced by no route at all. That also
-corrected an M4.2 line which had recorded the guard as wired.
+**Part-built:** the **Dashboard**. A first slice ships on `/` — subject, version and
+awaiting-approval counts, and the most recently registered subjects. Every number is derived
+from the subject list rather than fetched, which is honest at this size and has to move
+server-side the day that list is paginated. Recent breaking changes and enforcement coverage
+wait on endpoints that do not exist yet, so it is marked `[~]` rather than done.
+
+**Done 2026-08-15:** the design-system port — the prototype's tokens, a light theme, self-hosted
+fonts ([ADR-026](adr/026-self-hosted-web-fonts.md)), the sidebar shell, the icon set and the
+cards — and the Playwright suite that now pins it. The E2E suite stands at **26 tests across four
+specs**, up from the 11 it launched with; `design-system.spec.ts` asserts the palette, both
+themes, the typography and the shell as **computed styles rather than pixel screenshots**, which
+are exact and identical on Windows and on CI's Linux. It exists because the placeholder palette
+survived a whole milestone with every other test green: nothing named a colour, so nothing could
+notice they were all wrong.
+
+The one M4.5 item still absent — "direct URL to a write route redirects" — is blocked on M4.3
+rather than unwritten: there is no write route to paste, and `scopeGuard` is referenced by no
+route at all. That also corrected an M4.2 line which had recorded the guard as wired.
 
 **Already done but still listed:** `LoginPage` — `sign-in-page.ts` shipped with M8.2.
 
@@ -177,7 +197,7 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | ~~A page reload signs you out~~ | **Closed 2026-08-14** by decision 26 — an httpOnly `SameSite=Strict` cookie and a `/auth/resume` route that is the only thing accepting it. The credential still never touches `localStorage`. |
 | ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Still on, and now audible** (decision 27). The API logs a warning naming both ways to close it and repeats hourly until claimed; the web app shows a banner. Verified against a real container. |
-| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, 11 tests in `web/e2e/`. It found the subject list broken on its first run — see below. The one M4.5 test still absent is "direct URL to a write route redirects", because there is no write route to paste. |
+| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, 26 tests in `web/e2e/`. It found the subject list broken on its first run — see below. The one M4.5 test still absent is "direct URL to a write route redirects", because there is no write route to paste. |
 | **`Tenant` is not an aggregate** | There is exactly one, `TenantId.SelfHosted`. Cloud multi-tenancy is tested but single-rowed. |
 | ~~The derived-environment-id decision is unmade~~ | **Closed 2026-08-14.** Adopted, by creating rows that carry the derived id. No migration, and no orphaned subjects. |
 
@@ -212,7 +232,7 @@ survive being wrong.
 | Conformance corpus | `Conformance` | 99, over 98 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 63 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
-| Browser end-to-end | `web/e2e` | 11 | A real Chromium against the real stack |
+| Browser end-to-end | `web/e2e` | 26 | A real Chromium against the real stack, design system included |
 
 Plus 188 Angular unit tests.
 
