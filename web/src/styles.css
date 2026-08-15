@@ -1,5 +1,5 @@
 /*
- * The global stylesheet. Three imports and nothing else — every value lives in
+ * The global stylesheet. Four imports and nothing else — every value lives in
  * `styles/tokens.css`, which is the only file to touch when the design system changes.
  */
 
@@ -13,5 +13,11 @@
  * not optional.
  */
 @import '@spartan-ng/brain/hlm-tailwind-preset.css';
+
+/*
+ * Before the tokens, because `tokens.css` names these families in `--font-sans` and
+ * `--font-mono` and a face has to be declared before something asks for it.
+ */
+@import './styles/fonts.css';
 
 @import './styles/tokens.css';

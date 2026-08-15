@@ -15,3 +15,31 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+--------------------------------------------------------------------------------
+THIRD-PARTY COMPONENTS REDISTRIBUTED IN THIS SOURCE TREE
+
+Listed here because the files themselves are committed and shipped, not merely
+depended on. A package resolved at build time is covered by its own manifest; a
+binary in this repository travels with whatever we say about it, and nothing else.
+
+Web fonts (web/public/fonts/)
+-----------------------------
+The web application serves its own typography rather than loading it from a CDN
+(ADR-026), which makes this project a redistributor of both families. Each is
+licensed under the SIL Open Font License, Version 1.1, whose section 2 requires
+that the copyright notice and licence accompany the font files. Both are in
+web/public/fonts/ beside the .woff2 files they cover, and are served from the
+built application at /fonts/, so they reach anyone who receives the fonts.
+
+  Inter
+  Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)
+  SIL Open Font License 1.1 — web/public/fonts/inter-OFL.txt
+
+  JetBrains Mono
+  Copyright 2020 The JetBrains Mono Project Authors
+  (https://github.com/JetBrains/JetBrainsMono)
+  SIL Open Font License 1.1 — web/public/fonts/jetbrains-mono-OFL.txt
+
+Neither font is modified. The .woff2 files are the upstream builds Google Fonts
+serves, subset by Unicode range; web/tools/vendor-fonts.mjs reproduces them.

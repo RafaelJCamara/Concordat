@@ -11,6 +11,26 @@
       `color-scheme` property alongside the colours it belongs with, and a meta tag saying
       something different would be a second, weaker source of truth for the same thing.
     -->
+
+    <!--
+      No `<link>` to Google Fonts, and no `@import` of one. Inter and JetBrains Mono are
+      served from this origin — see `styles/fonts.css` for why, which is short: this is a
+      self-hosted registry and an air-gapped install is an ordinary way to run it.
+
+      The two faces the first screen always needs are preloaded. Everything else in
+      `fonts.css` is behind a `unicode-range` and is fetched only if the page contains
+      those characters; these two are not optional on any screen, and without the hint the
+      browser does not discover them until it has parsed the stylesheet and laid out the
+      text that needs them.
+    -->
+    <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link
+      rel="preload"
+      href="fonts/jetbrains-mono-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
   </head>
   <body>
     <cd-root></cd-root>
