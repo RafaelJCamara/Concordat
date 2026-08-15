@@ -1,6 +1,9 @@
 using Concordat.Domain.Results;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Concordat.Api;
 
@@ -70,6 +73,10 @@ public static class ProblemDetailsMapping
         // The request is well-formed; it is the existing bindings that refuse it.
         ConcordatCodes.BindingConflict => StatusCodes.Status409Conflict,
 
+        // Two requests raced at the database. See DbConflictExceptionHandler for where this
+        // code comes from -- it is never raised by application code directly.
+        ConcordatCodes.ConcurrentWriteConflict => StatusCodes.Status409Conflict,
+
         // The source version exists but is not something that may be promoted.
         ConcordatCodes.PromotionSourceNotActive => StatusCodes.Status409Conflict,
         ConcordatCodes.SubjectRetired => StatusCodes.Status409Conflict,
@@ -117,5 +124,62 @@ public static class ProblemDetailsMapping
         }
 
         return TypedResults.Problem(problem);
+    }
+}
+
+/// <summary>
+/// Turns a race the database caught into a 409, before it reaches the generic 500 handler.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>Nothing in application code catches these, and that is deliberate.</b> Every write path
+/// checks for an existing row before creating one, but that check and the insert are two
+/// separate statements: two requests can both pass the check and then both insert, and only
+/// the database's own unique constraint — or, for a row already loaded and changed underneath
+/// a caller, the <c>xmin</c> concurrency token — can catch the second one. Catching that here,
+/// once, is simpler and more honest than teaching every handler to guess which of its own
+/// constraints just fired.
+/// </para>
+/// <para>
+/// Registered ahead of the default problem-details handler, so a race lands as 409 with
+/// <c>ConcordatCodes.ConcurrentWriteConflict</c> instead of an unhandled-exception 500 — the
+/// same shape every other refusal in this API already has.
+/// </para>
+/// </remarks>
+public sealed class DbConflictExceptionHandler : IExceptionHandler
+{
+    /// <inheritdoc />
+    public async ValueTask<bool> TryHandleAsync(
+        HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(httpContext);
+        ArgumentNullException.ThrowIfNull(exception);
+
+        var message = exception switch
+        {
+            DbUpdateConcurrencyException =>
+                "This record was changed by another request in between your read and your " +
+                "write. Reload it and try again.",
+
+            // 23505 is Postgres's unique_violation SQLSTATE. Everything else DbUpdateException
+            // can wrap (a check constraint, a foreign key, a transient connection failure) is
+            // not a race between two legitimate requests and is left to the generic handler.
+            DbUpdateException { InnerException: PostgresException { SqlState: "23505" } } =>
+                "Another request created a conflicting record first. Retry the operation " +
+                "against the current state.",
+
+            _ => null,
+        };
+
+        if (message is null)
+        {
+            return false;
+        }
+
+        var problem = ProblemDetailsMapping.From(
+            new DomainError(ConcordatCodes.ConcurrentWriteConflict, message));
+
+        await problem.ExecuteAsync(httpContext).ConfigureAwait(false);
+        return true;
     }
 }

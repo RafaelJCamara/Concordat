@@ -130,8 +130,24 @@ public static class ContractDirectory
     /// <param name="subject">The subject.</param>
     /// <param name="format">The schema language.</param>
     /// <returns>The path.</returns>
-    public static string FileFor(string directory, string subject, SchemaFormat format) =>
-        System.IO.Path.Combine(
+    /// <exception cref="InvalidOperationException">
+    /// <paramref name="subject"/> would combine into a path outside <paramref name="directory"/>.
+    /// Callers should validate with <see cref="SubjectName.Create"/> first, which refuses the
+    /// grammar this would ever trigger on -- this is the backstop for a caller that did not.
+    /// </exception>
+    public static string FileFor(string directory, string subject, SchemaFormat format)
+    {
+        var path = System.IO.Path.Combine(
             directory,
             subject + Extensions.First(e => e.Value == format).Key);
+
+        var root = System.IO.Path.GetFullPath(directory) + System.IO.Path.DirectorySeparatorChar;
+        if (!System.IO.Path.GetFullPath(path).StartsWith(root, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Subject '{subject}' would write outside the contracts directory.");
+        }
+
+        return path;
+    }
 }

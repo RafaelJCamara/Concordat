@@ -20,7 +20,12 @@
 #   docker run --entrypoint dotnet concordat/api Concordat.Migrator.dll   # the migrations
 
 # ---- build ----------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# Pinned by digest, not just tag: a mutable `:10.0` tag is a silent supply-chain channel --
+# every rebuild of this image pulls whatever that tag points to on build day. Update the
+# digest deliberately (`docker pull ... && docker inspect --format '{{index .RepoDigests 0}}'`)
+# rather than letting it drift.
+FROM mcr.microsoft.com/dotnet/sdk@sha256:e1fc6e423f543119c406d24e2e687d67c569f18f04a37a8b0005d80ad0dcee80 AS build
+# mcr.microsoft.com/dotnet/sdk:10.0
 
 WORKDIR /src
 
@@ -43,7 +48,8 @@ RUN dotnet publish src/hosts/Concordat.Api -c Release -o /out \
 # The ASP.NET image rather than runtime-deps: unlike the CLI (M3.3), this is not NativeAOT.
 # The registry loads schema-format libraries and EF Core's provider through reflection-heavy
 # paths, and an AOT build of it would be a much larger piece of work than an image size.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet@sha256:207cc51496778557731c81ff670333d8ade4a4fec22768fd1be8e78474a84ecf AS runtime
+# mcr.microsoft.com/dotnet/aspnet:10.0
 
 WORKDIR /app
 COPY --from=build /out .

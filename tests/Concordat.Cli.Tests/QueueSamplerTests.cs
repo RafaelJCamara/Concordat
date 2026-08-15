@@ -134,6 +134,32 @@ public class QueueSamplerTests(DrainBrokerFixture broker)
     }
 
     [Fact]
+    public async Task ABinaryPayloadIsInspectedButNotSampled()
+    {
+        // Encoding.UTF8.GetString never throws -- it replaces invalid bytes with U+FFFD -- so
+        // a strict decoder is what makes a binary message recognisable as binary instead of
+        // silently becoming a garbled string handed to the inferrer as though it were JSON.
+        var queue = $"drain-{Guid.NewGuid():N}";
+
+        await using var connection = await broker.ConnectAsync();
+        await using var channel = await connection.CreateChannelAsync();
+        await channel.QueueDeclareAsync(queue, durable: false, exclusive: false, autoDelete: false);
+
+        byte[] binary = [0xFF, 0xFE, 0x00, 0x01, 0x80, 0x81];
+        await channel.BasicPublishAsync(
+            string.Empty, queue, mandatory: true, new BasicProperties(), binary);
+
+        await channel.BasicPublishAsync(
+            string.Empty, queue, mandatory: true, new BasicProperties(),
+            Encoding.UTF8.GetBytes("""{"id":1}"""));
+
+        var sample = await QueueSampler.DrainAsync(broker.Uri, queue, 2, default);
+
+        Assert.Equal(2, sample.Inspected);
+        Assert.Equal(["{\"id\":1}"], sample.Payloads);
+    }
+
+    [Fact]
     public async Task MessageTypesAreCountedSoAMixedQueueCanBeDetected()
     {
         // One queue routinely carries several message types (ADR-011), and inferring a single

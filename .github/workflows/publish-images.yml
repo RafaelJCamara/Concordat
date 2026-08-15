@@ -37,12 +37,12 @@ jobs:
             dockerfile: docker/cli.Dockerfile
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Sign in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -63,33 +63,38 @@ jobs:
       - name: Tags
         id: tags
         run: |
-          # The SHA tag is the one deployments should pin. `latest` is a convenience for
-          # someone trying the product, and moves — a deployment that follows it is a
-          # deployment whose version nobody can state after the fact.
-          TAGS="${NAME}:${GITHUB_SHA}"
-          TAGS="${TAGS},${NAME}:latest"
+          # `latest` and any release tag are promoted only after the smoke test below passes
+          # (see "Promote to latest" at the end of this job) — pushed here, they would be
+          # live and pullable the moment `docker/build-push-action` finishes, before anything
+          # has run the image at all. The SHA tag is what this step pushes directly: it is
+          # the one deployments should pin regardless, and staying unpromoted-until-verified
+          # doesn't apply to it the same way, since nothing follows it implicitly.
+          PROMOTE="latest"
 
           if [ -n "${EXTRA}" ]; then
-            TAGS="${TAGS},${NAME}:${EXTRA}"
+            PROMOTE="${PROMOTE},${EXTRA}"
           fi
 
           # A tag push names the release, and that is the tag people will actually pin.
           case "${GITHUB_REF}" in
-            refs/tags/v*) TAGS="${TAGS},${NAME}:${GITHUB_REF#refs/tags/v}" ;;
+            refs/tags/v*) PROMOTE="${PROMOTE},${GITHUB_REF#refs/tags/v}" ;;
           esac
 
-          echo "value=${TAGS}" >> "$GITHUB_OUTPUT"
+          {
+            echo "sha-tag=${NAME}:${GITHUB_SHA}"
+            echo "promote=${PROMOTE}"
+          } >> "$GITHUB_OUTPUT"
         env:
           NAME: ${{ steps.name.outputs.value }}
           EXTRA: ${{ inputs.tag }}
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: ${{ matrix.dockerfile }}
           push: true
-          tags: ${{ steps.tags.outputs.value }}
+          tags: ${{ steps.tags.outputs.sha-tag }}
           # Container Apps runs amd64. arm64 is here for Apple Silicon developers running the
           # compose `registry` profile, who would otherwise emulate and wonder why it crawls.
           platforms: linux/amd64,linux/arm64
@@ -105,6 +110,9 @@ jobs:
       # The API image is never exercised by CI, unlike the CLI's, so this is the only place
       # that finds out whether what was just published can start at all. It is a 30-second
       # check against a real database, and the alternative is discovering it in a deployment.
+      #
+      # Runs against the SHA tag specifically, before anything else can be pulled under
+      # `latest` — see "Promote to latest" below.
       - name: The published API image starts and answers
         if: matrix.image == 'concordat-api'
         run: |
@@ -123,10 +131,10 @@ jobs:
 
           docker run --rm --network concordat-check \
             -e ConnectionStrings__Concordat="$CS" \
-            --entrypoint dotnet "${NAME}:${GITHUB_SHA}" Concordat.Migrator.dll
+            --entrypoint dotnet "${SHA_TAG}" Concordat.Migrator.dll
 
           docker run -d --name api --network concordat-check \
-            -e ConnectionStrings__Concordat="$CS" -p 8080:8080 "${NAME}:${GITHUB_SHA}"
+            -e ConnectionStrings__Concordat="$CS" -p 8080:8080 "${SHA_TAG}"
 
           for _ in $(seq 1 30); do
             if curl -fsS http://localhost:8080/health/ready >/dev/null 2>&1; then
@@ -140,4 +148,45 @@ jobs:
           docker logs api
           exit 1
         env:
+          SHA_TAG: ${{ steps.tags.outputs.sha-tag }}
+
+      # CI's own `cli-container` job runs these same checks against a locally-built image on
+      # every push; repeated here against what was actually just pushed, in case the registry
+      # round-trip itself (layer upload, manifest, GHCR's handling of a NativeAOT binary) is
+      # what breaks — which a check that only ever ran against a local build could not catch.
+      - name: The published CLI image runs and carries no .NET runtime
+        if: matrix.image == 'concordat-cli'
+        run: |
+          if docker run --rm --entrypoint sh "${SHA_TAG}" \
+               -c 'command -v dotnet || ls /usr/share/dotnet' 2>/dev/null; then
+            echo "::error::a .NET runtime is present in the published CLI image"
+            exit 1
+          fi
+
+          mkdir -p ws/contracts
+          echo '{"type":"object","properties":{"id":{"type":"integer"}}}' > ws/contracts/acme.Order.json
+
+          OUT=$(docker run --rm -v "$PWD/ws:/workspace" "${SHA_TAG}" lint --json)
+          echo "$OUT"
+          echo "$OUT" | grep -q '"schemaId"' || { echo "::error::--json lost its payload"; exit 1; }
+        env:
+          SHA_TAG: ${{ steps.tags.outputs.sha-tag }}
+
+      # Only reached if the smoke test for this image passed — a skipped step (the other
+      # image's) counts as success for this purpose, so this still runs once per image. Copies
+      # the manifest the smoke test just verified under each promoted tag rather than
+      # rebuilding, so `latest` and any release tag point at the exact bytes that were tested,
+      # not a second build of the same source that could differ (a base image digest moving
+      # between the two runs, a flaky layer, anything nondeterministic in the build itself).
+      - name: Promote to latest
+        run: |
+          IFS=',' read -ra TAGS <<< "${PROMOTE}"
+          ARGS=()
+          for tag in "${TAGS[@]}"; do
+            ARGS+=(--tag "${NAME}:${tag}")
+          done
+          docker buildx imagetools create "${ARGS[@]}" "${SHA_TAG}"
+        env:
           NAME: ${{ steps.name.outputs.value }}
+          SHA_TAG: ${{ steps.tags.outputs.sha-tag }}
+          PROMOTE: ${{ steps.tags.outputs.promote }}

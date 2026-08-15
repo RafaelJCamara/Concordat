@@ -76,13 +76,37 @@ internal sealed class FakeSchemas : ISchemaRepository
     /// <summary>How many schemas a handler staged for insert.</summary>
     public int Staged { get; private set; }
 
-    /// <summary>How many times a handler read the store.</summary>
+    /// <summary>How many times a handler read the store one id at a time.</summary>
     public int Finds { get; private set; }
+
+    /// <summary>
+    /// How many times a handler batch-read the store — kept separate from <see cref="Finds"/>
+    /// so a test can assert the N+1 fix directly: a multi-version history costs one of these,
+    /// not one <see cref="Finds"/> per version.
+    /// </summary>
+    public int BatchFinds { get; private set; }
 
     public Task<Schema?> FindAsync(SchemaId id, CancellationToken cancellationToken)
     {
         Finds++;
         return Task.FromResult(_stored.GetValueOrDefault(id.Value));
+    }
+
+    public Task<IReadOnlyDictionary<SchemaId, Schema>> FindManyAsync(
+        IReadOnlyCollection<SchemaId> ids, CancellationToken cancellationToken)
+    {
+        BatchFinds++;
+
+        var result = new Dictionary<SchemaId, Schema>();
+        foreach (var id in ids)
+        {
+            if (_stored.TryGetValue(id.Value, out var schema))
+            {
+                result[id] = schema;
+            }
+        }
+
+        return Task.FromResult<IReadOnlyDictionary<SchemaId, Schema>>(result);
     }
 
     public Task<bool> IsReachableByCurrentTenantAsync(
@@ -170,24 +194,66 @@ internal sealed class RecordingOutbox : IOutbox
 {
     private readonly List<OutboxMessage> _staged = [];
 
+    /// <summary>
+    /// The tenant every staged message is claimed under. Defaults to the single self-hosted
+    /// tenant; a multi-tenant test overrides it per message via <see cref="StageFor"/>.
+    /// </summary>
+    private readonly Dictionary<OutboxMessage, TenantId> _tenants = [];
+
     /// <summary>Everything staged, in order.</summary>
     public IReadOnlyList<OutboxMessage> Staged => _staged;
 
     /// <summary>The events staged, for terse assertions.</summary>
     public IReadOnlyList<NotificationEvent> Events => [.. _staged.Select(m => m.Event)];
 
-    public void Stage(OutboxMessage message) => _staged.Add(message);
+    public void Stage(OutboxMessage message) => StageFor(TenantId.SelfHosted, message);
 
-    public Task<IReadOnlyList<OutboxMessage>> ClaimDueAsync(
-        DateTimeOffset now, int batchSize, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<OutboxMessage>>(
+    /// <summary>Stages a message as belonging to a specific tenant, for cross-tenant tests.</summary>
+    /// <param name="tenantId">The staging tenant.</param>
+    /// <param name="message">The message.</param>
+    public void StageFor(TenantId tenantId, OutboxMessage message)
+    {
+        _staged.Add(message);
+        _tenants[message] = tenantId;
+    }
+
+    public Task<IReadOnlyList<(TenantId TenantId, OutboxMessage Message)>>
+        ClaimDueAcrossTenantsAsync(
+            DateTimeOffset now, int batchSize, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<(TenantId, OutboxMessage)>>(
             [.. _staged.Where(m => m.DeliveredAt is null && !m.Parked && m.NextAttemptAt <= now)
-                .Take(batchSize)]);
+                .Take(batchSize)
+                .Select(m => (_tenants[m], m))]);
 
     public Task<(int Pending, int Parked)> DepthAsync(CancellationToken cancellationToken) =>
         Task.FromResult((
             _staged.Count(m => m.DeliveredAt is null && !m.Parked),
             _staged.Count(m => m.Parked)));
+}
+
+/// <summary>An in-memory <see cref="IWebhookSigningKeyStore"/>, so a test can assert what a
+/// webhook was signed with without touching Data Protection.</summary>
+internal sealed class FakeWebhookSigningKeyStore : IWebhookSigningKeyStore
+{
+    private readonly Dictionary<string, string> _secrets = new(StringComparer.Ordinal);
+    private int _next;
+
+    public Task<(string Reference, string Secret)> GenerateAsync(CancellationToken cancellationToken)
+    {
+        var reference = $"signing-key-{++_next}";
+        var secret = $"secret-for-{reference}";
+        _secrets[reference] = secret;
+        return Task.FromResult((reference, secret));
+    }
+
+    public Task<string?> ResolveAsync(string reference, CancellationToken cancellationToken) =>
+        Task.FromResult(_secrets.GetValueOrDefault(reference));
+
+    public Task RemoveAsync(string reference, CancellationToken cancellationToken)
+    {
+        _secrets.Remove(reference);
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>A billing gate a test can close, to prove a limit is enforced (M9.3).</summary>
@@ -360,6 +426,10 @@ internal sealed class FakeEnvironmentStore : IEnvironmentRepository
         Task.FromResult(_all.FirstOrDefault(e => e.Name == name));
 
     public Task<RegistryEnvironment?> FindAsync(EnvironmentId id, CancellationToken cancellationToken) =>
+        Task.FromResult(_all.FirstOrDefault(e => e.Id == id));
+
+    public Task<RegistryEnvironment?> FindAcrossTenantsAsync(
+        TenantId tenantId, EnvironmentId id, CancellationToken cancellationToken) =>
         Task.FromResult(_all.FirstOrDefault(e => e.Id == id));
 
     public Task<IReadOnlyList<RegistryEnvironment>> ListAsync(CancellationToken cancellationToken) =>

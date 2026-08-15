@@ -150,6 +150,37 @@ public class AuthorizationTests(AuthApiFactory factory)
     }
 
     [Fact]
+    public async Task AnAnonymousReadIsUnauthorizedOnceClaimed()
+    {
+        // Companion to AReaderCanBrowseEverything: a credential lets a Reader browse
+        // everything, but the absence of one must not. Before this test existed these routes
+        // had no RequireScope filter at all, so a claimed self-hosted instance still answered
+        // an anonymous request with real tenant data -- the audit trail included.
+        await factory.OwnerCredentialAsync();
+        var anonymous = Anonymous();
+
+        var routes = new[]
+        {
+            "/v1/environments",
+            "/v1/environments/test",
+            "/v1/audit",
+            "/v1/environments/test/subjects",
+            "/v1/environments/test/contracts",
+            "/v1/environments/test/notifications",
+            "/v1/notifications/outbox",
+        };
+
+        foreach (var route in routes)
+        {
+            var response = await anonymous.GetAsync(route);
+
+            Assert.True(
+                response.StatusCode is HttpStatusCode.Unauthorized,
+                $"an anonymous caller was allowed to read {route}: {(int)response.StatusCode}");
+        }
+    }
+
+    [Fact]
     public async Task AReaderCanChangeNothing()
     {
         var reader = WithCredential(await MemberCredentialAsync("READER"));

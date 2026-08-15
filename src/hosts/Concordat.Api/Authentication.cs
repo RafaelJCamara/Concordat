@@ -32,6 +32,27 @@ public sealed class AuthenticationOptions
 
     /// <summary>How long a sign-in credential lasts.</summary>
     public TimeSpan SessionLifetime { get; set; } = TimeSpan.FromHours(12);
+
+    /// <summary>
+    /// A shared secret <c>POST /v1/auth/bootstrap</c> must be sent before it will create the
+    /// first owner.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Closes the deploy-to-claim race.</b> <see cref="AllowAnonymousUntilClaimed"/> means an
+    /// unclaimed instance answers every request as owner, so on a reachable deployment whoever
+    /// calls <c>/bootstrap</c> first keeps the instance and locks the real operator out. Setting
+    /// this (via <c>Concordat:Authentication:BootstrapToken</c>, e.g. the
+    /// <c>CONCORDAT_BOOTSTRAP_TOKEN</c> environment variable) means possession of the deployment
+    /// — not mere reachability — is what authorises the claim.
+    /// </para>
+    /// <para>
+    /// <b>Null by default</b> so <c>docker compose up</c> still produces something immediately
+    /// usable on a machine only its operator can reach (ADR-008). Left unset, bootstrap works as
+    /// before. Cloud and any internet-reachable deployment should set it.
+    /// </para>
+    /// </remarks>
+    public string? BootstrapToken { get; set; }
 }
 
 /// <summary>Holds the caller resolved for the current request.</summary>
@@ -106,6 +127,14 @@ public sealed class CallerResolver(
             ? authorization[scheme.Length..].Trim()
             : authorization.Trim();
     }
+}
+
+/// <summary>Reads the configured bootstrap token from <see cref="AuthenticationOptions"/>.</summary>
+public sealed class ConfiguredBootstrapPolicy(
+    Microsoft.Extensions.Options.IOptions<AuthenticationOptions> options) : IBootstrapPolicy
+{
+    /// <inheritdoc />
+    public string? RequiredToken => options.Value.BootstrapToken;
 }
 
 /// <summary>Resolves the caller before anything else looks at the request.</summary>

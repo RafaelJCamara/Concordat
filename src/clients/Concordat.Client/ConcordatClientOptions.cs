@@ -227,5 +227,20 @@ public sealed class ConcordatClientOptions
         {
             throw new InvalidOperationException($"{nameof(WarmUpJitter)} cannot be negative.");
         }
+
+        // A Bearer credential is attached to every request regardless of scheme (see
+        // ConcordatClient), so an http:// BaseAddress sends it on the wire in the clear to
+        // anyone on the network path. Loopback is exempted: that traffic never leaves the
+        // machine, which is the ordinary shape of a local registry during development.
+        if (!string.IsNullOrEmpty(ApiKey)
+            && BaseAddress is { Scheme: "http" } address
+            && !address.IsLoopback)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(BaseAddress)} is '{address}' and {nameof(ApiKey)} is set. Sending " +
+                "an API key over a non-loopback http:// connection puts the credential on the " +
+                "wire in the clear. Use https://, or point this at localhost/127.0.0.1 if the " +
+                "registry really is local.");
+        }
     }
 }

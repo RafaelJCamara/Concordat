@@ -155,7 +155,7 @@ public static class DependencyInjection
 
         // M7.5 notifications.
         services.AddScoped<
-            ICommandHandler<CreateSubscriptionCommand, NotificationSubscription>,
+            ICommandHandler<CreateSubscriptionCommand, CreatedSubscription>,
             CreateSubscriptionHandler>();
         services.AddScoped<
             ICommandHandler<SetSubscriptionEnabledCommand, NotificationSubscription>,

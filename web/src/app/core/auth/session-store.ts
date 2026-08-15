@@ -9,8 +9,10 @@ interface SessionState {
    * Not `localStorage`, and not `sessionStorage`. A token in web storage is readable by any
    * script that runs on the page, so one injected script exfiltrates a registry credential
    * that is good from anywhere — and this project has already declined to ship one XSS hole
-   * (ADR-006). The cost is that a reload signs the user out, which is the right trade until
-   * there is a refresh flow or an httpOnly cookie. See NOTES-FOR-INTEGRATION.md.
+   * (ADR-006). A reload no longer signs the user out: decision 26 added an httpOnly
+   * `SameSite=Strict` session cookie whose only power is handing back this same in-memory
+   * credential, via `SessionApi.resume()` on startup. The credential itself still never
+   * touches web storage.
    */
   readonly credential: string | null;
 

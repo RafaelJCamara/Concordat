@@ -69,6 +69,11 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.UseSetting("Concordat:Profile", Profile.ToString());
+
+        // The in-memory TestServer never populates Connection.RemoteIpAddress, which would
+        // otherwise collapse every request across the whole run into one shared rate-limit
+        // partition. See Program.cs's DisableRateLimiting comment.
+        builder.UseSetting("Concordat:DisableRateLimiting", "true");
     }
 
     /// <inheritdoc />

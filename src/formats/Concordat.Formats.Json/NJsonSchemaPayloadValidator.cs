@@ -27,6 +27,18 @@ namespace Concordat.Formats.Json;
 /// </remarks>
 public sealed class NJsonSchemaPayloadValidator : IPayloadValidator
 {
+    /// <summary>
+    /// The largest payload this validator will parse, in UTF-8 bytes.
+    /// </summary>
+    /// <remarks>
+    /// Both the schema and the message arriving on this path are attacker-controlled under
+    /// this engine's threat model, and there is no upstream size limit between a RabbitMQ
+    /// delivery and this call. Generous for any legitimate event payload — this is a message
+    /// bus, not a file transfer — and cheap defence-in-depth independent of whatever the
+    /// caller does or does not enforce itself.
+    /// </remarks>
+    public const int MaxPayloadBytes = 10 * 1024 * 1024;
+
     private readonly ConcurrentDictionary<string, JsonSchema> _compiled = new(StringComparer.Ordinal);
 
     /// <inheritdoc />
@@ -41,6 +53,18 @@ public sealed class NJsonSchemaPayloadValidator : IPayloadValidator
         {
             return new PayloadValidationResult(
                 false, [new PayloadError("#", "empty", "The payload is empty.")]);
+        }
+
+        var payloadBytes = System.Text.Encoding.UTF8.GetByteCount(payload);
+        if (payloadBytes > MaxPayloadBytes)
+        {
+            return new PayloadValidationResult(
+                false,
+                [new PayloadError(
+                    "#",
+                    "payload_too_large",
+                    $"The payload is {payloadBytes} bytes; this validator parses at most " +
+                    $"{MaxPayloadBytes} bytes.")]);
         }
 
         JsonSchema schema;
@@ -66,7 +90,23 @@ public sealed class NJsonSchemaPayloadValidator : IPayloadValidator
         ICollection<ValidationError> errors;
         try
         {
-            errors = schema.Validate(payload);
+            errors = ValidateWithHardTimeout(schema, canonicalSchema, payload);
+        }
+        catch (PatternMatchTimedOutException)
+        {
+            // A pattern keyword with catastrophic backtracking, matched against a payload
+            // chosen to trigger it -- a ReDoS attempt, not a malformed document. The failure is
+            // reported as a verdict for the same reason every other one here is: this runs on
+            // the delivery path, where an exception is worse than a refusal. See
+            // ValidateWithHardTimeout for why this is a hard wall-clock bound rather than a
+            // dependency on RegexSafety having taken effect.
+            return new PayloadValidationResult(
+                false,
+                [new PayloadError(
+                    "#",
+                    "pattern_match_timeout",
+                    "A 'pattern' or 'patternProperties' regular expression took too long to " +
+                    "match this payload and was aborted.")]);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
@@ -96,6 +136,48 @@ public sealed class NJsonSchemaPayloadValidator : IPayloadValidator
                 .. missed.Select(m => new PayloadError(m.Path, m.Kind, m.Message)),
             ]);
     }
+
+    /// <summary>The most a pattern match may run before it is abandoned as a ReDoS attempt.</summary>
+    private static readonly TimeSpan HardMatchTimeout = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Runs NJsonSchema's own validation with a hard wall-clock bound that does not depend on
+    /// <see cref="RegexSafety.ApplyProcessWideDefault"/> having won the race described on that
+    /// type.
+    /// </summary>
+    /// <exception cref="PatternMatchTimedOutException">
+    /// The match ran past <see cref="HardMatchTimeout"/> and was abandoned.
+    /// </exception>
+    /// <remarks>
+    /// Only schemas whose text mentions <c>pattern</c> pay for the dispatch to a second
+    /// thread — every other schema, the overwhelming majority, validates exactly as it did
+    /// before this existed, because the delivery path does not get slower for a threat a given
+    /// schema cannot pose. A hung match is abandoned, not cancelled — NJsonSchema gives no way
+    /// to cancel a synchronous match in progress — so the sacrificial thread keeps running
+    /// until <see cref="RegexSafety"/>'s default cuts it off, if it won its race; either way,
+    /// this method's caller is freed to keep processing other messages instead of staying
+    /// blocked on this one forever.
+    /// </remarks>
+    private static ICollection<ValidationError> ValidateWithHardTimeout(
+        JsonSchema schema, string canonicalSchema, string payload)
+    {
+        if (!canonicalSchema.Contains("pattern", StringComparison.Ordinal))
+        {
+            return schema.Validate(payload);
+        }
+
+        var task = Task.Run(() => schema.Validate(payload));
+
+        if (!task.Wait(HardMatchTimeout))
+        {
+            throw new PatternMatchTimedOutException();
+        }
+
+        return task.GetAwaiter().GetResult();
+    }
+
+    /// <summary>Thrown by <see cref="ValidateWithHardTimeout"/> when it gives up waiting.</summary>
+    private sealed class PatternMatchTimedOutException : Exception;
 
     /// <summary>
     /// Drops errors NJsonSchema raises that draft 2020-12 does not consider errors.

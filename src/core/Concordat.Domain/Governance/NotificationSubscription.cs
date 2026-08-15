@@ -88,6 +88,21 @@ public sealed class NotificationSubscription
         Enabled = true;
     }
 
+    /// <summary>
+    /// A reference to this subscription's webhook signing secret, held encrypted elsewhere.
+    /// </summary>
+    /// <remarks>
+    /// Same shape as <see cref="BrokerConnection.CredentialRef"/> and for the same
+    /// reason: an aggregate that held the secret itself would be one serialisation mistake away
+    /// from returning it. Null for an email subscription, which has nothing to sign.
+    /// </remarks>
+    public string? SigningKeyRef { get; private set; }
+
+    /// <summary>Records where this subscription's signing secret is stored.</summary>
+    /// <param name="signingKeyRef">The reference, or null to clear it.</param>
+    public void SetSigningKeyRef(string? signingKeyRef) =>
+        SigningKeyRef = string.IsNullOrWhiteSpace(signingKeyRef) ? null : signingKeyRef.Trim();
+
     // Materialisation only.
     private NotificationSubscription()
     {

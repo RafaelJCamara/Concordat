@@ -58,7 +58,8 @@ public static class GovernanceEndpoints
         violations.MapGet("/", ListViolations)
             .WithSummary("List the violations reported in an environment")
             .Produces<IReadOnlyList<ViolationResponse>>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
 
         var subjects = app.MapGroup("/v1/environments/{env}/subjects/{subject}")
             .WithTags("Governance");
@@ -98,10 +99,13 @@ public static class GovernanceEndpoints
             .WithSummary("Read the audit trail, newest first")
             .WithDescription(
                 "Records what happened, in the same transaction as the change itself. A " +
-                "refused request never reaches a commit, so it leaves no entry.")
+                "refused request never reaches a commit, so it leaves no entry. Any read scope " +
+                "admits a caller, because the trail spans every resource type and a reader " +
+                "should be able to browse all of it, same as everything else.")
             .Produces<IReadOnlyList<AuditResponse>>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead, Scope.ContractRead, Scope.EnvRead, Scope.BrokerRead);
 
         return app;
     }

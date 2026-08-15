@@ -133,9 +133,23 @@ export class SignInPage {
     // the store records that it succeeded, and the screen decides what that means.
     effect(() => {
       if (this.store.succeeded()) {
-        void this.router.navigateByUrl(this.returnTo() ?? '/subjects');
+        void this.router.navigateByUrl(this.safeReturnTo());
       }
     });
+  }
+
+  /**
+   * `returnTo` is attacker-craftable (a phishing link can set it), not just router-produced.
+   * `navigateByUrl` treats its argument as an in-app route rather than a browser navigation, so
+   * `?returnTo=https://evil.com` is not an open redirect today -- but that safety is an
+   * implementation detail of which Router API happens to be in use here, not a property of the
+   * value itself. Accepting only a same-app path removes the latent class outright: `//host` is
+   * a protocol-relative URL a browser would treat as a navigation to `host`, which is why a
+   * single leading slash is required and a second one is refused.
+   */
+  private safeReturnTo(): string {
+    const target = this.returnTo();
+    return target && /^\/(?!\/)/.test(target) ? target : '/subjects';
   }
 
   protected submit(event: Event): void {

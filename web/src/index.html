@@ -7,6 +7,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <!--
+      Schema text, subject names and changelogs are attacker-controlled content in multi-tenant
+      Cloud mode, rendered in other tenants' browsers. Every render path today is safe
+      interpolation (ADR-006 -- see schema-view.ts and the icon system), so this is a backstop
+      against a future template mistake, not a fix for a known hole. script-src has no
+      'unsafe-inline': there is no inline <script> anywhere in this page (see
+      NOTES-FOR-INTEGRATION.md §4 on the theme boot script, which ships in the bundle, not
+      inline). style-src allows 'unsafe-inline' because Angular injects component styles as
+      <style> tags and there is no server here to hand out a per-request nonce for
+      ngCspNonce -- that is a real, accepted gap, not an oversight. connect-src assumes the API
+      is same-origin, which is true for local dev via proxy.conf.json; a deployment that serves
+      the API from a different origin must widen this.
+
+      A <meta> tag cannot set every directive HTTP headers can (frame-ancestors and
+      X-Frame-Options need a real response header), so this covers what a purely static
+      deployment can enforce. If this page ever gets a server in front of it, move this to a
+      Content-Security-Policy response header instead and add frame-ancestors 'none'.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
+    />
+    <!--
       No `<meta name="color-scheme">` here on purpose. `styles/tokens.css` sets the CSS
       `color-scheme` property alongside the colours it belongs with, and a meta tag saying
       something different would be a second, weaker source of truth for the same thing.

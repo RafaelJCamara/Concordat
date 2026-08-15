@@ -21,7 +21,8 @@ public static class EnvironmentEndpoints
 
         group.MapGet("/", ListEnvironments)
             .WithSummary("List environments")
-            .Produces<IReadOnlyList<EnvironmentResponse>>();
+            .Produces<IReadOnlyList<EnvironmentResponse>>()
+            .RequireScope(Scope.EnvRead);
 
         group.MapPost("/", CreateEnvironment)
             .WithSummary("Create an environment")
@@ -38,7 +39,8 @@ public static class EnvironmentEndpoints
         group.MapGet("/{env}", GetEnvironment)
             .WithSummary("Get an environment and its brokers")
             .Produces<EnvironmentResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.EnvRead);
 
         group.MapPatch("/{env}", UpdateEnvironment)
             .WithSummary("Change an environment's description or policies")
@@ -59,7 +61,8 @@ public static class EnvironmentEndpoints
         group.MapGet("/{env}/registration-policy", GetRegistrationPolicy)
             .WithSummary("Read who may register schemas here")
             .Produces<RegistrationPolicyResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.EnvRead);
 
         group.MapPut("/{env}/registration-policy", SetRegistrationPolicy)
             .WithSummary("Change who may register schemas here")

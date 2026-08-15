@@ -126,6 +126,18 @@ public static class InspectCommands
                 continue;
             }
 
+            // The registry's own grammar (SubjectName.Create) already refuses a name that
+            // could traverse out of the export directory, so a well-behaved server can never
+            // reach this. Re-validating here means a compromised or MITM'd registry -- not
+            // this CLI's own trust boundary -- cannot turn an export into a write outside it.
+            var validated = SubjectName.Create(subject.Name);
+            if (validated.IsFailure)
+            {
+                skipped.Add(new SkippedSubject(
+                    subject.Name, $"not a valid subject name: {validated.Error!.Message}"));
+                continue;
+            }
+
             var format = subject.Format switch
             {
                 WireTokens.FormatAvro => SchemaFormat.Avro,
@@ -133,7 +145,7 @@ public static class InspectCommands
                 _ => SchemaFormat.Json,
             };
 
-            var path = ContractDirectory.FileFor(directory, subject.Name, format);
+            var path = ContractDirectory.FileFor(directory, validated.Value.Value, format);
             await File.WriteAllTextAsync(path, schema, cancellationToken).ConfigureAwait(false);
 
             written.Add(new ExportedSubject(subject.Name, path, version.Ordinal, version.SchemaId));

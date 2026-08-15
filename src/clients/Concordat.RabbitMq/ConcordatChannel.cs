@@ -305,7 +305,7 @@ public sealed class ConcordatChannel : IChannel
         // again would validate every message twice and double every counter.
         var enforced = consumer is ConcordatConsumer
             ? consumer
-            : new ConcordatConsumer(consumer, _inner, _enforcer, _options, queue);
+            : new ConcordatConsumer(consumer, _inner, _enforcer, _options, queue, autoAck);
 
         return _inner.BasicConsumeAsync(
             queue, autoAck, consumerTag, noLocal, exclusive, arguments, enforced, cancellationToken);

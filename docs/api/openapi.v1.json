@@ -11,7 +11,7 @@
           "Governance"
         ],
         "summary": "Read the audit trail, newest first",
-        "description": "Records what happened, in the same transaction as the change itself. A refused request never reaches a commit, so it leaves no entry.",
+        "description": "Records what happened, in the same transaction as the change itself. A refused request never reaches a commit, so it leaves no entry. Any read scope admits a caller, because the trail spans every resource type and a reader should be able to browse all of it, same as everything else.",
         "parameters": [
           {
             "name": "env",
@@ -1694,7 +1694,7 @@
           "Notifications"
         ],
         "summary": "Subscribe a channel to an environment's events",
-        "description": "An empty event list means every event. The alternative is a subscription that is configured, enabled, and silently delivers nothing — which looks correct from every screen.",
+        "description": "An empty event list means every event. The alternative is a subscription that is configured, enabled, and silently delivers nothing — which looks correct from every screen. A WEBHOOK subscription also gets a signing secret, returned here once: every delivery to it carries an X-Concordat-Signature header, an HMAC-SHA256 of the body keyed on that secret, so the receiver can tell this registry sent it from anything else that found the URL.",
         "parameters": [
           {
             "name": "env",
@@ -1721,7 +1721,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SubscriptionResponse"
+                  "$ref": "#/components/schemas/CreatedSubscriptionResponse"
                 }
               }
             }
@@ -1877,7 +1877,7 @@
           "Identity"
         ],
         "summary": "Create the first owner",
-        "description": "Works exactly once. ADR-008 promises 'docker compose up' produces a working authenticated instance with no external dependency, which means the first run must be able to create an account — and every run after it must not.",
+        "description": "Works exactly once. ADR-008 promises 'docker compose up' produces a working authenticated instance with no external dependency, which means the first run must be able to create an account — and every run after it must not. When the host has a bootstrap token configured, the request must carry it in 'token' or this answers 401 -- otherwise whoever reaches a public instance first would keep it.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1901,6 +1901,16 @@
           },
           "400": {
             "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3604,6 +3614,13 @@
               "string"
             ],
             "description": "What to show; defaults to the address's local part."
+          },
+          "token": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The shared secret, required only when the host has a bootstrap token configured."
           }
         },
         "description": "Request to create the first owner."
@@ -4037,6 +4054,27 @@
           }
         },
         "description": "Request to create a contract."
+      },
+      "CreatedSubscriptionResponse": {
+        "required": [
+          "subscription",
+          "signingSecret"
+        ],
+        "type": "object",
+        "properties": {
+          "subscription": {
+            "description": "The subscription.",
+            "$ref": "#/components/schemas/SubscriptionResponse"
+          },
+          "signingSecret": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The secret to configure on the receiving end, for a WEBHOOK subscription. <b>This is the\nonly time it is ever returned</b> — the registry stores only an encrypted reference and\ncannot show it again. Null for an EMAIL subscription, which has nothing to sign."
+          }
+        },
+        "description": "A newly created subscription and its one-time webhook signing secret."
       },
       "CreateEnvironmentRequest": {
         "required": [

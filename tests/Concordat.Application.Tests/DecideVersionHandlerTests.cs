@@ -1,5 +1,7 @@
+using Concordat.Application.Abstractions;
 using Concordat.Application.Registry;
 using Concordat.Application.Tests.TestSupport;
+using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 using Microsoft.Extensions.Time.Testing;
@@ -18,6 +20,7 @@ public class DecideVersionHandlerTests
     private readonly EnvironmentId _environment = EnvironmentId.New();
     private readonly FakeSubjects _subjects = new();
     private readonly FakeSchemas _schemas = new();
+    private readonly SettableCaller _caller = new();
     private readonly RecordingUnitOfWork _unitOfWork = new();
     private readonly RecordingAuditLog _audit = new();
     private readonly RecordingOutbox _outbox = new();
@@ -25,9 +28,10 @@ public class DecideVersionHandlerTests
 
     private Task<Result<Subject>> DecideAsync(
         int ordinal, bool approve, string name = Name, string decidedBy = "bob") =>
-        new DecideVersionHandler(_subjects, _audit, _outbox, _unitOfWork, _clock).HandleAsync(
-            new DecideVersionCommand(_environment, name, ordinal, decidedBy, approve),
-            CancellationToken.None);
+        new DecideVersionHandler(_subjects, _caller, _audit, _outbox, _unitOfWork, _clock)
+            .HandleAsync(
+                new DecideVersionCommand(_environment, name, ordinal, decidedBy, approve),
+                CancellationToken.None);
 
     /// <summary>A subject with an active version 1 and a breaking version 2 awaiting review.</summary>
     private Subject WithPendingSecondVersion()
@@ -50,14 +54,18 @@ public class DecideVersionHandlerTests
     }
 
     [Fact]
-    public async Task AnEmptyDecidedBy_IsRefusedBeforeTheRepositoryIsTouched()
+    public async Task AnEmptyDecidedByStillDecidesBecauseItIsNeverTrusted()
     {
-        // The gate exists so that a breaking change is somebody's decision. An approval with no
-        // approver records the outcome and loses the only thing the gate was for.
+        // decidedBy is informational only -- the actor of record is always the authenticated
+        // caller (M8.4), so an empty or malicious value in the request body cannot refuse the
+        // decision and cannot substitute itself into the audit trail either.
+        WithPendingSecondVersion();
+        _caller.Current = _caller.Current with { Actor = ActorId.Create("bob").Value };
+
         var result = await DecideAsync(2, approve: true, decidedBy: "");
 
-        Assert.Equal(ConcordatCodes.ActorIdInvalid, result.Error!.Code);
-        Assert.Equal(0, _subjects.Finds);
+        Assert.True(result.IsSuccess);
+        Assert.Equal("bob", result.Value.Versions[1].DecidedBy!.Value);
     }
 
     [Fact]
@@ -134,12 +142,14 @@ public class DecideVersionHandlerTests
     public async Task TheDecisionIsAttributedToTheCallerAndStampedFromTheInjectedClock()
     {
         // Who and when are the entire record of the gate having been operated. A wall-clock
-        // read here would make the audit trail untestable.
+        // read here would make the audit trail untestable. "Who" comes from the authenticated
+        // caller, not the request body -- decidedBy: "mallory" below must be ignored.
         var moment = new DateTimeOffset(2030, 5, 6, 7, 8, 9, TimeSpan.FromHours(3));
         _clock.SetUtcNow(moment);
+        _caller.Current = _caller.Current with { Actor = ActorId.Create("carol").Value };
         var subject = WithPendingSecondVersion();
 
-        await DecideAsync(2, approve: true, decidedBy: "carol");
+        await DecideAsync(2, approve: true, decidedBy: "mallory");
 
         var version = subject.Versions[1];
         Assert.Equal(VersionStatus.Active, version.Status);

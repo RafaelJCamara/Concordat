@@ -72,6 +72,11 @@ public sealed class GetBundledSchemaHandler(
         var queue = new Queue<Schema>();
         queue.Enqueue(root);
 
+        // Left as one lookup per reference rather than batched (Q1, same reasoning as
+        // BootstrapHandler's own reference walk): what to look up is discovered from each
+        // schema's body as it is dequeued, and a reference can name any subject in any
+        // environment, so there is no id list to batch until the graph is already being
+        // walked one level at a time.
         while (queue.Count > 0)
         {
             foreach (var reference in queue.Dequeue().References)

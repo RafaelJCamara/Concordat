@@ -1,6 +1,14 @@
 using System.CommandLine;
 using Concordat.Cli;
 using Concordat.Cli.Commands;
+using Concordat.Formats.Json;
+
+// Must be the first statement: .NET reads the process-wide regex match timeout exactly once,
+// the first time anything touches Regex, so this is the one place that can reliably win that
+// race. See RegexSafety's remarks for why nothing downstream depends on it having won -- the
+// CLI's own `check`/`infer` commands run JSON Schema validation locally, over files an
+// operator points it at, which is the same untrusted-pattern-and-payload shape as the server.
+RegexSafety.ApplyProcessWideDefault();
 
 // Global options. Every one of them also reads an environment variable, because a CI job
 // should configure the registry once for the whole pipeline rather than repeating
@@ -319,11 +327,26 @@ Output NewOutput(ParseResult parse) =>
 
 HttpClient NewHttpClient(ParseResult parse)
 {
-    var client = new HttpClient { BaseAddress = new Uri(parse.GetValue(registryOption)!) };
+    var registry = new Uri(parse.GetValue(registryOption)!);
+    var client = new HttpClient { BaseAddress = registry };
     var key = parse.GetValue(apiKeyOption);
 
     if (!string.IsNullOrWhiteSpace(key))
     {
+        // The credential rides on every request regardless of scheme, so a non-loopback
+        // http:// registry -- a typo'd --registry, or the http:// default left unchanged
+        // against a real deployment -- would send it on the wire in the clear.
+        if (registry.Scheme is "http" && !registry.IsLoopback)
+        {
+            throw new RegistryException(
+                ExitCodes.UsageError,
+                "api_key_over_http",
+                $"--registry is '{registry}' and an API key is set. Sending it over a " +
+                "non-loopback http:// connection puts the credential on the wire in the " +
+                "clear. Use https://, or point --registry at localhost/127.0.0.1 if the " +
+                "registry really is local.");
+        }
+
         client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", $"Bearer {key}");
     }
 

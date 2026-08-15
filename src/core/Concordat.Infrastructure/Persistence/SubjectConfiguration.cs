@@ -169,6 +169,17 @@ internal sealed class SubjectConfiguration : IEntityTypeConfiguration<Subject>
                 t.HasCheckConstraint("ck_schema_version_ordinal_positive", "ordinal >= 1"));
         });
 
+        // Reconsidered for Q1 and kept, deliberately: SubjectResponse (the wire contract for
+        // both GET /subjects and GET /subjects/{subject}) embeds each subject's full Versions
+        // array, not a summary — removing AutoInclude would silently null that out for every
+        // caller of ListSubjectsQuery unless every read path added an explicit .Include(), and
+        // a forgotten one is a production bug (an empty Versions array), not a build error. The
+        // actual "unbounded" cost this leaves on the table is the N+1 the *other* Q1 fixes
+        // address instead: loading each prior schema's body one row at a time while walking a
+        // subject's history, not the Versions collection itself, which the wire contract needs
+        // loaded either way. If a subject's version count ever grows large enough that this
+        // join becomes the bottleneck, the fix is splitting the wire contract (a summary list
+        // endpoint plus the existing full-history get), not quietly dropping AutoInclude here.
         builder.Navigation(s => s.Versions).AutoInclude();
     }
 

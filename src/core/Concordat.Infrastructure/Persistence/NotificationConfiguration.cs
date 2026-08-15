@@ -121,6 +121,11 @@ internal sealed class NotificationSubscriptionConfiguration
 
         builder.Property(s => s.Enabled).HasColumnName("enabled");
         builder.Property(s => s.CreatedAt).HasColumnName("created_at");
+
+        builder.Property(s => s.SigningKeyRef)
+            .HasColumnName("signing_key_ref")
+            .HasMaxLength(64);
+
         builder.Property<Guid>(TenantIdProperty).HasColumnName("tenant_id");
 
         builder.HasIndex(TenantIdProperty, nameof(NotificationSubscription.EnvironmentId))

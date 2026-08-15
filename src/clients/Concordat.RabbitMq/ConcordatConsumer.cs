@@ -31,6 +31,7 @@ public sealed class ConcordatConsumer : IAsyncBasicConsumer
     private readonly ConcordatRabbitMqOptions _options;
     private readonly IChannel _channel;
     private readonly string? _queue;
+    private readonly bool _autoAck;
     private int _quarantineDeclared;
 
     /// <summary>Wraps a consumer.</summary>
@@ -48,12 +49,19 @@ public sealed class ConcordatConsumer : IAsyncBasicConsumer
     /// governed by <see cref="ConcordatRabbitMqOptions.Mode"/> alone, because RabbitMQ does not
     /// put the queue name on a delivery and there is nothing else to infer it from.
     /// </param>
+    /// <param name="autoAck">
+    /// Whether the broker already acknowledged this delivery on dispatch, matching the flag the
+    /// caller passed to <c>BasicConsumeAsync</c>. When true, a quarantined violation is never
+    /// nacked: the delivery is already settled, and nacking an already-acked tag is a protocol
+    /// error that can fault the channel.
+    /// </param>
     public ConcordatConsumer(
         IAsyncBasicConsumer inner,
         IChannel channel,
         SchemaEnforcer enforcer,
         ConcordatRabbitMqOptions options,
-        string? queue = null)
+        string? queue = null,
+        bool autoAck = false)
     {
         ArgumentNullException.ThrowIfNull(inner);
         ArgumentNullException.ThrowIfNull(channel);
@@ -65,6 +73,7 @@ public sealed class ConcordatConsumer : IAsyncBasicConsumer
         _enforcer = enforcer;
         _options = options;
         _queue = queue;
+        _autoAck = autoAck;
 
         // Unwrapped deliberately. A quarantined message is by definition one that fails its
         // schema, so publishing it through an enforcing channel would refuse it — and the
@@ -150,6 +159,15 @@ public sealed class ConcordatConsumer : IAsyncBasicConsumer
         }
 
         Report(decision, EnforcementOutcome.Quarantined, exchange, routingKey);
+
+        if (_autoAck)
+        {
+            // The broker already settled this delivery on dispatch -- there is nothing left to
+            // nack, and attempting to would be a protocol error the broker can fault the
+            // channel over. The quarantine copy above is already published; that is the whole
+            // of what this consumer can still do for an auto-ack delivery.
+            return;
+        }
 
         // requeue: false. A schema violation is deterministic — the same message will fail the
         // same way forever, so redelivery is pure waste and a redelivery storm besides.

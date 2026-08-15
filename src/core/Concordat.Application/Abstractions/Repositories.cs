@@ -44,6 +44,18 @@ public interface ISchemaRepository
     Task<Schema?> FindAsync(SchemaId id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Finds many schemas by id in one round trip — a single <c>WHERE id IN (...)</c> rather
+    /// than a caller looping <see cref="FindAsync"/> once per id, which is the difference
+    /// between one query and one per prior version when building compatibility history.
+    /// </summary>
+    /// <param name="ids">The schema ids. Duplicates are fine; the result has at most one entry
+    /// per distinct id.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The found schemas, keyed by id. An id with no matching row is simply absent.</returns>
+    Task<IReadOnlyDictionary<SchemaId, Schema>> FindManyAsync(
+        IReadOnlyCollection<SchemaId> ids, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Whether any subject in the caller's tenant references this schema.
     /// </summary>
     /// <param name="id">The schema id.</param>

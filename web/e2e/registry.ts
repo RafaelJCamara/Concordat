@@ -21,8 +21,18 @@ export const OWNER = {
 /** A reader, used to prove that write affordances are absent and write routes redirect. */
 export const READER = {
   email: 'e2e-reader@concordat.test',
-  password: 'correct horse battery staple',
+  password: process.env.CONCORDAT_E2E_PASSWORD ?? 'correct horse battery staple',
 } as const;
+
+/** Whether a registry URL points at this machine. */
+function isLoopback(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false;
+  }
+}
 
 interface SignedIn {
   readonly credential: string;
@@ -81,6 +91,19 @@ export async function ensureOwner(): Promise<string> {
   const claimed = await isClaimed();
 
   if (!claimed) {
+    // Claiming is one-way and OWNER's password defaults to a value printed in this public
+    // repo. A mistyped CONCORDAT_REGISTRY pointing this at a real, reachable instance would
+    // otherwise seize it permanently under that password. A non-loopback target is only
+    // trusted once an operator has deliberately set their own password.
+    if (!isLoopback(REGISTRY) && !process.env.CONCORDAT_E2E_PASSWORD) {
+      throw new Error(
+        `Refusing to bootstrap ${REGISTRY}: it is not on this machine and ` +
+          'CONCORDAT_E2E_PASSWORD is not set. Claiming an instance cannot be undone, and this ' +
+          'suite ships a public default password -- set CONCORDAT_E2E_PASSWORD explicitly if ' +
+          'you really mean to claim that registry.',
+      );
+    }
+
     const created = await call('/v1/auth/bootstrap', {
       method: 'POST',
       body: JSON.stringify({ email: OWNER.email, password: OWNER.password }),

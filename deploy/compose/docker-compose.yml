@@ -10,6 +10,13 @@
 # The `registry` profile is the other audience: somebody evaluating Concordat who has no .NET
 # SDK and wants the promise ADR-008 makes — compose up, and try it. It runs the published
 # image, so it needs no toolchain at all.
+#
+# Postgres and RabbitMQ publish to 127.0.0.1 ONLY, not 0.0.0.0: this file is a local dev loop
+# and an evaluation shortcut, not a hardened deployment, and its default credentials
+# (postgres/postgres, guest/guest) are only ever safe because nothing off this machine can
+# reach them. If you run this compose file on a shared host or anything with a routable IP,
+# override POSTGRES_PASSWORD, RABBITMQ_DEFAULT_USER and RABBITMQ_DEFAULT_PASS and reconsider
+# whether the loopback binding below is still enough for your network.
 services:
   postgres:
     # Pinned rather than floating, matching the version the test suite runs against. A
@@ -18,13 +25,18 @@ services:
     container_name: concordat-postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: concordat
     ports:
       # Deliberately not 5432. A developer machine very often already has a Postgres on the
       # default port — this one did — and "port is already allocated" is a discouraging first
       # thing to meet in a quickstart. The container still listens on 5432 internally.
-      - "55432:5432"
+      #
+      # 127.0.0.1, not 0.0.0.0: the containers reach each other over the compose network
+      # without this port published at all. Publishing it is purely for a developer's own
+      # `psql`/GUI client on the same machine, and binding it to every interface would hand
+      # the default password to anyone who can reach this host.
+      - "127.0.0.1:55432:5432"
     healthcheck:
       # The migrator and the API both fail unhelpfully against a database that is listening
       # but not yet ready, so readiness is checked rather than assumed.
@@ -42,11 +54,14 @@ services:
     image: rabbitmq:4.1-management
     container_name: concordat-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      # 127.0.0.1, not 0.0.0.0 -- see the top of this file. The official image only refuses
+      # 'guest' logins from remote hosts when it thinks it IS remote; a published port on every
+      # interface defeats that, and 'guest' is otherwise a byword for "already compromised".
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
       interval: 5s
@@ -64,7 +79,7 @@ services:
     container_name: concordat-migrate
     entrypoint: ['dotnet', 'Concordat.Migrator.dll']
     environment:
-      ConnectionStrings__Concordat: 'Host=postgres;Database=concordat;Username=postgres;Password=postgres'
+      ConnectionStrings__Concordat: 'Host=postgres;Database=concordat;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}'
     depends_on:
       postgres:
         condition: service_healthy
@@ -76,8 +91,9 @@ services:
     image: ${CONCORDAT_IMAGE:-ghcr.io/rafaeljcamara/concordat-api:latest}
     container_name: concordat-api
     environment:
-      ConnectionStrings__Concordat: 'Host=postgres;Database=concordat;Username=postgres;Password=postgres'
+      ConnectionStrings__Concordat: 'Host=postgres;Database=concordat;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}'
       Concordat__Profile: 'SelfHosted'
+      Concordat__Authentication__BootstrapToken: '${CONCORDAT_BOOTSTRAP_TOKEN:-}'
     ports:
       - "5062:8080"
     depends_on:

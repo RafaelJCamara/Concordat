@@ -57,3 +57,40 @@ public interface ICredentialStore
     /// <param name="cancellationToken">Cancellation.</param>
     Task RemoveAsync(string credentialRef, CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Stores a webhook subscription's HMAC signing secret encrypted at rest, addressed by an
+/// opaque reference (M7.5).
+/// </summary>
+/// <remarks>
+/// The same shape as <see cref="ICredentialStore"/> and for the same reason: the receiver of a
+/// webhook has no way to verify it came from this registry — or was not tampered with in
+/// transit past a compromised or misconfigured intermediary — without a shared secret, and
+/// that secret must never be recoverable from the aggregate itself.
+/// </remarks>
+public interface IWebhookSigningKeyStore
+{
+    /// <summary>Generates a new secret and stores it encrypted.</summary>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The reference to record on the subscription, and the secret itself.</returns>
+    /// <remarks>
+    /// The secret is generated here, not accepted from a caller: an operator-supplied secret
+    /// would have to travel through a request body and this process's logs on the way in, and
+    /// the whole point is a value that never does.
+    /// </remarks>
+    Task<(string Reference, string Secret)> GenerateAsync(CancellationToken cancellationToken);
+
+    /// <summary>Decrypts a stored secret.</summary>
+    /// <param name="reference">The reference recorded on the subscription.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>
+    /// The secret, or <see langword="null"/> when the reference names nothing or no longer
+    /// decrypts — a recoverable state (the key ring lost the key that wrote it), not a crash.
+    /// </returns>
+    Task<string?> ResolveAsync(string reference, CancellationToken cancellationToken);
+
+    /// <summary>Removes a stored secret.</summary>
+    /// <param name="reference">The reference.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    Task RemoveAsync(string reference, CancellationToken cancellationToken);
+}

@@ -65,17 +65,24 @@ public sealed class BootstrapHandler(
         var collected = new Dictionary<string, Schema>(StringComparer.Ordinal);
         var pending = new Queue<Schema>();
 
-        foreach (var subject in found)
+        // Every subject's latest schema in one round trip rather than one per subject — the
+        // exact N+1 this handler's own doc comment above says it exists to avoid. An
+        // environment with a thousand subjects used to mean a thousand queries just to answer
+        // the request that promises a cold-start client "one instead of N".
+        var latestBySubject = found
+            .Where(s => s.Lifecycle is not SubjectLifecycle.Retired)
+            .Select(s => (Subject: s, Latest: s.LatestVersion()))
+            .ToList();
+
+        var latestSchemas = await schemas.FindManyAsync(
+            [.. latestBySubject
+                .Where(x => x.Latest is not null)
+                .Select(x => x.Latest!.SchemaId)
+                .Distinct()],
+            cancellationToken).ConfigureAwait(false);
+
+        foreach (var (subject, latest) in latestBySubject)
         {
-            // Retired subjects are excluded: a client warming a cache should not be primed
-            // with contracts that are soft-deleted.
-            if (subject.Lifecycle is SubjectLifecycle.Retired)
-            {
-                continue;
-            }
-
-            var latest = subject.LatestVersion();
-
             payload.Add(new BootstrapSubject(
                 subject.Name.Value,
                 subject.Format,
@@ -88,10 +95,8 @@ public sealed class BootstrapHandler(
                 continue;
             }
 
-            var schema = await schemas.FindAsync(latest.SchemaId, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (schema is not null && collected.TryAdd(schema.Id.Value, schema))
+            if (latestSchemas.TryGetValue(latest.SchemaId, out var schema) &&
+                collected.TryAdd(schema.Id.Value, schema))
             {
                 pending.Enqueue(schema);
             }
@@ -100,6 +105,14 @@ public sealed class BootstrapHandler(
         // Follow references transitively, so the payload validates standalone. The visited set
         // is what stops a cyclic edge set - rejected at registration, but not to be trusted
         // blindly on a read path - from looping forever.
+        //
+        // Left as one lookup per reference rather than batched (Q1): unlike the loop above,
+        // what to look up here is discovered from each schema's own body as it is dequeued, not
+        // known up front, and a reference can name any subject in any environment — batching
+        // it would mean resolving subject-name-to-id per wave before the schema lookup can even
+        // be built, for a graph that in practice is shallow and narrow. The loop above scales
+        // with tenant data size directly (every subject, every environment); this one scales
+        // with how many schemas one document references, which does not grow the same way.
         while (pending.Count > 0)
         {
             foreach (var reference in pending.Dequeue().References)

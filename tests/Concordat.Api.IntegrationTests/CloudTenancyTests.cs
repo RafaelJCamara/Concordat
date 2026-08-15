@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Concordat.Application.Governance;
 using Concordat.Domain.Governance;
 using Concordat.Domain.Identity;
 using Concordat.Infrastructure;
@@ -303,16 +304,16 @@ public class CloudTenancyTests(CloudApiFactory factory)
     public async Task AnAnonymousCallerInCloudGetsNothingRatherThanEverything()
     {
         // The unclaimed-instance owner is a self-hosted first-run affordance. In Cloud there is
-        // no "unclaimed": an anonymous caller resolves to a tenant nobody is a member of, and a
-        // filter that matches nothing beats one that matches everything.
+        // no "unclaimed": an anonymous caller resolves to a tenant nobody is a member of. Reads
+        // require env:read same as writes require env:write, so an anonymous caller is refused
+        // before the tenant filter ever runs -- a stronger guarantee than "the filter matched
+        // nothing", and the one every read route now makes (M8.4).
         await factory.NewOrganisationAsync(UniqueSlug());
 
         var anonymous = factory.CreateClient();
 
-        var environments = await anonymous.GetFromJsonAsync<IReadOnlyList<EnvironmentResponse>>(
-            "/v1/environments", ApiFactory.Json);
-
-        Assert.Empty(environments!);
+        var read = await anonymous.GetAsync("/v1/environments");
+        Assert.Equal(HttpStatusCode.Unauthorized, read.StatusCode);
 
         var write = await anonymous.PostAsJsonAsync(
             "/v1/environments", new CreateEnvironmentRequest("sneaky"), ApiFactory.Json);
@@ -375,5 +376,48 @@ public class CloudTenancyTests(CloudApiFactory factory)
             .ToListAsync();
 
         Assert.Single(forThisSlug);
+    }
+
+    // ------------------------------------------------------------------------ outbox pump
+
+    private const string V1 = """{"type":"object","properties":{"id":{"type":"string"}}}""";
+
+    [Fact]
+    public async Task ThePumpClaimsARealTenantsMessageWithNoCallerInScope()
+    {
+        // The bug: the pump runs in its own DI scope with no HTTP request, so it has no caller
+        // and therefore -- in Cloud, where the tenant comes from the caller -- no tenant. A
+        // tenant-scoped claim query would see only TenantId.SelfHosted, which in Cloud owns
+        // nothing, so a real organisation's notifications would queue forever and the pump
+        // would report a quiet, misleadingly healthy zero every pass.
+        var credential = await factory.NewOrganisationAsync(UniqueSlug());
+        var client = For(credential);
+        var environment = UniqueSlug();
+        var subject = UniqueSubject();
+
+        (await client.PostAsJsonAsync(
+            "/v1/environments", new CreateEnvironmentRequest(environment), ApiFactory.Json))
+            .EnsureSuccessStatusCode();
+
+        (await client.PostAsJsonAsync(
+            $"/v1/environments/{environment}/subjects",
+            new CreateSubjectRequest(subject, "json", "alice", null, null, "open"),
+            ApiFactory.Json)).EnsureSuccessStatusCode();
+
+        (await client.PostAsJsonAsync(
+            $"/v1/environments/{environment}/subjects/{subject}/versions",
+            new RegisterVersionRequest(V1, "1.0.0", null, "alice"),
+            ApiFactory.Json)).EnsureSuccessStatusCode();
+
+        // A fresh, caller-less scope -- exactly what OutboxPump creates on every pass.
+        using var scope = factory.Services.CreateScope();
+
+        var result = await scope.ServiceProvider
+            .GetRequiredService<NotificationDispatcher>()
+            .PumpAsync(CancellationToken.None);
+
+        Assert.True(
+            result.Claimed > 0,
+            "the pump claimed nothing for a real tenant's message -- it is tenant-blind again.");
     }
 }

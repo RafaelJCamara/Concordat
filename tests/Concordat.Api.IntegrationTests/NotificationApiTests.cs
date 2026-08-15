@@ -90,7 +90,7 @@ public class NotificationApiTests(ApiFactory factory)
             client, environment, events: ["BREAKING_CHANGE_SUBMITTED", "VERSION_PROMOTED"]);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        var created = await ApiFactory.ReadAsync<SubscriptionResponse>(response);
+        var created = (await ApiFactory.ReadAsync<CreatedSubscriptionResponse>(response)).Subscription;
 
         Assert.Equal("WEBHOOK", created.Channel);
         Assert.True(created.Enabled);
@@ -107,10 +107,40 @@ public class NotificationApiTests(ApiFactory factory)
     {
         var (client, environment) = await NewEnvironmentAsync();
 
-        var created = await ApiFactory.ReadAsync<SubscriptionResponse>(
-            await SubscribeAsync(client, environment));
+        var created = (await ApiFactory.ReadAsync<CreatedSubscriptionResponse>(
+            await SubscribeAsync(client, environment))).Subscription;
 
         Assert.Empty(created.Events);
+    }
+
+    [Fact]
+    public async Task AWebhookSubscriptionReturnsASigningSecretOnceAndOnlyOnce()
+    {
+        var (client, environment) = await NewEnvironmentAsync();
+
+        var created = await ApiFactory.ReadAsync<CreatedSubscriptionResponse>(
+            await SubscribeAsync(client, environment));
+
+        Assert.False(string.IsNullOrWhiteSpace(created.SigningSecret));
+
+        var listed = await client.GetFromJsonAsync<IReadOnlyList<SubscriptionResponse>>(
+            $"/v1/environments/{environment}/notifications", ApiFactory.Json);
+
+        // The list/get shape never carries a secret -- there is nowhere on SubscriptionResponse
+        // for one to leak into, which this asserts by construction rather than by inspecting
+        // JSON for an absent property.
+        Assert.Single(listed!);
+    }
+
+    [Fact]
+    public async Task AnEmailSubscriptionHasNoSigningSecret()
+    {
+        var (client, environment) = await NewEnvironmentAsync();
+
+        var created = await ApiFactory.ReadAsync<CreatedSubscriptionResponse>(
+            await SubscribeAsync(client, environment, channel: "EMAIL", endpoint: "team@example.com"));
+
+        Assert.Null(created.SigningSecret);
     }
 
     [Fact]
@@ -157,8 +187,8 @@ public class NotificationApiTests(ApiFactory factory)
     public async Task MutingAndUnmutingKeepsTheSettings()
     {
         var (client, environment) = await NewEnvironmentAsync();
-        var created = await ApiFactory.ReadAsync<SubscriptionResponse>(
-            await SubscribeAsync(client, environment));
+        var created = (await ApiFactory.ReadAsync<CreatedSubscriptionResponse>(
+            await SubscribeAsync(client, environment))).Subscription;
 
         var muted = await client.PutAsJsonAsync(
             $"/v1/environments/{environment}/notifications/{created.Id}/enabled",
@@ -176,8 +206,8 @@ public class NotificationApiTests(ApiFactory factory)
     public async Task DeletingRemovesItAndThenIs404()
     {
         var (client, environment) = await NewEnvironmentAsync();
-        var created = await ApiFactory.ReadAsync<SubscriptionResponse>(
-            await SubscribeAsync(client, environment));
+        var created = (await ApiFactory.ReadAsync<CreatedSubscriptionResponse>(
+            await SubscribeAsync(client, environment))).Subscription;
 
         var deleted = await client.DeleteAsync(
             $"/v1/environments/{environment}/notifications/{created.Id}");
@@ -290,8 +320,8 @@ public class NotificationApiTests(ApiFactory factory)
     public async Task AMutedSubscriptionDoesNotBlockDelivery()
     {
         var (client, environment) = await NewEnvironmentAsync();
-        var created = await ApiFactory.ReadAsync<SubscriptionResponse>(
-            await SubscribeAsync(client, environment));
+        var created = (await ApiFactory.ReadAsync<CreatedSubscriptionResponse>(
+            await SubscribeAsync(client, environment))).Subscription;
 
         await client.PutAsJsonAsync(
             $"/v1/environments/{environment}/notifications/{created.Id}/enabled",

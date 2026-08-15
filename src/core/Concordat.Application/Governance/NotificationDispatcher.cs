@@ -35,6 +35,7 @@ public sealed partial class NotificationDispatcher(
     ISubscriptionRepository subscriptions,
     IEnvironmentRepository environments,
     IEnumerable<INotificationChannel> channels,
+    IWebhookSigningKeyStore signingKeys,
     IUnitOfWork unitOfWork,
     TimeProvider clock,
     ILogger<NotificationDispatcher> logger)
@@ -53,7 +54,7 @@ public sealed partial class NotificationDispatcher(
     {
         var now = clock.GetUtcNow();
 
-        var due = await outbox.ClaimDueAsync(now, BatchSize, cancellationToken)
+        var due = await outbox.ClaimDueAcrossTenantsAsync(now, BatchSize, cancellationToken)
             .ConfigureAwait(false);
 
         if (due.Count is 0)
@@ -65,19 +66,23 @@ public sealed partial class NotificationDispatcher(
         var failed = 0;
         var parked = 0;
 
-        // Subscriptions are read once per environment per pass, not once per message. A batch
-        // is usually one environment's worth of activity, and re-reading per message turns a
+        // Subscriptions are read once per (tenant, environment) per pass, not once per message.
+        // A batch is usually one tenant's worth of activity, and re-reading per message turns a
         // 50-message batch into 50 identical queries.
-        var byEnvironment = new Dictionary<EnvironmentId, IReadOnlyList<NotificationSubscription>>();
+        var byEnvironment =
+            new Dictionary<(TenantId, EnvironmentId), IReadOnlyList<NotificationSubscription>>();
 
-        foreach (var message in due)
+        foreach (var (tenantId, message) in due)
         {
-            if (!byEnvironment.TryGetValue(message.EnvironmentId, out var subscribers))
+            var key = (tenantId, message.EnvironmentId);
+
+            if (!byEnvironment.TryGetValue(key, out var subscribers))
             {
                 subscribers = await subscriptions
-                    .ListAsync(message.EnvironmentId, cancellationToken).ConfigureAwait(false);
+                    .ListAcrossTenantsAsync(tenantId, message.EnvironmentId, cancellationToken)
+                    .ConfigureAwait(false);
 
-                byEnvironment[message.EnvironmentId] = subscribers;
+                byEnvironment[key] = subscribers;
             }
 
             var wanted = subscribers.Where(s => s.Wants(message.Event)).ToList();
@@ -89,7 +94,8 @@ public sealed partial class NotificationDispatcher(
                 continue;
             }
 
-            var error = await DeliverAsync(message, wanted, cancellationToken).ConfigureAwait(false);
+            var error = await DeliverAsync(tenantId, message, wanted, cancellationToken)
+                .ConfigureAwait(false);
 
             if (error is null)
             {
@@ -121,12 +127,14 @@ public sealed partial class NotificationDispatcher(
     }
 
     private async Task<string?> DeliverAsync(
+        TenantId tenantId,
         OutboxMessage message,
         IReadOnlyList<NotificationSubscription> wanted,
         CancellationToken cancellationToken)
     {
         var environment = await environments
-            .FindAsync(message.EnvironmentId, cancellationToken).ConfigureAwait(false);
+            .FindAcrossTenantsAsync(tenantId, message.EnvironmentId, cancellationToken)
+            .ConfigureAwait(false);
 
         var notification = new Notification(
             message.Id,
@@ -153,7 +161,13 @@ public sealed partial class NotificationDispatcher(
 
             try
             {
-                await channel.SendAsync(subscription.Endpoint, notification, cancellationToken)
+                var signingSecret = subscription.SigningKeyRef is { } signingKeyRef
+                    ? await signingKeys.ResolveAsync(signingKeyRef, cancellationToken)
+                        .ConfigureAwait(false)
+                    : null;
+
+                await channel.SendAsync(
+                    subscription.Endpoint, notification, signingSecret, cancellationToken)
                     .ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

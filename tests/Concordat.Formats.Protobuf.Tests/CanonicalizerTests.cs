@@ -282,4 +282,37 @@ public class CanonicalizerTests
         Assert.True(result.IsFailure);
         Assert.Contains("proto2", result.Error!.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void AnOversizedBody_IsRejectedBeforeParsing()
+    {
+        // Padding lives in a trailing comment, so this is otherwise-valid proto3 well past
+        // Schema.MaxBodyBytes -- the point is that the size check runs before the lexer ever
+        // sees it, not that the document is otherwise unparseable.
+        var body = "syntax = \"proto3\"; message M { string a = 1; } // "
+            + new string('a', Schema.MaxBodyBytes + 1);
+
+        var result = Canonicalizer.Canonicalize(body);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ConcordatCodes.SchemaTooLarge, result.Error!.Code);
+    }
+
+    [Fact]
+    public void PathologicallyNestedMessages_AreRefusedRatherThanOverflowingTheStack()
+    {
+        // ParseMessage recurses once per nesting level. Uncaught, a StackOverflowException
+        // takes down the whole process -- not just this request -- so this has to fail as an
+        // ordinary Result before the stack runs out, not after.
+        var body = "syntax = \"proto3\";\n"
+            + string.Concat(Enumerable.Repeat("message M { ", 5_000))
+            + "string a = 1;"
+            + string.Concat(Enumerable.Repeat(" }", 5_000));
+
+        var result = Canonicalizer.Canonicalize(body);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ConcordatCodes.SchemaMalformed, result.Error!.Code);
+        Assert.Contains("nested", result.Error.Message, StringComparison.Ordinal);
+    }
 }

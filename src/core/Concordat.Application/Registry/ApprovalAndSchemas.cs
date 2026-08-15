@@ -9,7 +9,11 @@ namespace Concordat.Application.Registry;
 /// <param name="EnvironmentId">The environment.</param>
 /// <param name="SubjectName">The subject.</param>
 /// <param name="Ordinal">The version.</param>
-/// <param name="DecidedBy">Who is deciding.</param>
+/// <param name="DecidedBy">
+/// Informational only — accepted from the request body but never trusted as the audit
+/// identity, which is always <c>ICallerContext.Current.Actor</c>. A client-supplied string is
+/// attacker-assertable; the authenticated caller is not.
+/// </param>
 /// <param name="Approve"><see langword="true"/> to approve, <see langword="false"/> to reject.</param>
 public sealed record DecideVersionCommand(
     EnvironmentId EnvironmentId,
@@ -21,6 +25,7 @@ public sealed record DecideVersionCommand(
 /// <summary>Handles <see cref="DecideVersionCommand"/>.</summary>
 public sealed class DecideVersionHandler(
     ISubjectRepository subjects,
+    ICallerContext caller,
     IAuditLog audit,
     IOutbox outbox,
     IUnitOfWork unitOfWork,
@@ -39,11 +44,7 @@ public sealed class DecideVersionHandler(
             return Result<Subject>.Failure(name.Error!);
         }
 
-        var actor = ActorId.Create(command.DecidedBy);
-        if (actor.IsFailure)
-        {
-            return Result<Subject>.Failure(actor.Error!);
-        }
+        var actor = caller.Current.Actor;
 
         var subject = await subjects.FindAsync(command.EnvironmentId, name.Value, cancellationToken)
             .ConfigureAwait(false);
@@ -56,8 +57,8 @@ public sealed class DecideVersionHandler(
         }
 
         var decision = command.Approve
-            ? subject.Approve(command.Ordinal, actor.Value, clock.GetUtcNow())
-            : subject.Reject(command.Ordinal, actor.Value, clock.GetUtcNow());
+            ? subject.Approve(command.Ordinal, actor, clock.GetUtcNow())
+            : subject.Reject(command.Ordinal, actor, clock.GetUtcNow());
 
         if (decision.IsFailure)
         {
@@ -69,7 +70,7 @@ public sealed class DecideVersionHandler(
         audit.Append(AuditEntry.Record(
             command.EnvironmentId,
             command.Approve ? AuditAction.VersionApproved : AuditAction.VersionRejected,
-            actor.Value,
+            actor,
             name.Value.Value,
             at,
             $"version {command.Ordinal}"));
@@ -81,7 +82,7 @@ public sealed class DecideVersionHandler(
                 : NotificationEvent.BreakingChangeRejected,
             name.Value.Value,
             $"{name.Value} version {command.Ordinal} was " +
-            $"{(command.Approve ? "approved" : "rejected")} by {actor.Value.Value}.",
+            $"{(command.Approve ? "approved" : "rejected")} by {actor.Value}.",
             at));
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

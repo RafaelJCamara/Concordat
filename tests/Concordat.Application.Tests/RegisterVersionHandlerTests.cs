@@ -112,6 +112,30 @@ public class RegisterVersionHandlerTests
     }
 
     [Fact]
+    public async Task PriorVersionsAreLoadedInOneBatchRegardlessOfHistoryLength()
+    {
+        // Registration re-checks the proposal against every prior version (CompatibilityHistory)
+        // — loading that history one schema at a time turns a subject's Nth registration into N
+        // queries just to evaluate it. Regression test for that N+1 (Q1).
+        _subjects.Seed(Build.Subject(_environment));
+        _caller.Holding(Scope.SubjectWrite);
+
+        var first = await RegisterAsync(V1);
+        Assert.True(first.IsSuccess, first.Error?.Message);
+
+        var second = await RegisterAsync(V1Required);
+        Assert.True(second.IsSuccess, second.Error?.Message);
+
+        var third = await RegisterAsync(V1PlusOptional);
+        Assert.True(third.IsSuccess, third.Error?.Message);
+
+        // Never the one-at-a-time path across all three registrations, including the third,
+        // whose history already holds two prior versions.
+        Assert.Equal(0, _schemas.Finds);
+        Assert.True(_schemas.BatchFinds > 0);
+    }
+
+    [Fact]
     public async Task AMonthlyVersionLimit_RefusesBeforeTheSchemaIsEvenCanonicalised()
     {
         // Canonicalising and hashing is the expensive part of a registration. A tenant at their
@@ -142,14 +166,19 @@ public class RegisterVersionHandlerTests
     }
 
     [Fact]
-    public async Task AnEmptyRegisteredBy_IsRefusedWithActorIdInvalid()
+    public async Task AnEmptyRegisteredByStillRegistersBecauseItIsNeverTrusted()
     {
-        // The actor is the only attribution the audit trail gets. Recording a blank one is
-        // worse than refusing, because it looks like a record and answers nothing.
+        // registeredBy is informational only -- the actor of record is always the authenticated
+        // caller (M8.4), so a blank or malicious value in the request body cannot refuse the
+        // registration and cannot substitute itself into the audit trail either.
+        var subject = Build.Subject(_environment);
+        _subjects.Seed(subject);
+        _caller.Current = _caller.Current with { Actor = ActorId.Create("alice").Value };
+
         var result = await RegisterAsync(V1, registeredBy: "   ");
 
-        Assert.Equal(ConcordatCodes.ActorIdInvalid, result.Error!.Code);
-        Assert.Equal(0, _subjects.Finds);
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Equal("alice", subject.Versions[^1].RegisteredBy.Value);
     }
 
     [Fact]

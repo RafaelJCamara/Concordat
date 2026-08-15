@@ -12,7 +12,11 @@ namespace Concordat.Application.Registry;
 /// <param name="Body">The schema as authored.</param>
 /// <param name="SemanticVersion">An optional intent label, verified against the verdict.</param>
 /// <param name="Changelog">An optional note.</param>
-/// <param name="RegisteredBy">Who is registering.</param>
+/// <param name="RegisteredBy">
+/// Informational only — accepted from the request body but never trusted as the audit
+/// identity, which is always <c>ICallerContext.Current.Actor</c>. A client-supplied string is
+/// attacker-assertable; the authenticated caller is not.
+/// </param>
 /// <param name="EnvironmentName">
 /// The environment as it appeared in the route, so the row can be created if this is the first
 /// thing anyone has written to it (decision 23).
@@ -75,11 +79,12 @@ public sealed class RegisterVersionHandler(
             return Result<RegisterVersionResult>.Failure(name.Error!);
         }
 
-        var actor = ActorId.Create(command.RegisteredBy);
-        if (actor.IsFailure)
-        {
-            return Result<RegisterVersionResult>.Failure(actor.Error!);
-        }
+        // The authenticated caller, not command.RegisteredBy: the audit trail is presented as
+        // the authoritative record of who did what, and a client-supplied field is attacker-
+        // assertable -- a shared CI key could otherwise attribute a change to any colleague.
+        // caller.Current.Actor is set once at authentication and cannot be influenced by the
+        // request body.
+        var actor = caller.Current.Actor;
 
         // THE REGISTRATION POLICY, CHECKED BEFORE ANYTHING ELSE COSTS ANYTHING.
         //
@@ -172,7 +177,7 @@ public sealed class RegisterVersionHandler(
             evaluated.Value.Verdict,
             semver,
             command.Changelog,
-            actor.Value,
+            actor,
             clock.GetUtcNow());
 
         if (registered.IsFailure)
@@ -180,7 +185,7 @@ public sealed class RegisterVersionHandler(
             return Result<RegisterVersionResult>.Failure(registered.Error!);
         }
 
-        Audit(command.EnvironmentId, subject, registered.Value, actor.Value);
+        Audit(command.EnvironmentId, subject, registered.Value, actor);
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -262,19 +267,17 @@ public sealed class RegisterVersionHandler(
     private async Task<IReadOnlyList<PriorSchema>> LoadPriorsAsync(
         Subject subject, CancellationToken cancellationToken)
     {
-        var priors = new List<PriorSchema>();
+        var history = CompatibilityHistory.Of(subject);
 
-        foreach (var version in CompatibilityHistory.Of(subject))
-        {
-            var schema = await schemas.FindAsync(version.SchemaId, cancellationToken)
-                .ConfigureAwait(false);
+        // One round trip for the whole history rather than one per prior version: a subject
+        // that has been through a hundred revisions used to mean a hundred queries on every
+        // single registration against it, not just its own.
+        var bodies = await schemas.FindManyAsync(
+            [.. history.Select(v => v.SchemaId).Distinct()], cancellationToken)
+            .ConfigureAwait(false);
 
-            if (schema is not null)
-            {
-                priors.Add(new PriorSchema(version.Ordinal, schema.Body));
-            }
-        }
-
-        return priors;
+        return [.. history
+            .Where(v => bodies.ContainsKey(v.SchemaId))
+            .Select(v => new PriorSchema(v.Ordinal, bodies[v.SchemaId].Body))];
     }
 }

@@ -72,6 +72,7 @@ public static class DependencyInjection
         // thing that must be computed once rather than per request.
         services.AddSingleton<IPasswordHasher, AspNetPasswordHasher>();
         services.AddScoped<ICredentialStore, DataProtectionCredentialStore>();
+        services.AddScoped<IWebhookSigningKeyStore, DataProtectionWebhookSigningKeyStore>();
         services.AddScoped<IBrokerHealthProbe, RabbitMqBrokerHealthProbe>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 

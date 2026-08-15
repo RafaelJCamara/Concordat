@@ -310,4 +310,22 @@ public class CanonicalizerTests
         Assert.True(result.IsFailure);
         Assert.Equal(ConcordatCodes.SchemaBodyEmpty, result.Error!.Code);
     }
+
+    [Fact]
+    public void AnOversizedBody_IsRejectedBeforeParsing()
+    {
+        // Padding lives in a "doc" value, not whitespace, so this is valid Avro JSON well past
+        // Schema.MaxBodyBytes -- the point is that the size check runs before parsing ever sees
+        // it, not that the document is otherwise unparseable.
+        var body = $$"""
+            {"type":"record","name":"R","fields":[
+              {"name":"a","type":"string","doc":"{{new string('a', Schema.MaxBodyBytes + 1)}}"}
+            ]}
+            """;
+
+        var result = Canonicalizer.Canonicalize(body);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ConcordatCodes.SchemaTooLarge, result.Error!.Code);
+    }
 }

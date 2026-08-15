@@ -53,7 +53,10 @@ public sealed class EmailNotificationChannel(IOptions<SmtpOptions> options) : IN
 
     /// <inheritdoc />
     public async Task SendAsync(
-        string endpoint, Notification notification, CancellationToken cancellationToken)
+        string endpoint,
+        Notification notification,
+        string? signingSecret,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(notification);
 
@@ -145,7 +148,10 @@ public sealed class WebhookNotificationChannel(HttpClient http) : INotificationC
 
     /// <inheritdoc />
     public async Task SendAsync(
-        string endpoint, Notification notification, CancellationToken cancellationToken)
+        string endpoint,
+        Notification notification,
+        string? signingSecret,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(notification);
 
@@ -157,14 +163,31 @@ public sealed class WebhookNotificationChannel(HttpClient http) : INotificationC
             notification.Body,
             notification.OccurredAt);
 
+        var body = JsonSerializer.SerializeToUtf8Bytes(payload, Json);
+
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
-            Content = JsonContent.Create(payload, options: Json),
+            Content = new ByteArrayContent(body),
         };
+
+        request.Content.Headers.ContentType =
+            new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
 
         // Also in headers, so a receiver can deduplicate or route without parsing the body.
         request.Headers.TryAddWithoutValidation("X-Concordat-Message-Id", notification.Id.ToString());
         request.Headers.TryAddWithoutValidation("X-Concordat-Event", notification.Event);
+
+        if (signingSecret is { Length: > 0 })
+        {
+            // HMAC-SHA256 over the exact bytes sent, not a re-serialisation of the payload
+            // record: signing anything else would let a receiver's JSON library disagree with
+            // this one about whitespace or key order and reject a genuine delivery.
+            var key = System.Text.Encoding.UTF8.GetBytes(signingSecret);
+            var signature = System.Security.Cryptography.HMACSHA256.HashData(key, body);
+
+            request.Headers.TryAddWithoutValidation(
+                "X-Concordat-Signature", $"sha256={Convert.ToHexStringLower(signature)}");
+        }
 
         using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
 

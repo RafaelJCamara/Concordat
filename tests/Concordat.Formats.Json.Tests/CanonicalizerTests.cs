@@ -132,6 +132,20 @@ public class CanonicalizerTests
     }
 
     [Fact]
+    public void AnOversizedBody_IsRejectedBeforeParsing()
+    {
+        // Padding lives in a string value, not whitespace, so this is valid JSON well past
+        // Schema.MaxBodyBytes -- the point is that the size check runs before JsonDocument.Parse
+        // ever sees it, not that the document is otherwise unparseable.
+        var body = $$"""{"type":"string","description":"{{new string('a', Schema.MaxBodyBytes + 1)}}"}""";
+
+        var result = Canonicalizer.Canonicalize(body);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ConcordatCodes.SchemaTooLarge, result.Error!.Code);
+    }
+
+    [Fact]
     public void AllOfNullBooleanAndNestedArrays_RoundTrip()
     {
         const string body = """{"a":[{"b":null},[true,false]],"c":{}}""";

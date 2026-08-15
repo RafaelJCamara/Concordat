@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Net.Http.Headers;
 using Concordat.Application.Registry;
+using Concordat.Domain.Identity;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -177,6 +179,49 @@ public class RegistrationPolicyTests(ApiFactory factory)
         Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
         Assert.Equal("registration_policy_forbids", problem.ConcordatCode);
         Assert.Contains("'ci'", problem.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ACiScopedKeyCanBeIssuedAndAdmitsRegistrationWhereAPlainProducerCannot()
+    {
+        // The bug this closes: Scope.Ci grants nothing on its own and is implied by no role,
+        // not even Owner, so "an issuer cannot grant more than they hold" used to refuse every
+        // attempt to issue one -- which meant no API-minted key could ever satisfy CI_ONLY, the
+        // one policy that names ci as a requirement. An owner can attach the marker without
+        // holding it; every other requested scope is still checked normally.
+        var owner = factory.CreateClient();
+        var (_, environment) = await NewEnvironmentAsync(policy: "CI_ONLY");
+
+        var issued = await ApiFactory.ReadAsync<IssuedApiKeyResponse>(
+            await owner.PostAsJsonAsync(
+                "/v1/api-keys",
+                new IssueApiKeyRequest("pipeline", [Scope.SubjectWrite, Scope.Ci]),
+                ApiFactory.Json));
+
+        Assert.Contains(Scope.Ci, issued.Key.Scopes);
+
+        var pipeline = factory.CreateClient();
+        pipeline.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", issued.Secret);
+
+        Assert.Equal(
+            HttpStatusCode.Created,
+            (await CreateSubjectAsync(pipeline, environment, UniqueSubject())).StatusCode);
+
+        // A producer holding subject:write but not ci is still refused -- the marker is what
+        // CI_ONLY actually checks, not merely the write permission every key here also holds.
+        var producer = await ApiFactory.ReadAsync<IssuedApiKeyResponse>(
+            await owner.PostAsJsonAsync(
+                "/v1/api-keys",
+                new IssueApiKeyRequest("producer", [Scope.SubjectWrite]),
+                ApiFactory.Json));
+
+        var producerClient = factory.CreateClient();
+        producerClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", producer.Secret);
+
+        var refused = await CreateSubjectAsync(producerClient, environment, UniqueSubject());
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
     }
 
     [Fact]

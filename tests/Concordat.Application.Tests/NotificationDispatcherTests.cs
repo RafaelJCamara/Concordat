@@ -20,6 +20,7 @@ public class NotificationDispatcherTests
     private readonly RecordingOutbox _outbox = new();
     private readonly FakeSubscriptions _subscriptions = new();
     private readonly FakeEnvironmentStore _environments = new();
+    private readonly FakeWebhookSigningKeyStore _signingKeys = new();
     private readonly RecordingUnitOfWork _unitOfWork = new();
     private readonly FakeTimeProvider _clock = new(Now);
 
@@ -30,6 +31,7 @@ public class NotificationDispatcherTests
             _subscriptions,
             _environments,
             channels,
+            _signingKeys,
             _unitOfWork,
             _clock,
             NullLogger<NotificationDispatcher>.Instance);
@@ -232,7 +234,7 @@ public class NotificationDispatcherTests
         Assert.Equal(1, _subscriptions.Lists);
     }
 
-    private sealed record Sent(string Endpoint, Notification Notification);
+    private sealed record Sent(string Endpoint, Notification Notification, string? SigningSecret);
 
     private sealed class RecordingChannel(NotificationChannel channel) : INotificationChannel
     {
@@ -243,9 +245,12 @@ public class NotificationDispatcherTests
         public IReadOnlyList<Sent> Sent => _sent;
 
         public Task SendAsync(
-            string endpoint, Notification notification, CancellationToken cancellationToken)
+            string endpoint,
+            Notification notification,
+            string? signingSecret,
+            CancellationToken cancellationToken)
         {
-            _sent.Add(new Sent(endpoint, notification));
+            _sent.Add(new Sent(endpoint, notification, signingSecret));
             return Task.CompletedTask;
         }
     }
@@ -256,7 +261,10 @@ public class NotificationDispatcherTests
         public NotificationChannel Channel => channel;
 
         public Task SendAsync(
-            string endpoint, Notification notification, CancellationToken cancellationToken) =>
+            string endpoint,
+            Notification notification,
+            string? signingSecret,
+            CancellationToken cancellationToken) =>
             throw new HttpRequestException(message);
     }
 
@@ -271,6 +279,17 @@ public class NotificationDispatcherTests
         public Task<IReadOnlyList<NotificationSubscription>> ListAsync(
             EnvironmentId environmentId, CancellationToken cancellationToken)
         {
+            Lists++;
+            return Task.FromResult<IReadOnlyList<NotificationSubscription>>(
+                [.. _all.Where(s => s.EnvironmentId == environmentId)]);
+        }
+
+        public Task<IReadOnlyList<NotificationSubscription>> ListAcrossTenantsAsync(
+            TenantId tenantId, EnvironmentId environmentId, CancellationToken cancellationToken)
+        {
+            // The fake carries no per-subscription tenant, so this counts as a list too --
+            // SubscriptionsAreReadOncePerEnvironmentPerPass asserts on this same counter and the
+            // pump now always calls the cross-tenant overload.
             Lists++;
             return Task.FromResult<IReadOnlyList<NotificationSubscription>>(
                 [.. _all.Where(s => s.EnvironmentId == environmentId)]);
@@ -297,6 +316,10 @@ public class NotificationDispatcherTests
             Task.FromResult(_all.FirstOrDefault(e => e.Name == name));
 
         public Task<Environment?> FindAsync(EnvironmentId id, CancellationToken cancellationToken) =>
+            Task.FromResult(_all.FirstOrDefault(e => e.Id == id));
+
+        public Task<Environment?> FindAcrossTenantsAsync(
+            TenantId tenantId, EnvironmentId id, CancellationToken cancellationToken) =>
             Task.FromResult(_all.FirstOrDefault(e => e.Id == id));
 
         public Task<IReadOnlyList<Environment>> ListAsync(CancellationToken cancellationToken) =>

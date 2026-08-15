@@ -40,6 +40,24 @@ public interface IPasswordHasher
     (bool Verified, bool NeedsRehash) Verify(string hash, string password);
 }
 
+/// <summary>
+/// The shared secret <c>POST /v1/auth/bootstrap</c> must be sent, when the host requires one.
+/// </summary>
+/// <remarks>
+/// Closes the deploy-to-claim race an unauthenticated-until-claimed instance otherwise leaves
+/// open: without a token, whoever reaches a reachable instance first keeps it. An abstraction
+/// because the token is host configuration (an environment variable), not a domain concept the
+/// Application layer should read directly.
+/// </remarks>
+public interface IBootstrapPolicy
+{
+    /// <summary>
+    /// The required token, or <see langword="null"/> when the host has not configured one and
+    /// bootstrap works unauthenticated, as it always has (ADR-008).
+    /// </summary>
+    string? RequiredToken { get; }
+}
+
 /// <summary>Reads and writes local accounts (M8.1).</summary>
 public interface IUserRepository
 {

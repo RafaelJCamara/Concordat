@@ -20,15 +20,19 @@ public static class NotificationEndpoints
         group.MapGet("/", List)
             .WithSummary("List an environment's notification subscriptions")
             .Produces<IReadOnlyList<SubscriptionResponse>>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.EnvRead);
 
         group.MapPost("/", Create)
             .WithSummary("Subscribe a channel to an environment's events")
             .WithDescription(
                 "An empty event list means every event. The alternative is a subscription that " +
                 "is configured, enabled, and silently delivers nothing — which looks correct " +
-                "from every screen.")
-            .Produces<SubscriptionResponse>(StatusCodes.Status201Created)
+                "from every screen. A WEBHOOK subscription also gets a signing secret, " +
+                "returned here once: every delivery to it carries an X-Concordat-Signature " +
+                "header, an HMAC-SHA256 of the body keyed on that secret, so the receiver can " +
+                "tell this registry sent it from anything else that found the URL.")
+            .Produces<CreatedSubscriptionResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .RequireScope(Scope.EnvWrite);
@@ -51,7 +55,8 @@ public static class NotificationEndpoints
             .WithDescription(
                 "A non-zero parked count is the signal that a subscriber has been failing long " +
                 "enough to be given up on. Nothing else will say so.")
-            .Produces<OutboxDepthResponse>();
+            .Produces<OutboxDepthResponse>()
+            .RequireScope(Scope.EnvRead);
 
         return app;
     }
@@ -82,8 +87,10 @@ public static class NotificationEndpoints
         return result.IsFailure
             ? ProblemDetailsMapping.From(result.Error!)
             : TypedResults.Created(
-                $"/v1/environments/{env}/notifications/{result.Value.Id}",
-                SubscriptionResponse.From(result.Value));
+                $"/v1/environments/{env}/notifications/{result.Value.Subscription.Id}",
+                new CreatedSubscriptionResponse(
+                    SubscriptionResponse.From(result.Value.Subscription),
+                    result.Value.SigningSecret));
     }
 
     private static async Task<IResult> SetEnabled(
@@ -167,6 +174,16 @@ public sealed record SubscriptionResponse(
             subscription.CreatedAt);
     }
 }
+
+/// <summary>A newly created subscription and its one-time webhook signing secret.</summary>
+/// <param name="Subscription">The subscription.</param>
+/// <param name="SigningSecret">
+/// The secret to configure on the receiving end, for a WEBHOOK subscription. <b>This is the
+/// only time it is ever returned</b> — the registry stores only an encrypted reference and
+/// cannot show it again. Null for an EMAIL subscription, which has nothing to sign.
+/// </param>
+public sealed record CreatedSubscriptionResponse(
+    SubscriptionResponse Subscription, string? SigningSecret);
 
 /// <summary>How much the outbox is holding.</summary>
 /// <param name="Pending">Staged and not yet delivered.</param>

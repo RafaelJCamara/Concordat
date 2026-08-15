@@ -407,6 +407,51 @@ public class ClientTests
     }
 
     [Fact]
+    public void AnApiKeyOverANonLoopbackHttpAddressIsRefused()
+    {
+        // The credential rides on every request regardless of scheme (TheApiKeyIsSentAsA
+        // BearerToken below), so a non-loopback http:// BaseAddress would send it in the
+        // clear.
+        var options = new ConcordatClientOptions
+        {
+            BaseAddress = new Uri("http://registry.example.com"),
+            Environment = "test",
+            ApiKey = "cdt_test_secret",
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(options.Validate);
+        Assert.Contains("http://", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("http://localhost")]
+    [InlineData("http://127.0.0.1")]
+    public void AnApiKeyOverLoopbackHttpIsAllowed(string baseAddress)
+    {
+        var options = new ConcordatClientOptions
+        {
+            BaseAddress = new Uri(baseAddress),
+            Environment = "test",
+            ApiKey = "cdt_test_secret",
+        };
+
+        options.Validate();
+    }
+
+    [Fact]
+    public void AnApiKeyOverHttpsIsAllowed()
+    {
+        var options = new ConcordatClientOptions
+        {
+            BaseAddress = new Uri("https://registry.example.com"),
+            Environment = "test",
+            ApiKey = "cdt_test_secret",
+        };
+
+        options.Validate();
+    }
+
+    [Fact]
     public async Task TheApiKeyIsSentAsABearerToken()
     {
         var handler = new FakeHandler(_ => FakeHandler.Json(BootstrapBody()));

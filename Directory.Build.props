@@ -35,6 +35,22 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
   </PropertyGroup>
 
+  <!--
+    NuGet lock files (RestorePackagesWithLockFile) were evaluated for M13's supply-chain
+    hardening but not adopted: on the SDK this repository builds with (10.0.301), enabling it
+    repo-wide breaks `dotnet restore`/`dotnet build` against Concordat.slnx outright — solution-
+    level restore fails with NuGet.Frameworks.FrameworkException "Invalid framework identifier
+    ''" (NuGet.targets:198), reproducibly, and which project trips it moves around between runs.
+    Restoring any single project directly, with the exact same lock-file setting, works fine —
+    this is isolated to the SDK's solution-level (.slnx) restore graph construction, not this
+    repository's project files. Neither disabling restore parallelism (-p:RestoreDisableParallel)
+    nor a single MSBuild node (-m:1) changes the outcome. A lock file nobody can restore against
+    is worse than no lock file, so this stays off until a newer SDK fixes the underlying bug —
+    nuget.config's <packageSourceMapping/> (see repo root) is the supply-chain control that
+    shipped instead.
+  -->
+
+
   <PropertyGroup Label="Packaging">
     <Product>Concordat</Product>
     <Authors>Rafael Camara</Authors>

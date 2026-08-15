@@ -37,6 +37,28 @@ internal sealed class SchemaRepository(ConcordatDbContext context) : ISchemaRepo
         context.Schemas.SingleOrDefaultAsync(s => s.Id == id, cancellationToken);
 
     /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<SchemaId, Schema>> FindManyAsync(
+        IReadOnlyCollection<SchemaId> ids, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+
+        // Short-circuits rather than sending `WHERE id IN ()`: EF translates an empty Contains
+        // to a query that is always false, which is correct but is still a network round trip
+        // for an answer known ahead of time.
+        if (ids.Count == 0)
+        {
+            return new Dictionary<SchemaId, Schema>();
+        }
+
+        var distinct = ids as ISet<SchemaId> ?? ids.ToHashSet();
+
+        return await context.Schemas
+            .Where(s => distinct.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public Task<bool> IsReachableByCurrentTenantAsync(
         SchemaId id, CancellationToken cancellationToken) =>
         // Deliberately expressed over Subjects, not Schemas: Subjects carries the tenant query
@@ -104,6 +126,17 @@ internal sealed class EnvironmentRepository(ConcordatDbContext context) : IEnvir
     /// <inheritdoc />
     public Task<Environment?> FindAsync(EnvironmentId id, CancellationToken cancellationToken) =>
         context.Environments.SingleOrDefaultAsync(e => e.Id == id, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<Environment?> FindAcrossTenantsAsync(
+        TenantId tenantId, EnvironmentId id, CancellationToken cancellationToken) =>
+        context.Environments
+            .IgnoreQueryFilters()
+            .SingleOrDefaultAsync(
+                e => e.Id == id
+                    && EF.Property<Guid>(e, EnvironmentConfiguration.TenantIdProperty)
+                        == tenantId.Value,
+                cancellationToken);
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Environment>> ListAsync(CancellationToken cancellationToken) =>

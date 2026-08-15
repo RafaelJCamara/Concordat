@@ -4,6 +4,7 @@ using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 
 namespace Concordat.Api;
@@ -32,10 +33,15 @@ public static class IdentityEndpoints
             .WithDescription(
                 "Works exactly once. ADR-008 promises 'docker compose up' produces a working " +
                 "authenticated instance with no external dependency, which means the first run " +
-                "must be able to create an account — and every run after it must not.")
+                "must be able to create an account — and every run after it must not. When the " +
+                "host has a bootstrap token configured, the request must carry it in 'token' " +
+                "or this answers 401 -- otherwise whoever reaches a public instance first would " +
+                "keep it.")
             .Produces<MemberResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .RequireRateLimiting("auth-attempt");
 
         auth.MapPost("/signup", SignUp)
             .WithSummary("Create an organisation and its first owner")
@@ -44,7 +50,8 @@ public static class IdentityEndpoints
                 "is one organisation and this is not the way to get it — use /bootstrap.")
             .Produces<SignedUpResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status409Conflict);
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .RequireRateLimiting("auth-attempt");
 
         auth.MapPost("/signin", SignIn)
             .WithSummary("Exchange an email and password for a credential")
@@ -54,7 +61,8 @@ public static class IdentityEndpoints
                 "It is also set as an httpOnly cookie so a browser reload does not sign you " +
                 "out -- see POST /v1/auth/resume.")
             .Produces<SignInResponse>()
-            .ProducesProblem(StatusCodes.Status401Unauthorized);
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .RequireRateLimiting("auth-attempt");
 
         auth.MapPost("/resume", Resume)
             .WithSummary("Recover the credential from the session cookie")
@@ -144,7 +152,8 @@ public static class IdentityEndpoints
         ArgumentNullException.ThrowIfNull(request);
 
         var result = await dispatcher.SendAsync(
-            new BootstrapOwnerCommand(request.Email, request.DisplayName, request.Password),
+            new BootstrapOwnerCommand(
+                request.Email, request.DisplayName, request.Password, request.Token),
             cancellationToken).ConfigureAwait(false);
 
         return result.IsFailure
@@ -406,8 +415,11 @@ public static class IdentityEndpoints
 /// <param name="Email">The login.</param>
 /// <param name="Password">At least 12 characters.</param>
 /// <param name="DisplayName">What to show; defaults to the address's local part.</param>
+/// <param name="Token">
+/// The shared secret, required only when the host has a bootstrap token configured.
+/// </param>
 public sealed record BootstrapRequest(
-    string Email, string Password, string? DisplayName = null);
+    string Email, string Password, string? DisplayName = null, string? Token = null);
 
 /// <summary>Request to create an organisation and its first owner.</summary>
 /// <param name="OrganisationName">What the organisation calls itself.</param>

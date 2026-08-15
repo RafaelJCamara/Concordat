@@ -252,4 +252,22 @@ public class BootstrapHandlerTests
 
         Assert.Empty(result.Value.Subjects);
     }
+
+    [Fact]
+    public async Task LatestSchemasAreLoadedInOneBatchRegardlessOfSubjectCount()
+    {
+        // The doc comment on this handler promises "one request instead of N" to the client.
+        // That promise is broken from the inside if answering it costs one schema lookup per
+        // subject — this is the regression test for that specific N+1 (Q1).
+        for (var i = 0; i < 5; i++)
+        {
+            Publish($"acme.orders.Order{i}", Build.JsonSchema($$"""{"type":"object","x":{{i}}}"""));
+        }
+
+        var result = await BootstrapAsync();
+
+        Assert.Equal(5, result.Value.Subjects.Count);
+        Assert.Equal(1, _schemas.BatchFinds);
+        Assert.Equal(0, _schemas.Finds);
+    }
 }

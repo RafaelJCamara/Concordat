@@ -1,5 +1,6 @@
 using Concordat.Application.Abstractions;
 using Concordat.Application.Registry;
+using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 using Concordat.Formats.Abstractions;
@@ -27,12 +28,14 @@ public static class SchemaEndpoints
                 "An unreachable id returns 404, identical to one that does not exist — a " +
                 "distinct 403 would confirm another tenant's schema exists.")
             .Produces<SchemaResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
 
         group.MapGet("/{id}/subjects", GetUsages)
             .WithSummary("List the subjects and versions using a schema")
             .Produces<IReadOnlyList<SchemaUsage>>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
 
         group.MapGet("/{id}/bundled", GetBundled)
             .WithSummary("Get a schema as one self-contained document")
@@ -43,7 +46,8 @@ public static class SchemaEndpoints
                 "would make canonicalisation depend on registry state, and no SDK could then " +
                 "reproduce a schema id offline.")
             .Produces<BundledSchemaResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
 
         group.MapPost("/lookup", Lookup)
             .WithSummary("Find the id a schema document would receive")

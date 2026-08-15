@@ -329,6 +329,11 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(1024)")
                         .HasColumnName("events");
 
+                    b.Property<string>("SigningKeyRef")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("signing_key_ref");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -855,6 +860,32 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                     b.HasKey("Reference");
 
                     b.ToTable("broker_credential", (string)null);
+                });
+
+            modelBuilder.Entity("Concordat.Infrastructure.Persistence.StoredSigningKey", b =>
+                {
+                    b.Property<string>("Reference")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("signing_key_ref");
+
+                    b.Property<string>("Ciphertext")
+                        .IsRequired()
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)")
+                        .HasColumnName("ciphertext");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Reference");
+
+                    b.ToTable("webhook_signing_key", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>

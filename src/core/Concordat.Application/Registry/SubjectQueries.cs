@@ -233,16 +233,19 @@ public sealed class CheckCompatibilityHandler(
 
         // The same history registration uses. A dry run that answered a different question
         // from the gate would be worse than no dry run at all.
-        var priors = new List<PriorSchema>();
-        foreach (var version in CompatibilityHistory.Of(subject))
-        {
-            var schema = await schemas.FindAsync(version.SchemaId, cancellationToken)
-                .ConfigureAwait(false);
-            if (schema is not null)
-            {
-                priors.Add(new PriorSchema(version.Ordinal, schema.Body));
-            }
-        }
+        //
+        // One round trip for the whole history rather than one per prior version — this is a
+        // read endpoint with no billing gate ahead of it to absorb the cost, so it is the one
+        // most exposed to a subject with a long history being queried repeatedly (CI running
+        // `check` on every push, for instance).
+        var history = CompatibilityHistory.Of(subject);
+        var bodies = await schemas.FindManyAsync(
+            [.. history.Select(v => v.SchemaId).Distinct()], cancellationToken)
+            .ConfigureAwait(false);
+        var priors = history
+            .Where(v => bodies.ContainsKey(v.SchemaId))
+            .Select(v => new PriorSchema(v.Ordinal, bodies[v.SchemaId].Body))
+            .ToList();
 
         var policy = subject.EffectivePolicy(CompatibilityPolicy.Default);
         var evaluated = evaluator.Evaluate(

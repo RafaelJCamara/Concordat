@@ -33,6 +33,12 @@ public sealed record QueueSample(
 /// </remarks>
 public static class QueueSampler
 {
+    // Encoding.UTF8 uses replacement-character fallback, which never throws -- a binary
+    // payload silently becomes a garbled string fed to the inferrer instead of being
+    // recognised as binary and skipped. This is the same strict decoder SchemaEnforcer uses
+    // on the enforcement path, for the same reason.
+    private static readonly UTF8Encoding StrictUtf8 = new(false, throwOnInvalidBytes: true);
+
     /// <summary>Drains up to <paramref name="max"/> messages, requeuing every one.</summary>
     /// <param name="broker">AMQP URI, for example <c>amqp://guest:guest@localhost:5672/</c>.</param>
     /// <param name="queue">The queue to read.</param>
@@ -82,7 +88,7 @@ public static class QueueSampler
 
                 try
                 {
-                    payloads.Add(Encoding.UTF8.GetString(message.Body.Span));
+                    payloads.Add(StrictUtf8.GetString(message.Body.Span));
                 }
                 catch (DecoderFallbackException)
                 {

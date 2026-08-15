@@ -21,7 +21,8 @@ public static class ContractEndpoints
         group.MapGet("/", ListContracts)
             .WithSummary("List contracts")
             .Produces<IReadOnlyList<ContractResponse>>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.ContractRead);
 
         group.MapPost("/", CreateContract)
             .WithSummary("Create a contract")
@@ -51,7 +52,8 @@ public static class ContractEndpoints
         group.MapGet("/{contract}", GetContract)
             .WithSummary("Get a contract and its bindings")
             .Produces<ContractResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.ContractRead);
 
         group.MapPost("/{contract}/publishes", AddPublishBinding)
             .WithSummary("Add a publish binding")

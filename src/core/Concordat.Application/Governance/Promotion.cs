@@ -14,7 +14,11 @@ namespace Concordat.Application.Governance;
 /// <param name="ToEnvironment">Where it is going.</param>
 /// <param name="SubjectName">The subject.</param>
 /// <param name="Ordinal">Which version, or null for the source's latest.</param>
-/// <param name="PromotedBy">Who is promoting.</param>
+/// <param name="PromotedBy">
+/// Informational only — accepted from the request body but never trusted as the audit
+/// identity, which is always <c>ICallerContext.Current.Actor</c>. A client-supplied string is
+/// attacker-assertable; the authenticated caller is not.
+/// </param>
 public sealed record PromoteVersionCommand(
     string? FromEnvironment,
     string? ToEnvironment,
@@ -73,6 +77,7 @@ public sealed class PromoteVersionHandler(
     ISubjectRepository subjects,
     ISchemaRepository schemas,
     ICompatibilityEvaluator evaluator,
+    ICallerContext caller,
     IAuditLog audit,
     IOutbox outbox,
     IUnitOfWork unitOfWork,
@@ -115,11 +120,7 @@ public sealed class PromoteVersionHandler(
             return Result<PromotionResult>.Failure(name.Error!);
         }
 
-        var actor = ActorId.Create(command.PromotedBy ?? "unknown");
-        if (actor.IsFailure)
-        {
-            return Result<PromotionResult>.Failure(actor.Error!);
-        }
+        var actor = caller.Current.Actor;
 
         var found = await LoadSourceAsync(source.Value, name.Value, command.Ordinal, cancellationToken)
             .ConfigureAwait(false);
@@ -196,7 +197,7 @@ public sealed class PromoteVersionHandler(
             evaluated.Value.Verdict,
             sourceVersion.SemanticVersion,
             $"Promoted from {source.Value.Name.Value} version {sourceVersion.Ordinal}.",
-            actor.Value,
+            actor,
             clock.GetUtcNow());
 
         if (registered.IsFailure)
@@ -209,7 +210,7 @@ public sealed class PromoteVersionHandler(
         audit.Append(AuditEntry.Record(
             target.Value.Id,
             AuditAction.VersionPromoted,
-            actor.Value,
+            actor,
             name.Value.Value,
             clock.GetUtcNow(),
             $"{source.Value.Name.Value} v{sourceVersion.Ordinal} -> " +
@@ -225,7 +226,7 @@ public sealed class PromoteVersionHandler(
             name.Value.Value,
             $"{name.Value} was promoted from {source.Value.Name.Value} " +
             $"v{sourceVersion.Ordinal} into {target.Value.Name.Value} as v{landed.Ordinal} " +
-            $"({WireTokens.For(landed.Status)}) by {actor.Value.Value}.",
+            $"({WireTokens.For(landed.Status)}) by {actor.Value}.",
             clock.GetUtcNow()));
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -299,19 +300,17 @@ public sealed class PromoteVersionHandler(
     private async Task<IReadOnlyList<PriorSchema>> LoadPriorsAsync(
         Subject subject, CancellationToken cancellationToken)
     {
-        var priors = new List<PriorSchema>();
+        var history = CompatibilityHistory.Of(subject);
 
-        foreach (var version in CompatibilityHistory.Of(subject))
-        {
-            var schema = await schemas.FindAsync(version.SchemaId, cancellationToken)
-                .ConfigureAwait(false);
+        // One round trip for the whole history rather than one per prior version: a subject
+        // that has been through a hundred revisions used to mean a hundred queries on every
+        // single promotion into it, not just its own.
+        var bodies = await schemas.FindManyAsync(
+            [.. history.Select(v => v.SchemaId).Distinct()], cancellationToken)
+            .ConfigureAwait(false);
 
-            if (schema is not null)
-            {
-                priors.Add(new PriorSchema(version.Ordinal, schema.Body));
-            }
-        }
-
-        return priors;
+        return [.. history
+            .Where(v => bodies.ContainsKey(v.SchemaId))
+            .Select(v => new PriorSchema(v.Ordinal, bodies[v.SchemaId].Body))];
     }
 }

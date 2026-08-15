@@ -184,9 +184,10 @@ tenant itself — `ITenantContext`'s own doc comment already says as much.
 
 `SessionStore` holds the bearer credential **in memory only** — not `localStorage`, not
 `sessionStorage`. A token in web storage is readable by any script on the page, and this
-project has already declined to ship one XSS hole (ADR-006). The cost is that a reload signs
-the user out. M8 has to choose between a refresh flow and an httpOnly cookie; until then
-there is no sign-in at all, so nothing is lost.
+project has already declined to ship one XSS hole (ADR-006). **Closed 2026-08-14 by decision
+26**: an httpOnly `SameSite=Strict` session cookie whose only power is handing back this same
+credential via `POST /v1/auth/resume`, called by `SessionApi.resume()` on startup. A reload no
+longer signs the user out, and the credential still never touches web storage.
 
 ### 3.7 The toolchain's Node floor is above the machine's Node
 

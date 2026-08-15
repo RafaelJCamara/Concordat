@@ -264,6 +264,69 @@ public class MiddlewareIntegrationTests(PlainBrokerFixture broker)
     }
 
     [Fact]
+    public async Task AnAutoAckViolationIsQuarantinedWithoutNackingAnAlreadySettledDelivery()
+    {
+        // The broker settles an auto-ack delivery on dispatch, before the consumer even sees
+        // it. Nacking that delivery tag afterwards is a protocol error a broker can answer by
+        // closing the channel -- which would be the M9 regression: the channel this consumer's
+        // own quarantine publish depends on going down mid-quarantine. Proven black-box, by
+        // using the channel again afterward rather than by asserting on nack calls, because a
+        // protocol-level fault is what a broker does, not something this process throws.
+        var (enforcer, options, counters) = Build(EnforcementMode.Enforce);
+
+        await using var connection = await broker.ConnectAsync();
+        await using var raw = await connection.CreateChannelAsync();
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var queue = $"app-{suffix}";
+        var quarantineQueue = $"quarantined-{suffix}";
+        options.QuarantineExchange = $"concordat.quarantine.{suffix}";
+
+        await raw.QueueDeclareAsync(queue, durable: false, exclusive: false, autoDelete: false);
+        await raw.ExchangeDeclareAsync(
+            options.QuarantineExchange, ExchangeType.Topic, durable: true, autoDelete: false);
+        await raw.QueueDeclareAsync(quarantineQueue, durable: false, exclusive: false, autoDelete: false);
+        await raw.QueueBindAsync(quarantineQueue, options.QuarantineExchange, "#");
+
+        // No Channel on the application consumer: under autoAck the broker has already
+        // settled the delivery, so acking it too would be the same protocol error this test
+        // exists to prove the quarantine path no longer commits on the nack side.
+        var application = new RecordingConsumer();
+        var consumer = new ConcordatConsumer(application, raw, enforcer, options, queue, autoAck: true);
+
+        // Enveloped, as a real producer's SDK would send it -- SchemaEnforcer resolves the
+        // schema to validate against from these headers, not from properties.Type alone.
+        var properties = Properties();
+        properties.Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["concordat-v"] = "1",
+            ["concordat-schema-id"] = SchemaIdHex,
+            ["concordat-subject"] = Subject,
+            ["concordat-format"] = "json",
+        };
+
+        await raw.BasicPublishAsync(string.Empty, queue, mandatory: true, properties, Violating);
+        await raw.BasicConsumeAsync(queue, autoAck: true, consumerTag: string.Empty,
+            noLocal: false, exclusive: false, arguments: null, consumer);
+
+        var quarantined = await WaitAsync(raw, quarantineQueue);
+        Assert.True(quarantined is not null, "the violating message never reached quarantine.");
+        Assert.Equal(1, counters.Count(EnforcementSide.Consume, EnforcementOutcome.Quarantined));
+
+        // The channel is still alive: a real round trip, not merely "no exception was thrown"
+        // from the delivery handler, which would not catch a broker-initiated channel close.
+        await raw.BasicPublishAsync(string.Empty, queue, mandatory: true, Properties(), Conforming);
+
+        await WaitUntilAsync(() =>
+        {
+            lock (application.Delivered)
+            {
+                return application.Delivered.Contains("{\"id\":1}");
+            }
+        });
+    }
+
+    [Fact]
     public async Task MonitorModeDeliversTheViolationToTheApplication()
     {
         var (enforcer, options, counters) = Build(EnforcementMode.Monitor);

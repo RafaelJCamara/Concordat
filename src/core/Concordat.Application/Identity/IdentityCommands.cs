@@ -12,12 +12,16 @@ namespace Concordat.Application.Identity;
 /// <param name="Email">The owner's login.</param>
 /// <param name="DisplayName">What to show.</param>
 /// <param name="Password">The plaintext, checked against the length rule and then hashed.</param>
+/// <param name="Token">
+/// The shared secret, when the host has a bootstrap token configured. Ignored when it does not.
+/// </param>
 /// <remarks>
 /// <b>It works exactly once.</b> ADR-008 promises that <c>docker compose up</c> produces a
 /// working authenticated instance with no external dependency, which means the first run has to
 /// be able to create an account without one — and every run after that must not.
 /// </remarks>
-public sealed record BootstrapOwnerCommand(string? Email, string? DisplayName, string? Password)
+public sealed record BootstrapOwnerCommand(
+    string? Email, string? DisplayName, string? Password, string? Token = null)
     : ICommand<User>;
 
 /// <summary>Invites a member, or changes an existing one's role.</summary>
@@ -61,6 +65,7 @@ public sealed class BootstrapOwnerHandler(
     IUserRepository users,
     ITenantRepository tenants,
     IPasswordHasher passwords,
+    IBootstrapPolicy bootstrapPolicy,
     IAuditLog audit,
     IDeploymentLog deployments,
     IUnitOfWork unitOfWork,
@@ -73,6 +78,17 @@ public sealed class BootstrapOwnerHandler(
         BootstrapOwnerCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
+
+        // Checked before anything else touches the database. A host with no token configured
+        // (RequiredToken is null) behaves exactly as before — this is additive, never a new way
+        // to fail a deployment that never opted in.
+        if (!TokenMatches(bootstrapPolicy.RequiredToken, command.Token))
+        {
+            return Result<User>.Failure(
+                ConcordatCodes.Unauthenticated,
+                "A bootstrap token is required to claim this instance. Send it as 'token' in " +
+                "the request body.");
+        }
 
         // Checked first and re-checked by a unique index. A race between two first-run requests
         // would otherwise create two owners, and the loser would be a full-privilege account
@@ -147,6 +163,25 @@ public sealed class BootstrapOwnerHandler(
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return created;
+    }
+
+    // Hashed before comparing rather than compared directly: CryptographicOperations
+    // .FixedTimeEquals requires equal-length spans, and a raw length check ahead of it would
+    // leak the token's length through timing. Hashing first fixes both inputs to 32 bytes.
+    private static bool TokenMatches(string? required, string? presented)
+    {
+        if (string.IsNullOrEmpty(required))
+        {
+            return true;
+        }
+
+        var expected = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(required));
+        var actual = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(presented ?? string.Empty));
+
+        return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+            expected, actual);
     }
 }
 
@@ -348,7 +383,14 @@ public sealed class IssueApiKeyHandler(
             return Result<IssuedApiKey>.Failure(parsed.Error!);
         }
 
-        var exceeded = requested.Where(s => !current.Allows(s)).ToList();
+        // Scope.Ci is exempt from "must already hold it": it is a marker, not a permission --
+        // it grants nothing on its own (Scope.cs) and is deliberately implied by no role, Owner
+        // included, so that being an administrator does not make you a build pipeline. Applying
+        // the delegation rule to it anyway would mean nobody could ever issue a CI-scoped key
+        // at all, which makes RegistrationPolicy.CiOnly unreachable by any API-minted
+        // credential -- the opposite of what the policy is for. What still needs delegating is
+        // every scope requested alongside it, subject:write included.
+        var exceeded = requested.Where(s => s is not Scope.Ci && !current.Allows(s)).ToList();
 
         if (exceeded.Count > 0)
         {

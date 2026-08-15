@@ -13,17 +13,36 @@ internal sealed class Outbox(ConcordatDbContext context) : IOutbox
 
     /// <inheritdoc />
     /// <remarks>
+    /// <para>
+    /// <c>IgnoreQueryFilters</c>, deliberately: the pump runs with no request and therefore no
+    /// tenant, and a tenant-scoped query here would silently drain only whichever tenant an
+    /// unauthenticated caller resolves to — every other tenant's outbox would back up forever
+    /// with nothing ever failing loudly (M9.5).
+    /// </para>
+    /// <para>
     /// Tracked, not <c>AsNoTracking</c>: the pump mutates what it claims and saves it back
     /// through the same unit of work.
+    /// </para>
     /// </remarks>
-    public async Task<IReadOnlyList<OutboxMessage>> ClaimDueAsync(
-        DateTimeOffset now, int batchSize, CancellationToken cancellationToken) =>
-        await context.Outbox
+    public async Task<IReadOnlyList<(TenantId TenantId, OutboxMessage Message)>>
+        ClaimDueAcrossTenantsAsync(
+            DateTimeOffset now, int batchSize, CancellationToken cancellationToken)
+    {
+        var rows = await context.Outbox
+            .IgnoreQueryFilters()
             .Where(m => m.DeliveredAt == null && !m.Parked && m.NextAttemptAt <= now)
             .OrderBy(m => m.OccurredAt)
             .Take(batchSize)
+            .Select(m => new
+            {
+                TenantId = EF.Property<Guid>(m, OutboxMessageConfiguration.TenantIdProperty),
+                Message = m,
+            })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+
+        return [.. rows.Select(r => (new TenantId(r.TenantId), r.Message))];
+    }
 
     /// <inheritdoc />
     public async Task<(int Pending, int Parked)> DepthAsync(CancellationToken cancellationToken)
@@ -48,6 +67,18 @@ internal sealed class SubscriptionRepository(ConcordatDbContext context) : ISubs
         EnvironmentId environmentId, CancellationToken cancellationToken) =>
         await context.Subscriptions
             .Where(s => s.EnvironmentId == environmentId)
+            .OrderBy(s => s.CreatedAt)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<NotificationSubscription>> ListAcrossTenantsAsync(
+        TenantId tenantId, EnvironmentId environmentId, CancellationToken cancellationToken) =>
+        await context.Subscriptions
+            .IgnoreQueryFilters()
+            .Where(s => s.EnvironmentId == environmentId
+                && EF.Property<Guid>(s, NotificationSubscriptionConfiguration.TenantIdProperty)
+                    == tenantId.Value)
             .OrderBy(s => s.CreatedAt)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);

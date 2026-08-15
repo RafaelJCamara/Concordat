@@ -400,4 +400,17 @@ public static class ConcordatCodes
     /// same condition with the same token, or an operator cannot alert across the fleet.
     /// </remarks>
     public const string SchemaUnresolvable = "schema_unresolvable";
+
+    /// <summary>
+    /// Two requests raced on the same row: a unique constraint or an optimistic-concurrency
+    /// check caught it at the database rather than in application logic.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately one generic code rather than naming the specific constraint: the database
+    /// is the arbiter of last resort exactly because two concurrent "create the same thing"
+    /// requests cannot both be caught by an application-level existence check first — that
+    /// check itself has the same race. A CI job or a retrying client should retry the request;
+    /// a human seeing this in a UI is looking at a genuine simultaneous edit.
+    /// </remarks>
+    public const string ConcurrentWriteConflict = "concurrent_write_conflict";
 }

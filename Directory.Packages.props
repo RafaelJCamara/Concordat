@@ -52,6 +52,10 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <!-- Same version the EF provider above pulls transitively — pinned explicitly because
+         Concordat.Migrator talks to Npgsql directly (CREATE/ALTER ROLE, which EF has no API
+         for) rather than only through the DbContext. -->
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
     <!--
       M7.2: the Data Protection key ring is persisted to the database rather than to disk, so
       a second API instance can decrypt what the first one encrypted. A disk ring would make

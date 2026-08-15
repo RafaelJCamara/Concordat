@@ -14,7 +14,18 @@ public sealed record CreateSubscriptionCommand(
     string? EnvironmentName,
     string? Channel,
     string? Endpoint,
-    IReadOnlyList<string>? Events) : ICommand<NotificationSubscription>;
+    IReadOnlyList<string>? Events) : ICommand<CreatedSubscription>;
+
+/// <summary>What creating a subscription produced.</summary>
+/// <param name="Subscription">The subscription.</param>
+/// <param name="SigningSecret">
+/// The webhook signing secret, for a <c>WEBHOOK</c> subscription — null for <c>EMAIL</c>.
+/// <b>Returned once.</b> The registry stores only an encrypted reference to it
+/// (<see cref="NotificationSubscription.SigningKeyRef"/>) and cannot show it again; losing it
+/// means deleting the subscription and creating a new one.
+/// </param>
+public sealed record CreatedSubscription(
+    NotificationSubscription Subscription, string? SigningSecret);
 
 /// <summary>Turns a subscription's delivery on or off.</summary>
 /// <param name="EnvironmentName">Which environment.</param>
@@ -37,12 +48,13 @@ public sealed record ListSubscriptionsQuery(string? EnvironmentName)
 public sealed class CreateSubscriptionHandler(
     IEnvironmentRepository environments,
     ISubscriptionRepository subscriptions,
+    IWebhookSigningKeyStore signingKeys,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
-    : ICommandHandler<CreateSubscriptionCommand, NotificationSubscription>
+    : ICommandHandler<CreateSubscriptionCommand, CreatedSubscription>
 {
     /// <inheritdoc />
-    public async Task<Result<NotificationSubscription>> HandleAsync(
+    public async Task<Result<CreatedSubscription>> HandleAsync(
         CreateSubscriptionCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -52,12 +64,12 @@ public sealed class CreateSubscriptionHandler(
 
         if (environment.IsFailure)
         {
-            return Result<NotificationSubscription>.Failure(environment.Error!);
+            return Result<CreatedSubscription>.Failure(environment.Error!);
         }
 
         if (!ChannelTokens.TryParse(command.Channel, out var channel))
         {
-            return Result<NotificationSubscription>.Failure(
+            return Result<CreatedSubscription>.Failure(
                 ConcordatCodes.SubscriptionInvalid,
                 $"Unknown channel '{command.Channel}'. Expected EMAIL or WEBHOOK.");
         }
@@ -70,7 +82,7 @@ public sealed class CreateSubscriptionHandler(
             {
                 // Refused rather than ignored. A typo would otherwise produce a subscription
                 // that is configured, enabled, and quietly delivers nothing it was meant to.
-                return Result<NotificationSubscription>.Failure(
+                return Result<CreatedSubscription>.Failure(
                     ConcordatCodes.SubscriptionInvalid,
                     $"Unknown event '{token}'. Expected one of: " +
                     $"{string.Join(", ", NotificationTokens.All)}.");
@@ -84,13 +96,30 @@ public sealed class CreateSubscriptionHandler(
 
         if (created.IsFailure)
         {
-            return created;
+            return Result<CreatedSubscription>.Failure(created.Error!);
+        }
+
+        // A receiver has no way to verify a webhook came from this registry -- or was not
+        // altered in transit past a compromised or misconfigured intermediary -- without a
+        // shared secret, so every webhook subscription gets one. Generated here rather than
+        // accepted from the caller: an operator-supplied secret would have to travel through
+        // this request's body and this process's logs, and the whole point is a value that
+        // never does.
+        string? secret = null;
+
+        if (channel is NotificationChannel.Webhook)
+        {
+            var (reference, generated) = await signingKeys
+                .GenerateAsync(cancellationToken).ConfigureAwait(false);
+
+            created.Value.SetSigningKeyRef(reference);
+            secret = generated;
         }
 
         subscriptions.Add(created.Value);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        return created;
+        return Result<CreatedSubscription>.Success(new CreatedSubscription(created.Value, secret));
     }
 }
 
@@ -127,6 +156,7 @@ public sealed class SetSubscriptionEnabledHandler(
 public sealed class DeleteSubscriptionHandler(
     IEnvironmentRepository environments,
     ISubscriptionRepository subscriptions,
+    IWebhookSigningKeyStore signingKeys,
     IUnitOfWork unitOfWork)
     : ICommandHandler<DeleteSubscriptionCommand, bool>
 {
@@ -143,6 +173,11 @@ public sealed class DeleteSubscriptionHandler(
         if (found.IsFailure)
         {
             return Result<bool>.Failure(found.Error!);
+        }
+
+        if (found.Value.SigningKeyRef is { } signingKeyRef)
+        {
+            await signingKeys.RemoveAsync(signingKeyRef, cancellationToken).ConfigureAwait(false);
         }
 
         subscriptions.Remove(found.Value);

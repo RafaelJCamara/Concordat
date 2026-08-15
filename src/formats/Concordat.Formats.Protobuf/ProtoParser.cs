@@ -30,6 +30,18 @@ internal static class ProtoParser
         "fixed32", "fixed64", "sfixed32", "sfixed64", "bool", "string", "bytes",
     };
 
+    /// <summary>
+    /// The most <c>message { message { ... } }</c> nesting this parser will follow.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ParseMessage"/> recurses once per nesting level with nothing else bounding it,
+    /// so a schema built purely to nest deeply enough would overflow the stack —
+    /// <see cref="StackOverflowException"/> cannot be caught in .NET and takes down the whole
+    /// process, not just the request parsing it. Matches <c>System.Text.Json</c>'s default
+    /// <c>MaxDepth</c>, which is what bounds the JSON Schema and Avro paths for the same reason.
+    /// </remarks>
+    private const int MaxNestingDepth = 64;
+
     /// <summary>Parses a proto3 document.</summary>
     /// <param name="source">The <c>.proto</c> text.</param>
     /// <returns>The parsed file.</returns>
@@ -92,7 +104,7 @@ internal static class ProtoParser
 
                 case "message":
                     cursor.Take();
-                    messages.Add(ParseMessage(cursor));
+                    messages.Add(ParseMessage(cursor, depth: 1));
                     break;
 
                 case "enum":
@@ -166,8 +178,15 @@ internal static class ProtoParser
         ProtoReserved Reserved,
         List<ProtoOption> Options);
 
-    private static PendingMessage ParseMessage(Cursor cursor)
+    private static PendingMessage ParseMessage(Cursor cursor, int depth)
     {
+        if (depth > MaxNestingDepth)
+        {
+            throw new MalformedProtoSchemaException(
+                $"Messages are nested more than {MaxNestingDepth} levels deep. That is deeper " +
+                "than any real schema needs and is refused rather than parsed.");
+        }
+
         var name = cursor.TakeIdentifier();
         cursor.Expect("{");
 
@@ -185,7 +204,7 @@ internal static class ProtoParser
             {
                 case "message":
                     cursor.Take();
-                    messages.Add(ParseMessage(cursor));
+                    messages.Add(ParseMessage(cursor, depth + 1));
                     break;
 
                 case "enum":

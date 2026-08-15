@@ -140,6 +140,7 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.ApplyConfiguration(new SubjectConfiguration());
         modelBuilder.ApplyConfiguration(new EnvironmentConfiguration());
         modelBuilder.ApplyConfiguration(new StoredCredentialConfiguration());
+        modelBuilder.ApplyConfiguration(new StoredSigningKeyConfiguration());
         modelBuilder.ApplyConfiguration(new ContractConfiguration());
         modelBuilder.ApplyConfiguration(new ServiceRegistrationConfiguration());
         modelBuilder.ApplyConfiguration(new AuditEntryConfiguration());
@@ -167,6 +168,9 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
 
         modelBuilder.Entity<StoredCredential>().HasQueryFilter(
             c => EF.Property<Guid>(c, SubjectConfiguration.TenantIdProperty) == CurrentTenant.Value);
+
+        modelBuilder.Entity<StoredSigningKey>().HasQueryFilter(
+            k => EF.Property<Guid>(k, SubjectConfiguration.TenantIdProperty) == CurrentTenant.Value);
 
         modelBuilder.Entity<Contract>().HasQueryFilter(
             c => EF.Property<Guid>(c, ContractConfiguration.TenantIdProperty) == CurrentTenant.Value);

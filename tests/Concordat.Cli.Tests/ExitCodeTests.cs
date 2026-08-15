@@ -69,6 +69,18 @@ public class ExitCodeTests
     }
 
     [Fact]
+    public void AnApiKeyOverANonLoopbackRegistryIsAUsageErrorRatherThanBeingSent()
+    {
+        // The credential rides on every request regardless of scheme, so this has to be
+        // caught before the first request goes out, not discovered by inspecting traffic.
+        var (code, _, stderr) = Run(
+            "check", "--registry", "http://registry.example.com", "--api-key", "cdt_test_secret");
+
+        Assert.Equal(ExitCodes.UsageError, code);
+        Assert.Contains("http://", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void HelpSucceedsAndDocumentsTheExitCodes()
     {
         var (code, stdout, _) = Run("--help");

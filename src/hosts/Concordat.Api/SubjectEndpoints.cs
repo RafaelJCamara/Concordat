@@ -32,17 +32,20 @@ public static class SubjectEndpoints
 
         group.MapGet("/", ListSubjects)
             .WithSummary("List subjects in an environment")
-            .Produces<IReadOnlyList<SubjectResponse>>();
+            .Produces<IReadOnlyList<SubjectResponse>>()
+            .RequireScope(Scope.SubjectRead);
 
         group.MapGet("/{subject}", GetSubject)
             .WithSummary("Get a subject and its versions")
             .Produces<SubjectResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
 
         group.MapGet("/{subject}/versions", ListVersions)
             .WithSummary("List versions")
             .Produces<IReadOnlyList<VersionResponse>>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
         group.MapGet("/{subject}/versions/{ordinal}", GetVersion)
             .WithSummary("Get one version")
             .WithDescription(
@@ -50,7 +53,8 @@ public static class SubjectEndpoints
                 "gated pointer (ADR-017), not the highest ordinal, so a version awaiting " +
                 "approval is never returned.")
             .Produces<VersionResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
 
         group.MapPost("/{subject}/versions", RegisterVersion)
             .WithSummary("Register a version")
@@ -94,7 +98,8 @@ public static class SubjectEndpoints
                 "changed'; filtering it by the current policy would hide differences that " +
                 "matter to a consumer generating code.")
             .Produces<DiffResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
 
         group.MapPatch("/{subject}", UpdateSubject)
             .WithSummary("Change a subject's owner, or deprecate it")
@@ -120,7 +125,8 @@ public static class SubjectEndpoints
         group.MapGet("/{subject}/compatibility-policy", GetPolicy)
             .WithSummary("Get the compatibility policy")
             .Produces<PolicyResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
 
         group.MapPut("/{subject}/compatibility-policy", SetPolicy)
             .WithSummary("Set the compatibility policy")

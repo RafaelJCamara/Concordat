@@ -140,4 +140,38 @@ public class PayloadValidatorTests
         Assert.False(result.IsValid);
         Assert.Equal("schema_uncompilable", Assert.Single(result.Errors).Kind);
     }
+
+    [Fact]
+    public void AnOversizedPayload_IsRejectedBeforeParsing()
+    {
+        var schema = Schema("""{"type":"string"}""");
+        var payload = "\"" + new string('a', NJsonSchemaPayloadValidator.MaxPayloadBytes) + "\"";
+
+        var result = Validator.Validate(schema, payload);
+
+        Assert.False(result.IsValid);
+        Assert.Equal("payload_too_large", Assert.Single(result.Errors).Kind);
+    }
+
+    [Fact]
+    public async Task ACatastrophicallyBacktrackingPattern_TimesOutRatherThanHangingTheThread()
+    {
+        // ^(a+)+$ against a run of 'a's with no terminating match is the textbook ReDoS
+        // trigger: unbounded, it explores exponentially many ways to partition the run and
+        // would pin this thread for a duration nobody would ever wait out. RegexSafety's
+        // process-wide match timeout is what turns that into a bounded, reportable failure.
+        // Both the pattern and the payload are attacker-controlled in production -- the
+        // pattern from a registered schema, the payload from a message on the wire.
+        var schema = Schema("""{"type":"string","pattern":"^(a+)+$"}""");
+        var payload = "\"" + new string('a', 40) + "X\"";
+
+        var validated = Task.Run(() => Validator.Validate(schema, payload));
+
+        // A generous outer bound so a genuine failure to time out fails this test instead of
+        // hanging the run forever -- RegexSafety's own timeout is 1 second.
+        var result = await validated.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.False(result.IsValid);
+        Assert.Equal("pattern_match_timeout", Assert.Single(result.Errors).Kind);
+    }
 }

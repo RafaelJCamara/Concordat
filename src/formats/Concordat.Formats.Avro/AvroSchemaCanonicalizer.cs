@@ -130,6 +130,17 @@ public sealed class AvroSchemaCanonicalizer : ISchemaCanonicalizer
                 ConcordatCodes.SchemaBodyEmpty, "A schema body is required.");
         }
 
+        // Checked before parsing, not only by Schema.Create afterwards: that check runs on the
+        // canonical output, so an oversized raw document is otherwise fully parsed -- and every
+        // recursive walk below paid for -- before anything refuses it.
+        var bytes = System.Text.Encoding.UTF8.GetByteCount(body);
+        if (bytes > Schema.MaxBodyBytes)
+        {
+            return Result<string>.Failure(
+                ConcordatCodes.SchemaTooLarge,
+                $"A schema body may be at most {Schema.MaxBodyBytes} bytes; got {bytes}.");
+        }
+
         JsonDocument document;
         try
         {
