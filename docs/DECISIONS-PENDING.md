@@ -473,7 +473,7 @@ The shape, all of which follows from "this must not touch the delivery path":
 > and calling flush on a timer. Putting a background timer inside a client library that hosts
 > already own the lifetime of is the next decision, not this one.
 
-### 26. A reload signs you out — ~~fixed~~; the browser E2E is still missing
+### 26. ~~A reload signs you out, and there is no browser E2E~~ — both done
 
 **The reload half is resolved, 2026-08-14, with option (a).** `/v1/auth/signin` now sets an
 `HttpOnly`, `SameSite=Strict` cookie alongside the credential, and `POST /v1/auth/resume` trades

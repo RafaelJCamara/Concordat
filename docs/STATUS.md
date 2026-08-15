@@ -1,6 +1,6 @@
 # What is missing
 
-**As of 2026-08-14.** A companion to [PLAN.md](PLAN.md), which records what was built, and
+**As of 2026-08-15.** A companion to [PLAN.md](PLAN.md), which records what was built, and
 [DECISIONS-PENDING.md](DECISIONS-PENDING.md), which records what has not been decided. This
 file records what is **not there**, so the gaps are in one place rather than distributed across
 ten milestone files as unchecked boxes.
@@ -87,14 +87,14 @@ only when a cookie was presented and rejected.
 | M0 foundations | 22 / 25 |
 | M1 registry core | 60 / 63 |
 | M2 .NET client | 32 / 41 |
-| M3 CLI | 18 / 19 |
-| M4 web app | 11 / 27 |
+| M3 CLI | **19 / 19** |
+| M4 web app | 15 / 28 |
 | M5 formats | 14 / 15 |
 | M6 SDKs | 5 / 24 |
 | M7 governance | 29 / 31 |
 | M8 identity | 12 / 15 |
 | M9 cloud | 11 / 16 |
-| **Total** | **214 / 276** |
+| **Total** | **219 / 277** |
 
 **Do not read that as a progress bar.** Auditing the 62 unchecked boxes found roughly 11 that
 are not work at all:
@@ -109,7 +109,9 @@ are not work at all:
 - **Three M4 items are moot.** They are corrections to a React prototype that was never ported.
   Detail below.
 
-Real remaining work is therefore closer to **51 items**, and about 31 of those are M4 and M6.
+Real remaining work is therefore closer to **47 items**, and about 32 of those are M4 and M6.
+
+M3 is the first milestone to reach 19/19, closed by `Concordat.Contracts.Testing` (decision 13).
 
 ---
 
@@ -117,15 +119,20 @@ Real remaining work is therefore closer to **51 items**, and about 31 of those a
 
 ### M4 — the web application
 
-The honest count is **12**, not the 16 unchecked boxes suggest. Every API behind these exists,
-so this is Angular work rather than design work.
+The honest count is **11**. Every API behind these exists, so this is Angular work rather than
+design work.
 
 **Genuinely missing:** Dashboard · SubjectDetail / VersionDetail / NewVersion pages ·
 ContractsPage · CompatibilityDiffPage · ImpactAnalysisPage · ApprovalsPage · AuditLogPage ·
 the settings split (environment, brokers, API keys, members) · notification forms that persist ·
-Monaco for schema editing · `ajv` for client-side validation · the two Playwright E2E passes ·
-the "preserve" list of prototype behaviours (immutable-id confirmation, semver auto-increment,
-clone-previous-version, empty states).
+Monaco for schema editing · `ajv` for client-side validation · the "preserve" list of prototype
+behaviours (immutable-id confirmation, semver auto-increment, clone-previous-version, empty
+states).
+
+**Done 2026-08-15:** the Playwright E2E suite, and the non-admin affordance test. The third
+M4.5 item — "direct URL to a write route redirects" — is blocked on M4.3 rather than unwritten:
+there is no write route to paste, and `scopeGuard` is referenced by no route at all. That also
+corrected an M4.2 line which had recorded the guard as wired.
 
 **Already done but still listed:** `LoginPage` — `sign-in-page.ts` shipped with M8.2.
 
@@ -192,22 +199,82 @@ Nothing here can be done from inside the repository.
 
 ---
 
+## What the tests actually cover
+
+Six kinds, not one. Worth knowing which, because "1,493 tests" says nothing about what would
+survive being wrong.
+
+| Kind | Where | Tests | What it proves |
+|---|---|---|---|
+| Domain unit | `Domain.Tests`, three `Formats.*` | ~840 | Invariants in isolation. No I/O |
+| Application handler | `Application.Tests` | 155 | Handler refusals and **ordering**, with hand-written fakes |
+| HTTP integration | `Api.IntegrationTests` | 216 | Real HTTP against real PostgreSQL, via Testcontainers |
+| Conformance corpus | `Conformance` | 99, over 98 fixtures | The protocol as an executable spec |
+| Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 63 | Publish and consume through real RabbitMQ |
+| Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
+| Browser end-to-end | `web/e2e` | 11 | A real Chromium against the real stack |
+
+Plus 188 Angular unit tests.
+
+**No mocking framework, deliberately.** No Moq, NSubstitute, FluentAssertions or AutoFixture —
+`Directory.Packages.props` carries xunit, Testcontainers and `TimeProvider.Testing`. Every double
+is hand-written in `TestSupport/Fakes.cs`, which is what lets `Application.Tests` assert things
+like *"this refusal cost zero meter calls and staged nothing"* — a property mock-verify tends to
+hide rather than express.
+
+**`Application.Tests` is mostly about ordering.** The dominant shape is *"a refusal must happen
+before anything is spent"*: no canonicalisation, no billing round trip, no staged schema.
+
+**`HeaderSurvival` does not test our code at all.** It raises three brokers — two for federation
+alone — and measures whether `concordat-*` headers survive dead-lettering, shovel, federation,
+STOMP, MQTT and the AMQP 1.0 conversion. Those measurements are load-bearing: they are what
+scoped binary framing out of v1 (decision 19).
+
+**The corpus is a specification, not a suite.** 98 fixtures, each carrying a `why`, enforced by
+`EveryFixtureExplainsWhyItExists`. It is what M6's SDKs will be built against, which is why
+recent protocol changes landed there rather than only in C#.
+
+### Where the layers have failed each other
+
+Three structural tests exist because a gap between two correct halves shipped anyway:
+
+- `EveryMutatingRouteDeclaresAScope` — caught unguarded routes twice.
+- `TheVocabularyMatchesWhatTheFrontendPublishes` — caught the `ci` scope drifting.
+- `VersionStatusesMatchWhatTheFrontendPublishes` — **added 2026-08-15, after a browser found
+  the subject list broken.** The pattern was already known and had been applied to scopes only.
+
+### Still thin
+
+- **No load, soak or property-based tests.** The outbox pump and the violation reporter have no
+  concurrency test beyond what their unique indexes enforce.
+- **Coverage is collected and never read**, which is decision 4 and deliberate.
+- **CI now splits**: `build & test`, `web app`, and a separate `browser end-to-end` that runs the
+  API and dev server from source. A domain-unit change still waits on the broker containers in
+  the first job.
+
+---
+
 ## Decisions
 
-**15 open**, and every one of them is now either waiting on a fact only the owner has, a
-judgement call of mine to confirm, or an account somebody has to open. The whole of the
-"say yes and I go fix it" group was worked through on 2026-08-14.
+**10 open.** The "say yes and I go fix it" group was worked through on 2026-08-14, and the
+owner's own-estate questions — #14 exchange rights, #10 generic types, #8 pre-release labels —
+plus #17's Avro window were answered and built on 2026-08-15.
 
-Three worth reading first:
+What is left splits three ways:
 
-- **#17 — Avro's canonical form.** The only one with a closing window: free to overturn until
-  the first Avro schema is stored, then it is a preimage bump and a migration.
-- **#33 — `ci` is a marker scope and no role grants it.** A human cannot register into a
-  `CI_ONLY` environment however senior, and neither can an unclaimed instance. Both are
-  intentional and both will read as bugs the first time they are hit.
-- **#14, #10, #8** — one-liners about the owner's own estate (does it let applications declare
-  exchanges, do its publishers send generic types, does its pipeline emit `-rc` labels) that
-  nobody else can answer and that each unblock a documented gap.
+| | |
+|---|---|
+| **Recent calls of mine, to confirm or overturn** | #30 contract beats local `Mode` · #31 `BasicConsumeAsync` wraps consumers · #32 pinned bindings judge `latest` · #33 `ci` is a marker scope · #34 the policy gates subject creation |
+| **Product decisions still genuinely open** | #15 hard-delete semantics · #24 whether the audit trail records refusals |
+| **Accounts and admin** | #1 repo rename (two clicks) · #3 reserve the unreserved names · #28 is informational |
+
+**#33 is the one most likely to surprise.** No role grants `ci`, including Owner — so a human
+cannot register into a `CI_ONLY` environment however senior, and neither can an unclaimed
+instance. Both are intentional; both will read as bugs the first time they are hit.
+
+**#24 got cheaper on 2026-08-14.** Recording refusals needs a write path that is deliberately
+*not* transactional with the thing that did not happen — and `DeploymentEvent`, built for
+decision 29, is already exactly that shape.
 
 ---
 
@@ -227,9 +294,17 @@ curl localhost:5062/health/ready
 # 4. the sample publishes a valid message and then an invalid one
 dotnet run --project samples/Quickstart -c Release
 
-# 5. stop it
-docker compose --profile registry down          # add -v to drop the database volume
+# 5. the web app, on :4300 -- not in the compose stack, see above
+cd ../../web && npm start -- --port 4300
+
+# 6. the browser suite, against both of the above
+npm run e2e            # or e2e:headed to watch it
+
+# 7. stop it
+cd ../deploy/compose && docker compose --profile registry down   # -v drops the database
 ```
 
 The `concordat-postgres` volume persists between runs, so a second `up` starts with whatever the
-first one wrote.
+first one wrote. The E2E suite claims the instance on first run and is idempotent afterwards; if
+you have already claimed it by hand, point the suite at that account with `CONCORDAT_E2E_OWNER`
+and `CONCORDAT_E2E_PASSWORD`. See [`web/e2e/README.md`](../web/e2e/README.md).
