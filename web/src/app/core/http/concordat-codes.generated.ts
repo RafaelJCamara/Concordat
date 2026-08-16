@@ -90,6 +90,7 @@ export const DOMAIN_CONCORDAT_CODES = [
   'version_not_awaiting_approval',
   'changelog_too_long',
   'schema_unresolvable',
+  'concurrent_write_conflict',
 ] as const;
 
 /** A code from the domain catalogue. */

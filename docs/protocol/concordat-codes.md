@@ -104,8 +104,9 @@ token and an operator can alert across a fleet.
 | `version_not_awaiting_approval` | The version is not awaiting approval, so it cannot be approved or rejected. |
 | `changelog_too_long` | A changelog exceeded the permitted length. |
 | `schema_unresolvable` | A client could not resolve a schema, so the operation could not be enforced. |
+| `concurrent_write_conflict` | Two requests raced on the same row: a unique constraint or an optimistic-concurrency check caught it at the database rather than in application logic. |
 
-**81 codes.**
+**82 codes.**
 
 ## Rules for implementers
 
