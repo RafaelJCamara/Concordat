@@ -149,9 +149,12 @@ correctly — and then delivered whenever the next HTTP request happens to wake 
 view every message is still pending and will be retried. A quiet weekend looks exactly like
 a working system.
 
-**What the template deliberately does not do** is written down in
-[`deploy/azure/README.md`](../../deploy/azure/README.md) rather than left to be discovered:
-no VNet integration, no custom domain, no database HA.
+**What the template deliberately does not do by default** is written down in
+[`deploy/azure/README.md`](../../deploy/azure/README.md) rather than left to be discovered: no
+custom domain, no database HA. VNet integration was in that list until 2026-08-16 — it is now an
+opt-in (`usePrivateNetworking`), off by default because it can only be chosen before the first
+deployment and still roughly triples what a first deployment has to understand. See
+[decision 28](../DECISIONS-PENDING.md), part (b).
 
 ---
 

@@ -115,9 +115,13 @@ curl http://localhost:5062/v1/auth/status
 { "claimed": false, "authenticated": true, "actor": "unclaimed-instance", "scopes": ["..."] }
 ```
 
-- **`"claimed": false`** — every write succeeds unauthenticated. The quickstart sample runs as
-  written. The registry logs a warning on a loop telling you this, which is the point.
-- **`"claimed": true`** — writes need a credential, and anything unauthenticated gets **401**.
+- **`"claimed": false`** — every request succeeds unauthenticated, reads and writes alike. The
+  quickstart sample runs as written. The registry logs a warning on a loop telling you this,
+  which is the point.
+- **`"claimed": true`** — every request needs a credential, and anything unauthenticated gets
+  **401** ([ADR-027](adr/027-read-requires-authentication.md)) — a plain `curl` against
+  `GET /v1/environments/dev/subjects` on a claimed instance now needs the same `Authorization`
+  header a write does.
 
 Claiming happens exactly once and cannot be repeated:
 
@@ -220,8 +224,12 @@ dotnet format Concordat.slnx --verify-no-changes
 
 ## Troubleshooting
 
-**`401 (Unauthorized)` from the sample, or from any write.** The instance is claimed. See
+**`401 (Unauthorized)` from the sample, or from any read or write.** The instance is claimed. See
 [step 4](#4-claim-the-instance--read-this-before-anything-writes).
+
+**The web app loads to a sign-in prompt where you expected the subject list.** Correct, not
+broken, on a claimed instance: [ADR-027](adr/027-read-requires-authentication.md) gates reads too,
+and `signedInGuard` sends a signed-out visitor to `/sign-in` before `/subjects` renders.
 
 **The registry will not start: address already in use on 5062.** Something else is already
 serving it — most often a `concordat-api` container left behind by the compose `registry`

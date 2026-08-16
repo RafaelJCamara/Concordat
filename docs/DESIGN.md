@@ -67,6 +67,7 @@ updating.
 | 022 | **Named Concordat. Signet, Hutch, Syngraph and Stipula were rejected first** | A concordat *is* a formal agreement between two parties — no metaphor to unpack — and it is unclaimed on NuGet, PyPI, the `@concordat` npm scope and `.dev`/`.io`/`.sh`. The highest-starred GitHub repo bearing the name has **zero** stars. `crates.io/concordat` is taken and irrelevant: ADR-021 ships no Rust SDK. Maven uses `io.github.rafaeljcamara`, so no domain sits on the critical path. **Rejected, recorded so they don't resurface:** *Signet* — `Signet.Client` (NuGet) and `signet-client` (PyPI) are published by an **active** project, `bytepunx/signet-proto`, PyPI upload 2026-08-08 — the exact two package names ADR-021 depends on, in the same registries, for the same polyglot-client shape; NuGet's `signet` id is separately held by **SigNET** (7,452 downloads; ids are case-insensitive) and `signet.dev` is registered. *Hutch* — `ruby-amqp/hutch` (878 stars) is "a system for processing messages from RabbitMQ": same ecosystem, strictly worse than Signet. *Syngraph / Chirograph* — clean on every registry, but `-graph` reads as graph database or GraphQL to this audience. *Stipula* — the best metaphor of the lot (the straw broken in two to seal a bargain), but `stipula-language/stipula` is a DSL for legal contracts. **The transferable lesson: registry availability is not the test — ecosystem collision is.** Signet and Hutch were both free on NuGet. |
 
 | 026 | **The web app serves its own fonts** | The prototype loads Inter and JetBrains Mono from Google Fonts. Carried across unchanged, that gives a *self-hosted* registry three problems the prototype never had: it renders in fallback faces on an air-gapped network — and the monospace is load-bearing, since `acme.orders.v1` against `acme.0rders.v1` is exactly what a proportional fallback blurs — it sends every reader's IP to a third party from a page inside the customer's firewall (LG München I, 3 O 17493/20), and it puts a service nobody here operates on the first paint. The Angular trap makes it worse: `ng build` inlines the files and `ng serve` does not, so prod and dev would have differed exactly where someone would be looking. Vendored into `public/fonts/`, variable, one file per Unicode subset — `unicode-range` means a Latin reader fetches 78 kB of the 278 kB on disk. `npm run fonts:vendor` regenerates them, so the committed binaries are reproducible rather than mysterious. |
+| 027 | **Reading the registry requires authentication** | A production-readiness review found every `GET` route open to an anonymous caller — safer than it looked in `Cloud` mode, where an anonymous caller resolves to a tenant nobody is a member of (M9.1) rather than another organisation's data, but never intended, and never true in `SelfHosted` mode at all. `RequireScope` now gates reads the same as ADR-018 already gated writes, and `signedInGuard` redirects a signed-out visitor to `/sign-in` before a read route renders rather than letting it fail every request with 401. An unclaimed instance is unaffected — it already answers everyone as owner. See §5, Context E. |
 
 ### Non-goals for v1
 - **No inline AMQP proxy** — universal enforcement, but a new availability-critical hop.
@@ -381,6 +382,13 @@ patch, delete, promote — checks the scope server-side and returns `403` with
 presentation of it, not a substitute. Approve/reject (ADR-017) is admin-only for the same
 reason, which keeps the author of a breaking change from waving it through themselves
 once reviewers land in M7.
+
+**Reads require a caller too, holding no particular scope (ADR-027).** Every read
+endpoint answers `401` to an anonymous request; an unclaimed instance is unaffected,
+since it already answers every request — read or write — as owner (M8.2). The web app's
+`signedInGuard` is the read-side counterpart to §9's write-scope gating: it sends a
+signed-out visitor to `/sign-in` before a read route renders, rather than letting the
+route render and then fail every request it makes with 401.
 
 ### Context F — Notifications
 Outbox-driven `INotificationChannel`; **Email (SMTP) and Webhook in v1**, Slack later.

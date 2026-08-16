@@ -1,6 +1,6 @@
 # Browser end-to-end tests
 
-M4.5, and the open half of [decision 26](../../docs/DECISIONS-PENDING.md).
+M4.5, and [decision 26](../../docs/DECISIONS-PENDING.md) — both halves done.
 
 These drive a real Chromium against a real registry and a real database. Nothing here is
 mocked — that is the entire reason they exist.
@@ -43,19 +43,19 @@ Override either endpoint with `CONCORDAT_REGISTRY` and `CONCORDAT_WEB_URL`.
 adds a reader, and creates the `dev` environment. All three are idempotent, because claiming an
 instance is not — a suite that assumed a fresh database would pass once and fail every run after.
 
+**A signed-in browser by default.** [ADR-027](../../docs/adr/027-read-requires-authentication.md)
+made reading require a caller, and most of this suite is about reading — so `global-setup.ts`
+also signs in as OWNER through the real form once and saves the resulting `storageState`, which
+`playwright.config.ts` loads for every test. A test that is instead about being signed *out*
+(`authorization.spec.ts`'s anonymous case, `session.spec.ts`'s sign-out case) clears it for
+itself with `page.context().clearCookies()` rather than this file carrying an exception; a test
+that is about being signed in as someone specific (`READER`) still calls `signIn(page, READER)`
+as before, which simply overwrites the default session.
+
 **One worker, serially.** Every test signs in against one shared registry; parallel workers would
 race over a single global state.
 
 ## What is deliberately not here
-
-**"Direct URL to a write route redirects"**, the other test M4.5 names. There is no write route
-to paste: `app.routes.ts` has three entries — the dashboard, the subject list and sign-in — all
-of them reads, and `**` redirects everything else to the dashboard. `scopeGuard` is built,
-unit-tested, and referenced by no route.
-
-Writing it anyway would assert that `/subjects/new` redirects — and it would pass, on the
-wildcard, proving nothing. A test that passes for the wrong reason is worse than a missing one,
-because the missing one is still on the list. It goes in with M4.3's pages.
 
 **A network stub.** `design-system.spec.ts` asserts the page makes _no_ cross-origin request
 at all ([ADR-026](../../docs/adr/026-self-hosted-web-fonts.md)), which only means something

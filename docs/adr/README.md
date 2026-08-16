@@ -41,3 +41,4 @@ it; write a new one and mark the old **Superseded by**.
 | [024](024-v1-ships-dotnet-only.md) | v1 ships the .NET SDK only; Tier 2 SDKs are deferred | Accepted |
 | [025](025-generic-subject-spelling.md) | A closed generic type is spelled `Outer_of_Arg`, defined over names rather than CLR syntax | Accepted |
 | [026](026-self-hosted-web-fonts.md) | The web app serves its own fonts | Accepted |
+| [027](027-read-requires-authentication.md) | Reading the registry requires authentication | Accepted |

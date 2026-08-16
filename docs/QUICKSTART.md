@@ -68,8 +68,9 @@ database: a registry that cannot reach Postgres is not ready, but restarting it 
 
 > **This needs an unclaimed registry.** An instance with no accounts answers every request as an
 > owner, which is what makes step 4 work with no credentials anywhere in it (ADR-008). Once
-> somebody has claimed it — including the end-to-end suite, which bootstraps its own owner — every
-> write needs a credential and the sample stops on its first one with `401 (Unauthorized)`.
+> somebody has claimed it — including the end-to-end suite, which bootstraps its own owner —
+> every read and every write needs a credential ([ADR-027](adr/027-read-requires-authentication.md))
+> and the sample stops on its first request with `401 (Unauthorized)`.
 >
 > Check with `curl http://localhost:5062/v1/auth/status`. If it says `"claimed": true`, either
 > point this at a fresh database or reset with

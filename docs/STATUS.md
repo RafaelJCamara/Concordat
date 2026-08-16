@@ -1,6 +1,8 @@
 # What is missing
 
-**As of 2026-08-15.** A companion to [PLAN.md](PLAN.md), which records what was built, and
+**As of 2026-08-15**, except [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
+below, added the next day and not re-verified against the rest of this file. A companion to
+[PLAN.md](PLAN.md), which records what was built, and
 [DECISIONS-PENDING.md](DECISIONS-PENDING.md), which records what has not been decided. This
 file records what is **not there**, so the gaps are in one place rather than distributed across
 ten milestone files as unchecked boxes.
@@ -9,6 +11,52 @@ Everything under "verified locally" below was run on this machine today, against
 container image and a real PostgreSQL. Everything else is claimed on the strength of tests.
 
 ---
+
+## Security hardening, 2026-08-16
+
+A production-readiness review of the API, the infrastructure and the deploy path found 36
+issues — 2 critical, 4 high, 13 medium, 17 low or code-quality — and every one was fixed and
+verified, not just patched and trusted: real Postgres and RabbitMQ via Testcontainers, real
+Docker builds of both images, a live migrator run proving the least-privilege database role
+actually cannot run DDL, real GitHub API calls to resolve the action and image digests M13
+pinned rather than guessed ones.
+
+**The one that changed product behaviour, not just hardened it:** every read endpoint now
+requires an authenticated caller, the same as writes have since ADR-018 —
+[ADR-027](adr/027-read-requires-authentication.md). Browsing the registry, in either profile,
+now needs an account. Discovered the same way `VersionStatus.Dismissed` was in the entry above:
+CI's browser suite failed after the backend change shipped, because 24 of its 43 tests had been
+built against the original, anonymous-reads behaviour. `web/e2e/README.md` covers what the
+suite assumes now.
+
+**Critical, both closed:** an unclaimed self-hosted instance had no way to require a token
+before the first `/v1/auth/bootstrap` call, so whoever reached it first — not necessarily the
+operator — kept the instance; the shipped `docker-compose.yml` carried default database and
+broker credentials.
+
+**High, all four closed:** several `GET` routes had no scope requirement at all, ahead of and
+separate from ADR-027's blanket rule; the Cloud-mode outbox pump queried through the tenant
+filter and so delivered only one tenant's notifications, ever; the Protobuf parser had no
+recursion depth limit; JSON Schema pattern matching had no timeout, so a crafted schema could
+hang the delivery path.
+
+**Also closed:** Postgres connections now require a validated certificate chain rather than
+encryption alone; the process fails fast on a missing connection string instead of silently
+falling back; auth endpoints are rate-limited; the audit trail records the authenticated caller
+rather than a client-supplied field; the API serves CSP, HSTS and an explicit CORS policy;
+concurrent writes map to 409 instead of a bare 500; outbound webhooks are HMAC-signed per
+subscription; GitHub Actions are pinned to commit SHAs and base images to digests; the API now
+runs under a least-privilege Postgres role the migrator provisions rather than the admin login
+Postgres itself uses; Azure deployments can opt into a fully private-networking path for
+PostgreSQL ([decision 28](DECISIONS-PENDING.md), part (b)); and the N+1 schema loads in
+registration, promotion, compatibility checking and the bootstrap endpoint — the one whose own
+purpose is turning N requests into one — are now one batched query each.
+
+**A NuGet lock file was evaluated for the supply-chain pass and not shipped**: SDK 10.0.301
+breaks solution-level restore against `Concordat.slnx` when `RestorePackagesWithLockFile` is on,
+reproducibly, for reasons isolated to the SDK's `.slnx` restore-graph construction rather than
+this repository. `nuget.config`'s package source pinning shipped instead; `Directory.Build.props`
+carries the reason lock files did not.
 
 ## What runs today
 
@@ -249,9 +297,9 @@ survive being wrong.
 | Conformance corpus | `Conformance` | 99, over 98 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 63 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
-| Browser end-to-end | `web/e2e` | 42 | A real Chromium against the real stack, design system included |
+| Browser end-to-end | `web/e2e` | 43 | A real Chromium against the real stack, design system included |
 
-Plus 188 Angular unit tests.
+Plus 358 Angular unit tests.
 
 **No mocking framework, deliberately.** No Moq, NSubstitute, FluentAssertions or AutoFixture —
 `Directory.Packages.props` carries xunit, Testcontainers and `TimeProvider.Testing`. Every double

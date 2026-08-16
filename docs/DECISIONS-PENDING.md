@@ -547,20 +547,26 @@ That resolves two of the four blockers and changes a third:
 | Google / GitHub OAuth clients (M9.2) | Still yours. Needs redirect URIs on a real domain, which is [#3](#3-reserve-the-names-that-are-still-unreserved) |
 | A Stripe account (M9.3) | Still yours. Metering needs nothing from Stripe and is the obvious next build |
 
-> **Two things worth deciding soon, both consequences of Container Apps rather than of Azure:**
->
-> **(a) The outbox pump and scale-to-zero.** `minReplicas` is pinned to 1 because `OutboxPump`
-> is an in-process background worker: at zero replicas nothing polls, so notifications are
-> staged correctly and then delivered whenever the next HTTP request wakes the app. Alerts stop
-> arriving and *nothing reports an error* — from the registry's point of view every message is
-> still pending and will be retried. One always-on replica is the cheap fix. Moving the pump
-> into a Container Apps job on a cron schedule would let the API scale to zero; it is the right
-> answer if that idle cost matters and the wrong one to build before it does.
->
-> **(b) VNet integration.** The template reaches PostgreSQL through the allow-Azure-services
-> firewall rule, because a VNet-integrated environment with a private endpoint roughly triples
-> the resources on a first deployment. That is fine for an evaluation and not fine for
-> production, and the gap should close before anyone real depends on it.
+> **(a) The outbox pump and scale-to-zero — still open.** `minReplicas` is pinned to 1 because
+> `OutboxPump` is an in-process background worker: at zero replicas nothing polls, so
+> notifications are staged correctly and then delivered whenever the next HTTP request wakes the
+> app. Alerts stop arriving and *nothing reports an error* — from the registry's point of view
+> every message is still pending and will be retried. One always-on replica is the cheap fix.
+> Moving the pump into a Container Apps job on a cron schedule would let the API scale to zero;
+> it is the right answer if that idle cost matters and the wrong one to build before it does.
+
+**(b) VNet integration — resolved 2026-08-16, as an opt-in.** `usePrivateNetworking` on
+`main.bicep` provisions a VNet, a subnet delegated to PostgreSQL, and a private DNS zone, so
+PostgreSQL has no public endpoint at all rather than being reachable through the
+allow-Azure-services firewall rule. Off by default, deliberately: it can only be chosen before
+the first deployment — Azure fixes a server's public-vs-private networking mode at creation, so
+flipping it later recreates the server rather than reconfiguring it — and it still roughly
+triples the resources a first deployment has to understand. `deploy/azure/README.md` names both
+constraints where a deployer sees them before choosing.
+
+A second, related gap closed the same day: the API previously ran under the same admin
+PostgreSQL login the migration job needs for DDL. The migrator now provisions a `concordat_app`
+login scoped to CRUD on the schema and nothing else, and the API authenticates as that instead.
 
 ### 29. ~~A signup writes no audit entry~~ — done
 
