@@ -47,9 +47,14 @@ test.describe('a session', () => {
 
     // Script cannot delete an httpOnly cookie, so this only passes if the API actually cleared
     // it. A client-side-only sign-out would look identical until the next reload.
+    //
+    // Reading requires a caller (H1), so a signed-out visitor is redirected back to sign-in
+    // rather than seeing `/subjects` itself — which is the actual proof the cookie is gone:
+    // if it had survived, signedInGuard would have let this navigation through.
     await page.goto('/subjects');
 
-    await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
+    await expect(page).toHaveURL(/\/sign-in\?returnTo=%2Fsubjects/);
+    await expect(page.getByRole('button', { name: /sign in|create owner account/i })).toBeVisible();
     await expect(page.getByText(OWNER.email)).toHaveCount(0);
   });
 

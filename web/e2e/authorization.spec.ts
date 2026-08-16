@@ -38,11 +38,15 @@ test.describe('write affordances', () => {
   test('an anonymous visitor is offered none either', async ({ page }) => {
     // Not the same as a reader: an anonymous caller on an unclaimed instance is answered as an
     // OWNER by the API, so this only holds once somebody has claimed it. Global setup does.
+    //
+    // Reading requires a caller too (H1), so this is `signedInGuard` proving itself as much as
+    // it is this test: an anonymous visitor never reaches a screen that could offer the
+    // affordance in the first place, and lands on sign-in instead.
     await page.context().clearCookies();
     await page.goto('/subjects');
 
+    await expect(page).toHaveURL(/\/sign-in\?returnTo=%2Fsubjects/);
     await expect(page.getByRole('button', { name: 'New subject' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
   });
 });
 

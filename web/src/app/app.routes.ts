@@ -1,5 +1,5 @@
 import type { Routes } from '@angular/router';
-import { schemaWriteGuard } from './core/auth/scope-guard';
+import { schemaWriteGuard, signedInGuard } from './core/auth/scope-guard';
 
 /**
  * The route table.
@@ -24,6 +24,7 @@ export const routes: Routes = [
   {
     path: 'subjects',
     title: 'Subjects · Concordat',
+    canActivate: [signedInGuard],
     loadComponent: () =>
       import('./features/registry/feature/subject-list-page').then((m) => m.SubjectListPage),
   },
@@ -33,6 +34,7 @@ export const routes: Routes = [
     // whoever built the link encoded it. `routerLink` with an array does that for us.
     path: 'subjects/:name',
     title: 'Subject · Concordat',
+    canActivate: [signedInGuard],
     loadComponent: () =>
       import('./features/registry/feature/subject-detail-page').then((m) => m.SubjectDetailPage),
   },
@@ -58,6 +60,7 @@ export const routes: Routes = [
     // after the next registration, which is the reason to paste one.
     path: 'subjects/:name/versions/:ordinal',
     title: 'Version · Concordat',
+    canActivate: [signedInGuard],
     loadComponent: () =>
       import('./features/registry/feature/version-detail-page').then((m) => m.VersionDetailPage),
   },
@@ -68,6 +71,7 @@ export const routes: Routes = [
     path: '',
     pathMatch: 'full',
     title: 'Dashboard · Concordat',
+    canActivate: [signedInGuard],
     loadComponent: () =>
       import('./features/registry/feature/dashboard-page').then((m) => m.DashboardPage),
   },

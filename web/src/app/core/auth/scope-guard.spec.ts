@@ -8,7 +8,7 @@ import {
 import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Scope } from '../../domain/identity/scope';
-import { scopeGuard } from './scope-guard';
+import { scopeGuard, signedInGuard } from './scope-guard';
 import { SessionStore } from './session-store';
 
 /**
@@ -84,5 +84,48 @@ describe('scopeGuard', () => {
     // `claimed` is null on a cold start whose probe failed. Refusing is the safe direction:
     // a screen that renders and then 403s on submit reads as broken.
     expect(run('subject:write')).toBeInstanceOf(UrlTree);
+  });
+});
+
+describe('signedInGuard', () => {
+  let session: InstanceType<typeof SessionStore>;
+
+  const run = () =>
+    TestBed.runInInjectionContext(() =>
+      signedInGuard({} as ActivatedRouteSnapshot, { url: '/subjects' } as RouterStateSnapshot),
+    );
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideRouter([])] });
+    session = TestBed.inject(SessionStore);
+  });
+
+  it('lets a signed-in caller through, no matter what scopes they hold', () => {
+    // Reading needs no particular scope (scope.ts) -- holding none at all is the case that
+    // matters here, since a reader's whole point is not writing anything.
+    session.signIn({ credential: 't', actor: 'reader', scopes: [] });
+
+    expect(run()).toBe(true);
+  });
+
+  it('lets everyone through on an unclaimed instance', () => {
+    session.observeInstance({ claimed: false, actor: null, scopes: [] });
+
+    expect(run()).toBe(true);
+  });
+
+  it('sends a signed-out caller to sign in, with somewhere to come back to', () => {
+    session.observeInstance({ claimed: true, actor: null, scopes: [] });
+
+    const result = run() as UrlTree;
+
+    expect(TestBed.inject(Router).serializeUrl(result)).toBe('/sign-in?returnTo=%2Fsubjects');
+  });
+
+  it('refuses before the API has answered, rather than flashing the read surface first', () => {
+    // `claimed` is null on a cold start. This guard protects the read surface itself, so
+    // unlike scopeGuard it has no `/subjects` to fall back to -- refusing is the only safe
+    // direction, not just the preferred one.
+    expect(run()).toBeInstanceOf(UrlTree);
   });
 });

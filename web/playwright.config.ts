@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { OWNER_STORAGE_STATE } from './e2e/global-setup';
 
 /**
  * Browser end-to-end tests (M4.5, and the open half of decision 26).
@@ -53,6 +54,12 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'off',
+    // Most of this suite is about reading, and reading now requires a caller (H1) — so most
+    // tests start already signed in as OWNER, the same way a returning visitor's browser
+    // would. `global-setup.ts` produces this by signing in through the real form once. A test
+    // that is instead about being signed OUT (`authorization.spec.ts`'s anonymous cases) calls
+    // `page.context().clearCookies()` for itself rather than this file carrying an exception.
+    storageState: OWNER_STORAGE_STATE,
   },
 
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],

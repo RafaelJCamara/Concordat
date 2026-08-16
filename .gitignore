@@ -67,6 +67,9 @@ web/test-results/
 web/playwright-report/
 web/blob-report/
 web/.playwright-mcp/
+# global-setup.ts writes a live OWNER session credential here so most tests start signed in —
+# a captured credential, not source, and one a stale copy would let outlive its own session.
+web/e2e/.auth/
 # The MCP browser tools write beside the working directory, which is the repo root as often
 # as it is `web/`. Both spellings, so the artefacts land in .gitignore rather than in a diff.
 .playwright-mcp/

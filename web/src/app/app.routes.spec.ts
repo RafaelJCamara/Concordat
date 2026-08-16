@@ -1,6 +1,7 @@
 import type { Route } from '@angular/router';
 import { describe, expect, it } from 'vitest';
 import { routes } from './app.routes';
+import { signedInGuard } from './core/auth/scope-guard';
 
 /**
  * Structural tests over the route table.
@@ -46,6 +47,36 @@ describe('the route table', () => {
     );
 
     expect(unguarded.map((route) => route.path)).toEqual([]);
+  });
+
+  it('guards every read route except sign-in itself', () => {
+    // H1 closed anonymous reads server-side; a route with no guard here would still render,
+    // then fail every request it makes and report it as a broken screen rather than the
+    // sign-in prompt it actually needs. A write route counts too — schemaWriteGuard already
+    // sends an anonymous caller to sign-in on its own — so only sign-in is exempt.
+    const unguarded = routes.filter(
+      (route) =>
+        route.path !== 'sign-in' &&
+        route.loadComponent !== undefined &&
+        (route.canActivate ?? []).length === 0,
+    );
+
+    expect(unguarded.map((route) => route.path)).toEqual([]);
+  });
+
+  it('names signedInGuard specifically on every route that only reads', () => {
+    // Distinct from the check above: a route could carry *some* guard and still be the wrong
+    // one. schemaWriteGuard also keeps an anonymous caller out, so this only checks the
+    // routes that write nothing at all.
+    const unnamed = routes.filter(
+      (route) =>
+        route.path !== 'sign-in' &&
+        route.loadComponent !== undefined &&
+        !WRITE_ROUTE_MARKERS.some((marker) => (route.path ?? '').endsWith(marker)) &&
+        !(route.canActivate ?? []).includes(signedInGuard),
+    );
+
+    expect(unnamed.map((route) => route.path)).toEqual([]);
   });
 
   it('keeps the wildcard last', () => {

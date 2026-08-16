@@ -40,6 +40,34 @@ export function scopeGuard(...required: readonly Scope[]): CanActivateFn {
 }
 
 /**
+ * Keeps a read route from rendering for someone who has not signed in.
+ *
+ * Reading needs no particular scope -- every authenticated caller may read (`scope.ts`) --
+ * but it does need a caller: the API refuses an anonymous GET by default (H1). A route with
+ * no guard at all would still render here, then fail every request the page makes and report
+ * it as a broken screen instead of the sign-in prompt it actually needs.
+ *
+ * Checked against `isSignedIn` rather than `!needsSignIn`, which agree everywhere except the
+ * moment `claimed` has not resolved yet (`null`, before `/v1/auth/status` answers):
+ * `needsSignIn` reads `null` as "no" there, `isSignedIn` reads it as "not proven yet" — and
+ * this guard protects the read surface itself, so it has nowhere safe to fall back to the way
+ * `scopeGuard` falls back to `/subjects`. Refusing until proven otherwise is the same
+ * direction `scopeGuard`'s own "refuses before the API has answered" case takes.
+ */
+export const signedInGuard: CanActivateFn = (_route, state) => {
+  const session = inject(SessionStore);
+  const router = inject(Router);
+
+  // An unclaimed instance answers every request as owner server-side (M8.2), so there is
+  // nothing to gate here either.
+  if (session.claimed() === false || session.isSignedIn()) {
+    return true;
+  }
+
+  return router.createUrlTree(['/sign-in'], { queryParams: { returnTo: state.url } });
+};
+
+/**
  * The guard for routes that change a contract (ADR-018).
  *
  * Named here rather than spelled `scopeGuard(...SCHEMA_WRITE_SCOPES)` at each route, for two
