@@ -46,7 +46,7 @@ instance is not — a suite that assumed a fresh database would pass once and fa
 **A signed-in browser by default.** [ADR-027](../../docs/adr/027-read-requires-authentication.md)
 made reading require a caller, and most of this suite is about reading — so `global-setup.ts`
 also signs in as OWNER through the real form once and saves the resulting `storageState`, which
-`playwright.config.ts` loads for every test. A test that is instead about being signed *out*
+`playwright.config.ts` loads for every test. A test that is instead about being signed _out_
 (`authorization.spec.ts`'s anonymous case, `session.spec.ts`'s sign-out case) clears it for
 itself with `page.context().clearCookies()` rather than this file carrying an exception; a test
 that is about being signed in as someone specific (`READER`) still calls `signIn(page, READER)`
