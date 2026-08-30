@@ -11,12 +11,14 @@
 # SDK and wants the promise ADR-008 makes — compose up, and try it. It runs the published
 # image, so it needs no toolchain at all.
 #
-# Postgres and RabbitMQ publish to 127.0.0.1 ONLY, not 0.0.0.0: this file is a local dev loop
-# and an evaluation shortcut, not a hardened deployment, and its default credentials
-# (postgres/postgres, guest/guest) are only ever safe because nothing off this machine can
-# reach them. If you run this compose file on a shared host or anything with a routable IP,
-# override POSTGRES_PASSWORD, RABBITMQ_DEFAULT_USER and RABBITMQ_DEFAULT_PASS and reconsider
-# whether the loopback binding below is still enough for your network.
+# Every published port below binds 127.0.0.1 ONLY, not 0.0.0.0: this file is a local dev loop
+# and an evaluation shortcut, not a hardened deployment. Postgres and RabbitMQ's default
+# credentials (postgres/postgres, guest/guest) are only ever safe because nothing off this
+# machine can reach them -- and the registry itself needs the same binding for a sharper reason:
+# an unclaimed instance answers every request as an owner (ADR-008), so a routable port on it is
+# not a weak credential, it is no credential at all. If you run this compose file on a shared
+# host or anything with a routable IP, override POSTGRES_PASSWORD, RABBITMQ_DEFAULT_USER and
+# RABBITMQ_DEFAULT_PASS and reconsider whether loopback-only is still enough for your network.
 services:
   postgres:
     # Pinned rather than floating, matching the version the test suite runs against. A
@@ -95,7 +97,11 @@ services:
       Concordat__Profile: 'SelfHosted'
       Concordat__Authentication__BootstrapToken: '${CONCORDAT_BOOTSTRAP_TOKEN:-}'
     ports:
-      - "5062:8080"
+      # 127.0.0.1, not 0.0.0.0 -- see the top of this file. An unclaimed instance (ADR-008)
+      # answers every request as an owner, which is what makes the quickstart work with no
+      # credentials anywhere in it -- and exactly why a routable port here would hand out full
+      # admin to the first thing on the network that finds it.
+      - "127.0.0.1:5062:8080"
     depends_on:
       migrate:
         condition: service_completed_successfully
