@@ -119,7 +119,15 @@ builder.Services.AddSingleton<ISchemaBundler, ProtoSchemaBundler>();
 // exception 500. See DbConflictExceptionHandler for why nothing upstream catches these itself.
 builder.Services.AddExceptionHandler<DbConflictExceptionHandler>();
 builder.Services.AddProblemDetails();
-builder.Services.AddOpenApi("v1");
+builder.Services.AddOpenApi("v1", options =>
+{
+    // ADR-019 names this document artifact 1 of the protocol; RequireScope's own doc comment
+    // ("for tests and for OpenAPI") anticipated that it would need to say which routes need a
+    // credential. Order matters: the document transformer declares the scheme the operation
+    // transformer then references.
+    options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
+    options.AddOperationTransformer<ScopeSecurityOperationTransformer>();
+});
 
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ConcordatDbContext>("database");

@@ -11,7 +11,7 @@
           "Governance"
         ],
         "summary": "Read the audit trail, newest first",
-        "description": "Records what happened, in the same transaction as the change itself. A refused request never reaches a commit, so it leaves no entry. Any read scope admits a caller, because the trail spans every resource type and a reader should be able to browse all of it, same as everything else.",
+        "description": "Records what happened, in the same transaction as the change itself. A refused request never reaches a commit, so it leaves no entry. Any read scope admits a caller, because the trail spans every resource type and a reader should be able to browse all of it, same as everything else.\n\nRequires scope: `subject:read or contract:read or env:read or broker:read`.",
         "parameters": [
           {
             "name": "env",
@@ -97,7 +97,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/notifications/outbox": {
@@ -106,7 +111,7 @@
           "Notifications"
         ],
         "summary": "How much is waiting to be delivered",
-        "description": "A non-zero parked count is the signal that a subscriber has been failing long enough to be given up on. Nothing else will say so.",
+        "description": "A non-zero parked count is the signal that a subscriber has been failing long enough to be given up on. Nothing else will say so.\n\nRequires scope: `env:read`.",
         "responses": {
           "200": {
             "description": "OK",
@@ -118,7 +123,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/usage": {
@@ -127,7 +137,7 @@
           "Billing"
         ],
         "summary": "What this organisation is using, and what its plan allows",
-        "description": "Counts are measured from the rows themselves rather than from a meter, so there is nothing to drift. A self-hosted deployment has no plan and reports no limits.",
+        "description": "Counts are measured from the rows themselves rather than from a meter, so there is nothing to drift. A self-hosted deployment has no plan and reports no limits.\n\nRequires scope: `org:admin`.",
         "responses": {
           "200": {
             "description": "OK",
@@ -139,7 +149,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/bootstrap": {
@@ -189,6 +204,7 @@
           "Environments"
         ],
         "summary": "List environments",
+        "description": "Requires scope: `env:read`.",
         "responses": {
           "200": {
             "description": "OK",
@@ -203,14 +219,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       },
       "post": {
         "tags": [
           "Environments"
         ],
         "summary": "Create an environment",
-        "description": "An environment named 'prod', 'production' or 'live' defaults to CI_ONLY registration; everything else defaults to OPEN. An over-permissive production registry is polluted silently and permanently, while an over-strict scratch one produces a clear error and a config change.",
+        "description": "An environment named 'prod', 'production' or 'live' defaults to CI_ONLY registration; everything else defaults to OPEN. An over-permissive production registry is polluted silently and permanently, while an over-strict scratch one produces a clear error and a config change.\n\nRequires scope: `env:write`.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -252,7 +273,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}": {
@@ -261,6 +287,7 @@
           "Environments"
         ],
         "summary": "Get an environment and its brokers",
+        "description": "Requires scope: `env:read`.",
         "parameters": [
           {
             "name": "env",
@@ -292,14 +319,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       },
       "patch": {
         "tags": [
           "Environments"
         ],
         "summary": "Change an environment's description or policies",
-        "description": "Changing the default compatibility policy takes effect immediately for every subject that has not set its own — which is the point of inheritance, and worth knowing before changing it on an environment with traffic.",
+        "description": "Changing the default compatibility policy takes effect immediately for every subject that has not set its own — which is the point of inheritance, and worth knowing before changing it on an environment with traffic.\n\nRequires scope: `env:write`.",
         "parameters": [
           {
             "name": "env",
@@ -351,7 +383,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/registration-policy": {
@@ -360,6 +397,7 @@
           "Environments"
         ],
         "summary": "Read who may register schemas here",
+        "description": "Requires scope: `env:read`.",
         "parameters": [
           {
             "name": "env",
@@ -391,14 +429,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       },
       "put": {
         "tags": [
           "Environments"
         ],
         "summary": "Change who may register schemas here",
-        "description": "OPEN admits any caller with subject:write. CI_ONLY additionally requires the 'ci' scope, which is what separates a build pipeline from a producer — both otherwise arrive with an API key and write access. CLOSED admits nobody: schemas reach the environment only by promotion. Enforced server-side, on both subject creation and version registration.",
+        "description": "OPEN admits any caller with subject:write. CI_ONLY additionally requires the 'ci' scope, which is what separates a build pipeline from a producer — both otherwise arrive with an API key and write access. CLOSED admits nobody: schemas reach the environment only by promotion. Enforced server-side, on both subject creation and version registration.\n\nRequires scope: `env:write`.",
         "parameters": [
           {
             "name": "env",
@@ -450,7 +493,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/brokers": {
@@ -459,7 +507,7 @@
           "Environments"
         ],
         "summary": "Register a broker",
-        "description": "A broker's identity is its host, port and virtual host together, so the same host may appear more than once under different virtual hosts. Display names must be unique, because they are how an operator tells entries apart.",
+        "description": "A broker's identity is its host, port and virtual host together, so the same host may appear more than once under different virtual hosts. Display names must be unique, because they are how an operator tells entries apart.\n\nRequires scope: `broker:write`.",
         "parameters": [
           {
             "name": "env",
@@ -521,7 +569,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/brokers/{brokerId}/check": {
@@ -530,7 +583,7 @@
           "Environments"
         ],
         "summary": "Test a broker connection and record the result",
-        "description": "Completes a real AMQP handshake against the specific virtual host, rather than probing the port: a socket that accepts tells you a load balancer answered, not that the virtual host exists or the credentials work. An unreachable broker is recorded and returned, never an error — a registry that failed because a broker was down would have adopted someone else's outage.",
+        "description": "Completes a real AMQP handshake against the specific virtual host, rather than probing the port: a socket that accepts tells you a load balancer answered, not that the virtual host exists or the credentials work. An unreachable broker is recorded and returned, never an error — a registry that failed because a broker was down would have adopted someone else's outage.\n\nRequires scope: `broker:read`.",
         "parameters": [
           {
             "name": "env",
@@ -571,7 +624,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/brokers/{brokerId}/credentials": {
@@ -580,7 +638,7 @@
           "Environments"
         ],
         "summary": "Set or replace a broker's credentials",
-        "description": "Write-only (ADR-012). There is no endpoint that returns a credential and no field on any response that could carry one — reads report only whether one exists. Replacing rotates in place, so the previous secret is not left behind.",
+        "description": "Write-only (ADR-012). There is no endpoint that returns a credential and no field on any response that could carry one — reads report only whether one exists. Replacing rotates in place, so the previous secret is not left behind.\n\nRequires scope: `broker:write`.",
         "parameters": [
           {
             "name": "env",
@@ -641,13 +699,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       },
       "delete": {
         "tags": [
           "Environments"
         ],
         "summary": "Remove a broker's stored credentials",
+        "description": "Requires scope: `broker:write`.",
         "parameters": [
           {
             "name": "env",
@@ -688,7 +752,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/brokers/{brokerId}": {
@@ -697,6 +766,7 @@
           "Environments"
         ],
         "summary": "Remove a broker",
+        "description": "Requires scope: `broker:write`.",
         "parameters": [
           {
             "name": "env",
@@ -737,7 +807,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/contracts": {
@@ -746,6 +821,7 @@
           "Contracts"
         ],
         "summary": "List contracts",
+        "description": "Requires scope: `contract:read`.",
         "parameters": [
           {
             "name": "env",
@@ -780,14 +856,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       },
       "post": {
         "tags": [
           "Contracts"
         ],
         "summary": "Create a contract",
-        "description": "Defaults to MONITOR. A contract that started blocking the moment it was written would be authored by guessing and then discovered in production.",
+        "description": "Defaults to MONITOR. A contract that started blocking the moment it was written would be authored by guessing and then discovered in production.\n\nRequires scope: `contract:write`.",
         "parameters": [
           {
             "name": "env",
@@ -849,7 +930,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/contracts/resolve": {
@@ -909,6 +995,7 @@
           "Contracts"
         ],
         "summary": "Get a contract and its bindings",
+        "description": "Requires scope: `contract:read`.",
         "parameters": [
           {
             "name": "env",
@@ -948,7 +1035,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/contracts/{contract}/publishes": {
@@ -957,7 +1049,7 @@
           "Contracts"
         ],
         "summary": "Add a publish binding",
-        "description": "Refused when the pattern overlaps an existing binding that carries different subjects and neither declares precedence. Overlap is intersection, not text: 'orders.*' and '*.created' both match 'orders.created'.",
+        "description": "Refused when the pattern overlaps an existing binding that carries different subjects and neither declares precedence. Overlap is intersection, not text: 'orders.*' and '*.created' both match 'orders.created'.\n\nRequires scope: `contract:write`.",
         "parameters": [
           {
             "name": "env",
@@ -1027,7 +1119,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/contracts/{contract}/consumes": {
@@ -1036,6 +1133,7 @@
           "Contracts"
         ],
         "summary": "Add a consume binding",
+        "description": "Requires scope: `contract:write`.",
         "parameters": [
           {
             "name": "env",
@@ -1105,7 +1203,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/contracts/{contract}/enforcement": {
@@ -1114,6 +1217,7 @@
           "Contracts"
         ],
         "summary": "Change how much a contract may do",
+        "description": "Requires scope: `contract:write`.",
         "parameters": [
           {
             "name": "env",
@@ -1173,7 +1277,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/services": {
@@ -1332,7 +1441,7 @@
           "Governance"
         ],
         "summary": "Report contract violations an SDK saw",
-        "description": "The registry never sees message traffic, so an enforcement violation is only observable in the SDK on the publisher's machine. Reports are aggregated by the client and upserted here on (side, route, subject, code): one row per distinct violation, not one per message. The ENFORCEMENT_VIOLATION notification fires on FIRST SIGHT only -- 'this started happening' is an alert, 'this is still happening' is the row's counter.",
+        "description": "The registry never sees message traffic, so an enforcement violation is only observable in the SDK on the publisher's machine. Reports are aggregated by the client and upserted here on (side, route, subject, code): one row per distinct violation, not one per message. The ENFORCEMENT_VIOLATION notification fires on FIRST SIGHT only -- 'this started happening' is an alert, 'this is still happening' is the row's counter.\n\nRequires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -1384,13 +1493,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       },
       "get": {
         "tags": [
           "Governance"
         ],
         "summary": "List the violations reported in an environment",
+        "description": "Requires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -1437,7 +1552,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/subjects/{subject}/impact": {
@@ -1574,7 +1694,7 @@
           "Governance"
         ],
         "summary": "Promote a version into another environment",
-        "description": "Re-checks the schema against the target environment's history under the target's policy — a version compatible in dev says nothing about prod. The schema id does not change, so an in-flight envelope stays resolvable.",
+        "description": "Re-checks the schema against the target environment's history under the target's policy — a version compatible in dev says nothing about prod. The schema id does not change, so an in-flight envelope stays resolvable.\n\nRequires scope: `subject:admin`.",
         "parameters": [
           {
             "name": "env",
@@ -1644,7 +1764,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/notifications": {
@@ -1653,6 +1778,7 @@
           "Notifications"
         ],
         "summary": "List an environment's notification subscriptions",
+        "description": "Requires scope: `env:read`.",
         "parameters": [
           {
             "name": "env",
@@ -1687,14 +1813,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       },
       "post": {
         "tags": [
           "Notifications"
         ],
         "summary": "Subscribe a channel to an environment's events",
-        "description": "An empty event list means every event. The alternative is a subscription that is configured, enabled, and silently delivers nothing — which looks correct from every screen. A WEBHOOK subscription also gets a signing secret, returned here once: every delivery to it carries an X-Concordat-Signature header, an HMAC-SHA256 of the body keyed on that secret, so the receiver can tell this registry sent it from anything else that found the URL.",
+        "description": "An empty event list means every event. The alternative is a subscription that is configured, enabled, and silently delivers nothing — which looks correct from every screen. A WEBHOOK subscription also gets a signing secret, returned here once: every delivery to it carries an X-Concordat-Signature header, an HMAC-SHA256 of the body keyed on that secret, so the receiver can tell this registry sent it from anything else that found the URL.\n\nRequires scope: `env:write`.",
         "parameters": [
           {
             "name": "env",
@@ -1746,7 +1877,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/notifications/{id}/enabled": {
@@ -1755,6 +1891,7 @@
           "Notifications"
         ],
         "summary": "Mute or unmute a subscription without losing its settings",
+        "description": "Requires scope: `env:write`.",
         "parameters": [
           {
             "name": "env",
@@ -1805,7 +1942,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/notifications/{id}": {
@@ -1814,6 +1956,7 @@
           "Notifications"
         ],
         "summary": "Delete a subscription",
+        "description": "Requires scope: `env:write`.",
         "parameters": [
           {
             "name": "env",
@@ -1847,7 +1990,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/auth/status": {
@@ -2078,6 +2226,7 @@
           "Identity"
         ],
         "summary": "List the tenant's members",
+        "description": "Requires scope: `org:admin`.",
         "responses": {
           "200": {
             "description": "OK",
@@ -2092,13 +2241,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       },
       "post": {
         "tags": [
           "Identity"
         ],
         "summary": "Add a member",
+        "description": "Requires scope: `org:admin`.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2140,7 +2295,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/members/{userId}/role": {
@@ -2149,6 +2309,7 @@
           "Identity"
         ],
         "summary": "Change a member's role",
+        "description": "Requires scope: `org:admin`.",
         "parameters": [
           {
             "name": "userId",
@@ -2201,7 +2362,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/api-keys": {
@@ -2210,7 +2376,7 @@
           "Identity"
         ],
         "summary": "List the tenant's API keys",
-        "description": "Never their secrets — those exist only in the issue response.",
+        "description": "Never their secrets — those exist only in the issue response.\n\nRequires scope: `org:admin`.",
         "responses": {
           "200": {
             "description": "OK",
@@ -2225,14 +2391,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       },
       "post": {
         "tags": [
           "Identity"
         ],
         "summary": "Issue an API key",
-        "description": "The secret is returned once and never again. A key may not grant more than its issuer holds.",
+        "description": "The secret is returned once and never again. A key may not grant more than its issuer holds.\n\nRequires scope: `org:admin`.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2274,7 +2445,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/api-keys/{id}": {
@@ -2283,6 +2459,7 @@
           "Identity"
         ],
         "summary": "Revoke an API key",
+        "description": "Requires scope: `org:admin`.",
         "parameters": [
           {
             "name": "id",
@@ -2315,7 +2492,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/subjects": {
@@ -2324,7 +2506,7 @@
           "Subjects"
         ],
         "summary": "Create a subject",
-        "description": "A subject must exist before any version can be registered. Creation is explicit rather than implicit so a typo in a subject name fails loudly instead of silently starting a second contract.",
+        "description": "A subject must exist before any version can be registered. Creation is explicit rather than implicit so a typo in a subject name fails loudly instead of silently starting a second contract.\n\nRequires scope: `subject:write`.",
         "parameters": [
           {
             "name": "env",
@@ -2376,13 +2558,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       },
       "get": {
         "tags": [
           "Subjects"
         ],
         "summary": "List subjects in an environment",
+        "description": "Requires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -2407,7 +2595,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/subjects/{subject}": {
@@ -2416,6 +2609,7 @@
           "Subjects"
         ],
         "summary": "Get a subject and its versions",
+        "description": "Requires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -2455,14 +2649,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       },
       "patch": {
         "tags": [
           "Subjects"
         ],
         "summary": "Change a subject's owner, or deprecate it",
-        "description": "Deprecation is advisory: a deprecated subject still accepts versions, because existing producers need to be able to patch their contract.",
+        "description": "Deprecation is advisory: a deprecated subject still accepts versions, because existing producers need to be able to patch their contract.\n\nRequires scope: `subject:write`.",
         "parameters": [
           {
             "name": "env",
@@ -2522,14 +2721,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       },
       "delete": {
         "tags": [
           "Subjects"
         ],
         "summary": "Retire a subject",
-        "description": "The soft delete, and terminal. There is no hard delete: schemas are never removed (ADR-015), and removing a subject needs the registered-consumer check and audit entry that arrive in M7.",
+        "description": "The soft delete, and terminal. There is no hard delete: schemas are never removed (ADR-015), and removing a subject needs the registered-consumer check and audit entry that arrive in M7.\n\nRequires scope: `subject:admin`.",
         "parameters": [
           {
             "name": "env",
@@ -2579,7 +2783,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/subjects/{subject}/versions": {
@@ -2588,6 +2797,7 @@
           "Subjects"
         ],
         "summary": "List versions",
+        "description": "Requires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -2630,14 +2840,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       },
       "post": {
         "tags": [
           "Subjects"
         ],
         "summary": "Register a version",
-        "description": "A breaking change succeeds with status AWAITING_APPROVAL and does not move the latest pointer, so CI never wedges and the proposal stays reviewable.",
+        "description": "A breaking change succeeds with status AWAITING_APPROVAL and does not move the latest pointer, so CI never wedges and the proposal stays reviewable.\n\nRequires scope: `subject:write`.",
         "parameters": [
           {
             "name": "env",
@@ -2707,7 +2922,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/subjects/{subject}/versions/{ordinal}": {
@@ -2716,7 +2936,7 @@
           "Subjects"
         ],
         "summary": "Get one version",
-        "description": "The ordinal may be an integer or the literal 'latest'. 'latest' resolves the gated pointer (ADR-017), not the highest ordinal, so a version awaiting approval is never returned.",
+        "description": "The ordinal may be an integer or the literal 'latest'. 'latest' resolves the gated pointer (ADR-017), not the highest ordinal, so a version awaiting approval is never returned.\n\nRequires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -2764,7 +2984,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/subjects/{subject}/versions/{ordinal}/approve": {
@@ -2773,6 +2998,7 @@
           "Subjects"
         ],
         "summary": "Approve a pending version",
+        "description": "Requires scope: `subject:admin`.",
         "parameters": [
           {
             "name": "env",
@@ -2842,7 +3068,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/subjects/{subject}/versions/{ordinal}/reject": {
@@ -2851,6 +3082,7 @@
           "Subjects"
         ],
         "summary": "Reject a pending version",
+        "description": "Requires scope: `subject:admin`.",
         "parameters": [
           {
             "name": "env",
@@ -2920,7 +3152,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/subjects/{subject}/compatibility": {
@@ -2998,7 +3235,7 @@
           "Subjects"
         ],
         "summary": "Compare two versions",
-        "description": "Reports every difference, not only policy violations. A diff answers 'what changed'; filtering it by the current policy would hide differences that matter to a consumer generating code.",
+        "description": "Reports every difference, not only policy violations. A diff answers 'what changed'; filtering it by the current policy would hide differences that matter to a consumer generating code.\n\nRequires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -3058,7 +3295,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/subjects/{subject}/compatibility-policy": {
@@ -3067,6 +3309,7 @@
           "Subjects"
         ],
         "summary": "Get the compatibility policy",
+        "description": "Requires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -3106,14 +3349,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       },
       "put": {
         "tags": [
           "Subjects"
         ],
         "summary": "Set the compatibility policy",
-        "description": "Send nulls to clear it and inherit the environment default.",
+        "description": "Send nulls to clear it and inherit the environment default.\n\nRequires scope: `subject:admin`.",
         "parameters": [
           {
             "name": "env",
@@ -3173,7 +3421,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/schemas/{id}": {
@@ -3182,7 +3435,7 @@
           "Schemas"
         ],
         "summary": "Get a schema by its content-addressed id",
-        "description": "Schemas are stored globally and deduplicated by content (ADR-015), so there is no tenant column to filter on. Access is authorised by reachability: a caller may read a schema only if some subject in their tenant references it. An unreachable id returns 404, identical to one that does not exist — a distinct 403 would confirm another tenant's schema exists.",
+        "description": "Schemas are stored globally and deduplicated by content (ADR-015), so there is no tenant column to filter on. Access is authorised by reachability: a caller may read a schema only if some subject in their tenant references it. An unreachable id returns 404, identical to one that does not exist — a distinct 403 would confirm another tenant's schema exists.\n\nRequires scope: `subject:read`.",
         "parameters": [
           {
             "name": "id",
@@ -3214,7 +3467,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/schemas/{id}/subjects": {
@@ -3223,6 +3481,7 @@
           "Schemas"
         ],
         "summary": "List the subjects and versions using a schema",
+        "description": "Requires scope: `subject:read`.",
         "parameters": [
           {
             "name": "id",
@@ -3257,7 +3516,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/schemas/{id}/bundled": {
@@ -3266,7 +3530,7 @@
           "Schemas"
         ],
         "summary": "Get a schema as one self-contained document",
-        "description": "Inlines every Concordat reference, transitively, into $defs and rewrites the refs as local pointers, so the result validates without further fetches. Bundling happens here rather than at registration: doing it at registration would make canonicalisation depend on registry state, and no SDK could then reproduce a schema id offline.",
+        "description": "Inlines every Concordat reference, transitively, into $defs and rewrites the refs as local pointers, so the result validates without further fetches. Bundling happens here rather than at registration: doing it at registration would make canonicalisation depend on registry state, and no SDK could then reproduce a schema id offline.\n\nRequires scope: `subject:read`.",
         "parameters": [
           {
             "name": "id",
@@ -3298,7 +3562,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/schemas/lookup": {
@@ -5971,6 +6240,14 @@
           }
         },
         "description": "What the registry did with a batch."
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "description": "An API key or session secret, issued by POST /v1/auth/bootstrap, /v1/auth/signup or /v1/auth/signin, or minted at /v1/api-keys. Send it as 'Authorization: Bearer cdt_...'. An unclaimed instance (ADR-008) answers every request as an owner regardless of this header; once claimed, every route that declares a required scope below answers 401 'unauthenticated' without it (ADR-027).",
+        "scheme": "bearer",
+        "bearerFormat": "cdt_..."
       }
     }
   },
