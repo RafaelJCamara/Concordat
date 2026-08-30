@@ -237,9 +237,37 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
         {
             await JitterAsync(cancellationToken).ConfigureAwait(false);
 
-            var response = await _http
-                .PostAsync($"/v1/environments/{_options.Environment}/bootstrap", null, cancellationToken)
-                .ConfigureAwait(false);
+            HttpResponseMessage response;
+
+            try
+            {
+                response = await _http
+                    .PostAsync($"/v1/environments/{_options.Environment}/bootstrap", null, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            {
+                // Unreachable, not refused -- the same distinction every other resolution path
+                // in this class draws. Unlike those, this one used to leak the raw
+                // HttpRequestException straight out of WarmUpAsync, which meant RequireWarmUp's
+                // own promise ("off by default: a client that cannot start because the registry
+                // is down has put the registry back on the critical path") only held for a
+                // response the registry actually sent -- a 503 -- and not for the more common
+                // "the registry is not there yet" case a fresh deployment races into.
+                Interlocked.Increment(ref _resolutionFailures);
+                _degraded = true;
+                _lastFailure = $"warm-up: {ex.Message}";
+
+                if (_options.RequireWarmUp)
+                {
+                    throw new ConcordatException(
+                        "warm_up_failed",
+                        $"Warm-up failed: the registry is unreachable ({ex.Message}). " +
+                        "RequireWarmUp is on, so the client will not start unenforced.");
+                }
+
+                return Status;
+            }
 
             if (!response.IsSuccessStatusCode)
             {

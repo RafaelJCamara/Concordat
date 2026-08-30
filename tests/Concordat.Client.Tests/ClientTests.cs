@@ -280,6 +280,33 @@ public class ClientTests
     }
 
     [Fact]
+    public async Task AnUnreachableRegistryDoesNotThrowFromWarmUpByDefault()
+    {
+        // A dead socket, not a status code -- the case AFailedWarmUpDoesNotThrowByDefault does
+        // not cover, and the one WarmUpAsync used to leak straight past RequireWarmUp's default
+        // by throwing the raw HttpRequestException instead of degrading like every other
+        // resolution path in this class.
+        var (client, _, _) = Build(_ => throw new HttpRequestException("registry down"));
+
+        var status = await client.WarmUpAsync();
+
+        Assert.False(status.IsWarm);
+        Assert.True(status.IsDegraded);
+        Assert.Equal(1, status.ResolutionFailures);
+    }
+
+    [Fact]
+    public async Task RequireWarmUpMakesAnUnreachableRegistryFatalToo()
+    {
+        var (client, _, _) = Build(
+            _ => throw new HttpRequestException("registry down"),
+            o => o.RequireWarmUp = true);
+
+        var ex = await Assert.ThrowsAsync<ConcordatException>(() => client.WarmUpAsync());
+        Assert.Equal("warm_up_failed", ex.Code);
+    }
+
+    [Fact]
     public async Task AMissingSchemaIsDistinctFromAnUnreachableRegistry()
     {
         // Absent is a producer bug; unreachable is an operational condition. Conflating them
