@@ -1,7 +1,8 @@
 # What is missing
 
 **As of 2026-08-15**, except [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
-below, added the next day and not re-verified against the rest of this file. A companion to
+below, added the next day and not re-verified against the rest of this file. Test counts
+throughout were re-run and corrected 2026-08-30. A companion to
 [PLAN.md](PLAN.md), which records what was built, and
 [DECISIONS-PENDING.md](DECISIONS-PENDING.md), which records what has not been decided. This
 file records what is **not there**, so the gaps are in one place rather than distributed across
@@ -208,7 +209,7 @@ conflict".
 
 **Done 2026-08-15:** the design-system port — the prototype's tokens, a light theme, self-hosted
 fonts ([ADR-026](adr/026-self-hosted-web-fonts.md)), the sidebar shell, the icon set and the
-cards — and the Playwright suite that now pins it. The E2E suite stands at **26 tests across four
+cards — and the Playwright suite that now pins it. The E2E suite stands at **43 tests across four
 specs**, up from the 11 it launched with; `design-system.spec.ts` asserts the palette, both
 themes, the typography and the shell as **computed styles rather than pixel screenshots**, which
 are exact and identical on Windows and on CI's Linux. It exists because the placeholder palette
@@ -262,7 +263,7 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | ~~A page reload signs you out~~ | **Closed 2026-08-14** by decision 26 — an httpOnly `SameSite=Strict` cookie and a `/auth/resume` route that is the only thing accepting it. The credential still never touches `localStorage`. |
 | ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Still on, and now audible** (decision 27). The API logs a warning naming both ways to close it and repeats hourly until claimed; the web app shows a banner. Verified against a real container. |
-| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, 26 tests in `web/e2e/`. It found the subject list broken on its first run — see below. The one M4.5 test still absent is "direct URL to a write route redirects", because there is no write route to paste. |
+| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 26 tests then, 43 today. It found the subject list broken on its first run — see below. The one M4.5 test still absent is "direct URL to a write route redirects", because there is no write route to paste. |
 | **`Tenant` is not an aggregate** | There is exactly one, `TenantId.SelfHosted`. Cloud multi-tenancy is tested but single-rowed. |
 | ~~The derived-environment-id decision is unmade~~ | **Closed 2026-08-14.** Adopted, by creating rows that carry the derived id. No migration, and no orphaned subjects. |
 
@@ -286,16 +287,16 @@ Nothing here can be done from inside the repository.
 
 ## What the tests actually cover
 
-Six kinds, not one. Worth knowing which, because "1,493 tests" says nothing about what would
+Six kinds, not one. Worth knowing which, because "1,520 tests" says nothing about what would
 survive being wrong.
 
 | Kind | Where | Tests | What it proves |
 |---|---|---|---|
-| Domain unit | `Domain.Tests`, three `Formats.*` | ~840 | Invariants in isolation. No I/O |
-| Application handler | `Application.Tests` | 155 | Handler refusals and **ordering**, with hand-written fakes |
-| HTTP integration | `Api.IntegrationTests` | 216 | Real HTTP against real PostgreSQL, via Testcontainers |
+| Domain unit | `Domain.Tests`, three `Formats.*` | ~850 | Invariants in isolation. No I/O |
+| Application handler | `Application.Tests` | 157 | Handler refusals and **ordering**, with hand-written fakes |
+| HTTP integration | `Api.IntegrationTests` | 228 | Real HTTP against real PostgreSQL, via Testcontainers |
 | Conformance corpus | `Conformance` | 99, over 98 fixtures | The protocol as an executable spec |
-| Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 63 | Publish and consume through real RabbitMQ |
+| Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 64 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
 | Browser end-to-end | `web/e2e` | 43 | A real Chromium against the real stack, design system included |
 
@@ -376,11 +377,12 @@ CONCORDAT_IMAGE=concordat/api:local docker compose --profile registry up -d
 # 3. the registry is on :5062, RabbitMQ management on :15672
 curl localhost:5062/health/ready
 
-# 4. the sample publishes a valid message and then an invalid one
+# 4. the sample publishes a valid message and then an invalid one (paths are repo-relative)
+cd ../..
 dotnet run --project samples/Quickstart -c Release
 
 # 5. the web app, on :4300 -- not in the compose stack, see above
-cd ../../web && npm start -- --port 4300
+cd web && npm start -- --port 4300
 
 # 6. the browser suite, against both of the above
 npm run e2e            # or e2e:headed to watch it

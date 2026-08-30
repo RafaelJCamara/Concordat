@@ -82,8 +82,13 @@ Writing a client, roughly in dependency order:
 - **Cross-subject references for Avro and Protobuf.** Refused in v1
   ([ADR-023](../adr/023-no-cross-subject-references-avro-protobuf.md)) — neither format has
   anywhere to pin a version. Self-contained schemas are the supported shape.
-- **Authentication.** API keys and scopes arrive in M8. Until then the registry is unauthenticated
-  and the tenant is implicit.
+- **A written authentication spec.** Authentication itself is real: since
+  [ADR-027](../adr/027-read-requires-authentication.md) a claimed instance answers every
+  unauthenticated request — reads included — with `401` and `concordatCode: unauthenticated`,
+  and credentials travel as `Authorization: Bearer cdt_...`, issued by the `/v1/auth` endpoints
+  in the OpenAPI document. What no artifact yet declares is *which routes demand one*: the
+  OpenAPI document carries no `securityScheme`. By this page's own rule that is a defect in
+  artifact 1 — if it sends you into `src/`, open the issue.
 
 ## Running the registry locally
 

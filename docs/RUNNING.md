@@ -168,7 +168,7 @@ belongs to CI and the CLI under ADR-005, and the sample is deliberately a plain 
 
 ## Running the tests
 
-### The .NET suite — 1,493 tests
+### The .NET suite — 1,520 tests
 
 ```bash
 dotnet test Concordat.slnx
@@ -182,7 +182,7 @@ takes several minutes. The other eight are pure unit tests and finish in seconds
 dotnet test tests/Concordat.Domain.Tests        # 517 tests, no Docker, ~1s
 ```
 
-### The web suite — 352 tests
+### The web suite — 358 tests
 
 ```bash
 cd web
@@ -194,8 +194,9 @@ npm run codes:check     # fails if the error-code union has drifted from the .NE
 
 ### The browser end-to-end suite — 43 tests
 
-Three processes, none of them started by Playwright — a config that quietly started its own copy
-of either half would produce a suite that passes against the wrong thing.
+Two processes Playwright deliberately does not start for you, then the tests — a config that
+quietly started its own copy of either half would produce a suite that passes against the
+wrong thing.
 
 ```bash
 # 1. the registry on :5062        (either dotnet run, or the compose registry profile)
@@ -239,6 +240,13 @@ profile or by an earlier e2e session:
 docker ps --filter name=concordat-api
 docker stop concordat-api
 ```
+
+**Starting the dependencies fails: port 5672 or 15672 is already allocated.** Another RabbitMQ
+owns it — usually a different project's compose stack. Postgres sidesteps this by publishing on
+55432; RabbitMQ kept the defaults because a second broker on one machine is rarer, but it does
+happen. Stop the other broker, or override the published ports with a second compose file
+(`ports:` needs `!override`) — remembering the quickstart sample's `ConnectionFactory` then
+needs the new port too.
 
 **`Port 4300 is already in use` when starting the app for e2e.** A dev server from an earlier
 session is still on it. That one will serve the suite perfectly well — but it is running whatever

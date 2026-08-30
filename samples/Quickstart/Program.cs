@@ -140,7 +140,11 @@ while (await raw.BasicGetAsync(Queue, autoAck: true) is { } delivery)
 await channel.CloseAsync();
 await connection.CloseAsync();
 
-Console.WriteLine("\nDone. Nothing invalid reached the queue.");
+// True under Enforce, and a lie under Monitor — where the drain above just showed the
+// invalid message being delivered, which is the entire lesson of switching modes.
+Console.WriteLine(options.Mode == EnforcementMode.Enforce
+    ? "\nDone. Nothing invalid reached the queue."
+    : "\nDone. Monitor mode: the invalid order was delivered — it is in the drain above.");
 
 // ---------------------------------------------------------------------------- helpers
 
