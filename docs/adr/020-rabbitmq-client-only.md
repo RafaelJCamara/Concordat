@@ -23,6 +23,11 @@ only. Service-bus adapters are deferred, with their research retained rather tha
 discarded. The same rule applies in every language: each SDK binds its language's raw AMQP
 client, which puts **Spring AMQP** in the deferred set alongside MassTransit.
 
+> **Shipped as `Concordat.RabbitMq`.** The `Messaging.` segment was dropped when the project
+> was created in [M2.4](../plan/M2-dotnet-client.md#m24-middleware), and the csproj sets no
+> `PackageId`, so the package id follows the directory. What this ADR decided is the scope —
+> one SDK, over the raw client — not the spelling. *(Noted 2026-09-24.)*
+
 ## Alternatives considered
 
 - **Ship MassTransit support in v1** — it has the largest .NET installed base. Rejected on

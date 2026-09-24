@@ -159,7 +159,12 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 /// <param name="ConcordatCode">The stable code clients branch on.</param>
 /// <param name="Detail">The human-readable explanation.</param>
 /// <param name="Title">The short summary.</param>
-public sealed record ApiProblem(string? ConcordatCode, string? Detail, string? Title);
+/// <param name="Type">
+/// The type URI. Carried because it is built from the code, so a test asserting that a response
+/// does not disclose something has to look here too.
+/// </param>
+public sealed record ApiProblem(
+    string? ConcordatCode, string? Detail, string? Title, string? Type = null);
 
 /// <summary>Marks a class as sharing one API host and database.</summary>
 [CollectionDefinition(Name)]

@@ -46,11 +46,21 @@ and **the registry would serve consumers a schema stripped of the defaults that 
 older data at all**.
 
 So the canonical form here is **lossless normalisation**: sort, resolve fullnames, drop
-whitespace, and strip only `doc`. `default`, `aliases`, `logicalType` and everything else
-survive. For a schema using none of the attributes PCF would have stripped the output is
-byte-identical to PCF, and a test pins that. Recorded as
-[DECISIONS-PENDING #17](../DECISIONS-PENDING.md#17-avros-parsing-canonical-form-is-lossy-and-the-architecture-stores-the-canonical-form)
-— **still yours to overturn, and free to overturn until the first Avro schema is stored.**
+whitespace, and ~~strip only `doc`~~ **drop nothing at all**. `default`, `aliases`,
+`logicalType` and everything else survive. For a schema using none of the attributes PCF
+would have stripped the output is byte-identical to PCF, and a test pins that.
+
+**`doc` was the last attribute still stripped, and it is dropped no longer** — resolved
+2026-08-15 by
+[DECISIONS-PENDING #17](../DECISIONS-PENDING.md#17-avros-parsing-canonical-form-is-lossy--hash-the-full-document),
+inside the window that decision was recorded to be settled in: nothing had registered an Avro
+schema, so no migration and no id churn. The reasoning that carried it is that **an id is a
+claim about a document, not about the subset of it this build considers meaningful** — drop
+one attribute for being presentational and every later attribute needs the same judgement
+made about it, by five SDKs, identically, forever. The cost was accepted rather than
+overlooked: editing a comment now mints a new schema id and therefore a new version,
+compatible with its predecessor but leaving a history entry whose only change is prose, which
+`SchemasDifferingOnlyInDoc_HaveDifferentIds` pins so nobody rediscovers it as a bug.
 
 ### Compatibility is an implementation of a specification, not a design
 
@@ -116,7 +126,7 @@ which is worse than not supporting the format.
 DESIGN §4 says "normalised `FileDescriptorProto`". A descriptor is the right *model* — it is
 what the compatibility engine reasons over — but the canonical text is also what the registry
 **stores and serves**, and a consumer fetching a Protobuf schema wants source it can hand to
-`protoc`. Serving a descriptor blob would be [#17](../DECISIONS-PENDING.md#17-avros-parsing-canonical-form-is-lossy-and-the-architecture-stores-the-canonical-form)
+`protoc`. Serving a descriptor blob would be [#17](../DECISIONS-PENDING.md#17-avros-parsing-canonical-form-is-lossy--hash-the-full-document)
 again: technically sufficient, practically useless. That was cheap to get right here only
 because M5.2 had just paid for the lesson.
 
@@ -183,7 +193,8 @@ axes, with the corpus green.
 
 **Met.** JSON Schema, Avro and Protobuf each canonicalise deterministically and idempotently,
 produce content-addressed ids, and are checked on both axes; the corpus runs all three formats
-and is green at 82 cases. The one documented shortfall is
+and was green at 82 cases as M5 closed — [98 fixtures today](../protocol/conformance.md). The one
+documented shortfall is
 [ADR-023](../adr/023-no-cross-subject-references-avro-protobuf.md): Avro and Protobuf accept
 only self-contained schemas, which costs the "splitting a `.proto` across files" case that
 DESIGN §12 wanted.

@@ -3,7 +3,7 @@
 **Normative, and the ultimate arbiter.** Where this corpus and any prose disagree — including
 every other document in this directory — the corpus is right. It is executable; prose is not.
 
-The corpus is 89 JSON fixtures in
+The corpus is 98 JSON fixtures in
 [`tests/Concordat.Conformance/corpus/`](../../tests/Concordat.Conformance/corpus). They are
 plain files on disk rather than embedded resources or test-framework fixtures, for exactly one
 reason: **another language's test runner has to be able to read the same bytes.** A corpus that
@@ -53,7 +53,7 @@ structure.
 
 Fields common to every fixture: `name` (matches the filename) and `why` (the rationale).
 
-### `canonicalisation` — 11 fixtures
+### `canonicalisation` — 13 fixtures
 
 | Field | Meaning |
 | --- | --- |
@@ -105,7 +105,7 @@ validator, then correct it where it disagrees with these fixtures — do not rel
 match your library. That is what the .NET implementation does, in
 `Draft202012Corrections.cs`, and the header comment there explains each correction.
 
-### `envelope-encode` — 4 fixtures · `envelope-decode` — 18 fixtures
+### `envelope-encode` — 4 fixtures · `envelope-decode` — 22 fixtures
 
 Encode: given identity, produce exactly this header set — **set equality**, since an extra
 header is as much a divergence as a missing one.
@@ -115,7 +115,7 @@ load-bearing distinction is between failures that **reject** a message and ones 
 **warn**: quarantining a structurally valid payload because a human mistyped a semver label
 would be a self-inflicted outage.
 
-### `subject-resolution` — 14 fixtures
+### `subject-resolution` — 17 fixtures
 
 `messageType` (and optionally `exchange`, `routingKey`) → one of three outcomes:
 

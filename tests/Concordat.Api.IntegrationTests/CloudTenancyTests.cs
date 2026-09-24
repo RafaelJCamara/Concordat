@@ -298,6 +298,17 @@ public class CloudTenancyTests(CloudApiFactory factory)
         var problem = await ApiFactory.ReadProblemAsync(response);
         Assert.Equal(
             "That email address cannot be used to create an organisation.", problem.Detail);
+
+        // The half this test used to miss. It asserted the neutral detail string and stopped,
+        // so it passed the whole time the envelope around that string was answering
+        // "user_already_exists" in the code, the title and the type URI -- the same disclosure
+        // in the form a sweep would actually parse. A human-readable sentence is not where an
+        // enumeration oracle lives.
+        Assert.Equal("signup_refused", problem.ConcordatCode);
+        Assert.DoesNotContain(
+            "user_already_exists", problem.Type ?? string.Empty, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "user_already_exists", problem.Title ?? string.Empty, StringComparison.Ordinal);
     }
 
     [Fact]

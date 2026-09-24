@@ -503,16 +503,24 @@ it is for.
 
 **The browser E2E half is now done too, 2026-08-15.** Playwright is in, `web/e2e/` holds 11
 tests, and the reload case above is one of them — the only way to prove a *browser* keeps the
-cookie across a real navigation and that the app asks for it before the first render.
+cookie across a real navigation and that the app asks for it before the first render. That count
+is the day's snapshot and nothing else: the suite stands at **43 tests across four specs** as of
+2026-09-24, which is the figure [STATUS.md](STATUS.md) carries.
 
 It earned its place in the first ten seconds: the subject list was **broken** against a real
 registry, because `VersionStatus.Dismissed` shipped with M7 and `wire-tokens.ts` never learned
 it. 1,489 .NET and 187 Angular tests were green throughout. See [STATUS.md](STATUS.md).
 
-> **One of M4.5's two named tests is deliberately absent**: "direct URL to a write route
+> ~~**One of M4.5's two named tests is deliberately absent**: "direct URL to a write route
 > redirects". There is no write route — `app.routes.ts` has two entries and `**` redirects
 > everything else, and `scopeGuard` is built and referenced by nothing. Writing it would assert
-> the wildcard and pass while proving nothing. It goes in with M4.3's pages.
+> the wildcard and pass while proving nothing. It goes in with M4.3's pages.~~
+>
+> **It did, the same day.** M4.3's pages landed 2026-08-15 and took the test with them:
+> `app.routes.ts` now carries six routes plus the wildcard, and
+> `/subjects/:name/versions/new` is the first one `schemaWriteGuard` is attached to, so
+> `authorization.spec.ts` asserts the guard rather than the wildcard: it renders for a writer,
+> redirects a reader to `/subjects`, and sends a signed-out visitor to `/sign-in?returnTo=…`.
 
 ### 27. ~~`AllowAnonymousUntilClaimed` is on by default~~ — done
 
@@ -705,8 +713,8 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | The generator pins Roslyn **4.14** while the repo resolves 5.x | M3.4 | Low. An analyzer built against a newer Roslyn than the host fails to load |
 | `samples/ContractDrift` lives outside the solution | M3.4 | Low; the solution build must not depend on a sample |
 | Avro canonicalisation is hand-written against the spec, not delegated to a schema library | [M5.2](plan/M5-formats.md) | Low. Same reasoning as the JSON canonicaliser: ADR-019 needs it reproduced byte-for-byte in every SDK, and a library's own "canonical" output cannot be audited for that |
-| `Concordat.Formats.Avro` is registered in DI for canonicalisation and compatibility only, not references or bundling | M5.2 | Low, and deliberate: `ISchemaFormatRegistry` fails loudly for the unimplemented ones rather than silently guessing, so Avro registration is refused rather than half-working while [#16](#16-avro-cross-subject-references-carry-no-version) is open |
-| `doc` is the only Avro attribute stripped by canonicalisation | M5.2, and it is [#17](#17-avros-parsing-canonical-form-is-lossy-and-the-architecture-stores-the-canonical-form) | **Free today, needs a preimage bump and a migration once an Avro schema is stored** |
+| `Concordat.Formats.Avro` is registered in DI for canonicalisation and compatibility only, not references or bundling | M5.2 | Low, and deliberate: `ISchemaFormatRegistry` fails loudly for the unimplemented ones rather than silently guessing, so Avro registration is refused rather than half-working. The question that left it open was settled by [ADR-023](adr/023-no-cross-subject-references-avro-protobuf.md): Avro and Protobuf accept only self-contained schemas, so there is no cross-subject reference for the unregistered services to resolve |
+| ~~`doc` is the only Avro attribute stripped by canonicalisation~~ | M5.2, and it is [#17](#17-avros-parsing-canonical-form-is-lossy--hash-the-full-document) | ~~Free today, needs a preimage bump and a migration once an Avro schema is stored~~ — **overturned 2026-08-15 by #17**: nothing is stripped at all now, `doc` included, and it was settled inside the free window, so no preimage bump and no migration were needed |
 | Four tokens added to `BreakingChangeKinds`: `name_changed`, `fixed_size_changed`, `type_promoted`, `enum_value_defaulted` | M5.2 | Low, and additive — but normative under ADR-019 once published, so a client may branch on them |
 | Avro compatibility runs resolution twice with the roles swapped, rather than deriving direction from one comparison | M5.2 | Low, and required: Avro resolution is asymmetric, so `int → long` is genuinely backward-compatible and forward-breaking at once |
 | An enum symbol absorbed by the reader's `default` is reported at `WireJson`, not `Wire` | M5.2 | Low. The bytes decode, so it is not a wire break — but the value read is not the value written, which is exactly a broken JSON mapping |
@@ -714,7 +722,7 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | Avro paths are name-based (`#/fields/note`), not RFC 6901 index-based like the JSON engine's | M5.2 | Low, but **user-visible in every finding**. Avro matches fields by name, so an index is not a stable identifier — reordering fields is compatible and would renumber every path |
 | `ContentModel` is ignored by the Avro checker | M5.2 | Low. Avro records are closed by construction; there is no `additionalProperties` equivalent to honour |
 | The `.proto` parser is hand-written rather than taking a dependency | [M5.3](plan/M5-formats.md) | Low, and doubly forced: ADR-019 needs canonicalisation reproduced byte-for-byte in every SDK, and the mature .NET `.proto` parsers are reflection-heavy — which M3.3 established fails *silently* in the CLI's NativeAOT binary |
-| The Protobuf canonical form is normalised `.proto` source, not a serialised `FileDescriptorProto` | M5.3 | **Free today, needs a preimage bump and a migration once a Protobuf schema is stored.** DESIGN §4 names the descriptor; a descriptor is the right model but the wrong thing to *serve*, since a consumer wants source it can give to `protoc` — the same lesson as [#17](#17-avros-parsing-canonical-form-is-lossy-and-the-architecture-stores-the-canonical-form) |
+| The Protobuf canonical form is normalised `.proto` source, not a serialised `FileDescriptorProto` | M5.3 | **Free today, needs a preimage bump and a migration once a Protobuf schema is stored.** DESIGN §4 names the descriptor; a descriptor is the right model but the wrong thing to *serve*, since a consumer wants source it can give to `protoc` — the same lesson as [#17](#17-avros-parsing-canonical-form-is-lossy--hash-the-full-document) |
 | Protobuf canonical output is indented, not minified like the JSON and Avro forms | M5.3 | Low. Determinism and idempotence are what canonicalisation needs; this one is read and compiled by people |
 | proto2, groups, `extend`, `service` and aggregate option values are **refused**, not parsed | M5.3 | Low, and user-visible. A parser that silently mis-reads a construct yields a confidently wrong id *and* a confidently wrong verdict |
 | Four more `BreakingChangeKinds` tokens: `wire_type_changed`, `field_removed_without_reserved`, `field_number_reused`, `presence_changed` | M5.3 | Low, additive, normative under ADR-019 once published |

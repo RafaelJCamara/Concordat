@@ -69,6 +69,7 @@ public static class ProblemDetailsMapping
         ConcordatCodes.ContractAlreadyExists => StatusCodes.Status409Conflict,
         ConcordatCodes.UserAlreadyExists => StatusCodes.Status409Conflict,
         ConcordatCodes.TenantAlreadyExists => StatusCodes.Status409Conflict,
+        ConcordatCodes.SignupRefused => StatusCodes.Status409Conflict,
 
         // The request is well-formed; it is the existing bindings that refuse it.
         ConcordatCodes.BindingConflict => StatusCodes.Status409Conflict,

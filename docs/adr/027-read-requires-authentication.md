@@ -33,6 +33,27 @@ required since ADR-018. Server-side, `RequireScope` gates the `GET` routes in
 unclaimed instance is unaffected — it already answers every request, read or write, as an owner
 (M8.2), so there is nothing to gate until somebody exists to authenticate as.
 
+> **Amended 2026-09-24: this was not fully true when written.** A consistency audit found nine
+> routes still answering anonymously on a claimed instance, three of them in a file named
+> directly above — `GET …/services`, `GET …/services/{service}` and
+> `GET …/subjects/{subject}/impact` in `GovernanceEndpoints.cs`. The others were routes whose
+> shape hid them: `POST …/contracts/resolve`, `POST /v1/schemas/lookup`,
+> `POST …/subjects/{subject}/compatibility`, `POST …/subjects/{subject}/impact`,
+> `POST …/services`, and `POST …/environments/{env}/bootstrap` — which returns every subject and
+> every schema in an environment in one response, and was the widest read surface in the API.
+>
+> They survived because the only structural test covering scopes asked whether *mutating* routes
+> declare one, and each of these sat on its exemption list for a reason that was correct about
+> the question that test asks: a POST which writes nothing is not a mutation. That reasoning was
+> never revisited against this ADR, which asks a different one — who is reading. The environment
+> bootstrap route was exempted on top of that by accident, by a list entry reading `/bootstrap`
+> that was meant for `/v1/auth/bootstrap` and matched both.
+>
+> All nine now require a read scope, and `EveryRouteUnderV1DeclaresAScope` enumerates every
+> `/v1` route rather than only the mutating ones — so the distance between this ADR's text and
+> what the code enforces is now itself tested. The exemption list is down to the six
+> `/v1/auth/*` routes that exist to acquire or inspect a credential.
+
 Client-side, `signedInGuard` (`web/src/app/core/auth/scope-guard.ts`) redirects a signed-out
 visitor to `/sign-in` before the dashboard, the subject list, or a subject/version detail route
 activates — the same shape `scopeGuard` already used for write routes, minus a specific scope

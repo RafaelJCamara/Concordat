@@ -160,8 +160,13 @@ after it as the id, and validates it.
   above to recover the format; a media type not in the table yields a **valid envelope with no
   format**, not a rejection.
 
-A Mode B envelope carries no ordinal, no semver, and never any warnings. Its subject, if any,
-comes from `properties.type` (`envelope-decode/mode-b-content-type.json`).
+A Mode B envelope carries no ordinal and no semver. Its subject, if any, comes from
+`properties.type` (`envelope-decode/mode-b-content-type.json`), and it is validated by the **same
+rules, with the same warnings**, as a Mode A subject: padded or ungrammatical, it warns with
+`subject_name_invalid` and the envelope carries no subject
+(`envelope-decode/mode-b-padded-subject-warns.json`,
+`envelope-decode/mode-b-invalid-subject-warns.json`). Two paths reaching different verdicts on the
+same bytes would make a subject's identity depend on which mode the publisher happened to use.
 
 **Payload framing is not implemented in v1.** ADR-010 and DESIGN §2 describe two additional Mode B
 shapes — `0x01 | <16-byte id> | payload`, matching Confluent CP 8.1+, and read-only support for
@@ -271,17 +276,28 @@ a guess.
 | `concordat-version` | Not a base-10 integer ≥ 1, or unreadable | Warn, ordinal is null | `envelope_ordinal_malformed` |
 | `concordat-semver` | Absent | Semver is null | — |
 | `concordat-semver` | Not `MAJOR.MINOR.PATCH` | Warn, semver is null | `semver_invalid` |
-| `concordat-semver` | Carries a pre-release or build suffix | Warn, semver is null | `semver_prerelease_unsupported` |
+| `concordat-semver` | Padded with whitespace | Warn, semver is null | `semver_invalid` |
+| `concordat-semver` | Carries a pre-release label | **Read**, no warning | — |
+| `concordat-semver` | Carries build metadata | Warn, semver is null | `semver_build_metadata_unsupported` |
 | `concordat-semver` | WrongType, BadEncoding or Empty | Warn, semver is null | `envelope_malformed` |
 
-Notes on four rows that are easy to get subtly wrong:
+Notes on five rows that are easy to get subtly wrong:
 
 - **The ordinal is parsed strictly**: base-10 digits only, no sign, no leading or trailing
   whitespace, no group separators, and the result must be at least 1. Anything else warns
   (`envelope-decode/malformed-ordinal-warns.json`).
-- **A pre-release semver still delivers the message.** v1 rejects pre-release labels *at
-  registration*, but a message carrying one must not be quarantined for a human label
-  (`envelope-decode/prerelease-semver-warns.json`).
+- **A pre-release semver is read, not warned about.** Whether an environment *accepts* a
+  pre-release label is registry policy, decided at registration and configurable per environment;
+  what a message may *carry* is a separate question, and a consumer reading a message stamped by a
+  publisher whose environment permits `rc` labels must see the label rather than a warning about it
+  (`envelope-decode/prerelease-semver-is-read.json`). Build metadata is refused everywhere, because
+  SemVer ignores it for precedence — two labels carrying different metadata compare equal while
+  being different strings — and like every other advisory header it warns rather than quarantining
+  a structurally valid payload (`envelope-decode/build-metadata-semver-warns.json`).
+- **A padded semver warns, for the same reason a padded subject does.** Most semver parsers trim,
+  and the reader's stated rule is that it does not; accepting `" 1.2.3 "` would have made the
+  no-trim rule true of one header and false of another. Reject the padding before parsing
+  (`envelope-decode/padded-semver-warns.json`).
 - **An unreadable subject warns rather than passing silently**, or an unreadable subject looks
   identical to an absent one. It then falls back exactly as an absent one would.
 - **The subject rules apply to the fallback too.** A `properties.type` used because the header was
@@ -315,7 +331,8 @@ implementation detail: in RabbitMQ a publisher knows `(exchange, routing key)` a
 knows `(queue)`, and any scheme requiring both to compute the same answer from what each can see
 cannot work.
 
-The default strategy reads `properties.type`, applies two rewrites, and validates:
+The default strategy reads `properties.type`, applies two rewrites to every name it produces, and
+validates:
 
 1. **Everything from the first comma is dropped.** A .NET publisher reaching for
    `typeof(T).AssemblyQualifiedName` supplies assembly, version, culture and public-key-token, all
@@ -347,6 +364,39 @@ it mangles names meant to be read (`subject-resolution/case-is-preserved-not-fol
 consequence is accepted: two teams spelling the same type differently get two subjects, which the
 registry's subject list makes visible.
 
+**A closed generic is spelled, not refused**
+([ADR-025](../adr/025-generic-subject-spelling.md)). The subject is the outer name, then `_of_`,
+then the type arguments in declaration order joined with `_and_` — and the rule recurses, because a
+type argument is itself a type name. The two rewrites above apply to the outer name and to each
+argument, so an argument's assembly qualifier is stripped by the comma rule before it is joined:
+
+```
+Acme.Envelope<Acme.OrderCreated>       → Acme.Envelope_of_Acme.OrderCreated
+Acme.Pair<Acme.A, Acme.B>              → Acme.Pair_of_Acme.A_and_Acme.B
+Acme.Envelope<Acme.List<Acme.Order>>   → Acme.Envelope_of_Acme.List_of_Acme.Order
+```
+
+**A spelling had to become normative, because the alternative fails silently.** Refusing generics
+was the earlier rule and its reasoning was half right: any spelling *derived from CLR syntax* —
+``List`1[[Acme.Order, Asm, Version=…]]`` — is reproducible only in .NET, so it cannot be a protocol
+rule. But refusing generics does not remove the rule, it only leaves each SDK to invent one, and
+then the same logical contract is a different subject in every language: a .NET publisher
+registering one string and a Go consumer looking up another, each convinced it is correct. That is
+an interop break with no error attached to it. **So the spelling is defined over names** — the
+outer type's normalised name and the argument names in order, which every language with generics
+can produce — and not over backticks, arity markers or assembly-qualified brackets, which only
+.NET has. `Envelope[Order]` in Go, `Envelope[Order]` in Python and `Envelope<Order>` in C# all
+arrive at the same subject
+(`subject-resolution/generic-closed-is-spelled.json`,
+`subject-resolution/generic-two-arguments-use-and.json`,
+`subject-resolution/generic-nested-argument.json`).
+
+**Arity needs no marker**, because the separators already carry the structure: `X<Y, Z>` is
+`X_of_Y_and_Z` and `X<Y<Z>>` is `X_of_Y_of_Z`, so the two stay distinguishable without a count
+every SDK would have to format identically. The cost is accepted and is the same one the
+nested-type rewrite accepts: a type literally named `Envelope_of_Order` collides with
+`Envelope<Order>`, which is rare and visible in the registry's subject list.
+
 The result is validated against the canonical grammar:
 
 ```
@@ -363,11 +413,12 @@ Resolution has three outcomes, and collapsing any two of them is a real bug:
 
 Two refusals that implementers are tempted to soften:
 
-- **A generic type name is refused, not mangled.** Any spelling invented for a CLR generic —
-  ``List`1[[Acme.Order]]`` — would have to be reproduced character for character by every SDK, and
-  a Go or Python SDK has no CLR generic syntax to reproduce it from. A name containing a backtick
-  or a bracket is therefore reported as unusable, with a message saying to publish a named type
-  (`subject-resolution/generic-type-is-refused-not-mangled.json`).
+- **An open generic is refused, where a closed one is spelled.** ``Acme.Envelope`1`` names no
+  contract — there is nothing to validate a payload against — so it is unusable, and the message
+  names the closed form rather than complaining about the grammar, because this is the one invalid
+  case a .NET publisher hits by accident (`subject-resolution/generic-open-is-refused.json`). A
+  name still carrying a backtick or a bracket after the spelling has been applied is one the
+  spelling could not parse, and is reported the same way.
 - **A hyphen is refused, not rewritten.** Everyone arrives from routing keys where `order-created`
   is idiomatic. Rewriting it to an underscore is another invention every SDK would have to share,
   and a subject silently differing from what the publisher wrote is worse than a clear refusal at
@@ -468,11 +519,15 @@ purpose nobody recorded is one nobody dares change when it fails.
 | `envelope-decode/unsupported-version-stops-interpretation.json` | A future version stops all interpretation |
 | `envelope-decode/unknown-format-rejects.json` | Unknown format rejects, unlike advisory fields |
 | `envelope-decode/malformed-ordinal-warns.json` | Advisory fields warn |
-| `envelope-decode/prerelease-semver-warns.json` | A human label never quarantines a payload |
+| `envelope-decode/prerelease-semver-is-read.json` | A pre-release label on the wire is read, not warned about |
+| `envelope-decode/build-metadata-semver-warns.json` | Build metadata warns; a human label never quarantines a payload |
+| `envelope-decode/padded-semver-warns.json` | The no-trim rule holds for the semver header too |
 | `envelope-decode/padded-subject-warns-and-is-ignored.json` | The reader does not trim |
 | `envelope-decode/subject-falls-back-to-properties-type.json` | Fallback to `properties.type` |
 | `envelope-decode/header-wins-over-properties-type.json` | Header precedence, with a warning |
 | `envelope-decode/mode-b-content-type.json` | The Mode B token |
+| `envelope-decode/mode-b-padded-subject-warns.json` | Mode B reaches Mode A's verdict on a padded subject |
+| `envelope-decode/mode-b-invalid-subject-warns.json` | Mode B warns rather than dropping an invalid subject in silence |
 | `envelope-decode/ordinary-content-type-is-not-mode-b.json` | A plain content-type is not an envelope |
 | `envelope-decode/mode-a-wins-over-mode-b.json` | Mode precedence |
 | `subject-resolution/*.json` | Every rule in §7 |
@@ -484,6 +539,8 @@ purpose nobody recorded is one nobody dares change when it fails.
 Stated explicitly rather than left for an implementer to discover. Each of these is behaviour of
 the reference implementation that **no fixture asserts**, so a second implementation could diverge
 without failing the corpus. Treat each as a gap worth closing rather than as settled protocol.
+Struck entries were closed after the list was written and are kept, not deleted, so that an SDK
+written against an earlier reading of this document can see exactly what moved.
 
 - **A `concordat-schema-id` that decodes cleanly but is not 32 lowercase hex characters.** The
   reference implementation rejects with `schema_id_malformed` — a non-`envelope_*` code, which is
@@ -492,15 +549,26 @@ without failing the corpus. Treat each as a gap worth closing rather than as set
   *no envelope*, not as malformed. No fixture covers it.
 - **A Mode B token on an unrecognised media type** (`text/plain+concordat.v1.<id>`). The envelope
   is read and the format left null. No fixture covers it.
-- **Padded `properties.type` under Mode B.** Mode A refuses a padded subject with a warning; the
+- ~~**Padded `properties.type` under Mode B.** Mode A refuses a padded subject with a warning; the
   Mode B path validates `properties.type` through a routine that *trims*, so the same padded value
   is accepted there and refused under Mode A. This looks like an inconsistency in the
-  implementation rather than an intended rule, and no fixture covers either half.
-- **An invalid `properties.type` under Mode B** is dropped silently, with no warning, where Mode A
-  would warn.
-- **A padded `concordat-semver`** (`" 2.1.0 "`) is accepted, because semver parsing trims — again
-  inconsistent with the no-trim rule for subjects, and uncovered.
-- **`envelope_format_mismatch`** is in the code catalogue — "the declared format disagrees with the
-  format the registry holds for that id" — but nothing in the registry or client emits it today.
+  implementation rather than an intended rule, and no fixture covers either half.~~
+  **Closed 2026-08-14** by [decision 20](../DECISIONS-PENDING.md) — both modes now share one
+  validation routine and neither trims, pinned by
+  `envelope-decode/mode-b-padded-subject-warns.json`. §4 states the rule.
+- ~~**An invalid `properties.type` under Mode B** is dropped silently, with no warning, where Mode A
+  would warn.~~ **Closed 2026-08-14** by the same decision — Mode B warns with
+  `subject_name_invalid`, pinned by `envelope-decode/mode-b-invalid-subject-warns.json`.
+- ~~**A padded `concordat-semver`** (`" 2.1.0 "`) is accepted, because semver parsing trims — again
+  inconsistent with the no-trim rule for subjects, and uncovered.~~ **Closed 2026-08-14** by the
+  same decision — padding is refused before parsing, warning `semver_invalid`, pinned by
+  `envelope-decode/padded-semver-warns.json`.
+- ~~**`envelope_format_mismatch`** is in the code catalogue — "the declared format disagrees with the
+  format the registry holds for that id" — but nothing in the registry or client emits it today.~~
+  **Closed 2026-08-14** by the same decision — the code turned out to be unwritten rather than
+  dead, and the .NET consumer now emits it as an *observed* outcome when a message declares a
+  format the registry disagrees with. The schema id is content-addressed, so the registry wins and
+  validation is unaffected; what was missing was saying so. Still unpinned by the corpus, which
+  covers envelope reading rather than enforcement.
 - **Ordinal values above `int32`** warn rather than being carried; the ceiling is an
   implementation limit, not a stated protocol bound.

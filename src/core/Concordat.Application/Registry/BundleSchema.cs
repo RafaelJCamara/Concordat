@@ -108,44 +108,18 @@ public sealed class GetBundledSchemaHandler(
                 [.. resolved.Keys.Order(StringComparer.Ordinal)]));
     }
 
+    // Shared with the registration-time check rather than duplicated: the read path and the
+    // write path have to agree on what a reference resolves to, or registration admits an edge
+    // bundling cannot follow -- which is the shape of the bug that made this check necessary.
     private async Task<Result<Schema>> ResolveAsync(
         Reference reference, CancellationToken cancellationToken)
     {
-        var parsed = ConcordatRef.Create(reference.Name);
-        if (parsed.IsFailure)
-        {
-            return Result<Schema>.Failure(parsed.Error!);
-        }
+        var resolved = await ReferenceIntegrity.ResolveAsync(
+            reference, subjects, schemas, environments, cancellationToken).ConfigureAwait(false);
 
-        var subject = await subjects.FindAsync(
-                environments.Resolve(parsed.Value.Environment),
-                parsed.Value.Subject,
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        if (subject is null)
-        {
-            return Result<Schema>.Failure(
-                ConcordatCodes.SubjectNotFound,
-                $"'{reference.Name}' points at a subject this tenant cannot see.");
-        }
-
-        var version = subject.Versions.FirstOrDefault(v => v.Ordinal == parsed.Value.Version);
-        if (version is null)
-        {
-            return Result<Schema>.Failure(
-                ConcordatCodes.VersionNotFound,
-                $"'{reference.Name}' points at a version that does not exist.");
-        }
-
-        var schema = await schemas.FindAsync(version.SchemaId, cancellationToken)
-            .ConfigureAwait(false);
-
-        return schema is null
-            ? Result<Schema>.Failure(
-                ConcordatCodes.SchemaNotFound,
-                $"'{reference.Name}' resolves to a schema that is not stored.")
-            : Result<Schema>.Success(schema);
+        return resolved.IsFailure
+            ? Result<Schema>.Failure(resolved.Error!)
+            : Result<Schema>.Success(resolved.Value.Schema);
     }
 
     private static Result<BundledSchema> NotFound(SchemaId id) =>

@@ -2,7 +2,7 @@
 
 **Depends on:** [M8](M8-identity.md) · **Design refs:** [§10](../DESIGN.md#10-deployment-flavours), decisions 009
 
-Same image, `CONCORDAT__PROFILE=Cloud`. Everything here is Apache-2.0 too (ADR-009) — Cloud
+Same image, `Concordat__Profile=Cloud`. Everything here is Apache-2.0 too (ADR-009) — Cloud
 competes on managed upgrades, backups, HA, SLA and support, not on withheld code.
 
 ---
@@ -65,9 +65,21 @@ and can only ever run once; signup creates one organisation among many and runs 
 Sharing a handler would mean one code path whose safety depends on a profile flag, which is
 the shape DESIGN §10 rejects.
 
-**Signup does not say whether an email is already known.** A form open to the internet that
-distinguishes "taken" from "invalid" is an account enumeration oracle, so it answers the
-same way for both.
+**Signup does not name its reason for refusing.** A form open to the internet that says "that
+address already has an account" is an account enumeration oracle, so a refusal carries the
+neutral code `signup_refused` and a message that names no field.
+
+> **This claim used to be false in the place that mattered**, and was corrected 2026-09-24.
+> Only the human-readable `detail` was ever neutral: a taken address answered
+> `user_already_exists` in the `concordatCode`, the title and the type URI — the same
+> disclosure, in the form a sweep would actually parse — and the test covering it asserted the
+> sentence and stopped. `user_already_exists` is still the answer for an **authenticated**
+> caller adding a member, who is entitled to know.
+>
+> **It narrows the oracle rather than closing it**, and the difference is worth stating:
+> signup provisions an organisation synchronously, so submitting an unused handle still tells a
+> caller something from refusal-versus-creation. Closing it properly means answering
+> identically either way and deferring provisioning to a verified email, which is not built.
 
 **A signup is recorded on the deployment trail, not the organisation's** (decision 29). Audit
 rows are stamped with the tenant in scope, and at signup nobody has authenticated — the scope is

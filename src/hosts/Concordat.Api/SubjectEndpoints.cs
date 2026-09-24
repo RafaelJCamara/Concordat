@@ -89,7 +89,8 @@ public static class SubjectEndpoints
             .WithDescription("A dry run. Never writes.")
             .Produces<CompatibilityResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
 
         group.MapGet("/{subject}/versions/{from:int}/diff/{to:int}", DiffVersions)
             .WithSummary("Compare two versions")

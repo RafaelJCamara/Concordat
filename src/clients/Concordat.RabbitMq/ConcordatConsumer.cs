@@ -1,5 +1,6 @@
 using System.Globalization;
 using Concordat.Domain.Registry;
+using Concordat.Domain.Results;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -124,7 +125,8 @@ public sealed class ConcordatConsumer : IAsyncBasicConsumer
             // application gets its delivery and the observer gets told the middleware broke.
             // Letting this propagate would strand the delivery in CallbackExceptionAsync.
             Report(
-                new EnforcementDecision(EnforcementOutcome.Unenforced, "middleware_faulted", ex.Message),
+                new EnforcementDecision(
+                    EnforcementOutcome.Unenforced, ConcordatCodes.MiddlewareFaulted, ex.Message),
                 EnforcementOutcome.Unenforced,
                 exchange,
                 routingKey);

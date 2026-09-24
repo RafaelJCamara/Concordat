@@ -63,6 +63,7 @@ token and an operator can alert across a fleet.
 | `password_invalid` | A password did not meet the minimum requirements. |
 | `user_not_found` | No user with the given identity exists. |
 | `user_already_exists` | A user with that email address already exists. |
+| `signup_refused` | A signup was refused, without saying which of its fields caused it. |
 | `api_key_not_found` | No API key with the given id exists. |
 | `api_key_label_invalid` | An API key label was empty or too long. |
 | `unauthenticated` | The credential was missing, malformed, expired or revoked. |
@@ -104,9 +105,12 @@ token and an operator can alert across a fleet.
 | `version_not_awaiting_approval` | The version is not awaiting approval, so it cannot be approved or rejected. |
 | `changelog_too_long` | A changelog exceeded the permitted length. |
 | `schema_unresolvable` | A client could not resolve a schema, so the operation could not be enforced. |
+| `warm_up_failed` | A client could not warm its cache at startup and `RequireWarmUp` is on, so it refused to start rather than run unenforced. |
+| `service_registration_failed` | A client could not declare its service registration at startup and `RequireServiceRegistration` is on, so it refused to start undeclared. |
+| `middleware_faulted` | Concordat's own middleware threw while handling a delivery, which is reported as an unenforced outcome rather than allowed to reach the application. |
 | `concurrent_write_conflict` | Two requests raced on the same row: a unique constraint or an optimistic-concurrency check caught it at the database rather than in application logic. |
 
-**82 codes.**
+**86 codes.**
 
 ## Rules for implementers
 

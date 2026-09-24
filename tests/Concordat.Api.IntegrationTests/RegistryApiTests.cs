@@ -347,6 +347,73 @@ public class RegistryApiTests(ApiFactory factory)
     }
 
     [Fact]
+    public async Task ARegistrationWhoseReferenceDoesNotResolveIsRefused()
+    {
+        // DESIGN §4 requires the reference graph to be checked at registration, and M1.6's
+        // prose has claimed cycles are rejected there since it was written. Nothing called the
+        // graph functions M1.4 built, so an edge naming a subject or a version that does not
+        // exist was stored without complaint. The only symptom came later and somewhere else:
+        // a GET .../bundled that could not produce a self-contained document, reported to
+        // whoever happened to read next rather than to whoever wrote.
+        var client = Client();
+        var order = await NewSubjectAsync(client);
+
+        var missingSubject = await RegisterAsync(
+            client, order,
+            """{"type":"object","properties":{"addr":{"$ref":"REF"}}}""".Replace(
+                "REF", $"concordat://{Env}/acme.absent.Subject/1", StringComparison.Ordinal));
+
+        Assert.Equal(HttpStatusCode.NotFound, missingSubject.StatusCode);
+        Assert.Equal(
+            "subject_not_found",
+            (await ApiFactory.ReadProblemAsync(missingSubject)).ConcordatCode);
+
+        // The subject resolves; the ordinal it names does not.
+        var address = await NewSubjectAsync(client);
+        await RegisterAsync(
+            client, address, """{"type":"object","properties":{"city":{"type":"string"}}}""");
+
+        var missingVersion = await RegisterAsync(
+            client, order,
+            """{"type":"object","properties":{"addr":{"$ref":"REF"}}}""".Replace(
+                "REF", $"concordat://{Env}/{address}/7", StringComparison.Ordinal));
+
+        Assert.Equal(HttpStatusCode.NotFound, missingVersion.StatusCode);
+        Assert.Equal(
+            "version_not_found",
+            (await ApiFactory.ReadProblemAsync(missingVersion)).ConcordatCode);
+
+        // And nothing was written on the way to either refusal: the subject still has no
+        // versions, so a refused registration did not leave a schema row behind for the next
+        // reader to trip over.
+        var subject = await ApiFactory.ReadAsync<SubjectResponse>(
+            await client.GetAsync($"/v1/environments/{Env}/subjects/{order}"));
+
+        Assert.Empty(subject.Versions);
+    }
+
+    [Fact]
+    public async Task ASelfReferenceIsRefusedBecauseItsOwnVersionDoesNotExistYet()
+    {
+        // The cycle DESIGN §4 asks about, in the only form registration order permits. It is
+        // refused as an unresolvable version rather than as reference_cycle, and that is the
+        // honest answer: references are pinned to an ordinal, the proposal's own ordinal is
+        // unallocated while the check runs, so the edge genuinely points at nothing. The cycle
+        // check still runs behind this one -- see ReferenceIntegrity for why it is kept.
+        var client = Client();
+        var subject = await NewSubjectAsync(client);
+
+        var response = await RegisterAsync(
+            client, subject,
+            """{"type":"object","properties":{"self":{"$ref":"REF"}}}""".Replace(
+                "REF", $"concordat://{Env}/{subject}/1", StringComparison.Ordinal));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(
+            "version_not_found", (await ApiFactory.ReadProblemAsync(response)).ConcordatCode);
+    }
+
+    [Fact]
     public async Task Bootstrap_ReturnsEverySubjectAndEverySchemaItNeeds()
     {
         // One request instead of N. The payload must be self-sufficient, including schemas

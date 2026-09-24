@@ -19,9 +19,18 @@ AWS Glue, Azure and Buf converged on content addressing independently.
 ## Decision
 
 `SchemaId` is the SHA-256 of the canonical form, truncated to 128 bits, lowercase hex.
-**The hash covers the whole envelope — canonical body plus references plus any rules and
-metadata, not just the body.** Registering an identical schema returns the existing ID.
+**The hash covers the whole envelope — canonical body plus references ~~plus any rules and
+metadata~~, not just the body.** Registering an identical schema returns the existing ID.
 Schema content is never deleted and IDs are never reallocated.
+
+> **The preimage this sentence gestures at is normative and is written down elsewhere:**
+> a version tag, the **format token**, the length-prefixed canonical body, and the ordered
+> reference set — [canonicalisation §6.1](../protocol/canonicalisation.md#61-the-preimage),
+> implemented by `SchemaIdComputer.BuildPreimage`. "Rules and metadata" came from the CP 8.1
+> comparison above; Confluent hashes a `ruleSet` and a `metadata` block, and Concordat has
+> never had either. The format, which *is* hashed, was the omission that mattered — an
+> implementer building a preimage from this line alone would compute different ids for the
+> same schema. *(Corrected 2026-09-24; the decision is unchanged.)*
 
 ## Alternatives considered
 
@@ -68,4 +77,6 @@ Subjects and versions remain tenant-scoped as normal; only the immutable content
 ## References
 
 - [DESIGN §4, Context A](../DESIGN.md#context-a--registry-core)
+- [`protocol/canonicalisation.md` §6.1](../protocol/canonicalisation.md#61-the-preimage) — the
+  normative preimage, which this ADR describes only in outline
 - [M1.2 — Canonicalisation and identity](../plan/M1-registry-core.md#m12-canonicalisation-and-identity)

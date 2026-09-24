@@ -497,6 +497,17 @@ public sealed class Subject
     private SchemaVersion? ActiveTip() =>
         Latest is null ? null : _versions.Find(v => v.Ordinal == Latest.Ordinal);
 
+    /// <summary>
+    /// The ordinal the next registered version would receive.
+    /// </summary>
+    /// <remarks>
+    /// Exposed so a caller can name the version it is about to propose — the reference graph
+    /// has to be checked <em>before</em> the version exists, and a node in that graph is a
+    /// (subject, ordinal) pair. Allocation stays here rather than being recomputed by the
+    /// caller, so the node checked is the node created.
+    /// </remarks>
+    public int NextVersionOrdinal => NextOrdinal();
+
     private int NextOrdinal() => _versions.Count == 0 ? 1 : _versions[^1].Ordinal + 1;
 
     // Every mutator calls this. See Revision for why: it is what puts the root row in the

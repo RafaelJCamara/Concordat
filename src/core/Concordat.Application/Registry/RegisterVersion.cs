@@ -58,6 +58,7 @@ public sealed class RegisterVersionHandler(
     ISubjectRepository subjects,
     ISchemaRepository schemas,
     IEnvironmentRepository environments,
+    IEnvironmentResolver environmentResolver,
     ICallerContext caller,
     ICompatibilityEvaluator evaluator,
     IAuditLog audit,
@@ -167,6 +168,25 @@ public sealed class RegisterVersionHandler(
         if (evaluated.IsFailure)
         {
             return Result<RegisterVersionResult>.Failure(evaluated.Error!);
+        }
+
+        // Before the schema is stored, because storing it is what would make a dangling or
+        // cyclic edge somebody else's problem to discover. DESIGN §4 requires both checks at
+        // registration and M1.6's prose has claimed them since it was written; until now the
+        // graph functions M1.4 built had no caller at all, so a reference to a subject or
+        // version that does not exist was accepted and only surfaced when a client asked for
+        // the bundled form and got a document that was not self-contained.
+        var graph = await ReferenceIntegrity.VerifyAsync(
+            new SchemaNode(subject.Name, subject.NextVersionOrdinal),
+            evaluated.Value.Schema.References,
+            subjects,
+            schemas,
+            environmentResolver,
+            cancellationToken).ConfigureAwait(false);
+
+        if (graph.IsFailure)
+        {
+            return Result<RegisterVersionResult>.Failure(graph.Error!);
         }
 
         var stored = await schemas.AddIfMissingAsync(evaluated.Value.Schema, cancellationToken)

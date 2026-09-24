@@ -261,7 +261,7 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
                 if (_options.RequireWarmUp)
                 {
                     throw new ConcordatException(
-                        "warm_up_failed",
+                        ConcordatCodes.WarmUpFailed,
                         $"Warm-up failed: the registry is unreachable ({ex.Message}). " +
                         "RequireWarmUp is on, so the client will not start unenforced.");
                 }
@@ -277,7 +277,7 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
                 if (_options.RequireWarmUp)
                 {
                     throw new ConcordatException(
-                        problem.Code ?? "warm_up_failed",
+                        problem.Code ?? ConcordatCodes.WarmUpFailed,
                         $"Warm-up failed with {(int)response.StatusCode}: {problem.Describe()} " +
                         "RequireWarmUp is on, so the client will not start unenforced.");
                 }
@@ -917,7 +917,7 @@ public sealed class ConcordatClient : IConcordatClient, IDisposable
             var problem = await ReadProblemAsync(response, cancellationToken).ConfigureAwait(false);
 
             throw new ConcordatException(
-                problem.Code ?? "service_registration_failed",
+                problem.Code ?? ConcordatCodes.ServiceRegistrationFailed,
                 $"Declaring service '{_options.ServiceName}' failed with " +
                 $"{(int)response.StatusCode}: {problem.Describe()} " +
                 "RequireServiceRegistration is on, so the client will not start undeclared.");

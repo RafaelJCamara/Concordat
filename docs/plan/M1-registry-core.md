@@ -189,8 +189,14 @@ and the correction is noted inline.
 - [x] **`$id` and `$ref` normalisation**, deferred from M1.2 and landed here with the rest of
       reference handling
 - [x] Edges are **derived from the document**, not supplied alongside it
-- [x] Cycle detection over the version-level graph
-- [x] Referrer queries — direct and transitive, for re-checking on a referenced subject's change
+- [x] Cycle detection over the version-level graph — **wired into registration 2026-09-24**,
+      four milestones after the function was written. Until then it had no caller at all
+- [x] Referrer queries — direct and transitive. Written for re-checking on a referenced
+      subject's change; that re-check turned out to be **moot under pinned references**
+      ([DESIGN §4](../DESIGN.md#4-domain-model)), so the query stands unused rather than uncalled by mistake
+- [x] **Every edge must resolve at registration** — added 2026-09-24 with the cycle wiring. A
+      reference naming a subject or an ordinal that does not exist used to be stored happily and
+      only failed later, for whoever asked for the bundled form
 - [x] 41 reference tests; 191 across the solution
 - [x] Bundled canonical form → **delivered in M1.6**, see below
 
@@ -324,7 +330,8 @@ distinct "forbidden" would confirm another tenant's schema exists.
 - [x] 17 end-to-end tests over real HTTP against real PostgreSQL; 230 across the solution
 - [x] **Bundling**, deferred from M1.4 — `GET /v1/schemas/{id}/bundled`
 - [x] **OpenAPI 3.1 generated, committed and drift-gated** — `docs/api/openapi.v1.json`,
-      12 paths, emitted on every build; CI fails when it differs from what is committed
+      12 paths when this landed, emitted on every build; CI fails when it differs from what is
+      committed
 - [x] **`POST /environments/{env}/bootstrap`** — every subject plus every schema they need,
       including ones reachable only by reference, in one request
 - [x] **`GET …/versions/{from}/diff/{to}`**
@@ -336,7 +343,9 @@ distinct "forbidden" would confirm another tenant's schema exists.
 - [x] Negative-lookup caching semantics → **delivered in M2.1**, in `SchemaCache`; deferred from, where the client cache exists
 - [ ] Subject prefix search — needs a `ComplexProperty` mapping or a shadow column
 
-14 paths in the committed OpenAPI document; 245 tests.
+14 paths in the committed OpenAPI document; 245 tests — the counts as M1.6 closed. The
+committed document carries 48 `/v1` paths today, M7 governance and M8 identity having been
+folded in since.
 
 ### Bootstrap exists because cold start is the real load pattern
 
@@ -375,6 +384,13 @@ cycle terminates. Cycles are rejected at registration, but a read path that trus
 assumption is one bug away from hanging. A missing reference is a failure rather than a
 bundle that still contains a `concordat://` ref — a half-bundled document is not
 self-contained, and the client would only discover that at consume time.
+
+> **"Cycles are rejected at registration" was not true when this was written**, and stayed
+> untrue until 2026-09-24: registration never called the graph. This paragraph's own defensive
+> reasoning is why it went unnoticed for so long — the read path was built not to trust the
+> guarantee, so nothing downstream ever failed in a way that pointed at the missing check. Both
+> halves now hold, and the two paths share one resolver so they cannot disagree about what a
+> reference points at.
 
 ### The OpenAPI document is now enforced
 
@@ -442,7 +458,8 @@ Normative from day one — a corpus written later only ratifies whatever .NET al
 - [x] 7 canonicalisation cases
 - [x] 4 schema-id cases, **pinning the preimage bytes as well as the id**
 - [x] 12 compatibility cases
-- [x] 4 payload-validation cases — fixtures written, execution deferred, see below
+- [x] 4 payload-validation cases — ~~fixtures written, execution deferred~~, see below;
+      **executed from M2** against the real validator, and 12 fixtures today
 - [x] .NET runner, 28 tests, running in CI with the rest
 
 ### The fixtures are JSON on disk, not C#
@@ -463,14 +480,18 @@ it: all four preimages matched the implementation exactly on the first run, incl
 UTF-8 byte counts, which means the framing is genuinely reproducible from the written spec
 rather than only from the code.
 
-### One category cannot execute yet, and that is recorded rather than hidden
+### One category could not execute yet, and that was recorded rather than hidden
 
 Concordat has no payload validator of its own — validation is client-side and uses a
-different third-party library in every language. The runner currently asserts only that the
+different third-party library in every language. At M1.7 the runner asserted only that the
 payload fixtures load, that their schema canonicalises and that every document parses. **M2
 wires the first real validator; M6.1 makes every SDK run them.** They are written now because
 that is the whole point: five independent validators disagree at the edges, and a corpus
 written after the fact would just ratify whatever the first one did.
+
+**Closed in M2.** `PayloadValidationMatchesTheCorpus` runs every `mustAccept` and `mustReject`
+document through `NJsonSchemaPayloadValidator`, so the deferral above describes M1.7 and not
+the runner today; the category has grown from 4 fixtures to 12.
 
 ### A meta-test guards the corpus itself
 
@@ -482,11 +503,25 @@ and both are worse than the failure.
 
 **Minimum viable: container plus compose**
 
-- [x] `Concordat.Api` container image — `docker/api.Dockerfile`, published to GHCR
+- [x] `Concordat.Api` container image — `docker/api.Dockerfile`, ~~published to GHCR~~
+      **publishable to GHCR**: `.github/workflows/publish-images.yml` pushes it on a `v*` tag
+      or manual dispatch, and CI builds the image on every run. The workflow has never been
+      run, so GHCR is still empty: compose's default `ghcr.io/rafaeljcamara/concordat-api:latest`
+      cannot be pulled, and `CONCORDAT_IMAGE` has to point at a locally built one until it is.
+      An owner action, tracked under "Blocked on you" in [STATUS](../STATUS.md)
 - [x] `docker compose --profile registry up` → Concordat + PostgreSQL. The default profile
       still leaves the registry out, because `dotnet run` is the loop you want while writing
       code against the SDK; the profile is for evaluating without a .NET SDK at all
-- [ ] `CONCORDAT__*` configuration binding
+- [ ] ~~`CONCORDAT__*` configuration binding~~ — **superseded, and not built.** Every host
+      binds through the default configuration provider instead, so a deployment sets
+      `ConnectionStrings__Concordat` and `Concordat__*` (`deploy/compose/docker-compose.yml`,
+      `deploy/azure/main.bicep`, and the CI container job) and the API reads nothing prefixed.
+      What is left is a small code inconsistency rather than a feature: `Concordat.Migrator`
+      still falls back to the literal keys `CONCORDAT__ConnectionStrings__Concordat` and
+      `CONCORDAT__Provisioning__AppRolePassword`, and advertises the first in its
+      no-connection-string message — dead advice, because the environment-variable provider
+      rewrites `__` to `:` before load, so neither literal can ever match an environment
+      variable. Remove them, or bind a real prefix in both hosts
 
 ---
 

@@ -163,7 +163,7 @@
           "Bootstrap"
         ],
         "summary": "Fetch everything needed to warm a client cache, in one request",
-        "description": "Cold start is the real load pattern, not steady state. A fleet-wide rolling restart empties every cache at the same moment and stampedes the registry — which sits on the deserialize path, so a registry that buckles takes consumption down with it. One request instead of N is the mitigation. Referenced schemas are included transitively, so the payload is self-sufficient and a client never has to follow a reference it did not plan for. Retired subjects are excluded.",
+        "description": "Cold start is the real load pattern, not steady state. A fleet-wide rolling restart empties every cache at the same moment and stampedes the registry — which sits on the deserialize path, so a registry that buckles takes consumption down with it. One request instead of N is the mitigation. Referenced schemas are included transitively, so the payload is self-sufficient and a client never has to follow a reference it did not plan for. Retired subjects are excluded.\n\nRequires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -195,7 +195,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments": {
@@ -944,7 +949,7 @@
           "Contracts"
         ],
         "summary": "Resolve a topology against the environment's contracts",
-        "description": "What an SDK calls at startup: one request for its whole topology rather than one per route, because a fleet-wide restart is the real load pattern. A route nothing governs is answered with an empty contract list and OFF, not omitted — the SDK needs to tell 'ungoverned' from 'I forgot to ask'. A route governed by more than one contract returns all of them, with the strictest enforcement and the union of their subjects, so the ambiguity is visible rather than resolved by name order.",
+        "description": "What an SDK calls at startup: one request for its whole topology rather than one per route, because a fleet-wide restart is the real load pattern. A route nothing governs is answered with an empty contract list and OFF, not omitted — the SDK needs to tell 'ungoverned' from 'I forgot to ask'. A route governed by more than one contract returns all of them, with the strictest enforcement and the union of their subjects, so the ambiguity is visible rather than resolved by name order.\n\nRequires scope: `contract:read`.",
         "parameters": [
           {
             "name": "env",
@@ -986,7 +991,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/contracts/{contract}": {
@@ -1291,7 +1301,7 @@
           "Governance"
         ],
         "summary": "Declare a service's producer and consumer intent",
-        "description": "Called by an SDK at startup and by CI on deploy. An upsert keyed on the service name: fifty pods reporting the same intent are one row, because the alternative reports fifty affected consumers where there is one.",
+        "description": "Called by an SDK at startup and by CI on deploy. An upsert keyed on the service name: fifty pods reporting the same intent are one row, because the alternative reports fifty affected consumers where there is one.\n\nRequires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -1343,13 +1353,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       },
       "get": {
         "tags": [
           "Governance"
         ],
         "summary": "List the services registered in an environment",
+        "description": "Requires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -1384,7 +1400,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/services/{service}": {
@@ -1393,6 +1414,7 @@
           "Governance"
         ],
         "summary": "Read one service registration",
+        "description": "Requires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -1432,7 +1454,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/violations": {
@@ -1566,7 +1593,7 @@
           "Governance"
         ],
         "summary": "Who breaks if this subject changes",
-        "description": "Analyses a version already in the registry. The check runs FORWARD — can a consumer still holding its declared version read data written under this one — which is the opposite of the direction registration asks.",
+        "description": "Analyses a version already in the registry. The check runs FORWARD — can a consumer still holding its declared version read data written under this one — which is the opposite of the direction registration asks.\n\nRequires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -1618,14 +1645,19 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       },
       "post": {
         "tags": [
           "Governance"
         ],
         "summary": "Who breaks if I register this schema",
-        "description": "The form CI calls before pushing: the schema is not registered, and nothing is written by asking.",
+        "description": "The form CI calls before pushing: the schema is not registered, and nothing is written by asking.\n\nRequires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -1685,7 +1717,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/subjects/{subject}/promote": {
@@ -3166,7 +3203,7 @@
           "Subjects"
         ],
         "summary": "Check a schema without registering it",
-        "description": "A dry run. Never writes.",
+        "description": "A dry run. Never writes.\n\nRequires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -3226,7 +3263,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     },
     "/v1/environments/{env}/subjects/{subject}/versions/{from}/diff/{to}": {
@@ -3576,7 +3618,7 @@
           "Schemas"
         ],
         "summary": "Find the id a schema document would receive",
-        "description": "Canonicalises the document and returns its content-addressed id, plus whether it is already known. Never writes.",
+        "description": "Canonicalises the document and returns its content-addressed id, plus whether it is already known. Never writes.\n\nRequires scope: `subject:read`.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -3608,7 +3650,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
       }
     }
   },

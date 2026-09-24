@@ -103,7 +103,7 @@ rather than deleted, because "why is there no zod here?" is a question worth ans
 
 ## M4.5 Tests
 
-- [x] Playwright E2E against a real API — `web/e2e/`, 42 tests. Found the subject list
+- [x] Playwright E2E against a real API — `web/e2e/`, 43 tests. Found the subject list
       broken on its first run (see [STATUS.md](../STATUS.md)), and on 2026-08-15 found two
       more: a first-hit lazy-route compile that made a correct page look absent, and a
       fixture of its own that was growing the registry by two versions per run

@@ -87,11 +87,11 @@ public sealed class SignUpHandler(
 
         if (emailTaken is not null)
         {
-            // Deliberately the same message an existing account would produce anywhere else.
-            // A signup form that says "that address already has an account" is an account
-            // enumeration oracle open to the entire internet.
+            // Neutral in the code as well as the message. Saying "user_already_exists" in the
+            // detail is an enumeration oracle; saying it in the concordatCode, the title and
+            // the type URI is the same oracle in the form a script would actually read.
             return Result<SignedUp>.Failure(
-                ConcordatCodes.UserAlreadyExists,
+                ConcordatCodes.SignupRefused,
                 "That email address cannot be used to create an organisation.");
         }
 

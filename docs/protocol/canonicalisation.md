@@ -145,11 +145,16 @@ What is escaped, as the registry implements it today:
 The same escaping applies to object keys, and to the Avro canonical form in §4, which uses the same
 writer.
 
-**This table is measured from the implementation and is pinned by no fixture.** It is the sharpest
-cross-language hazard in this document: the natural implementation in Go or Python emits raw UTF-8
-for everything except `"`, `\` and C0 controls, which produces a different canonical body — and so
-a different schema id — for any schema containing an emoji, a non-breaking space or a private-use
-character anywhere in a description, a `const` or an `enum`. See
+**This table is measured from the implementation, and two fixtures pin its sharpest rows:**
+`canonicalisation/string-escaping-controls-and-quotes.json` for `"`, `\`, the short escapes and the
+six-character escape for a control that has none; and
+`canonicalisation/string-escaping-supplementary-characters.json` for the surrogate pair in
+upper-case hex, alongside raw `é`, `中`, `<`, `>` and `&`. **The remaining rows are pinned by
+nothing**, and escaping is still the sharpest cross-language hazard in this document: the natural
+implementation in Go or Python emits raw UTF-8 for everything except `"`, `\` and C0 controls,
+which produces a different canonical body — and so a different schema id — for any schema
+containing a non-breaking space or a private-use character anywhere in a description, a `const`
+or an `enum`. See
 [Where this document is not yet pinned](#where-this-document-is-not-yet-pinned).
 
 ### 3.5 `$id` and `$ref` URI normalisation
@@ -226,20 +231,26 @@ Underneath both sits an identity problem: under PCF, a schema **with** a field d
 schema **without** one hash to the same id, yet they resolve differently against the same bytes.
 Content addressing is supposed to mean *same id ⇒ same meaning*, and under PCF for Avro it does not.
 
-So the rule is **lossless normalisation**: every attribute that can change how data is read or
-resolved survives, and `doc` — the one purely presentational attribute — is dropped so that a
-comment edit does not mint a new schema id
-(`canonicalisation/avro-doc-stripped-defaults-kept.json`).
+So the rule is **lossless normalisation**: nothing is dropped at all. Every attribute survives,
+including `doc`, and the transformation is confined to ordering, whitespace and fullname
+resolution — form, never content (`canonicalisation/avro-nothing-is-stripped.json`).
 
 **For a schema that uses none of the attributes PCF would have stripped, the output is
 byte-identical to PCF.** The form only diverges where PCF loses information, which is what keeps it
 recognisable to anyone who knows Avro.
 
-This decision is recorded as [DECISIONS-PENDING #17](../DECISIONS-PENDING.md) and is open: it is
-reversible until the first Avro schema is stored, and reversing it costs a preimage version bump
-(§6) plus a migration. Concordat ids were never Avro fingerprints anyway — 128-bit truncated
-SHA-256 over a versioned preimage, against Avro's 64-bit CRC — so nothing that interoperates today
-depends on the two forms matching.
+**`doc` was dropped until 2026-08-15**, on the grounds that no reader, writer or resolver consults
+it and a comment edit should not mint a second id.
+[DECISIONS-PENDING #17](../DECISIONS-PENDING.md) settled the other way and is closed: an id is a
+claim about a *document*, not about the subset of it one build considers meaningful, and once one
+attribute is dropped for being presentational, every later attribute needs the same judgement made
+about it — by five SDKs, identically, forever. The cost was accepted: editing a comment now mints a
+new schema id and therefore a new version, compatible with its predecessor but carrying an entry
+whose only change is prose. It cost no migration and no id churn, because no Avro schema had been
+registered, and the preimage version tag (§6.1) is deliberately unbumped — `format` is part of the
+preimage, so JSON Schema ids were never in reach of the change. Concordat ids were never Avro
+fingerprints anyway — 128-bit truncated SHA-256 over a versioned preimage, against Avro's 64-bit
+CRC — so nothing that interoperates today depends on the two forms matching.
 
 ### 4.1 The transformation
 
@@ -254,11 +265,12 @@ resolved in, or `Old` and `acme.Old` would canonicalise differently while naming
 **Aliases on a *field* are left unqualified**, because a field alias is a plain field name and
 fields do not live in a namespace.
 
-**PRIMITIVES.** A primitive in object form with nothing else surviving reduces to the bare string:
-`{"type":"long","doc":"…"}` becomes `"long"`. One carrying any other attribute keeps its object
-form — `{"type":"long","logicalType":"timestamp-millis"}` stays, because `logicalType` decides the
-type a generator emits and how a reader interprets the bytes. PCF always reduces here; this does
-not. `precision` and `scale` on a `decimal` survive for the same reason.
+**PRIMITIVES.** A primitive in object form carrying nothing beside the type reduces to the bare
+string: `{"type":"long"}` becomes `"long"`. One carrying any attribute at all keeps its object form
+— `{"type":"long","logicalType":"timestamp-millis"}` stays, because `logicalType` decides the type
+a generator emits and how a reader interprets the bytes, and `{"type":"long","doc":"…"}` stays for
+the plainer reason that nothing is dropped. PCF always reduces here; this does not. `precision` and
+`scale` on a `decimal` survive for the same reason.
 
 **KEY ORDER.** Structural keys first, in the specification's fixed order; every surviving attribute
 then follows, sorted ordinally, so that arbitrary and future attributes still canonicalise
@@ -277,7 +289,8 @@ deterministically.
 So a `fixed` written `{"size":16,"namespace":"acme","name":"Fx","type":"fixed"}` canonicalises to
 `{"name":"acme.Fx","type":"fixed","size":16}`, and a field written
 `{"name":"a","type":"string","doc":"…","default":"d","order":"ascending","aliases":["oldA"]}`
-canonicalises to `{"name":"a","type":"string","aliases":["oldA"],"default":"d","order":"ascending"}`.
+canonicalises to
+`{"name":"a","type":"string","aliases":["oldA"],"default":"d","doc":"…","order":"ascending"}`.
 `size` is re-emitted as a base-10 integer.
 
 **SEQUENCE ORDER IS PRESERVED** in `fields`, `symbols` and union branches. All three are semantic:
@@ -294,7 +307,8 @@ String escaping is the table in §3.4.
 adds is written deterministically: object keys sorted, **array order preserved** — a `default` for
 an array field is data and its order is meaningful — and numbers verbatim.
 
-**`doc` is the only attribute dropped**, at every level.
+**Nothing is dropped**, at any level — `doc` included. The only attribute the transformation
+removes is `namespace`, and only because the fullname it qualified now carries it.
 
 ### 4.2 What is rejected
 
@@ -555,10 +569,12 @@ sorted by name, so the id is stable.
 | `canonicalisation/key-order.json` | Ordinal key sorting, at every depth |
 | `canonicalisation/array-order-preserved.json` | Arrays are never sorted |
 | `canonicalisation/numbers-verbatim.json` | The RFC 8785 deviation |
+| `canonicalisation/string-escaping-controls-and-quotes.json` | Short escapes where one exists, `\u` where none does |
+| `canonicalisation/string-escaping-supplementary-characters.json` | Surrogate pairs in upper-case hex; BMP non-ASCII and markup raw |
 | `canonicalisation/uri-normalisation.json` | `$id`/`$ref` only, absolute only |
 | `canonicalisation/duplicate-keys-rejected.json` | Duplicate keys have no single meaning |
 | `canonicalisation/malformed-rejected.json` | No parser leniency |
-| `canonicalisation/avro-doc-stripped-defaults-kept.json` | The PCF deviation |
+| `canonicalisation/avro-nothing-is-stripped.json` | The PCF deviation: `default`, `aliases` and `doc` all survive |
 | `canonicalisation/avro-fullnames-resolved.json` | Namespace inheritance and fullname folding |
 | `canonicalisation/protobuf-import-order-normalised.json` | Import sorting, comment stripping, field sorting |
 | `canonicalisation/protobuf-reserved-ranges-merged.json` | Reserved range merging |
@@ -576,12 +592,16 @@ Stated explicitly rather than left for an implementer to discover. Each item is 
 registry that **no fixture asserts**, so a second implementation could diverge without failing the
 corpus.
 
-- **String escaping beyond ASCII (§3.4).** The most likely source of a silent id divergence in this
-  document. No fixture contains a supplementary character, a private-use character, a non-breaking
-  space or a control character, so nothing in the corpus catches an implementation that emits raw
-  UTF-8 where the registry emits `\uXXXX`, or lower-case hex where it emits upper-case. Until a
-  fixture exists, an implementation should reproduce the table in §3.4 and treat any schema
-  containing those characters as a known interoperability risk.
+- **String escaping beyond ASCII (§3.4), except the rows M6.1 pinned.** Still the most likely source
+  of a silent id divergence in this document, but no longer wholly unpinned:
+  `string-escaping-supplementary-characters.json` catches an implementation that emits a
+  supplementary character as raw UTF-8, or spells its surrogate pair in lower-case hex, or escapes
+  `<`, `>`, `&` and ordinary non-ASCII text; `string-escaping-controls-and-quotes.json` catches one
+  that writes a tab as a six-character escape rather than `\t`, or a bell as anything but one.
+  No fixture contains a non-breaking space or any other `Zs`, U+2028, U+2029, U+FEFF, a private-use
+  character or an unassigned BMP code point, so those rows remain measured from the implementation
+  alone. Reproduce the table in §3.4 and treat a schema carrying one of those characters as a known
+  interoperability risk.
 - **URI normalisation beyond the cases in §3.5.** The corpus pins one case; the .NET unit tests add
   casing, default port and dot segments. Percent-encoding normalisation, an empty path gaining `/`,
   internationalised host names, and non-hierarchical schemes such as `urn:` are measured from the
@@ -589,9 +609,11 @@ corpus.
 - **Sort order for names containing supplementary characters.** §2 states UTF-16 code-unit order,
   which is what the implementation does and what RFC 8785 requires, but no fixture contains such a
   name, so a UTF-8-byte-order implementation passes the corpus today.
-- **The Avro canonical form is an open decision.** DECISIONS-PENDING #17 records it as taken on the
-  implementer's judgement and reversible until the first Avro schema is stored. If it is reversed,
-  the preimage version tag in §6.1 changes with it.
+- ~~**The Avro canonical form is an open decision.**~~ **Closed 2026-08-15** by
+  [DECISIONS-PENDING #17](../DECISIONS-PENDING.md) — nothing is dropped, the form is pinned by
+  `canonicalisation/avro-nothing-is-stripped.json`, and the preimage version tag in §6.1 stayed
+  where it was, because no Avro schema had been registered and `format` keeps JSON Schema ids out
+  of reach.
 - **Protobuf option value normalisation.** Escape sequences inside a string option value are decoded
   during lexing and re-escaped on output for `\` and `"` only, so a `\n` written in the source
   becomes a literal newline inside the canonical text. No fixture covers option values at all.

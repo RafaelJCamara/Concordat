@@ -33,14 +33,15 @@ public class RegisterVersionHandlerTests
     private readonly RecordingOutbox _outbox = new();
     private readonly SettableBillingGate _billing = new();
     private readonly FakeEnvironmentStore _environments = new();
+    private readonly FakeEnvironments _environmentNames = new();
     private readonly SettableCaller _caller = new();
 
     private RegisterVersionHandler Handler() =>
-        new(_subjects, _schemas, _environments, _caller, _evaluator,
+        new(_subjects, _schemas, _environments, _environmentNames, _caller, _evaluator,
             _audit, _outbox, _billing, _unitOfWork, _clock);
 
     private RegisterVersionHandler Handler(ICompatibilityEvaluator evaluator) =>
-        new(_subjects, _schemas, _environments, _caller, evaluator,
+        new(_subjects, _schemas, _environments, _environmentNames, _caller, evaluator,
             _audit, _outbox, _billing, _unitOfWork, _clock);
 
     private Task<Result<RegisterVersionResult>> RegisterAsync(

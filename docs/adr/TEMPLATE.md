@@ -12,7 +12,7 @@ general impression.
 
 ## Decision
 
-The choice, in the imperative: "Signet does X", not "we could do X". One paragraph.
+The choice, in the imperative: "Concordat does X", not "we could do X". One paragraph.
 
 ## Alternatives considered
 

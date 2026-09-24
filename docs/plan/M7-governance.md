@@ -11,7 +11,10 @@ Contexts B, C and D of the domain model — the contract layer Kafka has no equi
 **ADR-012**
 
 - [x] `Environment` aggregate — `Name`, `Description`, `Brokers[]`, `DefaultCompatibilityPolicy`
-- [x] `BrokerConnection` entity — `Uri`, `VirtualHost`, `CredentialRef`, `TlsSettings`, `Status`
+- [x] `BrokerConnection` entity — `Uri`, `VirtualHost`, `CredentialRef`, `Status`, and
+      ~~`TlsSettings`~~ **`UseTls`**, derived from the scheme at creation rather than stored:
+      two sources for one fact is one too many, and `amqps://` with TLS disabled is a
+      configuration nobody means
 - [x] Connection health check
 - [x] `GET|PUT …/registration-policy`, deferred from [M1.6](M1-registry-core.md)
 - [x] **`RegistrationPolicy` enforced**, on subject creation and version registration alike
@@ -82,9 +85,12 @@ it was written would have been authored by guessing about a live topology and th
 discovered in production.
 
 **An unmatched route is answered, not omitted.** `resolve` returns
-`{contract: null, enforcement: "OFF"}` for a route no contract governs, because the SDK
+`{contracts: [], enforcement: "OFF"}` for a route no contract governs, because the SDK
 has to tell "nothing governs this" (normal, brownfield) from "I forgot to ask" (a bug),
-and the answers are positional.
+and the answers are positional. The field went plural on 2026-08-14 with
+[decision 21](../DECISIONS-PENDING.md): every matching contract is named, the strictest of
+their modes wins and their subjects are unioned, so an ungoverned route sends the empty list
+where it once sent `{contract: null}`.
 
 ### A governing contract wins outright; `Mode` is the default for what it does not cover
 
@@ -95,9 +101,9 @@ refusing traffic after the contract had been set to `OFF`. An off switch that do
 anything off is worse than no off switch, because it is believed.
 
 So a contract that matches decides, and the client's `Mode` governs only routes nothing covers.
-This is the whole reason `resolve` distinguishes a null contract from an `OFF` one: **"nobody has
-written a contract for this" has to mean something different from "a contract covers this and
-says do nothing"**, or the central control is unreachable from the client.
+This is the whole reason `resolve` distinguishes an empty contract list from an `OFF` one:
+**"nobody has written a contract for this" has to mean something different from "a contract
+covers this and says do nothing"**, or the central control is unreachable from the client.
 
 The one exception is local `Mode = Off`, which no contract can override. It means "Concordat does
 nothing in this process", and honouring that must not depend on the registry being reachable — it

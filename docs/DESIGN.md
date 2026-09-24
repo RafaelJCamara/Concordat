@@ -1,8 +1,12 @@
 # Concordat — A Schema Registry for RabbitMQ
 
-> **Status: design, not yet implemented.** This document records the architecture and the
-> decisions behind it. No code exists yet; see [Milestones](#11-milestones) for the
-> intended build order.
+> **Status: ~~design, not yet implemented~~ — the architecture of record, and most of it is
+> built.** **Amended 2026-09-24.** This document records the architecture and the decisions
+> behind it. It is not a build log and does not track progress: it is amended in place only
+> where delivery contradicted it, and those amendments are marked where they sit (§2's ADR-010
+> strikethrough, §5's "Corrected in M1.3"). For what runs today and what is still missing read
+> **[STATUS.md](STATUS.md)**; for the order the work was taken in, see
+> [Milestones](#11-milestones) and [PLAN.md](PLAN.md).
 
 ## Context
 
@@ -279,9 +283,14 @@ common complaint about Confluent is that "contexts" bolted this on late.
   >
   > **Canonicalisation is day-one work.** Confluent's `normalize.schemas` still defaults
   > to `false`, which is how registries accumulate thousands of near-duplicate schemas
-  > and blow past quota. Avro → Parsing Canonical Form; JSON Schema → key-sorted,
-  > whitespace-normalised, `$id` resolved; Protobuf → normalised `FileDescriptorProto`
-  > with import ordering normalised.
+  > and blow past quota. Avro → ~~Parsing Canonical Form~~ **lossless normalisation, nothing
+  > dropped (M5.2, decision #17)** — see [protocol/canonicalisation.md §4](protocol/canonicalisation.md)
+  > for why PCF was refused; JSON Schema → key-sorted,
+  > whitespace-normalised, `$id` resolved; Protobuf → ~~normalised `FileDescriptorProto`~~
+  > **normalised `.proto` source (M5.3)** with import ordering normalised. The descriptor is
+  > still the right *model* — the compatibility engine reasons over one — but the canonical
+  > text is what the registry stores and serves, and a consumer fetching a Protobuf schema
+  > wants source it can hand to `protoc`.
   >
   > **Size limit** — reject above a documented ceiling (Confluent has `42209
   > SCHEMA_TOO_LARGE`; Redpanda warns <128 KB; Glue caps at 170 KB).
@@ -291,10 +300,17 @@ common complaint about Confluent is that "contexts" bolted this on late.
   ordinals contiguous and monotonic.
   - **`SchemaVersion`** — `Ordinal`, `SemanticVersion` (optional), `SchemaId`,
     `Changelog`, `RegisteredAt/By`, `Deprecated`, **`Status`**
-    (`Active | AwaitingApproval | Rejected`).
+    (`Active | AwaitingApproval | Rejected | Dismissed`).
     > **`Rejected` added during M1.1.** Rejection needs somewhere to record its outcome, and
     > leaving a declined proposal as `AwaitingApproval` forever is precisely the graveyard
     > ADR-017 warns about. The value is wire-visible and therefore normative under ADR-019.
+    >
+    > **`Dismissed` added during M7.4**, for a proposal that stopped being proposed because the
+    > change was reverted before anyone reviewed it. Deliberately not `Rejected`: rejection is a
+    > reviewer's judgement, and recording an auto-dismissal as one attributes a decision to a
+    > reviewer who never made it. Wire-visible on the same terms, so a client must handle four
+    > tokens — the frontend missing this one is what broke the subject list against a real
+    > registry.
 - **`LatestPointer`** (ADR-017) — the `latest` label is an explicit, gated pointer on the
   Subject, not "whatever has the highest ordinal". A breaking registration succeeds with
   `Status = AwaitingApproval` and does **not** advance it.
@@ -324,10 +340,25 @@ common complaint about Confluent is that "contexts" bolted this on late.
 
 **Schema references.** `Reference = (name, subject, version)`. Resolution per format:
 JSON Schema `$ref` → `concordat://<env>/<subject>/<version>`; Protobuf `import` filename →
-subject; Avro named-type FQN → subject. Registration resolves references into a bundled
-canonical form *and* retains the edges. Cycle detection is required, and **compatibility
-must be evaluated transitively** — a breaking change inside a referenced schema breaks
+subject; Avro named-type FQN → subject. Registration ~~resolves references into a bundled
+canonical form *and*~~ retains the edges; **bundling moved to serve time in M1.6** —
+`GET /v1/schemas/{id}/bundled` — because bundling at registration would make
+canonicalisation depend on registry state and stop any SDK reproducing an id offline.
+Cycle detection is required, and **compatibility must be evaluated
+transitively** — a breaking change inside a referenced schema breaks
 every referrer, so referrers are re-checked on the referenced subject's new version.
+
+> **Both halves landed 2026-09-24, and one of them turned out to be vacuous.** Until then
+> nothing called the graph functions M1.4 built, so registration checked neither that an edge
+> resolves nor that the graph is acyclic; the first symptom of a reference to a subject or
+> version that does not exist arrived later, on the read path, as a `bundled` document that was
+> not self-contained. Registration now resolves every edge before storing the schema.
+> **The transitive re-check is a no-op, by construction rather than by omission:** a
+> `Reference` is pinned to an ordinal and versions are immutable, so registering `B@2` cannot
+> change what `A@1` reads — it still resolves `B@1`. The premise above holds only for a
+> reference that follows a moving pointer, which this product does not have. Cycle detection is
+> kept and runs, for the same reason: it is what would catch a `latest` selector reintroducing
+> the possibility. See `ReferenceIntegrity` for the full argument.
 
 **Deletion semantics.** Schemas are content-addressed and **never deleted**. Subjects
 soft-delete by moving to `Retired`; hard delete requires no registered consumers, an
@@ -603,9 +634,12 @@ detection (uuid, date-time, email), enums at low cardinality, nullability. Outpu
 **Build/test-time NuGet packages**
 - **`Concordat.Client`** — HTTP + caching.
 - **`Concordat.Contracts`** — `[ConcordatContract("acme.orders.OrderCreated")]` on C# records.
-- **`Concordat.Contracts.MSBuild`** — MSBuild task + Roslyn analyzer generating a schema
-  from every attributed type at build time, diffing against checked-in `contracts/`,
-  **erroring on drift**. The C# type is the source of truth; breaking it breaks the build.
+- **`Concordat.Contracts.Generators`** (~~`Concordat.Contracts.MSBuild`~~) — ~~MSBuild task +
+  Roslyn analyzer~~ **a Roslyn source generator (M3.4)**, generating a schema from every
+  attributed type at build time, diffing against checked-in `contracts/` and **erroring on
+  drift** (`CDT003`). The C# type is the source of truth; breaking it breaks the build. A
+  generator rather than a task because a task has to load the consumer's compiled assemblies,
+  which is a whole class of build failure a generator reading the compilation never has.
 - **`Concordat.Contracts.Testing`** — `await Concordat.Assert.CompatibleAsync<OrderCreated>(env: "prod")`.
 
 ### Compatibility semantics (ADR-016)
@@ -671,16 +705,32 @@ Concordat/
     core/      Concordat.Domain/  Concordat.Application/  Concordat.Infrastructure/
     formats/   Concordat.Formats.Abstractions/ .Json/ .Avro/ .Protobuf/
     hosts/     Concordat.Api/  Concordat.Migrator/
-    cloud/     Concordat.Cloud.Tenancy/  Concordat.Cloud.Billing/
-    clients/   Concordat.Client/  Concordat.Contracts{,.MSBuild,.Testing}/
-               Concordat.Messaging.RabbitMq/     # service-bus adapters deferred — Appendix A
+    clients/   Concordat.Client/  Concordat.RabbitMq/
+                                       # service-bus adapters deferred — Appendix A
+    contracts/ Concordat.Contracts{,.Generators,.Testing}/
     tools/     Concordat.Cli/          # NativeAOT
-  clients/     typescript/ python/ go/ java/          # ADR-021
+  clients/     typescript/ python/ go/ java/   # ADR-021 — deferred post-v1 (ADR-024)
   web/         # Angular
-  deploy/      docker/ compose/ helm/
+  docker/      api.Dockerfile  cli.Dockerfile
+  deploy/      azure/ compose/         # Helm chart still open — M9.4
+  samples/  scripts/
   tests/       Concordat.Domain.Tests/ Concordat.Application.Tests/ Concordat.Formats.*.Tests/
-               Concordat.Api.IntegrationTests/ Concordat.Messaging.Tests/ Concordat.Conformance/
+               Concordat.Api.IntegrationTests/ Concordat.RabbitMq.Tests/ Concordat.Client.Tests/
+               Concordat.Contracts.Tests/ Concordat.Cli.Tests/ Concordat.HeaderSurvival/
+               Concordat.EndToEnd/ Concordat.Conformance/
 ```
+
+> **Amended to the layout that shipped.** The top-level `clients/` row is the one exception:
+> it is the SDK work ADR-024 deferred past v1, so nothing is there yet.
+> ~~`src/cloud/` with `Concordat.Cloud.Tenancy` and `Concordat.Cloud.Billing`~~ was never
+> created — M9's tenancy and billing live in `Concordat.Domain` (`Billing/`,
+> `Identity/Tenant.cs`) and `Concordat.Infrastructure` (`Billing/`, `ConcordatProfile.cs`),
+> behind the profile swap this section already prescribes, so separate assemblies would have
+> bought nothing the swap does not. The RabbitMQ middleware shipped in M2 as
+> **`Concordat.RabbitMq`**, not ~~`Concordat.Messaging.RabbitMq`~~ — the transport is in the
+> name already, and "Messaging" named nothing the adapter does. The contract packages sit in
+> their own **`src/contracts/`** rather than under `clients/`: they are build-time tooling,
+> not a wire client, and only one of the three talks to the registry at all.
 
 **Dependency rule:** Domain ← Application ← Infrastructure/Api. Format projects depend
 only on `Formats.Abstractions` + their parser lib; Domain references interfaces only.
@@ -769,10 +819,15 @@ cmdk, vaul, embla, input-otp — all installed, none used).
 ## 10. Deployment flavours
 
 **Self-hosted** — one image serving API + embedded SPA. `docker compose up` brings
-Concordat + Postgres + optional RabbitMQ. Helm chart. `CONCORDAT__*` env vars. Auto-migrate on
-startup (toggleable). Single implicit tenant, local accounts + optional OIDC.
+Concordat + Postgres + optional RabbitMQ. Helm chart. ~~`CONCORDAT__*` env vars.~~
+**`ConnectionStrings__Concordat` and `Concordat__*` (M1.8)** — the double-underscore prefix this
+line named was never built, and compose, the Bicep and CI have always used the shipped spelling.
+~~Auto-migrate on startup (toggleable).~~ **Migration runs as its own process (M1.5)** —
+`Concordat.Migrator` runs to completion and the API waits on it, so replicas cannot race each
+other to migrate one database and a failed migration stops the rollout instead of starting an
+API against a half-migrated schema. Single implicit tenant, local accounts + optional OIDC.
 
-**Concordat Cloud** — same image, `CONCORDAT__PROFILE=Cloud`. Multi-tenant, row-level
+**Concordat Cloud** — same image, `Concordat__Profile=Cloud`. Multi-tenant, row-level
 isolation. Org signup, Google/GitHub SSO, SAML on the top tier. Stripe metered on
 subjects, versions/month, API requests, environments, seats. Free (1 env, 10 subjects) →
 Team → Business → Enterprise. Per ADR-009 everything is Apache-2.0, so Cloud competes on
@@ -789,8 +844,8 @@ managed upgrades, backups, HA, SLA and support.
 |---|---|
 | **M0** | Solution skeleton, `Directory.*.props`, `global.json`, CI, ADRs 001–022. Name availability **done** — the project was renamed from Signet to Concordat (ADR-022); `concordat.dev` still to buy. |
 | **M1** | Registry core, **JSON Schema only**: subjects, versions, canonicalisation, **content-addressed IDs**, **two-axis compatibility engine**, references, **gated `latest` pointer + registration policy**, REST API + `/bootstrap`, Postgres, OpenAPI |
-| **M2** | `Concordat.Client` + `Concordat.Messaging.RabbitMq` + `ISubjectResolver`; Testcontainers tests; **verify header survival** (§2) |
-| **M3** | `concordat` CLI incl. `infer` + GitHub Action + `Concordat.Contracts{,.MSBuild,.Testing}` |
+| **M2** | `Concordat.Client` + `Concordat.RabbitMq` + `ISubjectResolver`; Testcontainers tests; **verify header survival** (§2) |
+| **M3** | `concordat` CLI incl. `infer` + GitHub Action + `Concordat.Contracts{,.Generators,.Testing}` |
 | **M4** | Angular app port |
 | **M5** | Avro + Protobuf formats |
 | **M6** | **Tier 2 SDKs** (ADR-021) — TypeScript/JavaScript → Python → Go → Java — plus the cross-language conformance suite running in every SDK's CI |
@@ -856,8 +911,9 @@ clients have already hardened.
   `Status = AwaitingApproval` and leaves `latest` unmoved; approval advances it;
   reverting the change auto-dismisses the pending approval; `RegistrationPolicy = CiOnly`
   rejects SDK auto-registration server-side regardless of client config.
-- **Reference tests** — transitive breakage: changing a referenced schema must fail its
-  referrers; cycles must be rejected at registration.
+- **Reference tests** — ~~transitive breakage: changing a referenced schema must fail its
+  referrers~~ **moot under pinned references (see §4)**; every edge must resolve at
+  registration, and cycles must be rejected there.
 - **Header round-trip tests** — the `string` → `byte[]` decode holds on the
   RabbitMQ.Client path, and no Concordat header collides with `MT-`, `NServiceBus.`,
   `rbs2-`, `rabbitmq-` or `x-`. The collision check stays despite ADR-020: those headers

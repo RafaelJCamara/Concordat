@@ -55,7 +55,8 @@ public static class SchemaEndpoints
                 "Canonicalises the document and returns its content-addressed id, plus " +
                 "whether it is already known. Never writes.")
             .Produces<LookupSchemaResponse>()
-            .ProducesProblem(StatusCodes.Status400BadRequest);
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .RequireScope(Scope.SubjectRead);
 
         return app;
     }

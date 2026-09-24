@@ -49,6 +49,7 @@ export const DOMAIN_CONCORDAT_CODES = [
   'password_invalid',
   'user_not_found',
   'user_already_exists',
+  'signup_refused',
   'api_key_not_found',
   'api_key_label_invalid',
   'unauthenticated',
@@ -90,6 +91,9 @@ export const DOMAIN_CONCORDAT_CODES = [
   'version_not_awaiting_approval',
   'changelog_too_long',
   'schema_unresolvable',
+  'warm_up_failed',
+  'service_registration_failed',
+  'middleware_faulted',
   'concurrent_write_conflict',
 ] as const;
 

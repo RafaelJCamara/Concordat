@@ -2,7 +2,10 @@
 
 **As of 2026-08-15**, except [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added the next day and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30. A companion to
+throughout were re-run and corrected 2026-08-30. A consistency audit on **2026-09-24** corrected
+the prose that had gone stale against shipped code — four places where this file claimed
+something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
+aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
 [PLAN.md](PLAN.md), which records what was built, and
 [DECISIONS-PENDING.md](DECISIONS-PENDING.md), which records what has not been decided. This
 file records what is **not there**, so the gaps are in one place rather than distributed across
@@ -10,6 +13,43 @@ ten milestone files as unchecked boxes.
 
 Everything under "verified locally" below was run on this machine today, against the real
 container image and a real PostgreSQL. Everything else is claimed on the strength of tests.
+
+---
+
+## Requirements consistency audit, 2026-09-24
+
+Every requirement source checked against the code it describes: 27 ADRs, ten milestone plans,
+DESIGN.md, the four normative protocol specs, and this file. **54 inconsistencies confirmed**,
+each re-verified by a second reviewer told to refute it; 226 load-bearing requirements verified
+as holding. A gap these documents already recorded counted as consistency, so what follows is
+only disagreement between a claim and the code.
+
+**Three were product gaps, all now closed** — they are in the holes table below, with the code:
+
+- **Registration never checked the reference graph.** `ReferenceGraph.DetectCycle` and
+  `ReferrersOf` shipped with M1.4 and had no production caller, so an edge naming a subject or
+  ordinal that does not exist was accepted and surfaced later as a `bundled` document that was
+  not self-contained. M1.6's prose and `BundleSchema`'s own comment had claimed cycles were
+  rejected at registration since the day they were written.
+- **Nine routes answered anonymously on a claimed instance**, including the environment
+  bootstrap route that returns every subject and schema at once. ADR-027 named three of them as
+  gated. See [ADR-027](adr/027-read-requires-authentication.md) for how the structural test
+  missed them, which is the more useful half of the finding.
+- **Signup announced that an address was taken** in its `concordatCode`, title and type URI,
+  while the message above them was carefully neutral.
+
+**Two were normative protocol documents specifying the opposite of what ships** — the exact
+cross-SDK divergence `docs/protocol/` exists to prevent. `canonicalisation.md` still described
+Avro `doc`-stripping that decision #17 reversed on 2026-08-15, citing a fixture that no longer
+exists; `envelope.md` §7 still refused generic type names that ADR-025 gave a normative
+spelling. An SDK written from either would have computed different schema ids or refused
+subjects every other implementation resolves.
+
+**The rest was drift in one direction or the other**: this file understating what the web app
+has shipped, protocol gap-lists trailing closed decisions, and ADR-003, `src/README.md` and
+DESIGN §7–§8 describing an M1-era layout with a `src/cloud/` and a `Contracts.MSBuild` that were
+never built. Nothing found suggested a wrong decision — only records that had stopped matching
+what was decided.
 
 ---
 
@@ -82,8 +122,10 @@ cd deploy/compose && CONCORDAT_IMAGE=concordat/api:local docker compose --profil
 | Quickstart sample over real RabbitMQ | valid message accepted, invalid one refused at publish, queue drained clean |
 | Container healthcheck | **was broken, now fixed** — see below |
 
-`CONCORDAT__*` configuration binding is listed as an open M1 item and appears to be **stale**:
-the container ran on `ConnectionStrings__Concordat` and `Concordat__Profile` today.
+`CONCORDAT__*` configuration binding was listed as an open M1 item and was **stale**: the
+container ran on `ConnectionStrings__Concordat` and `Concordat__Profile` that day, and still
+does. [M1.8](plan/M1-registry-core.md) now records the prefix as superseded and not built,
+rather than as work outstanding.
 
 ### The one defect this found
 
@@ -122,7 +164,9 @@ only when a cookie was presented and rejected.
 ### Two things that path does not cover
 
 - **The web app is not in the compose stack.** There is no way to bring up the UI alongside the
-  registry with one command, because most of the UI does not exist yet (below).
+  registry with one command. The reason used to be that most of the UI did not exist; it is now
+  simply that compose has no web service wired — the registry's own read path is walkable in a
+  browser, which is what the 2026-08-15 verification below exercised.
 - **The quickstart does not exercise contracts.** It prints `0/0 routes governed` — the sample
   predates contract resolution and declares no topology, so the newest feature in the SDK is
   demonstrated by nothing a user would run.
@@ -137,33 +181,37 @@ only when a cookie was presented and rejected.
 | M1 registry core | 65 / 68 |
 | M2 .NET client | 32 / 41 |
 | M3 CLI | **19 / 19** |
-| M4 web app | 16 / 29 |
+| M4 web app | 20 / 30, plus the part-built Dashboard |
 | M5 formats | 14 / 15 |
 | M6 SDKs | 5 / 24 |
 | M7 governance | **30 / 31** |
 | M8 identity | 13 / 15 |
 | M9 cloud | 11 / 16 |
-| **Total** | **227 / 283** |
+| **Total** | **231 / 284** |
 
-**Do not read that as a progress bar.** Auditing the 56 remaining boxes found 12 that are not
+**Do not read that as a progress bar.** Auditing the 53 remaining boxes found 9 that are not
 work at all:
 
 - **M2 has an archived scope list.** `## M2.2 notes (original scope)` preserves the original
   seven-item envelope scope, deliberately left unchecked as a historical record while the
-  section above it is marked done. Most of those items shipped — Mode A headers and the Mode B
-  content-type are exercised by the quickstart. At least one did not: see the binary framing
-  gap below.
+  section above it is marked done. Most of those items shipped — Mode A headers are exercised by
+  the quickstart, and the Mode B content-type is written and parsed by `ContentTypeEnvelope`
+  under unit tests only, because the sample publishes plain `application/json`. At least one did
+  not: see the binary framing gap below.
 - **One M2 item is a cross-reference,** not a gap: "binding it to `IReadOnlyBasicProperties`" is
   annotated *"— M2.4"*, where it was in fact done.
-- **Three M4 items are moot.** They are corrections to a React prototype that was never ported.
-  Detail below.
 - **One M5 item cannot be done** — splitting a `.proto` across files, which [ADR-023](adr/023-no-cross-subject-references-avro-protobuf.md)
   scoped out rather than deferred.
 
-Real remaining work is therefore **16 items**, and 12 of those are M4. The rest of the arithmetic:
+~~Three M4 items are moot — corrections to a React prototype that was never ported.~~ **Removed
+from the plan 2026-09-24**, which is why this list is 9 rather than the 12 it counted before:
+carrying an item as "not work at all" is a way of saying it should not have been a box, and the
+honest fix is to stop counting it rather than to annotate it forever.
+
+Real remaining work is therefore **17 items**, and 10 of those are M4. The rest of the arithmetic:
 **22 are deferred by an ADR** (M6's four SDKs, OIDC, SAML, Helm) and **5 are blocked on an account
 or a purchase** you have to make — see *Blocked on you* below. Sorted that way the picture is much
-narrower than 56: one milestone of real engineering, and a pile of decisions.
+narrower than 53: one milestone of real engineering, and a pile of decisions.
 
 M3 is the first milestone to reach 19/19, closed by `Concordat.Contracts.Testing` (decision 13).
 M7 reached 30/31 on 2026-08-15 — not by new work, but by an audit finding its last open box had
@@ -175,14 +223,21 @@ described shipped code since decision 25 landed the day before.
 
 ### M4 — the web application
 
-The honest count is **12**. Every API behind these exists, so this is Angular work rather than
-design work.
+The honest count is **10** — nine unchecked boxes plus the part-built Dashboard. Every API behind
+these exists, so this is Angular work rather than design work.
 
-**Genuinely missing:** SubjectDetail / VersionDetail / NewVersion pages · ContractsPage ·
+**Genuinely missing:** ContractsPage ·
 CompatibilityDiffPage · ImpactAnalysisPage · ApprovalsPage · AuditLogPage · the settings split
 (environment, brokers, API keys, members) · notification forms that persist · Monaco for schema
 editing · `ajv` for client-side validation · the "preserve" list of prototype behaviours
 (immutable-id confirmation, semver auto-increment, clone-previous-version, empty states).
+
+~~SubjectDetail / VersionDetail / NewVersion pages~~ headed that list until this audit.
+**They shipped 2026-08-15 with M4.3** — `subject-detail-page.ts`, `version-detail-page.ts` and
+`new-version-page.ts`, routed at `/subjects/:name`, `/subjects/:name/versions/:ordinal` and
+`/subjects/:name/versions/new` — and the browser-verification paragraph below has said so since
+that day. The 2026-08-30 pass re-ran the test counts and nothing else, so the list outlived the
+gap it described.
 
 **Part-built:** the **Dashboard**. A first slice ships on `/` — subject, version and
 awaiting-approval counts, and the most recently registered subjects. Every number is derived
@@ -216,9 +271,14 @@ are exact and identical on Windows and on CI's Linux. It exists because the plac
 survived a whole milestone with every other test green: nothing named a colour, so nothing could
 notice they were all wrong.
 
-The one M4.5 item still absent — "direct URL to a write route redirects" — is blocked on M4.3
+~~The one M4.5 item still absent — "direct URL to a write route redirects" — is blocked on M4.3
 rather than unwritten: there is no write route to paste, and `scopeGuard` is referenced by no
-route at all. That also corrected an M4.2 line which had recorded the guard as wired.
+route at all. That also corrected an M4.2 line which had recorded the guard as wired.~~
+**Written 2026-08-15**, the same day, once M4.3's pages gave it a route to paste:
+`/subjects/:name/versions/new` is the app's first write route and the first thing
+`schemaWriteGuard` is attached to, so `authorization.spec.ts` asserts the guard rather than the
+`**` wildcard — it renders for a writer, redirects a reader to `/subjects`, and sends a
+signed-out visitor to `/sign-in?returnTo=…`.
 
 **Already done but still listed:** `LoginPage` — `sign-in-page.ts` shipped with M8.2.
 
@@ -234,8 +294,10 @@ The Monaco item is worth keeping but its stated reason has expired: it is framed
 prototype's `dangerouslySetInnerHTML` XSS hole, and that code was never ported either. Monaco is
 wanted on its own merits.
 
-**What exists today:** sign-in, a subject list with a table, and the routing, guards and
-interceptors under it. Two features out of roughly ten.
+**What exists today:** six screens — sign-in, the dashboard slice on `/`, the subject list,
+subject detail, version detail and the register-a-version form — and the routing, guards and
+interceptors under them. The registry's own read path is walkable end to end; the list above is
+governance, approvals, settings and the editing affordances.
 
 ### M6 — Tier 2 SDKs
 
@@ -257,14 +319,17 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~Mode B binary framing is specified and not implemented~~ | **Closed 2026-08-14** by decision 19 — amended out of v1 rather than built. M2.5 measured every transport it could raise and `concordat-*` headers survived all of them, so framing had no demonstrated need. ADR-010 carries the amendment and says what would bring it back. |
 | ~~`ENFORCEMENT_VIOLATION` is a notification event nothing emits~~ | **Closed 2026-08-14** by decision 25 — `POST …/violations`, aggregated and reported by the SDK, upserted by fingerprint, notification on first sight only. **Nothing schedules the flush yet**: a host opts in by wrapping its observer and calling `FlushViolationsAsync` on a timer. |
 | ~~An environment with no row has no registration policy~~ | **Closed 2026-08-14** by decision 23. The first write creates the row with the derived id, so the policy applies from the first request rather than from whenever somebody thought to create the environment. |
+| ~~Registration never checked the reference graph~~ | **Closed 2026-09-24.** `ReferenceGraph` could detect a cycle and find referrers since M1.4 and nothing called it, so an edge naming a subject or ordinal that does not exist was stored without complaint and failed later, on whoever's `GET …/bundled` asked next. Registration now resolves every edge first, sharing one resolver with the bundler. The transitive re-check DESIGN §4 asked for is moot under pinned references — see §4 — and the cycle check is kept for the assumption it guards. |
+| ~~Nine routes answered anonymously on a claimed instance~~ | **Closed 2026-09-24**, thirteen months of exposure after [ADR-027](adr/027-read-requires-authentication.md) said they did not: three governance `GET`s, five read-shaped `POST`s, and `POST …/environments/{env}/bootstrap`, which returns every subject and schema in an environment. `EveryRouteUnderV1DeclaresAScope` now covers reads, not only mutations. |
+| ~~Signup named its reason for refusing~~ | **Narrowed 2026-09-24.** The neutral `detail` was the only neutral part; the code, title and type URI all said `user_already_exists`. Now `signup_refused`. Not closed: synchronous provisioning still distinguishes refusal from creation — [M9.2](plan/M9-cloud.md) says what closing it would take. |
 | **Approval reviewers do not exist** | Anyone with `subject:admin` can approve anything. A reviewer *set* was deferred to M8 and M8 did not build it. |
 | **Hard delete does not exist** | Soft delete is all there is. The full rule — no registered consumers, force flag, audit entry — is an outstanding commitment. |
 | **Subject prefix search is not implemented** | Value converters do not translate `StartsWith`; it needs a `ComplexProperty` mapping or a shadow column. |
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | ~~A page reload signs you out~~ | **Closed 2026-08-14** by decision 26 — an httpOnly `SameSite=Strict` cookie and a `/auth/resume` route that is the only thing accepting it. The credential still never touches `localStorage`. |
 | ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Still on, and now audible** (decision 27). The API logs a warning naming both ways to close it and repeats hourly until claimed; the web app shows a banner. Verified against a real container. |
-| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 26 tests then, 43 today. It found the subject list broken on its first run — see below. The one M4.5 test still absent is "direct URL to a write route redirects", because there is no write route to paste. |
-| **`Tenant` is not an aggregate** | There is exactly one, `TenantId.SelfHosted`. Cloud multi-tenancy is tested but single-rowed. |
+| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 43 tests today across four specs, up from the 11 it launched with. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
+| ~~`Tenant` is not an aggregate~~ | **Closed by M9.1**, recorded here 2026-09-24 — `Tenant.Create` carries the name and slug invariants, signup writes a row per organisation, bootstrap writes the self-hosted one, and `CloudTenancyTests` drives two organisations through the real host. Self-hosted still holds exactly one row, `TenantId.SelfHosted`: the profiles differ in how many rows there are, not in whether the table means anything. |
 | ~~The derived-environment-id decision is unmade~~ | **Closed 2026-08-14.** Adopted, by creating rows that carry the derived id. No migration, and no orphaned subjects. |
 
 ---
@@ -287,14 +352,14 @@ Nothing here can be done from inside the repository.
 
 ## What the tests actually cover
 
-Six kinds, not one. Worth knowing which, because "1,520 tests" says nothing about what would
+Six kinds, not one. Worth knowing which, because "1,526 tests" says nothing about what would
 survive being wrong.
 
 | Kind | Where | Tests | What it proves |
 |---|---|---|---|
 | Domain unit | `Domain.Tests`, three `Formats.*` | ~850 | Invariants in isolation. No I/O |
 | Application handler | `Application.Tests` | 157 | Handler refusals and **ordering**, with hand-written fakes |
-| HTTP integration | `Api.IntegrationTests` | 228 | Real HTTP against real PostgreSQL, via Testcontainers |
+| HTTP integration | `Api.IntegrationTests` | 232 | Real HTTP against real PostgreSQL, via Testcontainers |
 | Conformance corpus | `Conformance` | 99, over 98 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 64 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
@@ -334,9 +399,9 @@ Three structural tests exist because a gap between two correct halves shipped an
 - **No load, soak or property-based tests.** The outbox pump and the violation reporter have no
   concurrency test beyond what their unique indexes enforce.
 - **Coverage is collected and never read**, which is decision 4 and deliberate.
-- **CI now splits**: `build & test`, `web app`, and a separate `browser end-to-end` that runs the
-  API and dev server from source. A domain-unit change still waits on the broker containers in
-  the first job.
+- **CI is six jobs**: `build & test`, `web app`, a separate `browser end-to-end` that runs the
+  API and dev server from source, `protocol docs gate`, `contract drift gate` and
+  `CLI container`. A domain-unit change still waits on the broker containers in the first job.
 
 ---
 

@@ -27,7 +27,7 @@ to revise, just a queue that stops advancing.
 
 ## M6.1 Protocol freeze and interop prerequisites
 
-**🔴 Heavy · do this before the first SDK · in progress**
+**🔴 Heavy · do this before the first SDK · done 2026-08-14, less one box deferred to M6.2**
 
 Do this before the first SDK, not during it.
 
@@ -65,10 +65,17 @@ canonical bytes, and therefore a **different schema id for the same schema**. AD
 id is reproducible offline in any implementation; nothing pinned this, and every other fixture
 in the corpus would still have passed. Two fixtures now pin it.
 
-Three further gaps are recorded rather than papered over: payload framing that ADR-010 describes
-and no code implements ([#19](../DECISIONS-PENDING.md)), Mode A and Mode B disagreeing about
-whitespace ([#20](../DECISIONS-PENDING.md)), and `envelope_format_mismatch` published but never
-emitted.
+Three further gaps were recorded rather than papered over: payload framing that ADR-010
+described and no code implemented ([#19](../DECISIONS-PENDING.md)), Mode A and Mode B
+disagreeing about whitespace ([#20](../DECISIONS-PENDING.md)), and `envelope_format_mismatch`
+published but never emitted. **All three closed 2026-08-14.** Framing was amended out of v1
+rather than built, because M2.5 had measured the risk it existed for and found `concordat-*`
+headers surviving every transport; the two envelope modes now share
+`EnvelopeReader.ValidateSubject`, with three corpus fixtures putting the same input through
+both paths — the fixtures that were actually missing, which is why the divergence survived to
+be found by reading the code rather than by running it; and `envelope_format_mismatch` turned
+out to be unwritten rather than dead, and `SchemaEnforcer` now emits it when a message
+declares a format the registry disagrees with.
 
 ### The payload corpus found four real divergences, all in our own validator
 

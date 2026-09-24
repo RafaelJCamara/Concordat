@@ -72,6 +72,6 @@ validate a payload against — so it fails with a message naming the closed form
 ## References
 
 - [DESIGN §3 — Subject naming](../DESIGN.md#3-subject-naming-adr-011)
-- [ADR-011 — Subject naming](011-subject-naming.md)
-- [ADR-019 — Protocol-first](019-protocol-first.md)
+- [ADR-011 — The subject is the message type](011-subject-is-message-type.md)
+- [ADR-019 — A language-neutral HTTP protocol](019-language-neutral-protocol.md)
 - `corpus/subject-resolution/generic-*.json` — the normative fixtures

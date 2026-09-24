@@ -120,9 +120,12 @@ subject indistinguishable from an absent one.
 
 > **This is an archived scope list, not a to-do list.** The boxes are unchecked because they
 > record what M2.2 set out to do, and the section above records what it did. Most of it shipped
-> — Mode A headers and the Mode B content-type are exercised by `samples/Quickstart` on every
-> run. **The exception is the Mode B binary framing**, which is specified here and implemented
-> nowhere; that one is a real gap and is tracked as decision #19, not as this checkbox.
+> — Mode A headers are exercised by `samples/Quickstart` on every run, and the Mode B
+> content-type is both written and parsed (`ContentTypeEnvelope`), though only by unit tests:
+> the sample publishes a plain `application/json`, and nothing in `src/` calls the writer yet.
+> **The exceptions are the two binary framings and the CloudEvents read interop**, specified
+> here and implemented nowhere; the 2026-08-14 ADR-010 amendment scoped all three out of v1,
+> and they are tracked as decision #19, not as these checkboxes.
 > Counting these as outstanding work overstates what is left by seven items.
 
 - [ ] Mode A writer/reader — `concordat-v`, `concordat-schema-id`, `concordat-subject`, `concordat-version`, `concordat-semver`, `concordat-format`
@@ -140,7 +143,8 @@ subject indistinguishable from an absent one.
 - [x] `ISubjectResolver` seam, with `PublishContext` and a three-outcome `SubjectResolution`
 - [x] `MessageTypeSubjectResolver` — `properties.type`, as-is
 - [x] Canonical-form validation `^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$`, via `SubjectNormalizer`
-- [x] `corpus/subject-resolution` — 14 normative fixtures
+- [x] `corpus/subject-resolution` — 14 normative fixtures; **17 today**, after ADR-025
+      replaced the one generic-refusal fixture with four that pin the generic spelling
 - [ ] Binding it to `IReadOnlyBasicProperties` — **M2.4**, where RabbitMQ.Client is a
       dependency anyway
 
@@ -178,10 +182,13 @@ That is the whole reason this is corpus-pinned rather than merely tested. A rule
 five SDKs must apply identically or one message type becomes two subjects, so the set is small
 and refusals are preferred to inventions:
 
-- **Generic type names are refused, not mangled.** Any spelling for
-  `` List`1[[Acme.Order]] `` would be an invention every SDK must reproduce character for
-  character — and Go and Python have no CLR generic syntax to reproduce it *from*. Refusing is
-  honest and actionable.
+- ~~**Generic type names are refused, not mangled.**~~ **Superseded 2026-08-15 by
+  [ADR-025](../adr/025-generic-subject-spelling.md).** A *closed* generic is now spelled
+  `Outer_of_Arg`, with `_and_` between arguments; only open and unparseable ones are still
+  refused. The reasoning below is why the spelling had to become normative rather than be left
+  to each SDK: any spelling for `` List`1[[Acme.Order]] `` is an invention every SDK must
+  reproduce character for character — and Go and Python have no CLR generic syntax to reproduce
+  it *from* — so ADR-025 writes it down and four `generic-*` corpus fixtures pin it.
 - **Hyphens are refused, not rewritten to underscores.** Everyone arrives from routing keys
   where `order-created` is idiomatic. Rewriting would be another shared invention, and a
   subject silently differing from what the publisher wrote is worse than a clear refusal.

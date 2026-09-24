@@ -286,17 +286,19 @@ direction matters: an analyzer built against a Roslyn **newer** than the host co
 load outright. A consumer on the .NET 8 SDK must be able to run a generator this repository
 builds on .NET 10.
 
-### `Concordat.Contracts.Testing` is deferred, on purpose
+### ~~`Concordat.Contracts.Testing` is deferred, on purpose~~ — **built 2026-08-14** (decision 13)
 
 `ConcordatAssert.CompatibleAsync<T>(env: "prod")` needs the schema for `T` at test time. The
 obvious implementation — reflect over the runtime type — would be **a second implementation of
 the C#-to-JSON-Schema mapping**, and the two would drift apart exactly as this milestone's
 whole subject warns.
 
-The groundwork is in place: the generator already emits
-`[assembly: ConcordatGeneratedSchema(subject, clrType, schema)]`, so the testing package can
-read the compile-time schema rather than recomputing it. That is a small, correct package to
-build next, and building it wrong would be worse than not having it.
+The groundwork was already in place: the generator emits
+`[assembly: ConcordatGeneratedSchema(subject, clrType, schema)]`, so the testing package reads
+the compile-time schema rather than recomputing it. That is what shipped the next day —
+`ConcordatAssert` resolves a contract by looking the attribute up on the assembly and never
+reflects over a runtime type — so the deferral's reason survives as the package's design rather
+than as a reason not to have it.
 
 ---
 

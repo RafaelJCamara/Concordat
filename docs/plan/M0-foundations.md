@@ -79,7 +79,9 @@ NetArchTest assertions to `Concordat.Domain.Tests` — noted in `src/README.md`.
 
 **Done 2026-08-13**
 
-`.github/workflows/ci.yml`, one job, eight steps.
+`.github/workflows/ci.yml`, ~~one job, eight steps~~ — **six jobs today.** The boxes below are
+the first of them, `build & test`; `web app`, `browser end-to-end`, `protocol docs gate`,
+`contract drift gate` and `CLI container` were each added by the milestone that needed them.
 
 - [x] Build + test — triggers on pull request, push to `main`, and manual dispatch
 - [x] Format gate — `dotnet format --verify-no-changes`, run **before** build so a

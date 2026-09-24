@@ -27,17 +27,20 @@ public static class GovernanceEndpoints
                 "alternative reports fifty affected consumers where there is one.")
             .Produces<ServiceResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
 
         services.MapGet("/", ListServices)
             .WithSummary("List the services registered in an environment")
             .Produces<IReadOnlyList<ServiceResponse>>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
 
         services.MapGet("/{service}", GetService)
             .WithSummary("Read one service registration")
             .Produces<ServiceResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
 
         var violations = app.MapGroup("/v1/environments/{env}/violations").WithTags("Governance");
 
@@ -71,7 +74,8 @@ public static class GovernanceEndpoints
                 "consumer still holding its declared version read data written under this one " +
                 "— which is the opposite of the direction registration asks.")
             .Produces<ImpactResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
 
         subjects.MapPost("/impact", ImpactOfCandidate)
             .WithSummary("Who breaks if I register this schema")
@@ -80,7 +84,8 @@ public static class GovernanceEndpoints
                 "is written by asking.")
             .Produces<ImpactResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
 
         subjects.MapPost("/promote", Promote)
             .WithSummary("Promote a version into another environment")

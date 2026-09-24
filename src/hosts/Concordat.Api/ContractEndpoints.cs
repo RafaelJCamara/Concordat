@@ -47,7 +47,8 @@ public static class ContractEndpoints
                 "and the union of their subjects, so the ambiguity is visible rather than " +
                 "resolved by name order.")
             .Produces<ResolveContractsResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.ContractRead);
 
         group.MapGet("/{contract}", GetContract)
             .WithSummary("Get a contract and its bindings")

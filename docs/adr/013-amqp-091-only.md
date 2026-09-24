@@ -32,10 +32,19 @@ rather than a rewrite: **no header uses the `x-` prefix**, because RabbitMQ conv
 
 - **Positive:** a much smaller v1, and the 1.0 path stays open at essentially no cost —
   the only price is a naming constraint.
-- **Negative, and important:** the 1.0-safety claim is currently **an assertion, not a
+- **Negative, and important:** ~~the 1.0-safety claim is currently **an assertion, not a
   verified property.** It rests entirely on RabbitMQ's documented conversion behaviour.
   M2.5 tests it directly by reading a Concordat-published message with a 1.0 client and
-  confirming the headers arrive as application-properties.
+  confirming the headers arrive as application-properties.~~ **Closed 2026-08-13 by M2.5**,
+  which did what this bullet asked and one thing more: `tests/Concordat.HeaderSurvival` reads a
+  Concordat-published message with a 1.0 client and *asserts* the `concordat-*` headers arrive
+  as application-properties, while the same message carries a deliberately `x-`-prefixed
+  counterfactual header that **is** demoted to a message-annotation. So the prefix rule is
+  measured to be load-bearing rather than precautionary, and because the finding lives in a
+  test rather than a write-up, a change in RabbitMQ's behaviour breaks the build instead of
+  quietly invalidating this paragraph.
+  [ADR-010's amendment](010-header-envelope.md#amendment-2026-08-14-binary-framing-is-out-of-v1)
+  rests on the same suite.
 - **Negative:** MQTT and STOMP users get nothing in v1, and Streams users get nothing at
   all until the separate client is addressed.
 
@@ -43,4 +52,4 @@ rather than a rewrite: **no header uses the `x-` prefix**, because RabbitMQ conv
 
 - [DESIGN §2](../DESIGN.md#2-the-concordat-envelope-adr-010)
 - [ADR-010](010-header-envelope.md) — the `x-` constraint this depends on
-- [M2.5](../plan/M2-dotnet-client.md#m25-header-survival-experiments) — where the claim gets verified
+- [M2.5](../plan/M2-dotnet-client.md#m25-header-survival-experiments) — where the claim was verified

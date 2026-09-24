@@ -1,5 +1,6 @@
 using Concordat.Application.Abstractions;
 using Concordat.Application.Registry;
+using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 
 namespace Concordat.Api;
@@ -26,7 +27,8 @@ public static class BootstrapEndpoint
                 "self-sufficient and a client never has to follow a reference it did not plan " +
                 "for. Retired subjects are excluded.")
             .Produces<BootstrapResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectRead);
 
         return app;
     }

@@ -37,11 +37,26 @@ prefix as a first-class wire format.
 - **Positive:** the API can express `(vhost, exchange, routing key)` publish bindings and
   `(vhost, queue)` consume bindings, which have no Confluent equivalent. Error responses
   can use RFC 9457 with actionable JSON-Pointer paths instead of opaque numeric codes.
-- **Negative:** no drop-in migration for a team moving from Kafka. Reading messages from a
+- **Negative:** no drop-in migration for a team moving from Kafka. ~~Reading messages from a
   Kafka bridge is supported only as a read-only legacy prefix format
-  ([ADR-010](010-header-envelope.md)).
+  ([ADR-010](010-header-envelope.md)).~~ **Amended 2026-08-14** — see below.
 - **Neutral:** cross-language reach comes from a committed OpenAPI document rather than
   from an existing serializer ecosystem ([ADR-019](019-language-neutral-protocol.md)).
+
+## Amendment, 2026-08-14: there is no legacy-prefix read path either
+
+**The Kafka-bridge consequence above promised a capability the product deliberately does not
+have.** [ADR-010's amendment of the same date](010-header-envelope.md#amendment-2026-08-14-binary-framing-is-out-of-v1)
+scoped both binary forms out of v1 — including read-only `0x00 | <int32 BE>` — because M2.5
+measured `concordat-*` headers surviving every transport it could raise, so framing had nothing
+left to carry. No magic-byte prefix is parsed anywhere in `src/`. (Carried across here
+2026-09-24; the decision itself is ADR-010's.)
+
+The decision this ADR records is untouched: it already refused the 5-byte prefix as a
+first-class wire format, and the negative only got sharper. A team leaving Kafka re-publishes
+through a Concordat client rather than bridging framed messages in. If ADR-010's reversal
+condition is ever met — a transport that drops the header table *and* `content-type` — the
+legacy read path returns with it.
 
 ## References
 

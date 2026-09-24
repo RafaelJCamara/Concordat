@@ -205,7 +205,32 @@ public static class ConcordatCodes
     public const string UserNotFound = "user_not_found";
 
     /// <summary>A user with that email address already exists.</summary>
+    /// <remarks>
+    /// Answers an <b>authenticated</b> caller who is entitled to know — an organisation
+    /// administrator adding a member, or the bootstrap of an unclaimed instance. Public signup
+    /// must not use it; see <see cref="SignupRefused"/>.
+    /// </remarks>
     public const string UserAlreadyExists = "user_already_exists";
+
+    /// <summary>A signup was refused, without saying which of its fields caused it.</summary>
+    /// <remarks>
+    /// <para>
+    /// Signup is the one write open to the entire internet, so its refusals are the one place
+    /// where a precise code is a liability rather than a courtesy. Returning
+    /// <see cref="UserAlreadyExists"/> here put the literal string "user_already_exists" in the
+    /// Problem Details type, title and <c>concordatCode</c> — a machine-readable confirmation
+    /// that an address has an account, which is exactly what an enumeration sweep is looking
+    /// for. The human-readable detail was already neutral; the rest of the envelope was not.
+    /// </para>
+    /// <para>
+    /// <b>This narrows the oracle, it does not close it.</b> A caller who submits an unused
+    /// organisation handle still learns something from refusal-versus-creation, and no code can
+    /// hide that while signup provisions an organisation synchronously. Closing it properly
+    /// needs signup to answer identically either way and defer provisioning to a verified
+    /// email, which is not built.
+    /// </para>
+    /// </remarks>
+    public const string SignupRefused = "signup_refused";
 
     /// <summary>No API key with the given id exists.</summary>
     public const string ApiKeyNotFound = "api_key_not_found";
@@ -400,6 +425,41 @@ public static class ConcordatCodes
     /// same condition with the same token, or an operator cannot alert across the fleet.
     /// </remarks>
     public const string SchemaUnresolvable = "schema_unresolvable";
+
+    /// <summary>
+    /// A client could not warm its cache at startup and <c>RequireWarmUp</c> is on, so it
+    /// refused to start rather than run unenforced.
+    /// </summary>
+    /// <remarks>
+    /// Client-raised, like <see cref="SchemaUnresolvable"/>, and catalogued for the same reason.
+    /// Used only when there is no registry answer to quote: a warm-up that fails because the
+    /// registry <i>refused</i> reports the registry's own code, because the caller needs to know
+    /// it was turned away rather than unable to ask.
+    /// </remarks>
+    public const string WarmUpFailed = "warm_up_failed";
+
+    /// <summary>
+    /// A client could not declare its service registration at startup and
+    /// <c>RequireServiceRegistration</c> is on, so it refused to start undeclared.
+    /// </summary>
+    /// <remarks>
+    /// Client-raised. The same fallback rule as <see cref="WarmUpFailed"/>: the registry's code
+    /// wins when the registry answered at all. Starting undeclared matters because M7.4's impact
+    /// analysis can only warn about consumers it knows exist.
+    /// </remarks>
+    public const string ServiceRegistrationFailed = "service_registration_failed";
+
+    /// <summary>
+    /// Concordat's own middleware threw while handling a delivery, which is reported as an
+    /// unenforced outcome rather than allowed to reach the application.
+    /// </summary>
+    /// <remarks>
+    /// Client-raised, and the one code here that reports a bug in Concordat rather than a
+    /// condition in the user's system. The middleware fails open deliberately — a defect in
+    /// enforcement must not eat somebody's message — so this token is the only trace that a
+    /// delivery went unchecked, which is why it has to be one an operator can alert on.
+    /// </remarks>
+    public const string MiddlewareFaulted = "middleware_faulted";
 
     /// <summary>
     /// Two requests raced on the same row: a unique constraint or an optimistic-concurrency
