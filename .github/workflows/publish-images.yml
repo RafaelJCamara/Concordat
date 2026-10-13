@@ -35,6 +35,8 @@ jobs:
             dockerfile: docker/api.Dockerfile
           - image: concordat-cli
             dockerfile: docker/cli.Dockerfile
+          - image: concordat-web
+            dockerfile: docker/web.Dockerfile
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -169,6 +171,14 @@ jobs:
           OUT=$(docker run --rm -v "$PWD/ws:/workspace" "${SHA_TAG}" lint --json)
           echo "$OUT"
           echo "$OUT" | grep -q '"schemaId"' || { echo "::error::--json lost its payload"; exit 1; }
+        env:
+          SHA_TAG: ${{ steps.tags.outputs.sha-tag }}
+
+      # CI's `web-container` job runs this against a locally built image on every push; repeated
+      # here against what was actually pushed, for the same reason as the CLI's.
+      - name: The published web image starts and serves with the right policies
+        if: matrix.image == 'concordat-web'
+        run: bash scripts/smoke-web-image.sh "${SHA_TAG}"
         env:
           SHA_TAG: ${{ steps.tags.outputs.sha-tag }}
 

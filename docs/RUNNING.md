@@ -35,6 +35,7 @@ Worth reading once, because two of them are deliberately not the number you woul
 | `5062` | The registry | Fixed by `launchSettings.json`; the web app's proxy hard-codes it |
 | `4200` | The web app | `npm start` |
 | `4300` | The web app, for end-to-end tests | `npm start -- --port 4300` — the e2e suite expects this one |
+| `5063` | The web app, from containers | The compose `registry` profile — [§7](#7-or-run-all-of-it-from-containers). Next to the registry's 5062, and not 4200, so `npm start` and the container can run at once |
 
 ## 1. Start the dependencies
 
@@ -166,6 +167,88 @@ belongs to CI and the CLI under ADR-005, and the sample is deliberately a plain 
 `samples/Quickstart/Program.cs` is meant to be edited; [QUICKSTART.md
 §5](QUICKSTART.md#5-now-change-something) lists the changes worth making and what each teaches.
 
+## 7. Or run all of it from containers
+
+Everything above is the developer loop. To *evaluate* the product — the registry, its migrator, its
+database and its web UI — with no .NET SDK and no Node, build the two images and let compose run them:
+
+```bash
+docker build -f docker/api.Dockerfile -t concordat/api:local .
+docker build -f docker/web.Dockerfile -t concordat/web:local .
+```
+
+**bash**
+
+```bash
+CONCORDAT_IMAGE=concordat/api:local CONCORDAT_WEB_IMAGE=concordat/web:local \
+  docker compose -f deploy/compose/docker-compose.yml --profile registry up -d postgres migrate registry web
+```
+
+**PowerShell**
+
+```powershell
+$env:CONCORDAT_IMAGE = "concordat/api:local"
+$env:CONCORDAT_WEB_IMAGE = "concordat/web:local"
+docker compose -f deploy/compose/docker-compose.yml --profile registry up -d postgres migrate registry web
+```
+
+The two variables name images you just built because the published ones
+(`ghcr.io/rafaeljcamara/concordat-api` and `-web`, the defaults) do not exist until the publish
+workflow has run — see "Blocked on you" in [STATUS.md](STATUS.md). Once they do, the variables
+disappear and so does the build.
+
+Naming the four services leaves RabbitMQ out, which nothing here needs. Leave the names off
+(`--profile registry up -d`) to start it too, which the quickstart sample does need — and which fails
+with *port is already allocated* if another project's broker owns 5672 (see
+[Troubleshooting](#troubleshooting)).
+
+```bash
+docker compose -f deploy/compose/docker-compose.yml --profile registry ps -a
+```
+
+```
+NAME                 IMAGE                     COMMAND                  SERVICE    CREATED          STATUS                      PORTS
+concordat-api        concordat/api:local       "dotnet Concordat.Ap…"   registry   40 seconds ago   Up 16 seconds (healthy)     127.0.0.1:5062->8080/tcp
+concordat-migrate    concordat/api:local       "dotnet Concordat.Mi…"   migrate    41 seconds ago   Exited (0) 16 seconds ago
+concordat-postgres   postgres:17-alpine        "docker-entrypoint.s…"   postgres   41 seconds ago   Up 40 seconds (healthy)     127.0.0.1:55432->5432/tcp
+concordat-web        concordat/web:local       "/docker-entrypoint.…"   web        40 seconds ago   Up 10 seconds (healthy)     127.0.0.1:5063->8080/tcp
+```
+
+`migrate` exiting 0 is the point: it ran, and the registry waited for it. Then open
+**<http://localhost:5063>**. The registry is still on <http://localhost:5062>, and everything in
+[step 4](#4-claim-the-instance--read-this-before-anything-writes) about claiming applies
+unchanged — a fresh database is an unclaimed registry, and the page says so in a banner.
+
+nginx forwards `/v1` and `/health` to the registry, so the browser only ever talks to port 5063, and
+you can see both halves answer through it:
+
+```bash
+curl http://localhost:5063/config.json
+curl http://localhost:5063/v1/auth/status
+```
+
+```json
+{"apiBaseUrl":"","profile":"self-hosted","tenant":null,"defaultEnvironment":"dev"}
+{"claimed":false,"authenticated":true,"actor":"unclaimed-instance","scopes":["broker:read", "..."]}
+```
+
+The first is **the web container's own answer, written from its environment when it started**; the
+second is the registry's, through nginx. That one image is what every deployment gets, and
+`config.json` is how it is told where its registry is: `CONCORDAT_API_UPSTREAM` (where nginx
+forwards — the compose file sets it to `http://registry:8080`), `CONCORDAT_API_BASE_URL`,
+`CONCORDAT_PROFILE`, `CONCORDAT_TENANT` and `CONCORDAT_DEFAULT_ENVIRONMENT`. A value that is wrong
+stops the container with a sentence rather than being corrected; the header of
+[`docker/web.Dockerfile`](../docker/web.Dockerfile) has the list and [ADR-029](adr/029-web-container.md)
+has the reasoning.
+
+This is not the developer loop. There is no hot reload, and a change to the app is an image rebuild —
+`npm start` (§5) is still how you work on it. What it is is the production build, served the way it
+ships, which is why the browser suite can be pointed at it:
+
+```bash
+cd web && CONCORDAT_WEB_URL=http://localhost:5063 npm run e2e
+```
+
 ## Running the tests
 
 ### The .NET suite — 1,532 tests
@@ -179,10 +262,10 @@ containers through Testcontainers rather than mocking them, so a cold run pulls 
 takes several minutes. The other eight are pure unit tests and finish in seconds:
 
 ```bash
-dotnet test tests/Concordat.Domain.Tests        # 517 tests, no Docker, ~1s
+dotnet test tests/Concordat.Domain.Tests        # 523 tests, no Docker, ~1s
 ```
 
-### The web suite — 858 tests
+### The web suite — 1,106 tests
 
 ```bash
 cd web
@@ -190,9 +273,10 @@ npm test                # vitest
 npm run lint            # architectural boundaries, not just style — see web/README.md
 npm run format:check    # prettier
 npm run codes:check     # fails if the error-code union has drifted from the .NET catalogue
+npm run monaco:check    # fails if the vendored editor stylesheet is not the installed Monaco's
 ```
 
-### The browser end-to-end suite — 144 tests
+### The browser end-to-end suite — 178 tests
 
 Two processes Playwright deliberately does not start for you, then the tests — a config that
 quietly started its own copy of either half would produce a suite that passes against the
@@ -208,16 +292,18 @@ cd web && npm run e2e
 ```
 
 `npm run e2e:headed` watches it happen; `npm run e2e:ui` opens Playwright's runner. Override
-either endpoint with `CONCORDAT_REGISTRY` and `CONCORDAT_WEB_URL`.
+either endpoint with `CONCORDAT_REGISTRY` and `CONCORDAT_WEB_URL` — the second is how the same
+suite runs against the production image from [§7](#7-or-run-all-of-it-from-containers), which it
+should, because the dev server is not what ships.
 
 The suite claims the instance and creates its own fixtures, all idempotently. See
 [web/e2e/README.md](../web/e2e/README.md) for what it assumes and why it exists.
 
 ### What CI runs
 
-`.github/workflows/ci.yml` is the authority. Six jobs: `build & test` (format, build, the
+`.github/workflows/ci.yml` is the authority. Seven jobs: `build & test` (format, build, the
 OpenAPI drift gate, the .NET suite), `web app`, `browser end-to-end`, `protocol docs gate`,
-`contract drift gate` and `CLI container`. To reproduce the formatting gate locally:
+`contract drift gate`, `Web container` and `CLI container`. To reproduce the formatting gate locally:
 
 ```bash
 dotnet format Concordat.slnx --verify-no-changes
@@ -248,6 +334,15 @@ happen. Stop the other broker, or override the published ports with a second com
 (`ports:` needs `!override`) — remembering the quickstart sample's `ConnectionFactory` then
 needs the new port too.
 
+**The web container's `/v1` answers 502.** It is running and cannot find the registry: nginx looks the
+upstream up when a request arrives, so the UI comes up first and says so. Check
+`docker compose -f deploy/compose/docker-compose.yml --profile registry ps` and that
+`CONCORDAT_API_UPSTREAM` names a service on the same compose network.
+
+**The web container exits at start with one line starting `concordat-web:`.** A `CONCORDAT_*` variable
+has a value the image will not use — `docker logs concordat-web` says which and why. It refuses
+rather than corrects, because the values decide where the page may connect.
+
 **`Port 4300 is already in use` when starting the app for e2e.** A dev server from an earlier
 session is still on it. That one will serve the suite perfectly well — but it is running whatever
 code it started with, so if you have changed the app since, stop it and start a fresh one rather
@@ -273,6 +368,10 @@ the bash form. Use `$env:ConnectionStrings__Concordat = "..."` on its own line f
 docker compose -f deploy/compose/docker-compose.yml down        # keeps the data
 docker compose -f deploy/compose/docker-compose.yml down -v     # discards it
 ```
+
+If you started the `registry` profile (§7), add `--profile registry` to either. Without it compose
+only stops the services whose profile is on, so the database goes and the registry and the web
+container are left running with nothing behind them.
 
 `down -v` drops the volume, so the next `up` gives you an empty database and therefore an
 **unclaimed** registry again — which is what you want before running the quickstart sample, and

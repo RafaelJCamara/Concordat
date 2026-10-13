@@ -5,6 +5,8 @@ import { provideConcordatConfig } from '../../../core/config/app-config';
 import { ConcordatError } from '../../../core/http/problem-details';
 import type { RegistrationOutcome } from '../../../domain/registry/registration';
 import type { SchemaVersion, Subject } from '../../../domain/registry/subject';
+import type { SchemaDocument } from '../../../domain/registry/schema';
+import { SchemasApi } from '../data-access/schemas-api';
 import { SubjectsApi } from '../data-access/subjects-api';
 import { NewVersionStore } from './new-version-store';
 
@@ -14,11 +16,15 @@ import { NewVersionStore } from './new-version-store';
 // one store in the app that writes, and `switchMap` would abandon the browser's half of a
 // request the registry is still going to process.
 
-function version(ordinal: number, status: SchemaVersion['status'] = 'ACTIVE'): SchemaVersion {
+function version(
+  ordinal: number,
+  status: SchemaVersion['status'] = 'ACTIVE',
+  semanticVersion: string | null = null,
+): SchemaVersion {
   return {
     ordinal,
     schemaId: `schema-${ordinal}`,
-    semanticVersion: null,
+    semanticVersion,
     status,
     changelog: null,
     registeredAt: new Date('2026-08-13T09:00:00Z'),
@@ -96,16 +102,37 @@ function fakeApi() {
   };
 }
 
+function fakeSchemas() {
+  const requests: { schemaId: string; stream: ResponseStream<SchemaDocument> }[] = [];
+
+  return {
+    requests,
+    getSchema(schemaId: string) {
+      const stream = new ResponseStream<SchemaDocument>();
+      requests.push({ schemaId, stream });
+      return stream.asObservable();
+    },
+    answer(index: number, text: string) {
+      const { schemaId, stream } = requests[index]!;
+      stream.next({ schemaId, format: 'json', text, references: [] });
+      stream.complete();
+    },
+  };
+}
+
 describe('NewVersionStore', () => {
   let api: ReturnType<typeof fakeApi>;
+  let schemas: ReturnType<typeof fakeSchemas>;
   let store: InstanceType<typeof NewVersionStore>;
 
   beforeEach(() => {
     api = fakeApi();
+    schemas = fakeSchemas();
     TestBed.configureTestingModule({
       providers: [
         provideConcordatConfig({ defaultEnvironment: 'dev' }),
         { provide: SubjectsApi, useValue: api },
+        { provide: SchemasApi, useValue: schemas },
         NewVersionStore,
       ],
     });
@@ -148,6 +175,165 @@ describe('NewVersionStore', () => {
 
     it('is null before the subject has loaded', () => {
       expect(store.nextOrdinal()).toBeNull();
+    });
+  });
+
+  describe('the label to increase on', () => {
+    it('comes from the highest live label, not from the one on `latest`', () => {
+      // v1 is current at 1.0.0 and v2 is held at 2.0.0. The registry compares against 2.0.0,
+      // so suggesting 1.0.1 would be refused as `semver_not_increasing`.
+      store.loadSubject('orders.created');
+      api
+        .latestSubject()
+        .next(
+          subject([version(1, 'ACTIVE', '1.0.0'), version(2, 'AWAITING_APPROVAL', '2.0.0')], 1),
+        );
+
+      expect(store.liveLabel()).toMatchObject({ major: 2, minor: 0, patch: 0 });
+      expect(store.labelSuggestions()?.patch).toMatchObject({ major: 2, minor: 0, patch: 1 });
+    });
+
+    it('is absent when nothing live is labelled', () => {
+      store.loadSubject('orders.created');
+      api.latestSubject().next(subject([version(1)], 1));
+
+      expect(store.liveLabel()).toBeNull();
+      expect(store.labelSuggestions()).toBeNull();
+    });
+  });
+
+  describe('starting points', () => {
+    beforeEach(() => {
+      store.loadSubject('orders.created');
+      api
+        .latestSubject()
+        .next(subject([version(1), version(2), version(3, 'AWAITING_APPROVAL')], 2));
+    });
+
+    it('lists every version, newest first, held ones included', () => {
+      expect(store.startingPoints().map((v) => v.ordinal)).toEqual([3, 2, 1]);
+    });
+
+    it('defaults to the version consumers resolve, not the held proposal above it', () => {
+      expect(store.defaultStartingOrdinal()).toBe(2);
+    });
+
+    it('falls back to the highest ordinal when nothing is current yet', () => {
+      store.loadSubject('orders.created');
+      api.latestSubject().next(subject([version(1, 'AWAITING_APPROVAL')], null));
+
+      expect(store.defaultStartingOrdinal()).toBe(1);
+    });
+
+    it('has none on a subject with no versions', () => {
+      store.loadSubject('orders.created');
+      api.latestSubject().next(subject([], null));
+
+      expect(store.startingPoints()).toEqual([]);
+      expect(store.defaultStartingOrdinal()).toBeNull();
+    });
+  });
+
+  describe('cloning', () => {
+    beforeEach(() => {
+      store.loadSubject('orders.created');
+      api.latestSubject().next(subject([version(1), version(2)], 2));
+    });
+
+    it('fetches the document the chosen version points at', () => {
+      store.cloneFrom(1);
+
+      expect(schemas.requests.map((r) => r.schemaId)).toEqual(['schema-1']);
+      expect(store.cloning()).toBe(true);
+    });
+
+    it('holds the registered text as the registry returned it', () => {
+      store.cloneFrom(1);
+      schemas.answer(0, '{"type": "object", "maximum": 1.0}');
+
+      expect(store.cloned()).toMatchObject({
+        ordinal: 1,
+        text: '{"type": "object", "maximum": 1.0}',
+      });
+      expect(store.cloning()).toBe(false);
+    });
+
+    it('makes loading the same version twice a second, observable event', () => {
+      // Otherwise the second "load v1", after the editor was changed, leaves this signal
+      // equal to what it was and nothing re-applies the document.
+      store.cloneFrom(1);
+      schemas.answer(0, '{}');
+      const first = store.cloned()!.nonce;
+
+      store.cloneFrom(1);
+      schemas.answer(1, '{}');
+
+      expect(store.cloned()!.nonce).toBeGreaterThan(first);
+    });
+
+    it('reports a failure apart from a refusal, and keeps the form usable', () => {
+      store.cloneFrom(1);
+      schemas.requests[0]!.stream.error(
+        new ConcordatError({ status: 404, code: 'schema_not_found', detail: 'No such schema.' }),
+      );
+
+      expect(store.cloneError()?.detail).toBe('No such schema.');
+      expect(store.error()).toBeNull();
+      expect(store.cloning()).toBe(false);
+    });
+
+    it('does nothing for a version the subject does not carry', () => {
+      store.cloneFrom(99);
+
+      expect(schemas.requests).toHaveLength(0);
+      expect(store.cloning()).toBe(false);
+    });
+
+    it('lets a later choice supersede an earlier one still in flight', () => {
+      store.cloneFrom(1);
+      store.cloneFrom(2);
+      schemas.answer(0, '{"stale":true}');
+      schemas.answer(1, '{"fresh":true}');
+
+      expect(store.cloned()?.text).toBe('{"fresh":true}');
+    });
+  });
+
+  describe('after a registration', () => {
+    it("reads the subject again, so the next ordinal is the registry's and not arithmetic", () => {
+      store.loadSubject('orders.created');
+      api.latestSubject().next(subject([version(1)], 1));
+
+      submit();
+      api.respond(outcome({ ordinal: 2 }));
+
+      expect(api.subjects).toHaveLength(2);
+
+      api.latestSubject().next(subject([version(1), version(2)], 2));
+
+      expect(store.nextOrdinal()).toBe(3);
+    });
+
+    it('does not read it again when nothing was allocated', () => {
+      store.loadSubject('orders.created');
+      api.latestSubject().next(subject([version(1)], 1));
+
+      submit();
+      api.respond(outcome({ created: false, ordinal: 1 }));
+
+      expect(api.subjects).toHaveLength(1);
+    });
+
+    it('keeps the outcome when the refresh fails, rather than blaming the registration', () => {
+      store.loadSubject('orders.created');
+      api.latestSubject().next(subject([version(1)], 1));
+
+      submit();
+      api.respond(outcome({ ordinal: 2 }));
+      api.latestSubject().error(new Error('offline'));
+
+      expect(store.outcome()?.ordinal).toBe(2);
+      expect(store.error()).toBeNull();
     });
   });
 

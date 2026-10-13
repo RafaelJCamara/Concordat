@@ -166,6 +166,13 @@ jobs:
         working-directory: web
         run: npm run codes:check
 
+      # The editor's stylesheet and icon font are vendored files, because the build cannot be made
+      # to link the stylesheet a lazy chunk imports. A new Monaco in the lockfile with the old files
+      # beside it would ship an editor whose styles and scripts are different versions.
+      - name: Monaco's vendored assets match the installed Monaco
+        working-directory: web
+        run: npm run monaco:check
+
       - name: Lint
         working-directory: web
         run: npm run lint
@@ -352,6 +359,26 @@ jobs:
             echo "::error::CDT003 fired but did not name the offending path"
             exit 1
           }
+
+  web-container:
+    name: Web container
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Its own job because it checks what nothing else can: that the image starts, reads its
+    # configuration from its environment, and serves with the policies the page needs. The unit
+    # tests and the browser suite both run against the dev server, which has no nginx, no
+    # config.json and no response headers — so an image that serves a page with no
+    # Content-Security-Policy, or one that forbids the worker from compiling a schema, passes
+    # every other job here.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Build the image
+        run: docker build -f docker/web.Dockerfile -t concordat/web:ci .
+
+      - name: The image starts, is configured from its environment, and serves with the right policies
+        run: bash scripts/smoke-web-image.sh concordat/web:ci
 
   cli-container:
     name: CLI container

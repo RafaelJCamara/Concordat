@@ -180,11 +180,38 @@ against a React prototype on the assumption it would be ported file by file. It 
 Angular app was written fresh — so the defects they describe were never introduced. Struck
 rather than deleted, because "why is there no zod here?" is a question worth answering once.
 
-- [ ] **Monaco for the schema editor.** Listed here as replacing the prototype's
+- [x] **Monaco for the schema editor.** Listed here as replacing the prototype's
       `dangerouslySetInnerHTML` regex highlighter, which was also never ported — so the XSS
-      framing has expired. Monaco is still wanted, on its own merits
-- [ ] `ajv` for client-side validation and sample-payload checking
-- [ ] Preserve: immutable-id confirmation, auto-slugged id with a touched flag, semver auto-increment seeded from latest, clone-previous-version JSON, compatibility tooltips, "No versions yet" empty state, Format/Validate buttons
+      framing had expired; Monaco was wanted on its own merits. **A lazy chunk, self-hosted, that
+      the textarea can always replace** ([ADR-028](../adr/028-schema-editor.md)). Initial bundle
+      +4.7 kB (405.9 → 410.6 kB raw, 102.5 → 104.3 kB transferred); Monaco itself is 3.32 MB raw /
+      667 kB transferred, fetched only by this screen, with its worker (307 kB), stylesheet (187 kB)
+      and icon font (153 kB) beside it. **The production build corrected the first draft**: the
+      stylesheet a lazy chunk imports is emitted and never linked, so the editor rendered unstyled
+      in a production build while `ng serve` — which injects it from the module — looked right.
+      It is now a vendored file (`tools/vendor-monaco.mjs`, `npm run monaco:check`) linked on load.
+      Not Monaco's JSON language service, which would be a second opinion about the document that
+      accepts comments; JSON is coloured by a small tokenizer of our own, and every judgement about
+      the text comes from `domain/`. Auto-closing is off, because dictation and input methods
+      deliver text the way typing does
+- [x] `ajv` for client-side validation and sample-payload checking. **In a Web Worker**, because
+      `ajv` compiles with `new Function` and the page's policy has no `unsafe-eval` — and because a
+      pathological `pattern` can then be killed (four seconds) instead of freezing the tab. Everything
+      it says is *advice* and nothing blocks on it: the registry registers `{"type":"bogus"}`. A
+      document in another dialect is not handed to it at all, and a sample that refers to
+      something only the registry resolves is "could not be checked", never "valid"
+- [x] Preserve: immutable-id confirmation (**registering takes two clicks and names the ordinal it
+      allocates**; the confirmation is a snapshot of the form, so editing afterwards withdraws it),
+      semver auto-increment (**seeded from the highest *live* label, not from `latest`** — with v1
+      current at `1.0.0` and v2 held at `2.0.0` the registry compares against `2.0.0`; offered as
+      buttons, never applied), clone-previous-version (the registered text verbatim, with a second
+      click before it replaces anything written, and `Ctrl+Z` after), the "No versions yet" empty
+      state, Format (**changes whitespace and nothing else**: `1.0`, `1E5` and `12345678901234567890`
+      survive, because the registry hashes number literals as written — a test asks the registry
+      whether the formatted text has the original's id) and Validate
+- [ ] Preserve, **not built**: *auto-slugged id with a touched flag* — it belongs to creating a
+      subject, and **no screen in the web app creates one** (`POST …/subjects` exists and nothing
+      calls it), so there was nothing to put it on; and *compatibility tooltips*
 - [x] ~~Collapse the two competing HTTP paths into one typed data-access layer~~ — **moot.**
       There is one: `HttpClient` plus three interceptors, and a typed data-access file per feature
 - [x] ~~Uncontrolled `defaultValue` forms → reactive forms~~ — **moot.** A React idiom; no such
@@ -194,7 +221,8 @@ rather than deleted, because "why is there no zod here?" is a question worth ans
 
 ## M4.5 Tests
 
-- [x] Playwright E2E against a real API — `web/e2e/`, 144 tests. Found the subject list
+- [x] Playwright E2E against a real API — `web/e2e/`, 178 tests, **against the dev server and
+      against the production image** (`CONCORDAT_WEB_URL=http://localhost:5063`). Found the subject list
       broken on its first run (see [STATUS.md](../STATUS.md)), and on 2026-08-15 found two
       more: a first-hit lazy-route compile that made a correct page look absent, and a
       fixture of its own that was growing the registry by two versions per run
@@ -217,6 +245,10 @@ rather than deleted, because "why is there no zod here?" is a question worth ans
 
 Create a subject, register a version, view a diff and an impact report, and approve a
 pending breaking change — entirely in the UI.
+
+> **Not met, and was recorded as met until 2026-10-13: "create a subject".** Nothing in the web
+> app calls `POST …/subjects`. Everything after it is in the UI; a subject has to be created
+> through the API or the CLI first. The e2e specs arrange subjects over HTTP for the same reason.
 
 ---
 

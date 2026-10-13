@@ -330,8 +330,9 @@ SSR. Neither seemed worth it at M4.1; both are still open.
 
 ### M4.4 — port corrections
 
-- **Monaco and `ajv` are not installed.** Both are M4.4's, and adding an unused dependency
-  now would contradict the milestone's own instruction to drop the unused dependency surface.
+- **Monaco and `ajv` were not installed** when this was written, and adding an unused dependency
+  would have contradicted the milestone's own instruction to drop the unused dependency surface.
+  Both arrived with the schema editor (2026-10-13): [ADR-028](../docs/adr/028-schema-editor.md).
 - The prototype's regex highlighter is not ported and never should be (XSS, ADR-006).
 - The `--font-mono` token is already defined and the subject table already uses `font-mono`
   for schema text, so Monaco has a font stack to match.

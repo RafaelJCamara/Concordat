@@ -17,6 +17,51 @@ architectural still becomes an ADR in [`adr/`](adr/README.md) either way.
 
 ## Proceeded on my judgement — confirm or overturn
 
+### 35. `ajv` runs in a worker, and nothing the client computes may block a registration except what the registry certainly refuses
+
+**Implemented** ([ADR-028](adr/028-schema-editor.md)). Two calls in one, both yours to confirm.
+
+*The worker.* `ajv` compiles schemas with `new Function`; the page's policy is `script-src 'self'`
+and I would not add `unsafe-eval` to it. So `ajv` is in a worker served with its own policy
+(`unsafe-eval`, no network), and a check that runs for four seconds is killed — which also answers a
+pathological `pattern`. The alternative I rejected is a validator that interprets rather than
+compiles (`@cfworker/json-schema`): it would keep the page's policy without a worker's, but
+DESIGN §9 and ADR-021 name `ajv`, and the regular-expression timeout would still want the worker.
+
+*The rule.* The editor has two grades of finding, and only a *refusal* — a port of what the
+registry certainly refuses — may disable Register. `ajv`'s findings are advice, because the
+registry accepts `{"type":"bogus"}` and a different engine's opinion that can veto will eventually be
+wrong in the strict direction. **The cost:** a person can register a schema `ajv` has called
+invalid, and the registry will take it.
+
+> **If you overturn the worker**, the check moves into `schema-checker.ts` and the two nginx
+> policy maps lose a branch; nothing is persisted. **If you want the registry to refuse a schema
+> that is not valid under the metaschema**, that is a registry change (see the holes table in
+> [STATUS.md](STATUS.md)) and the editor's advice then becomes a refusal for free.
+
+### 36. The web container forwards `/v1`, publishes on `127.0.0.1:5063`, and owns the Content-Security-Policy
+
+**Implemented** ([ADR-029](adr/029-web-container.md)). Four small calls that read as nothing and are
+not:
+
+- **Same origin, by proxy, not CORS.** The browser talks only to the web container, which forwards
+  `/v1` to the registry. A cross-origin API is supported (`CONCORDAT_API_BASE_URL`) but needs
+  `Concordat:WebOrigin` and a cookie policy that works cross-site, and was not signed into.
+- **Port 5063**, beside the registry's 5062, rather than 4200, so `npm start` and the container can
+  run at once. Loopback only, like everything in that file: it is a sign-in page for an instance that
+  may still be unclaimed.
+- **The policy is a response header, and the `<meta>` tag is stripped in the image build.** The
+  browser intersects the two, so keeping both would let the tag's `connect-src 'self'` veto a
+  configured API the header allowed. Static hosting still gets the tag.
+- **The image does not exist on GHCR yet** (the publish workflow has never run — see "Blocked on
+  you"). Compose defaults to `ghcr.io/rafaeljcamara/concordat-web:latest` like the registry does;
+  until then both images are built locally and named with `CONCORDAT_IMAGE` and
+  `CONCORDAT_WEB_IMAGE`.
+
+> **If you want the API served from the same image as the UI** (DESIGN §10's end state), none of
+> this is in the way: nginx and `config.json` become the API host's static files and its own
+> response headers.
+
 ### 33. `ci` is a marker scope, and no role grants it
 
 **Implemented.** `RegistrationPolicy.CiOnly` has to tell a build pipeline apart from a running
@@ -505,7 +550,7 @@ it is for.
 **The browser E2E half is now done too, 2026-08-15.** Playwright is in, `web/e2e/` holds 11
 tests, and the reload case above is one of them — the only way to prove a *browser* keeps the
 cookie across a real navigation and that the app asks for it before the first render. That count
-is the day's snapshot and nothing else: the suite stands at **144 tests across ten specs** as of
+is the day's snapshot and nothing else: the suite stands at **178 tests across fourteen specs** as of
 2026-10-13, which is the figure [STATUS.md](STATUS.md) carries.
 
 It earned its place in the first ten seconds: the subject list was **broken** against a real

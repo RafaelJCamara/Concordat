@@ -371,3 +371,153 @@ async function register(
     throw new Error(`Registering against '${subject}' failed with ${response.status}.`);
   }
 }
+
+/**
+ * Creates a subject and registers nothing against it.
+ *
+ * For tests that only ever *ask* the registry about a document — the dry-run endpoint writes
+ * nothing — and need a subject of a given format to ask against. Idempotent: 409 is a subject
+ * a previous run made, which is exactly what is wanted.
+ */
+export async function ensureEmptySubject(
+  ownerCredential: string,
+  environment: string,
+  subject: string,
+  format: 'json' | 'avro' | 'protobuf',
+): Promise<void> {
+  const created = await call(`/v1/environments/${environment}/subjects`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${ownerCredential}` },
+    body: JSON.stringify({ name: subject, format, owner: 'e2e' }),
+  });
+
+  if (!created.ok && created.status !== 409) {
+    throw new Error(`Creating subject '${subject}' failed with ${created.status}.`);
+  }
+}
+
+/** What the registry said about a document, reduced to what a comparison needs. */
+export interface DryRunVerdict {
+  readonly status: number;
+  /** The registry's `concordatCode` when it refused, else null. */
+  readonly code: string | null;
+}
+
+/**
+ * Asks the registry whether it would take a document, without registering anything.
+ *
+ * `POST …/subjects/{subject}/compatibility` is documented as a dry run that never writes, and
+ * it runs the same canonicalisation and portability checks registration does. That makes it the
+ * oracle for "is the client stricter or looser than the registry": the client's own opinion is
+ * compared with this, never with what its author believes the registry does. (Three times in
+ * this suite an engine answer disproved a fixture written to agree with its author.)
+ */
+export async function dryRun(
+  ownerCredential: string,
+  environment: string,
+  subject: string,
+  schema: string,
+): Promise<DryRunVerdict> {
+  const response = await call(`/v1/environments/${environment}/subjects/${subject}/compatibility`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${ownerCredential}` },
+    body: JSON.stringify({ schema }),
+  });
+
+  if (response.ok) {
+    return { status: response.status, code: null };
+  }
+
+  try {
+    const body = (await response.json()) as { concordatCode?: string };
+
+    return { status: response.status, code: body.concordatCode ?? null };
+  } catch {
+    // A 500 has no Problem Details body. Report it as what it is rather than throwing, so a
+    // comparison can say "the registry crashed" and not "the test failed".
+    return { status: response.status, code: null };
+  }
+}
+
+/**
+ * Registers a version over the API and returns what the registry answered.
+ *
+ * Unlike `register`, which throws on anything but success, this hands back the status, because
+ * a test that is about a refusal wants to read it.
+ */
+export async function registerVersion(
+  ownerCredential: string,
+  environment: string,
+  subject: string,
+  schema: string,
+  semanticVersion: string | null = null,
+): Promise<{ status: number; body: unknown }> {
+  const response = await call(`/v1/environments/${environment}/subjects/${subject}/versions`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${ownerCredential}` },
+    body: JSON.stringify({ schema, semanticVersion, registeredBy: 'e2e' }),
+  });
+
+  return { status: response.status, body: await response.json().catch(() => null) };
+}
+
+/** A subject as the registry reports it, reduced to what a comparison needs. */
+export interface SubjectView {
+  readonly latest: number | null;
+  readonly versions: readonly {
+    ordinal: number;
+    schemaId: string;
+    status: string;
+    semanticVersion: string | null;
+  }[];
+}
+
+/** Reads a subject, for a test that wants to know what really happened to it. */
+export async function readSubject(
+  ownerCredential: string,
+  environment: string,
+  subject: string,
+): Promise<SubjectView> {
+  const response = await call(`/v1/environments/${environment}/subjects/${subject}`, {
+    headers: { authorization: `Bearer ${ownerCredential}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Reading subject '${subject}' failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as SubjectView;
+}
+
+/** The registered text of a schema, by id, exactly as the registry serves it. */
+export async function readSchemaText(ownerCredential: string, schemaId: string): Promise<string> {
+  const response = await call(`/v1/schemas/${schemaId}`, {
+    headers: { authorization: `Bearer ${ownerCredential}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Reading schema '${schemaId}' failed with ${response.status}.`);
+  }
+
+  return ((await response.json()) as { schema: string }).schema;
+}
+
+/** The id the registry would give a document, from the dry run. */
+export async function schemaIdOf(
+  ownerCredential: string,
+  environment: string,
+  subject: string,
+  schema: string,
+): Promise<string> {
+  const response = await call(`/v1/environments/${environment}/subjects/${subject}/compatibility`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${ownerCredential}` },
+    body: JSON.stringify({ schema }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`The dry run refused the document with ${response.status}.`);
+  }
+
+  return ((await response.json()) as { schemaId: string }).schemaId;
+}

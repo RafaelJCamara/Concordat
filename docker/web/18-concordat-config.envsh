@@ -1,0 +1,93 @@
+# shellcheck shell=sh
+#
+# Turns the container's environment into what the web app and nginx need, and refuses to start on
+# an environment that would make either wrong.
+#
+# SOURCED, not executed — the base image's entrypoint sources `*.envsh` files, which is the only
+# way a startup script can export a variable to the template rendering that follows it. It runs
+# after the image's own `15-local-resolvers.envsh` and before `20-envsubst-on-templates.sh`.
+#
+# FAIL FAST, with a sentence. A value that reaches config.json or the Content-Security-Policy
+# header decides where a bearer token is sent and what the page may connect to, so it is checked
+# against a strict alphabet here — and again by the app itself (`runtime-config.ts`), because a
+# static host has no such script. An environment that is wrong stops the container, which is
+# visible; one that is quietly corrected is a deployment pointed somewhere nobody chose.
+
+concordat_fail() {
+    echo "concordat-web: $1" >&2
+    exit 1
+}
+
+: "${CONCORDAT_API_UPSTREAM:=http://registry:8080}"
+: "${CONCORDAT_API_BASE_URL:=}"
+: "${CONCORDAT_PROFILE:=self-hosted}"
+: "${CONCORDAT_TENANT:=}"
+: "${CONCORDAT_DEFAULT_ENVIRONMENT:=dev}"
+
+# Only the characters a URL or a name legitimately needs. The point is what is absent: quotes,
+# backslashes, semicolons and whitespace are how a value would end a JSON string or a CSP
+# directive and begin something of its own.
+concordat_check() {
+    case "$2" in
+        *[!A-Za-z0-9._~:/@%-]*) concordat_fail "$1 may only contain letters, digits and . _ ~ : / @ % - (got '$2')." ;;
+    esac
+}
+
+# Where nginx forwards to. A URL, and one that names a host.
+case "$CONCORDAT_API_UPSTREAM" in
+    http://*|https://*) ;;
+    *) concordat_fail "CONCORDAT_API_UPSTREAM must be an http:// or https:// URL (got '$CONCORDAT_API_UPSTREAM')." ;;
+esac
+concordat_check CONCORDAT_API_UPSTREAM "$CONCORDAT_API_UPSTREAM"
+
+# Where the browser sends API requests: empty (this origin), a path, or an absolute URL.
+CONCORDAT_API_BASE_URL="${CONCORDAT_API_BASE_URL%/}"
+case "$CONCORDAT_API_BASE_URL" in
+    ''|/*|http://*|https://*) ;;
+    *) concordat_fail "CONCORDAT_API_BASE_URL must be empty, a path such as /registry, or an http(s) URL (got '$CONCORDAT_API_BASE_URL')." ;;
+esac
+case "$CONCORDAT_API_BASE_URL" in
+    //*) concordat_fail "CONCORDAT_API_BASE_URL must not be protocol-relative (got '$CONCORDAT_API_BASE_URL')." ;;
+esac
+concordat_check CONCORDAT_API_BASE_URL "$CONCORDAT_API_BASE_URL"
+
+case "$CONCORDAT_PROFILE" in
+    self-hosted|cloud) ;;
+    *) concordat_fail "CONCORDAT_PROFILE must be self-hosted or cloud (got '$CONCORDAT_PROFILE')." ;;
+esac
+
+concordat_check CONCORDAT_TENANT "$CONCORDAT_TENANT"
+
+case "$CONCORDAT_DEFAULT_ENVIRONMENT" in
+    ''|*[!A-Za-z0-9._-]*) concordat_fail "CONCORDAT_DEFAULT_ENVIRONMENT may only contain letters, digits and . _ - (got '$CONCORDAT_DEFAULT_ENVIRONMENT')." ;;
+esac
+
+# What the page may connect to: always this origin, and the API's if it is somewhere else.
+CONCORDAT_CONNECT_SRC="'self'"
+case "$CONCORDAT_API_BASE_URL" in
+    http://*|https://*)
+        CONCORDAT_API_ORIGIN="$(printf '%s' "$CONCORDAT_API_BASE_URL" | sed -E 's#^(https?://[^/]+).*#\1#')"
+        CONCORDAT_CONNECT_SRC="'self' $CONCORDAT_API_ORIGIN"
+        ;;
+esac
+
+# `NGINX_LOCAL_RESOLVERS` comes from resolv.conf and is empty when it has no nameserver, which
+# would render `resolver ;` and stop nginx with an error that names nothing useful.
+if [ -z "${NGINX_LOCAL_RESOLVERS:-}" ]; then
+    NGINX_LOCAL_RESOLVERS="127.0.0.11"
+fi
+
+if [ -n "$CONCORDAT_TENANT" ]; then
+    CONCORDAT_TENANT_JSON="\"$CONCORDAT_TENANT\""
+else
+    CONCORDAT_TENANT_JSON="null"
+fi
+
+# /tmp, because the document root is not writable by the unprivileged user and should not be:
+# nginx serves this one path from here.
+printf '{"apiBaseUrl":"%s","profile":"%s","tenant":%s,"defaultEnvironment":"%s"}\n' \
+    "$CONCORDAT_API_BASE_URL" "$CONCORDAT_PROFILE" "$CONCORDAT_TENANT_JSON" "$CONCORDAT_DEFAULT_ENVIRONMENT" \
+    > /tmp/concordat-config.json
+
+export CONCORDAT_API_UPSTREAM CONCORDAT_CONNECT_SRC NGINX_LOCAL_RESOLVERS
+echo "concordat-web: serving config.json with apiBaseUrl='$CONCORDAT_API_BASE_URL', forwarding /v1 to $CONCORDAT_API_UPSTREAM"

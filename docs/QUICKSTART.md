@@ -13,6 +13,11 @@ Concordat's internals, which is the point: [ADR-019](adr/019-language-neutral-pr
 says every SDK is an ordinary client of a documented protocol, and a quickstart that cheated
 would hide the places that is not yet true.
 
+> **No .NET SDK, or just want to see it first?** Steps 1–3 are one command, and it brings the web
+> UI up too: build the two images and start the `registry` profile — see
+> [RUNNING.md §7](RUNNING.md#7-or-run-all-of-it-from-containers). Open <http://localhost:5063>, and
+> come back for step 4, which is the part that needs the SDK.
+
 ## 1. Start the dependencies
 
 ```bash

@@ -9,6 +9,10 @@ package-lock.json
 src/app/shared/ui/*/src
 src/app/core/http/concordat-codes.generated.ts
 
+# Vendored, and named for a hash of their content: reformatting the stylesheet would change the
+# bytes the name promises (tools/vendor-monaco.mjs).
+public/monaco/
+
 # Playwright run output, not source.
 test-results/
 playwright-report/

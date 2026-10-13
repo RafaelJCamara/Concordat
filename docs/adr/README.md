@@ -42,3 +42,5 @@ it; write a new one and mark the old **Superseded by**.
 | [025](025-generic-subject-spelling.md) | A closed generic type is spelled `Outer_of_Arg`, defined over names rather than CLR syntax | Accepted |
 | [026](026-self-hosted-web-fonts.md) | The web app serves its own fonts | Accepted |
 | [027](027-read-requires-authentication.md) | Reading the registry requires authentication | Accepted |
+| [028](028-schema-editor.md) | The schema editor says only what the registry would | Accepted |
+| [029](029-web-container.md) | The web app is an nginx image, configured when it starts | Accepted |

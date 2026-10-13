@@ -22,9 +22,10 @@ Two processes, neither started by Playwright. A config that quietly started its 
 either would produce a suite that passes against the wrong thing.
 
 ```bash
-# 1. the registry, on :5062
+# 1. the registry, on :5062 (RabbitMQ is not needed: nothing here publishes)
 docker build -f docker/api.Dockerfile -t concordat/api:local .
-cd deploy/compose && CONCORDAT_IMAGE=concordat/api:local docker compose --profile registry up -d
+cd deploy/compose
+CONCORDAT_IMAGE=concordat/api:local docker compose --profile registry up -d postgres migrate registry
 
 # 2. the web app, on :4300
 cd web && npm start -- --port 4300
@@ -32,6 +33,24 @@ cd web && npm start -- --port 4300
 # 3. the tests
 cd web && npm run e2e
 ```
+
+**Against the production image instead.** The dev server is not what ships, and the difference
+has already bitten: the production build inlines its critical CSS with an `onload` handler that
+the app's own Content-Security-Policy blocks, so the full stylesheet never applied — and every test
+here was green, because every test here was running against `ng serve`.
+
+```bash
+docker build -f docker/web.Dockerfile -t concordat/web:local .
+cd deploy/compose
+CONCORDAT_IMAGE=concordat/api:local CONCORDAT_WEB_IMAGE=concordat/web:local \
+  docker compose --profile registry up -d postgres migrate registry web
+
+cd ../../web && CONCORDAT_WEB_URL=http://localhost:5063 npm run e2e
+```
+
+That is also the arrangement that proves the editor works as shipped: Monaco's stylesheet is a
+vendored file the page links, the schema checker's worker is served with its own policy, and both
+are things the dev server provides by a different route.
 
 `npm run e2e:headed` watches it happen; `npm run e2e:ui` opens Playwright's runner.
 
@@ -60,6 +79,19 @@ subjects whose proposals are held at the approval gate — `acme.e2e.PaymentTake
 field, which does _not_ break a reader pinned to v1) and `acme.e2e.LedgerPosted` (changes a
 property's type, which does) — and registered consumers of each, so the diff, impact and approval
 screens have real engine answers to render. Both are idempotent: they look before they write.
+
+**Fixtures the editor specs use, none of which they change.** `acme.e2e.parity.json`,
+`acme.e2e.parity.avro` and `acme.e2e.parity.proto` are created once, empty, so the registry's dry-run
+endpoint has a subject of each format to ask about; nothing is ever registered against them.
+`schema-editor.spec.ts` registers into a subject of its own, named by the run
+(`acme.e2e.editor.<timestamp>`), because a version cannot be undone.
+
+**The editor is Monaco, and `fill` does not work on it.** Chromium gives it an `EditContext`
+element, which is a `div`. `e2e/schema-editor.ts` puts text in by pasting and reads it back from the
+rendered lines, and every spec goes through it, so a spec says "put this in" and does not care
+whether it is talking to Monaco or to the textarea it falls back to. It pastes rather than using
+`keyboard.insertText` because the latter is delivered as input-method composition and a 140 KB
+document took over a minute where the same document pasted takes under half a second.
 
 **Deciding is the one thing that cannot be.** Approving a version makes it `latest` and rejecting
 is final, so `approvals.spec.ts` creates a subject of its own per decision, named by the run

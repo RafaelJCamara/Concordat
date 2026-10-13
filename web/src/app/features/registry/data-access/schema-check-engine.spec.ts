@@ -1,0 +1,158 @@
+import { describe, expect, it } from 'vitest';
+import { checkSchema } from './schema-check-engine';
+
+// ajv is a different engine from the registry's, and everything it says is advice. These pin the
+// two things that keep it from being stricter or looser than the registry in a way that matters:
+// it does not apply 2020-12 rules to another dialect, and it does not pretend to agree about
+// what it cannot know (formats, references).
+
+const check = (schema: string, payload: string | null = null) => checkSchema({ schema, payload });
+
+describe('checkSchema — the schema', () => {
+  it('flags nothing in an ordinary schema', () => {
+    const result = check('{"type":"object","properties":{"id":{"type":"string"}}}');
+
+    expect(result.skipped).toBeNull();
+    expect(result.advice).toEqual([]);
+  });
+
+  it('flags a keyword that is not valid under the metaschema, naming where and what is allowed', () => {
+    // The registry registers this without complaint — which is exactly why it is advice.
+    const result = check('{"type":"bogus"}');
+
+    expect(result.advice).toHaveLength(1);
+    expect(result.advice[0]).toMatchObject({ code: 'ajv_metaschema', pointer: '/type' });
+    expect(result.advice[0]!.message).toContain('"object"');
+  });
+
+  it('says one thing per location, not the metaschema’s three', () => {
+    // A wrong `type` comes back as "not one of the allowed values", "must be array" and "must
+    // match a schema in anyOf". Only the first says what to change.
+    const result = check('{"type":"bogus","properties":{"a":{"minLength":"x"}}}');
+
+    expect(result.advice.map((a) => a.pointer).sort()).toEqual([
+      '/properties/a/minLength',
+      '/type',
+    ]);
+    expect(result.advice.every((a) => !a.message.includes('anyOf'))).toBe(true);
+  });
+
+  it('accepts both spellings of the dialect, as the registry does', () => {
+    for (const dialect of [
+      'https://json-schema.org/draft/2020-12/schema',
+      'https://json-schema.org/draft/2020-12/schema#',
+    ]) {
+      expect(check(`{"$schema":"${dialect}","type":"object"}`).skipped).toBeNull();
+    }
+  });
+
+  it('does not judge a document that declares another dialect', () => {
+    // Handing it to ajv would either throw or apply 2020-12 rules to a draft-07 document —
+    // the exact mistake the registry refuses it for. Say what happened instead.
+    const result = check('{"$schema":"http://json-schema.org/draft-07/schema#","type":"object"}');
+
+    expect(result.skipped).toContain('draft-07');
+    expect(result.advice).toEqual([]);
+  });
+
+  it('says it did not look at a document that is not JSON yet, rather than that it found nothing', () => {
+    const result = check('{"type": ');
+
+    expect(result.skipped).toContain('not well-formed');
+  });
+
+  it('says so for a document that is not a schema at all', () => {
+    expect(check('42').skipped).toContain('object or a boolean');
+    expect(check('null').skipped).toContain('object or a boolean');
+  });
+
+  it('takes a boolean schema', () => {
+    expect(check('true').skipped).toBeNull();
+    expect(check('false').advice).toEqual([]);
+  });
+
+  it('is not strict about keywords the registry accepts', () => {
+    // ajv's strict mode rejects unknown keywords and formats; the registry stores them.
+    const result = check('{"type":"string","format":"no-such-format","x-owner":"billing"}');
+
+    expect(result.skipped).toBeNull();
+    expect(result.advice).toEqual([]);
+  });
+
+  it('records what was checked, so a stale answer can be recognised', () => {
+    expect(check('{"type":"object"}').checked).toBe('{"type":"object"}');
+  });
+});
+
+describe('checkSchema — a sample message', () => {
+  const schema =
+    '{"type":"object","required":["id"],"properties":{"id":{"type":"string"},"n":{"type":"integer","minimum":1}}}';
+
+  it('has no payload outcome when none was supplied', () => {
+    expect(check(schema).payload).toBeNull();
+  });
+
+  it('accepts a conforming message', () => {
+    expect(check(schema, '{"id":"a","n":3}').payload).toEqual({ kind: 'valid' });
+  });
+
+  it('lists each way a message does not conform, with where', () => {
+    const payload = check(schema, '{"n":0}').payload;
+
+    expect(payload).toMatchObject({ kind: 'invalid', omitted: 0 });
+    expect(payload?.kind === 'invalid' && payload.errors.map((e) => e.path).sort()).toEqual([
+      '',
+      '/n',
+    ]);
+  });
+
+  it('says a message that is not JSON is not JSON', () => {
+    expect(check(schema, '{"id":').payload).toMatchObject({ kind: 'not_json' });
+  });
+
+  it('caps a long list of errors and counts the rest', () => {
+    const items = JSON.stringify(Array.from({ length: 100 }, () => 'x'));
+    const payload = check('{"type":"array","items":{"type":"integer"}}', items).payload;
+
+    expect(payload).toMatchObject({ kind: 'invalid', omitted: 75 });
+    expect(payload?.kind === 'invalid' && payload.errors).toHaveLength(25);
+  });
+
+  it('does not claim to agree with the registry about formats', () => {
+    // The registry's engine has its own list of formats. Pretending ajv's agree is the one
+    // place this would be confidently wrong, so formats are not checked at all.
+    const payload = check('{"type":"string","format":"email"}', '"not an email"').payload;
+
+    expect(payload).toEqual({ kind: 'valid' });
+  });
+
+  it('says a message cannot be judged against a reference only the registry resolves', () => {
+    // Neither "valid" nor "invalid": the registry resolves `concordat://` references from the
+    // version's reference list, and there is no registry here to ask.
+    const result = check('{"$ref":"concordat://dev/acme.Address/1"}', '{"a":1}');
+
+    expect(result.payload).toMatchObject({ kind: 'unavailable' });
+    expect(result.payload?.kind === 'unavailable' && result.payload.reason).toContain(
+      'concordat://dev/acme.Address/1',
+    );
+  });
+
+  it('still checks the schema itself when a reference blocks the message', () => {
+    const result = check('{"$ref":"concordat://dev/x/1","type":"bogus"}', '{}');
+
+    expect(result.advice.map((a) => a.pointer)).toEqual(['/type']);
+  });
+
+  it('follows a reference inside the document', () => {
+    const result = check('{"$ref":"#/$defs/id","$defs":{"id":{"type":"string"}}}', '42');
+
+    expect(result.payload).toMatchObject({ kind: 'invalid' });
+  });
+
+  it('says a pattern that does not compile is why the message could not be checked', () => {
+    const payload = check('{"type":"string","pattern":"(["}', '"x"').payload;
+
+    expect(payload).toMatchObject({ kind: 'unavailable' });
+    expect(payload?.kind === 'unavailable' && payload.reason).toContain('does not compile');
+  });
+});

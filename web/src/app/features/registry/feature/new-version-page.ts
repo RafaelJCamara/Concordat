@@ -1,48 +1,45 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
 import {
-  FormBuilder,
-  ReactiveFormsModule,
-  Validators,
-  type AbstractControl,
-  type ValidationErrors,
-} from '@angular/forms';
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+  viewChild,
+} from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { ActiveEnvironmentStore } from '../../../core/config/active-environment-store';
+import { ThemeStore } from '../../../core/config/theme-store';
+import type { EditorFinding } from '../../../domain/registry/editor-finding';
+import {
+  formatJsonDocument,
+  locatePointer,
+  parseJsonDocument,
+  positionAt,
+} from '../../../domain/registry/json-document';
+import { checkSchemaText } from '../../../domain/registry/schema-document';
+import {
+  compareSemanticVersions,
+  formatSemanticVersion,
+  parseSemanticVersion,
+} from '../../../domain/registry/semantic-version';
 import { Icon } from '../../../shared/ui/icon/icon';
 import { StatusBadge } from '../../../shared/ui/status-badge/status-badge';
 import { NewVersionStore } from '../application/new-version-store';
+import { SchemaCheckStore } from '../application/schema-check-store';
+import { CheckResult } from '../ui/check-result';
 import { DivergenceList } from '../ui/divergence-list';
-
-/**
- * Whether a document is at least well-formed JSON.
- *
- * <b>Well-formedness only, deliberately.</b> Whether it is a *valid* schema is the registry's
- * question and it answers it authoritatively — checking here as well would mean two
- * implementations of the same rule, and the client's would be the one that goes stale.
- * `ajv` arrives in M4.4 to catch the rest before a round trip, which is a convenience; this
- * is the one check worth making without it, because a missing brace is a certain 400 and
- * there is no reason to spend a request finding out.
- *
- * Avro is JSON too. Protobuf is not, so this validator is only attached for the formats
- * where it means something.
- */
-function wellFormedJson(control: AbstractControl): ValidationErrors | null {
-  const value = String(control.value ?? '').trim();
-
-  if (value === '') {
-    return null;
-  }
-
-  try {
-    JSON.parse(value);
-    return null;
-  } catch (error) {
-    return { json: error instanceof Error ? error.message : 'Not valid JSON.' };
-  }
-}
+import { EditorFindings } from '../ui/editor-findings';
+import { LabelSuggestions } from '../ui/label-suggestions';
+import { RegisterConfirmation } from '../ui/register-confirmation';
+import { SchemaEditor } from '../ui/schema-editor';
+import { VersionStarter } from '../ui/version-starter';
 
 /**
  * Register a version against an existing subject.
@@ -60,7 +57,7 @@ function wellFormedJson(control: AbstractControl): ValidationErrors | null {
 @Component({
   selector: 'cd-new-version-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  providers: [NewVersionStore],
+  providers: [NewVersionStore, SchemaCheckStore],
   imports: [
     ReactiveFormsModule,
     RouterLink,
@@ -69,6 +66,12 @@ function wellFormedJson(control: AbstractControl): ValidationErrors | null {
     Icon,
     StatusBadge,
     DivergenceList,
+    CheckResult,
+    EditorFindings,
+    LabelSuggestions,
+    RegisterConfirmation,
+    SchemaEditor,
+    VersionStarter,
   ],
   template: `
     <section class="mx-auto w-full max-w-4xl space-y-6 p-6 lg:p-8">
@@ -154,7 +157,7 @@ function wellFormedJson(control: AbstractControl): ValidationErrors | null {
             <a hlmBtn variant="outline" size="sm" [routerLink]="['/subjects', name()]">
               Back to the subject
             </a>
-            <button hlmBtn variant="ghost" size="sm" type="button" (click)="store.reset()">
+            <button hlmBtn variant="ghost" size="sm" type="button" (click)="another()">
               Register another
             </button>
           </div>
@@ -167,24 +170,93 @@ function wellFormedJson(control: AbstractControl): ValidationErrors | null {
           </div>
         }
 
-        <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-5">
+        <form [formGroup]="form" (ngSubmit)="ask()" class="space-y-5">
+          @if (store.subject() !== null) {
+            <cd-version-starter
+              [versions]="store.startingPoints()"
+              [defaultOrdinal]="store.defaultStartingOrdinal()"
+              [editorHasContent]="hasContent()"
+              [loading]="store.cloning()"
+              [failure]="store.cloneError()?.detail ?? null"
+              (startFrom)="store.cloneFrom($event)"
+            />
+          }
+
           <div class="space-y-1.5">
-            <label class="text-sm font-medium" for="schema">Schema document</label>
-            <textarea
-              id="schema"
+            <div class="flex flex-wrap items-end justify-between gap-2">
+              <label class="text-sm font-medium" for="schema">Schema document</label>
+
+              <div class="flex gap-2">
+                @if (canFormat()) {
+                  <button hlmBtn type="button" variant="outline" size="sm" (click)="format()">
+                    Format
+                  </button>
+                }
+                @if (canValidate()) {
+                  <button hlmBtn type="button" variant="outline" size="sm" (click)="validate()">
+                    Validate
+                  </button>
+                }
+              </div>
+            </div>
+
+            <cd-schema-editor
+              inputId="schema"
               formControlName="schema"
-              rows="18"
-              spellcheck="false"
-              placeholder='{ "type": "object", "properties": { } }'
-              class="border-input bg-background focus-visible:ring-ring block w-full rounded-md border p-3 font-mono text-xs focus-visible:ring-1 focus-visible:outline-none"
-            ></textarea>
-            @if (schemaError(); as message) {
-              <p class="text-destructive text-xs">{{ message }}</p>
-            } @else {
-              <p class="text-muted-foreground text-xs">
-                The document as you want it stored. The registry canonicalises it to compute the id,
-                but keeps what you sent.
-              </p>
+              [invalid]="visibleFindings().length > 0"
+              [format]="store.format()"
+              [findings]="visibleFindings()"
+              [dark]="dark()"
+              describedBy="schema-help"
+            />
+
+            <div id="schema-help" class="space-y-1.5" aria-live="polite">
+              <cd-editor-findings [findings]="visibleFindings()" (reveal)="reveal($event)" />
+
+              @if (formatMessage(); as message) {
+                <p class="text-muted-foreground text-xs" role="status">{{ message }}</p>
+              }
+
+              @if (visibleFindings().length === 0) {
+                <p class="text-muted-foreground text-xs">
+                  The document as you want it stored. The registry canonicalises it to compute the
+                  id, but keeps what you sent.
+                </p>
+              }
+            </div>
+
+            @if (canValidate()) {
+              <details class="border-border rounded-md border px-3 py-2 text-sm">
+                <summary class="cursor-pointer font-medium">
+                  Check a sample message
+                  <span class="text-muted-foreground font-normal">· optional</span>
+                </summary>
+                <div class="mt-2 space-y-1.5">
+                  <label class="text-muted-foreground text-xs" for="sample">
+                    A message you expect to be valid under this schema. Press Validate to check it.
+                  </label>
+                  <textarea
+                    id="sample"
+                    [formControl]="sample"
+                    rows="6"
+                    spellcheck="false"
+                    placeholder='{ "id": "abc" }'
+                    class="border-input bg-background focus-visible:ring-ring block w-full rounded-md border p-3 font-mono text-xs focus-visible:ring-1 focus-visible:outline-none"
+                  ></textarea>
+                </div>
+              </details>
+            }
+
+            @if (checkVisible()) {
+              <cd-check-result
+                [checking]="checks.checking()"
+                [failure]="checks.failure()"
+                [checked]="checkIsCurrent()"
+                [stale]="checkIsStale()"
+                [skipped]="checks.result()?.skipped ?? null"
+                [adviceCount]="adviceFindings().length"
+                [payload]="checks.result()?.payload ?? null"
+              />
             }
           </div>
 
@@ -200,6 +272,21 @@ function wellFormedJson(control: AbstractControl): ValidationErrors | null {
                 placeholder="1.2.0"
                 class="border-input bg-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 font-mono text-sm focus-visible:ring-1 focus-visible:outline-none"
               />
+              @if (store.subject() !== null) {
+                <cd-label-suggestions
+                  [from]="store.liveLabel()"
+                  [suggestions]="store.labelSuggestions()"
+                  (pick)="pickLabel($event)"
+                />
+              }
+              @if (labelFinding(); as finding) {
+                <p
+                  class="text-xs"
+                  [class]="finding.severity === 'refusal' ? 'text-destructive' : 'text-warning'"
+                >
+                  {{ finding.message }}
+                </p>
+              }
               <p class="text-muted-foreground text-xs">
                 <!--
                   "Verified", not "recorded". The registry checks the label against its own
@@ -227,12 +314,24 @@ function wellFormedJson(control: AbstractControl): ValidationErrors | null {
             </div>
           </div>
 
-          <div class="flex items-center gap-2">
-            <button hlmBtn type="submit" [disabled]="!canSubmit()">
-              {{ store.submitting() ? 'Registering…' : 'Register' }}
-            </button>
-            <a hlmBtn variant="ghost" [routerLink]="['/subjects', name()]">Cancel</a>
-          </div>
+          @if (confirming()) {
+            <cd-register-confirmation
+              [subject]="name()"
+              [environment]="environments.name()"
+              [ordinal]="store.nextOrdinal()"
+              [label]="sentLabel()"
+              [busy]="store.submitting()"
+              (confirmed)="register()"
+              (declined)="confirmation.set(null)"
+            />
+          } @else {
+            <div class="flex items-center gap-2">
+              <button hlmBtn type="submit" [disabled]="!canSubmit()">
+                {{ store.submitting() ? 'Registering…' : 'Register' }}
+              </button>
+              <a hlmBtn variant="ghost" [routerLink]="['/subjects', name()]">Cancel</a>
+            </div>
+          }
         </form>
       }
     </section>
@@ -243,12 +342,21 @@ export class NewVersionPage {
   readonly name = input.required<string>();
 
   protected readonly store = inject(NewVersionStore);
+  protected readonly checks = inject(SchemaCheckStore);
+  private readonly theme = inject(ThemeStore);
+
+  /** Whether the editor should be drawn for the dark theme. */
+  protected readonly dark = computed(() => this.theme.resolved() === 'dark');
   protected readonly environments = inject(ActiveEnvironmentStore);
 
   private readonly builder = inject(FormBuilder);
 
   protected readonly form = this.builder.nonNullable.group({
-    schema: ['', [Validators.required, wellFormedJson]],
+    // `required` and nothing else. What else is wrong with the text depends on the subject's
+    // format, which arrives after the form is built, and a validator cannot read a signal
+    // that has not settled — so the format-aware checks are `documentFindings` below, and
+    // `canSubmit` joins them.
+    schema: ['', [Validators.required]],
     semanticVersion: [''],
     changelog: [''],
   });
@@ -258,55 +366,337 @@ export class NewVersionPage {
    *
    * A `computed` over `form.controls.x.invalid` would never recompute: an `AbstractControl`
    * is not a signal, so nothing tells the graph it changed and the message would be
-   * whatever it was at construction. Reading this signal first is what makes the two
-   * computeds below track the form — `events` covers value, status *and* touched, where
+   * whatever it was at construction. Reading this signal first is what makes the computeds
+   * below track the form — `events` covers value, status *and* touched, where
    * `statusChanges` alone would miss a blur on an untouched field.
    */
   private readonly formEvents = toSignal(this.form.events);
 
-  /** The schema field's complaint, once it has one worth showing. */
-  protected readonly schemaError = computed(() => {
+  /**
+   * A message to check against the schema. Outside the form group on purpose: it is not part of
+   * what gets registered, so editing it must not withdraw a confirmation of what will be.
+   */
+  protected readonly sample = new FormControl('', { nonNullable: true });
+
+  private readonly sampleText = toSignal(this.sample.valueChanges, { initialValue: '' });
+
+  private readonly editor = viewChild(SchemaEditor);
+
+  /** The editor's text, as typed. Positions in it are what the editor can underline. */
+  private readonly editorText = computed(() => {
+    this.formEvents();
+
+    return this.form.controls.schema.value;
+  });
+
+  /** The text as the registry would receive it: trimmed, as `register` sends it. */
+  private readonly schemaText = computed(() => this.editorText().trim());
+
+  /** Whether there is anything in the editor that loading a version would overwrite. */
+  protected readonly hasContent = computed(() => this.schemaText() !== '');
+
+  /**
+   * What the registry will certainly refuse about the text.
+   *
+   * Empty while the subject has not loaded, because every one of these depends on its
+   * format: reading a Protobuf file as JSON would call a valid schema malformed.
+   */
+  private readonly documentFindings = computed((): readonly EditorFinding[] => {
+    const format = this.store.format();
+
+    if (format === null) {
+      return [];
+    }
+
+    // An empty editor is `required`'s business and the placeholder's; a finding that says
+    // "a schema body is required" over a box nobody has typed in yet is only noise.
+    return checkSchemaText(this.editorText(), format).filter((f) => f.code !== 'schema_body_empty');
+  });
+
+  /**
+   * Whether the last check was of what is on screen now.
+   *
+   * An answer about a document that has since been edited is an answer about something else,
+   * and showing it beside the new text would be the page lying with a straight face. It is
+   * hidden rather than dimmed.
+   */
+  protected readonly checkIsCurrent = computed(() => {
+    const request = this.checks.request();
+
+    return (
+      this.checks.result() !== null &&
+      request !== null &&
+      request.schema === this.schemaText() &&
+      request.payload === this.payloadText()
+    );
+  });
+
+  /** There was an answer and the text has moved on. */
+  protected readonly checkIsStale = computed(
+    () => this.checks.result() !== null && !this.checkIsCurrent(),
+  );
+
+  protected readonly checkVisible = computed(
+    () => this.checks.checking() || this.checks.failure() !== null || this.checks.result() !== null,
+  );
+
+  /** The sample message as it would be checked: trimmed, and absent rather than empty. */
+  private readonly payloadText = computed(() => {
+    const text = this.sampleText().trim();
+
+    return text === '' ? null : text;
+  });
+
+  /**
+   * What ajv thought of the schema, placed in the text.
+   *
+   * Advice, so it is shown beside the refusals but never joins canSubmit: the registry takes
+   * a schema ajv has opinions about, and a block here would be stricter than the registry.
+   */
+  protected readonly adviceFindings = computed((): readonly EditorFinding[] => {
+    const result = this.checks.result();
+
+    if (result === null || !this.checkIsCurrent()) {
+      return [];
+    }
+
+    // The check ran on the trimmed text; what is underlined is the editor's, which may begin
+    // with whitespace the trimmed text does not have.
+    const editor = this.editorText();
+    const leading = editor.length - editor.trimStart().length;
+    const parsed = parseJsonDocument(this.schemaText());
+
+    return result.advice.map((a) => {
+      const span = parsed.ok ? locatePointer(parsed.root, a.pointer) : null;
+
+      return {
+        severity: 'advice',
+        code: a.code,
+        message: a.message,
+        position: span === null ? null : positionAt(editor, leading + span.start),
+        // A container is pointed at by its opening character; underlining a whole nested object
+        // would draw a line under half the document.
+        length: 1,
+      };
+    });
+  });
+
+  /** The findings worth showing right now. */
+  protected readonly visibleFindings = computed((): readonly EditorFinding[] => {
     this.formEvents();
 
     const control = this.form.controls.schema;
 
     // Held back until the field has been touched or edited. Complaining about an empty
-    // textarea the moment the screen opens is telling someone off for not having started.
-    if (!control.touched && !control.dirty) {
+    // editor the moment the screen opens is telling someone off for not having started.
+    const refusals = control.touched || control.dirty ? this.documentFindings() : [];
+
+    return [...refusals, ...this.adviceFindings()];
+  });
+
+  /** Whether the client-side check applies: JSON Schema only, since Avro is not a JSON Schema. */
+  protected readonly canValidate = computed(
+    () => this.hasContent() && this.store.format() === 'json',
+  );
+
+  /** Whether Format applies: the text is JSON, which JSON Schema and Avro both are. */
+  protected readonly canFormat = computed(
+    () => this.hasContent() && (this.store.format() === 'json' || this.store.format() === 'avro'),
+  );
+
+  /** What Format said when it could not do what was asked. */
+  protected readonly formatMessage = signal<string | null>(null);
+
+  /**
+   * The label field's complaint, or its advice.
+   *
+   * A label that does not parse is a certain refusal and blocks; one that does not increase on
+   * the highest live label is only advice, because the subject on screen may be older than the
+   * registry's (a held version rejected since would have freed the number) — and advice that
+   * can veto a submit is wrong in exactly that direction.
+   */
+  protected readonly labelFinding = computed((): EditorFinding | null => {
+    this.formEvents();
+
+    const text = this.form.controls.semanticVersion.value.trim();
+
+    if (text === '') {
       return null;
     }
 
-    return control.hasError('json') ? `Not valid JSON: ${control.getError('json')}` : null;
+    const parsed = parseSemanticVersion(text);
+
+    if (!parsed.ok) {
+      return {
+        severity: 'refusal',
+        code: parsed.problem.kind === 'invalid' ? 'semver_invalid' : 'semver_build_metadata',
+        message: parsed.problem.message,
+        position: null,
+        length: 0,
+      };
+    }
+
+    const live = this.store.liveLabel();
+
+    if (live !== null && compareSemanticVersions(parsed.value, live) <= 0) {
+      return {
+        severity: 'advice',
+        code: 'semver_not_increasing',
+        message:
+          `${text} does not increase on ${formatSemanticVersion(live)}, the highest label on a ` +
+          'live version. The registry will refuse it unless that version has been rejected since ' +
+          'this page loaded.',
+        position: null,
+        length: 0,
+      };
+    }
+
+    return null;
+  });
+
+  /** The label as it will be sent: trimmed, and absent rather than empty. */
+  protected readonly sentLabel = computed(() => {
+    this.formEvents();
+
+    const text = this.form.controls.semanticVersion.value.trim();
+
+    return text === '' ? null : text;
   });
 
   /** Whether the form is in a state worth sending. */
   protected readonly canSubmit = computed(() => {
     this.formEvents();
 
-    return this.form.valid && !this.store.submitting();
+    return (
+      this.form.valid &&
+      this.store.subject() !== null &&
+      !this.documentFindings().some((f) => f.severity === 'refusal') &&
+      this.labelFinding()?.severity !== 'refusal' &&
+      !this.store.submitting()
+    );
   });
+
+  /**
+   * What the form said when the person asked to register, or null if they have not.
+   *
+   * <b>The confirmation belongs to one exact set of values.</b> It is stored as a snapshot and
+   * `confirming` compares it with the form as it is now, so editing anything after the first
+   * click withdraws it. Without that, the second click would send something the first never
+   * showed.
+   */
+  protected readonly confirmation = signal<string | null>(null);
+
+  private readonly snapshot = computed(() => {
+    this.formEvents();
+
+    return JSON.stringify(this.form.getRawValue());
+  });
+
+  protected readonly confirming = computed(
+    () => this.confirmation() !== null && this.confirmation() === this.snapshot(),
+  );
 
   constructor() {
     effect(() => {
       this.environments.name();
       this.store.loadSubject(this.name());
     });
+
+    // Applies a cloned document to the editor, from what the registry returned.
+    effect(() => {
+      const cloned = this.store.cloned();
+
+      if (cloned === null) {
+        return;
+      }
+
+      untracked(() => {
+        const control = this.form.controls.schema;
+
+        control.setValue(cloned.text);
+        control.markAsDirty();
+        this.formatMessage.set(null);
+      });
+    });
   }
 
-  protected submit(): void {
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
+  protected format(): void {
+    const formatted = formatJsonDocument(this.form.controls.schema.value);
+
+    if (formatted === null) {
+      // Not a guess at what the author meant: a document that does not read has no structure
+      // to lay out, and re-indenting a broken one is how a Format button destroys work.
+      this.formatMessage.set(
+        'This is not well-formed JSON yet, so there is nothing to lay out. Fix the problem above first.',
+      );
       return;
     }
 
-    const { schema, semanticVersion, changelog } = this.form.getRawValue();
+    this.formatMessage.set(null);
 
+    const control = this.form.controls.schema;
+
+    control.setValue(formatted);
+    control.markAsDirty();
+  }
+
+  protected validate(): void {
+    this.checks.run({ schema: this.schemaText(), payload: this.payloadText() });
+  }
+
+  /**
+   * Back to the form after a registration, to write the next version.
+   *
+   * The document stays, because the next version is nearly always an edit of the one just
+   * registered. The label and the changelog do not: they described that version, and a label
+   * cannot be used twice.
+   */
+  protected another(): void {
+    this.store.reset();
+    this.confirmation.set(null);
+    this.form.controls.semanticVersion.reset('');
+    this.form.controls.changelog.reset('');
+  }
+
+  protected pickLabel(label: string): void {
+    const control = this.form.controls.semanticVersion;
+
+    control.setValue(label);
+    control.markAsDirty();
+  }
+
+  protected reveal(finding: EditorFinding): void {
+    if (finding.position !== null) {
+      this.editor()?.reveal(finding.position.offset);
+    }
+  }
+
+  /** The first click: asks for confirmation rather than registering. */
+  protected ask(): void {
+    this.form.markAllAsTouched();
+
+    if (!this.canSubmit()) {
+      return;
+    }
+
+    this.confirmation.set(this.snapshot());
+  }
+
+  /** The second click: registers exactly what was confirmed. */
+  protected register(): void {
+    if (!this.confirming()) {
+      return;
+    }
+
+    const { schema, changelog } = this.form.getRawValue();
+
+    this.confirmation.set(null);
     this.store.submit({
       subject: this.name(),
       schema: schema.trim(),
       // Empty is absent, not an empty label. The API distinguishes them: a `""` semantic
       // version would be checked against the verdict and refused as unparseable.
-      semanticVersion: semanticVersion.trim() === '' ? null : semanticVersion.trim(),
+      semanticVersion: this.sentLabel(),
       changelog: changelog.trim() === '' ? null : changelog.trim(),
     });
   }

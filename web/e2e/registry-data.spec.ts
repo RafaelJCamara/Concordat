@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { OWNER } from './registry';
+import { setSchema, waitForSubject } from './schema-editor';
 import { signIn } from './sign-in';
 
 /**
@@ -195,8 +196,11 @@ test.describe('registering a version', () => {
     await signIn(page, OWNER);
     await page.goto(`/subjects/${SUBJECT}/versions/new`);
 
-    await page.getByRole('textbox', { name: 'Schema document' }).fill(TIP_SCHEMA);
-    await page.getByRole('button', { name: 'Register' }).click();
+    await waitForSubject(page);
+    await setSchema(page, TIP_SCHEMA);
+    // Two clicks: a version is permanent, so the first asks and the second does it.
+    await page.getByRole('button', { name: 'Register', exact: true }).click();
+    await page.getByRole('button', { name: 'Yes, register it' }).click();
 
     await expect(page.getByText('Unchanged')).toBeVisible();
     await expect(page.getByText(/no ordinal was allocated/i)).toBeVisible();
@@ -217,10 +221,11 @@ test.describe('registering a version', () => {
     await signIn(page, OWNER);
     await page.goto(`/subjects/${SUBJECT}/versions/new`);
 
-    await page.getByRole('textbox', { name: 'Schema document' }).fill('{"type": ');
+    await waitForSubject(page);
+    await setSchema(page, '{"type": ');
 
-    await expect(page.getByText(/not valid json/i)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Register' })).toBeDisabled();
+    await expect(page.getByText(/not well-formed json/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Register', exact: true })).toBeDisabled();
   });
 });
 

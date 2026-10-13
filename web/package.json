@@ -19,6 +19,8 @@
     "codes:generate": "node tools/generate-concordat-codes.mjs",
     "codes:check": "node tools/generate-concordat-codes.mjs --check",
     "fonts:vendor": "node tools/vendor-fonts.mjs",
+    "monaco:vendor": "node tools/vendor-monaco.mjs",
+    "monaco:check": "node tools/vendor-monaco.mjs --check",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
     "e2e:ui": "playwright test --ui"
@@ -33,8 +35,10 @@
     "@angular/router": "^22.1.0",
     "@ngrx/signals": "^22.0.0-rc.0",
     "@spartan-ng/brain": "^1.3.1",
+    "ajv": "^8.20.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "monaco-editor": "^0.57.0",
     "rxjs": "~7.8.0",
     "tailwind-merge": "^3.5.0",
     "tslib": "^2.3.0"

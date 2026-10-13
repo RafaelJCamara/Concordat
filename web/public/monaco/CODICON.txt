@@ -1,0 +1,10 @@
+Codicon icon font (codicon-*.ttf)
+
+Copyright (c) Microsoft Corporation
+https://github.com/microsoft/vscode-codicons
+
+Licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
+
+The font file is the one distributed inside the monaco-editor package, decoded from the data
+URI in its stylesheet and otherwise unmodified.

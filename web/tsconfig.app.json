@@ -4,5 +4,5 @@
     "types": []
   },
   "include": ["src/**/*.ts", "src/app/shared/ui/**/src/**/*.ts"],
-  "exclude": ["src/**/*.spec.ts"]
+  "exclude": ["src/**/*.spec.ts", "src/**/*.worker.ts"]
 }

@@ -1,0 +1,136 @@
+# Rendered by the base image from the environment at start-up (envsubst, on the variables that
+# are set — nginx's own `$uri` and `$host` are left alone). See docker/web.Dockerfile.
+
+# The Content-Security-Policy differs by what is being served, and a header set in a `location`
+# replaces every header set outside it, so the difference is carried by variables and the header is
+# written once.
+#
+# THE WORKERS ARE THE ONE PLACE THAT MAY EVALUATE STRINGS. The schema checker runs ajv, which
+# compiles each schema to JavaScript with `new Function`; the page's policy deliberately forbids
+# that (`script-src 'self'`), so the check runs in a worker, and a worker's policy is the one on
+# its own script. Giving it `'unsafe-eval'` costs little because of what else it is given: no
+# network (`connect-src 'none'`), no DOM, nothing to reach. Giving the *page* `'unsafe-eval'` would
+# cost the backstop the policy exists to be. Both workers are named `worker-<hash>.js` by the
+# build, so both get the same policy; the editor's worker does not need the eval and does no harm
+# with it for the same reasons.
+map $uri $concordat_script_src {
+    ~^/worker-[A-Za-z0-9_-]+\.js$  "'self' 'unsafe-eval'";
+    default                         "'self'";
+}
+
+map $uri $concordat_connect_src {
+    ~^/worker-[A-Za-z0-9_-]+\.js$  "'none'";
+    default                         "${CONCORDAT_CONNECT_SRC}";
+}
+
+server {
+    listen 8080;
+    server_name _;
+    server_tokens off;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Resolved when a request arrives, not when nginx starts: with a literal host nginx refuses to
+    # start at all while the registry is not yet reachable, and the UI should come up and say so
+    # rather than not come up. `NGINX_LOCAL_RESOLVERS` is set by the base image from resolv.conf
+    # (and defaulted, if empty, by 18-concordat-config.envsh).
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
+    # Short, so a registry that cannot be found is a 502 in seconds and not a request that hangs for the
+    # default thirty while the page waits on it.
+    resolver_timeout 3s;
+    set $concordat_upstream "${CONCORDAT_API_UPSTREAM}";
+
+    # The policy the page used to carry as a <meta> tag, plus what a tag cannot say.
+    add_header Content-Security-Policy "default-src 'self'; script-src $concordat_script_src; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src $concordat_connect_src; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header X-Frame-Options "DENY" always;
+
+    # Schemas are at most 512 KiB, and JSON escaping can nearly double that.
+    client_max_body_size 2m;
+
+    # Answered here, not forwarded: whether this container is serving, which is all it can say
+    # without the registry.
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    # Written at start-up from the environment. Never cached: the one thing it must not be is
+    # stale after somebody changes where the registry is.
+    location = /config.json {
+        alias /tmp/concordat-config.json;
+        default_type application/json;
+        expires -1;
+    }
+
+    # The API, forwarded to the registry so the browser only ever talks to this origin. That is
+    # what keeps the session cookie first-party and the CSP's `connect-src` at `'self'`, and it is
+    # the same arrangement `ng serve` has in proxy.conf.json.
+    #
+    # `^~`, and it matters: without it the regular expression below that serves static files by
+    # extension outranks a plain prefix, so `GET /v1/environments/dev/subjects/orders.json` — a
+    # perfectly good subject name, since subjects are dotted — was answered 404 by nginx as a file
+    # that does not exist, and never reached the registry. The browser suite found it, on a subject
+    # that happened to be called `...parity.json`.
+    location ^~ /v1/ {
+        proxy_pass $concordat_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_read_timeout 60s;
+    }
+
+    location = /health {
+        proxy_pass $concordat_upstream;
+        proxy_set_header Host $http_host;
+    }
+
+    location ^~ /health/ {
+        proxy_pass $concordat_upstream;
+        proxy_set_header Host $http_host;
+    }
+
+    # Content-hashed files, which never change under the same name.
+    location ~ ^/(?:chunk|main|styles|worker)-[A-Za-z0-9_-]+\.(?:js|css)$ {
+        try_files $uri =404;
+        expires 1y;
+    }
+
+    location ^~ /media/ {
+        try_files $uri =404;
+        expires 1y;
+    }
+
+    # Vendored by tools/vendor-monaco.mjs, with a hash of the content in each name.
+    #
+    # `types` here rather than in the server: it replaces the whole table for its context, and
+    # nginx's default has no entry for `ttf`, so the icon font would be served as an opaque binary.
+    location ^~ /monaco/ {
+        types {
+            text/css css;
+            font/ttf ttf;
+            text/plain txt;
+        }
+        try_files $uri =404;
+        expires 1y;
+    }
+
+    # Anything else that looks like a file is a file or a 404. Never `index.html`: a stale tab
+    # asking for a chunk that was redeployed away would otherwise be handed HTML and fail to parse
+    # it as a script, which reads as a bug in the app instead of a missing file.
+    location ~* \.(?:js|css|woff2?|ttf|ico|png|svg|map|json|txt|webmanifest)$ {
+        try_files $uri =404;
+        expires 1h;
+    }
+
+    # Everything else is a route of the single-page app.
+    location / {
+        try_files /index.html =404;
+        expires -1;
+    }
+}

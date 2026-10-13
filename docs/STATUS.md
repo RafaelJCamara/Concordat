@@ -1,8 +1,9 @@
 # What is missing
 
-**As of 2026-08-15**, except [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
+**As of 2026-08-15**, except [the schema editor and the web container, 2026-10-13](#the-schema-editor-and-the-web-container-2026-10-13),
+[the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
-below, added the next day and not re-verified against the rest of this file. Test counts
+below, added later and not re-verified against the rest of this file. Test counts
 throughout were re-run and corrected 2026-08-30. A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
@@ -14,6 +15,66 @@ ten milestone files as unchecked boxes.
 
 Everything under "verified locally" below was run on this machine today, against the real
 container image and a real PostgreSQL. Everything else is claimed on the strength of tests.
+
+---
+
+## The schema editor and the web container, 2026-10-13
+
+M4.4's last three boxes — Monaco, `ajv`, and the prototype's editing conveniences — shipped on
+`NewVersionPage`, and the web app joined the compose stack: `docker compose --profile registry up`
+now brings up the registry **and** its UI (`127.0.0.1:5063`). The Angular suite went from 858 to
+**1,106** tests and the browser suite from 144 to **178**, the latter run against the dev server **and
+against the production image**; the .NET suite is **1,532** and was not touched. Decisions:
+[ADR-028](adr/028-schema-editor.md), [ADR-029](adr/029-web-container.md).
+
+**The one rule the editor is built on:** a check that can block a registration must be one the
+registry would certainly make. Everything it says is a *refusal* (a port of the registry's own
+rules, which may disable Register) or *advice* (which never does). The refusals are held against
+the registry's own dry-run endpoint, in both directions, over about fifty documents in three
+formats — and that test found exactly one disagreement, in the test: JavaScript's `trim()` strips
+a byte-order mark that the registry's reader refuses.
+
+**The real stack corrected the first draft five times**, and four of the five could only have been
+found by running the production build:
+
+- **The production build ran on a fraction of its stylesheet under the app's own policy.** Angular inlines critical CSS as
+  `<link media="print" onload="this.media='all'">`; `script-src 'self'` forbids inline event
+  handlers, so the handler was blocked and the full stylesheet never left `print` — only the inlined subset applied, which showed up as a light palette on a page that starts dark. Every browser test
+  ran against `ng serve`, which does not do this. The build now does not inline critical CSS, and
+  the image's smoke test fails on any inline handler in `index.html`.
+- **Monaco rendered unstyled in production and not in development.** The stylesheet a lazy chunk
+  imports is emitted and never linked; the dev server injects it from the module. It is a vendored
+  file now (`npm run monaco:check`), linked on load, and a test fails the build's fallback path by
+  aborting that very request.
+- **A subject named `…parity.json` was a 404 through nginx.** The regular expression that serves
+  static files by extension outranked the `/v1/` prefix, so any API path ending `.json`, `.js`,
+  `.css` or `.txt` never reached the registry. Subjects are dotted; `orders.json` is a plausible
+  name. Found by the browser suite's own fixture, fixed with `^~`, and now a line in the smoke test
+  that the broken image fails.
+- **The accessibility attributes on Monaco's input were never set.** In Chromium Monaco's input is
+  an `EditContext` `div`, not a `textarea`, and the code looked for a textarea.
+- **The minifier writes `.625rem` for `0.625rem`**, which an exact-string test called a regression;
+  and two design-system tests counted icons before the app had rendered them, which the
+  production image's one extra request before first paint was enough to lose.
+
+**What the editor is not allowed to claim, and the two registry facts the work surfaced:** the
+registry **accepts a schema that is not valid under the 2020-12 metaschema** (`{"type":"bogus"}` is
+registered; it only fails when a message is validated against it), which is why `ajv`'s findings
+are advice; and it answers **500, with no Problem Details body, to a lone-surrogate escape**
+(`"\ud800"` in a string), which is well-formed JSON. Both are in the holes table below.
+
+**Measured, 2026-10-13, production build.** Initial bundle 405.9 → 410.6 kB raw (102.5 → 104.3 kB
+transferred): the editor is not in it. On demand: Monaco 3.32 MB raw / 667 kB transferred, its
+worker 307 / 75 kB, the checker's worker (with `ajv`) 136 / 36 kB, the stylesheet 187 kB and the
+icon font 153 kB. The screen's own chunk grew from 9.7 to 50.2 kB.
+
+**Not covered.** The prototype's *auto-slugged id* and *compatibility tooltips* — the first belongs to
+creating a subject, which **no screen does** (see below). A cross-origin API
+(`CONCORDAT_API_BASE_URL` set to another origin) was checked as far as `config.json`, the rendered
+header and the validation, **not by signing in across origins**. The CI and `Publish images`
+changes parse as YAML and have not been run by GitHub. Right-to-left text, very large documents
+that scroll (a 527 KB paste took 0.7 s; reading it back through the DOM is not attempted) and
+touch editing were not exercised.
 
 ---
 
@@ -269,14 +330,18 @@ described shipped code since decision 25 landed the day before.
 
 ### M4 — the web application
 
-The honest count is **4** — three unchecked boxes plus the part-built Dashboard. **No page is
-missing.** On 2026-10-13 the seven that were — the version diff, impact analysis, approvals,
+The honest count is **2** — the part-built Dashboard, and the one box M4.4 still has open
+(two prototype conveniences, below). **No page is missing**, and the schema editor's three boxes
+are done ([the section above](#the-schema-editor-and-the-web-container-2026-10-13)). On
+2026-10-13 the seven pages that were missing — the version diff, impact analysis, approvals,
 contracts, the audit log, the settings split and notification forms — shipped, each driven in a
-browser against the real registry, and what is left is the schema editor's own enhancements.
+browser against the real registry.
 
-**Genuinely missing:** Monaco for schema editing · `ajv` for client-side validation · the
-"preserve" list of prototype behaviours (immutable-id confirmation, semver auto-increment,
-clone-previous-version, empty states). None is a screen; all three belong to `NewVersionPage`.
+**Genuinely missing:** the prototype's *auto-slugged id with a "touched" flag*, which belongs to
+**creating a subject — and no screen creates one.** `POST …/subjects` exists and nothing in the web
+app calls it, so a subject has to be made through the API or the CLI before the UI can do anything
+with it. M4's exit criterion ("create a subject, register a version, …entirely in the UI") was
+recorded as met and is **not**; it is every step but the first. And *compatibility tooltips*.
 
 ~~SubjectDetail / VersionDetail / NewVersion pages~~ headed that list until this audit.
 **They shipped 2026-08-15 with M4.3** — `subject-detail-page.ts`, `version-detail-page.ts` and
@@ -310,8 +375,8 @@ conflict".
 
 **Done 2026-08-15:** the design-system port — the prototype's tokens, a light theme, self-hosted
 fonts ([ADR-026](adr/026-self-hosted-web-fonts.md)), the sidebar shell, the icon set and the
-cards — and the Playwright suite that now pins it. The E2E suite stands at **144 tests across ten
-specs**, up from the 11 it launched with; `design-system.spec.ts` asserts the palette, both
+cards — and the Playwright suite that now pins it. The E2E suite stands at **178 tests across fourteen
+specs** as of 2026-10-13, up from the 11 it launched with; `design-system.spec.ts` asserts the palette, both
 themes, the typography and the shell as **computed styles rather than pixel screenshots**, which
 are exact and identical on Windows and on CI's Linux. It exists because the placeholder palette
 survived a whole milestone with every other test green: nothing named a colour, so nothing could
@@ -336,17 +401,17 @@ signed-out visitor to `/sign-in?returnTo=…`.
 | "Uncontrolled `defaultValue` forms → reactive forms" | A React idiom. No such forms exist. |
 | "Drop the unused dependency surface (React Query, zod, recharts, …)" | None of them are in `package.json`. The Angular app never had them. |
 
-The Monaco item is worth keeping but its stated reason has expired: it is framed as fixing the
-prototype's `dangerouslySetInnerHTML` XSS hole, and that code was never ported either. Monaco is
-wanted on its own merits.
+The Monaco item's stated reason had expired — it was framed as fixing the prototype's
+`dangerouslySetInnerHTML` XSS hole, and that code was never ported either — and it shipped on its
+own merits.
 
 **What exists today:** seventeen screens — sign-in, the dashboard slice on `/`, the subject list,
 subject detail, version detail, the register-a-version form, the version diff, impact analysis,
 approvals, the contract list and a contract, the audit log, and the five settings tabs
 (environment, brokers, members, API keys, notifications) — and the routing, guards and
-interceptors under them. Every flow in the exit criterion — create a subject, register a
+interceptors under them. Every flow in the exit criterion after the first — register a
 version, view a diff and an impact report, approve a pending breaking change — is now possible
-entirely in the UI.
+entirely in the UI, **except the first: nothing creates a subject.**
 
 ### M6 — Tier 2 SDKs
 
@@ -373,12 +438,15 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~Signup named its reason for refusing~~ | **Narrowed 2026-09-24.** The neutral `detail` was the only neutral part; the code, title and type URI all said `user_already_exists`. Now `signup_refused`. Not closed: synchronous provisioning still distinguishes refusal from creation — [M9.2](plan/M9-cloud.md) says what closing it would take. |
 | **Approval reviewers do not exist** | Anyone with `subject:admin` can approve anything. A reviewer *set* was deferred to M8 and M8 did not build it. |
 | **A contract's bindings cannot be edited or removed** | There is an `add` endpoint for each kind and nothing else, so a binding added without a precedence can never be separated from a later overlapping one — the registry's own refusal says to "give the two bindings different precedence values", and the first has none to change. Found by the web app's first real overlap test (2026-10-13); the form now says to set precedence up front, which is a workaround, not a fix. |
+| **No screen creates a subject** | `POST /v1/environments/{env}/subjects` is built and tested and nothing in the web app calls it, so M4's exit criterion has been recorded as met when its first step is not. Found 2026-10-13 while looking for the prototype's "auto-slugged id", which has nowhere to live without it. |
+| **The registry accepts a schema that is not valid JSON Schema** | `{"type":"bogus"}` registers. Canonicalisation and the portability check never read the document against the 2020-12 metaschema, so it is stored, given an id and offered to consumers — and fails every message validated against it. The web editor reports it as advice (`ajv`); the registry does not. Whether registration should refuse it is a product decision, not a bug fix: refusing changes what existing users can register. |
+| **A lone-surrogate escape in a schema answers 500** | `{"a":"\ud800"}` is well-formed JSON to the registry's reader and then fails in the writer: a bare 500 with no Problem Details body, from both registration and the dry run. Found by the editor's parity test, which records it rather than mirroring it. |
 | **Hard delete does not exist** | Soft delete is all there is. The full rule — no registered consumers, force flag, audit entry — is an outstanding commitment. |
 | **Subject prefix search is not implemented** | Value converters do not translate `StartsWith`; it needs a `ComplexProperty` mapping or a shadow column. |
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | ~~A page reload signs you out~~ | **Closed 2026-08-14** by decision 26 — an httpOnly `SameSite=Strict` cookie and a `/auth/resume` route that is the only thing accepting it. The credential still never touches `localStorage`. |
 | ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Still on, and now audible** (decision 27). The API logs a warning naming both ways to close it and repeats hourly until claimed; the web app shows a banner. Verified against a real container. |
-| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 144 tests today across ten specs, up from the 11 it launched with. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
+| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 178 tests today across fourteen specs, up from the 11 it launched with, and run against the production image as well as the dev server. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
 | ~~`Tenant` is not an aggregate~~ | **Closed by M9.1**, recorded here 2026-09-24 — `Tenant.Create` carries the name and slug invariants, signup writes a row per organisation, bootstrap writes the self-hosted one, and `CloudTenancyTests` drives two organisations through the real host. Self-hosted still holds exactly one row, `TenantId.SelfHosted`: the profiles differ in how many rows there are, not in whether the table means anything. |
 | ~~The derived-environment-id decision is unmade~~ | **Closed 2026-08-14.** Adopted, by creating rows that carry the derived id. No migration, and no orphaned subjects. |
 
@@ -413,9 +481,9 @@ survive being wrong.
 | Conformance corpus | `Conformance` | 99, over 98 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 64 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
-| Browser end-to-end | `web/e2e` | 144 | A real Chromium against the real stack, design system included |
+| Browser end-to-end | `web/e2e` | 178 | A real Chromium against the real stack, design system included — and against the production image |
 
-Plus 858 Angular unit tests.
+Plus 1,106 Angular unit tests.
 
 **No mocking framework, deliberately.** No Moq, NSubstitute, FluentAssertions or AutoFixture —
 `Directory.Packages.props` carries xunit, Testcontainers and `TimeProvider.Testing`. Every double

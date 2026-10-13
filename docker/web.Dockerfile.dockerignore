@@ -1,0 +1,19 @@
+# The context for docker/web.Dockerfile. BuildKit uses this file in place of the repository's root
+# .dockerignore for that Dockerfile — which matters, because the root one excludes web/ (the .NET
+# images need nothing from the Angular app) and would leave this build with an empty directory.
+#
+# Everything is excluded and the web app put back, so a new top-level directory is never uploaded
+# by accident.
+*
+
+!web/
+!docker/web/
+
+# What a local `npm install`, `ng build` or test run leaves in web/, which is tens of thousands of
+# files and would be copied over the container's own clean install.
+web/node_modules/
+web/dist/
+web/.angular/
+web/test-results/
+web/playwright-report/
+web/e2e/.auth/

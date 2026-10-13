@@ -43,3 +43,24 @@ built application at /fonts/, so they reach anyone who receives the fonts.
 
 Neither font is modified. The .woff2 files are the upstream builds Google Fonts
 serves, subset by Unicode range; web/tools/vendor-fonts.mjs reproduces them.
+
+Code editor assets (web/public/monaco/)
+---------------------------------------
+The web application's schema editor is Monaco, served from this origin rather than from a CDN
+(ADR-028). Two files of it are committed and shipped, and tools/vendor-monaco.mjs reproduces
+both from the monaco-editor package:
+
+  The editor's stylesheet (monaco-*.css)
+  Copyright (c) Microsoft Corporation
+  MIT License — web/public/monaco/LICENSE.txt
+  Monaco's own prebuilt stylesheet with one change: the icon font it embeds as a data: URI is
+  a file beside it instead, because the page's policy (font-src 'self') refuses a data: font.
+
+  The Codicon icon font (codicon-*.ttf)
+  Copyright (c) Microsoft Corporation (https://github.com/microsoft/vscode-codicons)
+  Creative Commons Attribution 4.0 International — web/public/monaco/CODICON.txt
+  The file distributed inside the monaco-editor package, unmodified.
+
+Monaco's own third-party notices travel with them as web/public/monaco/ThirdPartyNotices.txt.
+The editor's JavaScript, and ajv (MIT) in the schema checker's worker, are build-time
+dependencies bundled into the built application and are covered by their packages' manifests.

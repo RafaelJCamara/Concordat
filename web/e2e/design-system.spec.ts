@@ -74,7 +74,14 @@ test.describe('the ported palette', () => {
 
     // The corner radius is part of the voice too — 0.625rem is visibly softer than shadcn's
     // 0.5rem default, and Spartan derives every other radius in the app from it.
-    expect(await token(page, '--radius')).toBe('0.625rem');
+    //
+    // Compared as a number: the production build's CSS minifier writes `.625rem` for
+    // `0.625rem`, which is the same length and is not a regression. This suite runs against the
+    // dev server and against the production image, and the second is where the spelling differs.
+    const radius = await token(page, '--radius');
+
+    expect(radius).toMatch(/rem$/);
+    expect(parseFloat(radius)).toBe(0.625);
   });
 
   test('actually reaches the page, not just the stylesheet', async ({ page }) => {
@@ -279,6 +286,12 @@ test.describe('the icon set', () => {
     // "Dashboard Dashboard", which is why `cd-icon` defaults to aria-hidden and takes a label
     // only when the icon *is* the label.
     const navIcons = page.getByRole('navigation', { name: 'Main' }).locator('cd-icon svg');
+
+    // Waited for, not counted on arrival: `goto` resolves on the document and the app renders
+    // after it, so a count taken straight away can be a count of nothing. The production image
+    // reads `config.json` before it bootstraps, which is enough to lose that race.
+    await expect(navIcons.first()).toBeVisible();
+
     const count = await navIcons.count();
     expect(count).toBeGreaterThan(0);
 
@@ -293,6 +306,9 @@ test.describe('the icon set', () => {
     // `cd-icon` switches on a closed union of names, so an unknown name renders an empty
     // `<svg>` — invisible in a screenshot and easy to miss in review. Every icon on the
     // landing screen having at least one child is the cheapest possible guard against that.
+    // Waited for first: with no icons rendered yet, "none of them is empty" is true of nothing.
+    await expect(page.locator('cd-icon svg').first()).toBeVisible();
+
     const empties = await page
       .locator('cd-icon svg')
       .evaluateAll((nodes) => nodes.filter((node) => node.children.length === 0).length);
