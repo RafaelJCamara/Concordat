@@ -77,8 +77,9 @@ not:
   and a name already in the repo's style is returned unchanged either way.
 - **A name that is taken, or differs only in case from one, is *advice*, not a refusal.** The list the
   page read is a snapshot; the registry's own 409 is what refuses.
-- **The confirmation says the owner and policy "can be changed later, but only through the API"**,
-  because that is true and the app has no screen for either. Adding one is the real fix.
+- **The confirmation said the owner and policy "can be changed later, but only through the API"**, because
+  that was true and the app had no screen for either. [Decision 39](#39-a-subjects-owner-and-policy-are-changed-on-its-page-and-the-confirmations-say-only-what-the-registry-was-measured-to-do)
+  is the screen, and the sentence now says they change from the subject's own page.
 
 ### 38. A schema with an unpaired surrogate escape is refused with `schema_malformed`; and six enum parses refuse numbers that are no member
 
@@ -95,6 +96,32 @@ one change, the second of which was **not in the brief** and is the one to look 
   works, and nobody should have been sending it; a number that *is* a member still does. If you would
   rather take this as its own commit, it is `WireEnums.cs`, six one-line call-site changes and their tests,
   and nothing else depends on it.
+
+### 39. A subject's owner and policy are changed on its page, and the confirmations say only what the registry was measured to do
+
+**Implemented** ([ADR-032](adr/032-subject-settings.md)). Five calls, and two registry behaviours found on
+the way that are **yours to decide**, which I did not.
+
+- **Inline on the subject page, not a route.** The two controls have different scopes (`subject:write` for
+  the owner, `subject:admin` for the policy), so one route guard would admit a writer to a page with half its
+  controls missing. If more settings of a subject appear, `/subjects/:name/settings` is the shape to move to.
+- **The form blocks on two things that are not registry refusals**: a blank owner (no request exists) and the
+  owner or policy the page already shows (the registry would write an audit entry saying "owner changed" for a
+  change that did not happen). The second is the one place the client is *stricter* than the registry, and only
+  when its snapshot is stale. The alternative is to let it through and have the registry skip the entry.
+- **Deprecate and Retire are not built.** Neither has an inverse, and deprecating notifies every subscriber.
+  The request type the web app sends cannot carry `deprecate`.
+- **I changed the registry in one place**, and it is separable: `UpdateSubjectHandler` recorded the *new owner*
+  as the actor of an owner change, and answered 500 for a whitespace-only owner. It records the caller now. It
+  is one handler and nine tests; if you would rather take it as its own commit, nothing else depends on it.
+- **The confirmations say what the registry does today, including two things it should probably not do**, and
+  each is pinned by a test that goes red when it changes:
+  - **A subject with no policy of its own is judged by the built-in `BACKWARD · WIRE_JSON` at registration, not
+    by its environment's default.** The environment settings screen says the opposite. **Decision for you:**
+    fix it (three call sites and tests; it changes which versions are held in every environment whose default
+    is not the built-in), or change what the screen and the docs claim.
+  - **A policy change is not written to the audit log.** **Decision for you:** whether it should be (a new
+    audit action, which the frontend pins by name).
 
 ### 33. `ci` is a marker scope, and no role grants it
 
@@ -584,7 +611,7 @@ it is for.
 **The browser E2E half is now done too, 2026-08-15.** Playwright is in, `web/e2e/` holds 11
 tests, and the reload case above is one of them — the only way to prove a *browser* keeps the
 cookie across a real navigation and that the app asks for it before the first render. That count
-is the day's snapshot and nothing else: the suite stands at **195 tests across sixteen specs** as of
+is the day's snapshot and nothing else: the suite stands at **218 tests across eighteen specs** as of
 2026-10-13, which is the figure [STATUS.md](STATUS.md) carries.
 
 It earned its place in the first ten seconds: the subject list was **broken** against a real

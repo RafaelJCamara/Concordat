@@ -47,6 +47,18 @@ export interface CompatibilityPolicy {
   readonly surface: CompatibilitySurface | null;
 }
 
+/**
+ * The policy the registry itself falls back on (`CompatibilityPolicy.Default`).
+ *
+ * Named here only because one screen has to say what registering a version is judged against
+ * when a subject sets no policy of its own: **this, and not the environment's default**, which is
+ * what the registry's own model says and what registration does not do (STATUS.md, ADR-032). It is
+ * pinned by `e2e/subject-settings.spec.ts` against a real environment whose default is something
+ * else, so the day the registry reads the environment's default instead, that test goes red and
+ * the sentence that cites this has to change with it.
+ */
+export const BUILT_IN_POLICY: CompatibilityPolicy = { mode: 'BACKWARD', surface: 'WIRE_JSON' };
+
 /** Whether a policy is inherited rather than set on the subject. */
 export function isInherited(policy: CompatibilityPolicy): boolean {
   return policy.mode === null && policy.surface === null;

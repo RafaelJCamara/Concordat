@@ -160,6 +160,118 @@ describe('SubjectsApi', () => {
     });
   });
 
+  describe('changeOwner', () => {
+    it('patches the subject with the owner and nothing else', () => {
+      // Never `deprecate`: that is advisory, notifies every subscriber and has no inverse, and a
+      // body that could carry it by accident is a screen that could deprecate a subject while
+      // meaning to rename its owner.
+      const { api, backend } = setUp();
+      api.changeOwner('dev', 'orders.created', 'new-team').subscribe();
+
+      const call = backend.expectOne('/v1/environments/dev/subjects/orders.created');
+
+      expect(call.request.method).toBe('PATCH');
+      expect(call.request.body).toEqual({ owner: 'new-team' });
+    });
+
+    it('percent-encodes the subject name', () => {
+      const { api, backend } = setUp();
+      api.changeOwner('dev', 'a/b', 'x').subscribe();
+
+      backend.expectOne('/v1/environments/dev/subjects/a%2Fb');
+    });
+
+    it('hands back the subject the registry answered with, as a domain type', () => {
+      // The registry trims, so the owner in the answer is the stored one.
+      let changed: Subject | null = null;
+      const { api, backend } = setUp();
+      api.changeOwner('dev', 'orders.created', '  stored  ').subscribe((v) => (changed = v));
+
+      backend
+        .expectOne('/v1/environments/dev/subjects/orders.created')
+        .flush({ ...dto, owner: 'stored' });
+
+      expect((changed as Subject | null)?.owner).toBe('stored');
+      expect((changed as Subject | null)?.versions[0]?.registeredAt).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('setPolicy', () => {
+    it('puts both members to the policy resource', () => {
+      const { api, backend } = setUp();
+      api.setPolicy('dev', 'orders.created', { mode: 'FULL', surface: 'SOURCE' }).subscribe();
+
+      const call = backend.expectOne(
+        '/v1/environments/dev/subjects/orders.created/compatibility-policy',
+      );
+
+      expect(call.request.method).toBe('PUT');
+      expect(call.request.body).toEqual({ mode: 'FULL', surface: 'SOURCE' });
+    });
+
+    it('clears the policy with two nulls, which is a request and not an empty body', () => {
+      const { api, backend } = setUp();
+      api.setPolicy('dev', 'orders.created', { mode: null, surface: null }).subscribe();
+
+      const call = backend.expectOne(
+        '/v1/environments/dev/subjects/orders.created/compatibility-policy',
+      );
+
+      expect(call.request.body).toEqual({ mode: null, surface: null });
+    });
+
+    it('percent-encodes the subject name', () => {
+      const { api, backend } = setUp();
+      api.setPolicy('dev', 'a/b', { mode: null, surface: null }).subscribe();
+
+      backend.expectOne('/v1/environments/dev/subjects/a%2Fb/compatibility-policy');
+    });
+
+    it('answers with the policy the registry stored, not the subject and not what was sent', () => {
+      // `PUT` returns a `PolicyResponse`. The registry reads `backward` as `BACKWARD`, and what it
+      // says is what the screen reports.
+      let stored: unknown = null;
+      const { api, backend } = setUp();
+      api
+        .setPolicy('dev', 'orders.created', { mode: 'BACKWARD', surface: 'WIRE' })
+        .subscribe((value) => (stored = value));
+
+      backend
+        .expectOne('/v1/environments/dev/subjects/orders.created/compatibility-policy')
+        .flush({ mode: 'BACKWARD_TRANSITIVE', surface: 'WIRE_JSON' });
+
+      expect(stored).toEqual({ mode: 'BACKWARD_TRANSITIVE', surface: 'WIRE_JSON' });
+    });
+
+    it('reads nulls together as inheriting', () => {
+      let stored: unknown = null;
+      const { api, backend } = setUp();
+      api
+        .setPolicy('dev', 'orders.created', { mode: null, surface: null })
+        .subscribe((value) => (stored = value));
+
+      backend
+        .expectOne('/v1/environments/dev/subjects/orders.created/compatibility-policy')
+        .flush({ mode: null, surface: null });
+
+      expect(stored).toEqual({ mode: null, surface: null });
+    });
+
+    it('refuses a token this build does not know rather than showing it', () => {
+      let failed: unknown = null;
+      const { api, backend } = setUp();
+      api.setPolicy('dev', 'orders.created', { mode: 'FULL', surface: 'WIRE' }).subscribe({
+        error: (error: unknown) => (failed = error),
+      });
+
+      backend
+        .expectOne('/v1/environments/dev/subjects/orders.created/compatibility-policy')
+        .flush({ mode: 'SIDEWAYS', surface: 'WIRE' });
+
+      expect(String(failed)).toContain('SIDEWAYS');
+    });
+  });
+
   describe('diffVersions', () => {
     const diff = {
       from: 1,

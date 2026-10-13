@@ -112,6 +112,30 @@ export interface CreateSubjectDto {
   readonly compatibilitySurface?: string;
 }
 
+/**
+ * `UpdateSubjectRequest`, as this app sends it: the owner and nothing else.
+ *
+ * The wire type also carries `deprecate`, and the registry reads an absent one as `false`. It is
+ * left off on purpose, so that no code path in this app can deprecate a subject while meaning to
+ * change its owner: deprecation is advisory, notifies every subscriber, and has no inverse
+ * (ADR-032 leaves it out).
+ */
+export interface ChangeOwnerDto {
+  readonly owner: string;
+}
+
+/**
+ * `SetCompatibilityPolicyRequest`.
+ *
+ * Both members null to clear the policy and inherit, which the registry documents and reads the
+ * same as both absent — sent as nulls here because "clear" is the thing being asked, and an
+ * empty object would read as a request that forgot its fields.
+ */
+export interface SetPolicyDto {
+  readonly mode: string | null;
+  readonly surface: string | null;
+}
+
 /** `RegisterVersionRequest`. */
 export interface RegisterVersionDto {
   readonly schema: string;

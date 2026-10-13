@@ -1,15 +1,28 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmSkeleton } from '@spartan-ng/helm/skeleton';
 import { IfScope } from '../../../core/auth/if-scope';
 import { ActiveEnvironmentStore } from '../../../core/config/active-environment-store';
-import { SCHEMA_WRITE_SCOPES } from '../../../domain/identity/scope';
+import { POLICY_WRITE_SCOPES, SCHEMA_WRITE_SCOPES } from '../../../domain/identity/scope';
+import type { CompatibilityPolicy } from '../../../domain/registry/compatibility';
+import { describePolicy } from '../../../domain/registry/subject-settings';
 import { Icon } from '../../../shared/ui/icon/icon';
 import { StatusBadge } from '../../../shared/ui/status-badge/status-badge';
 import { SubjectName } from '../../../shared/ui/subject-name/subject-name';
 import { SubjectDetailStore } from '../application/subject-detail-store';
+import { SubjectSettingsStore, type SettingsOutcome } from '../application/subject-settings-store';
+import { SubjectOwnerEditor } from '../ui/subject-owner-editor';
+import { SubjectPolicyEditor } from '../ui/subject-policy-editor';
 import { VersionTable } from '../ui/version-table';
 
 /**
@@ -28,7 +41,7 @@ import { VersionTable } from '../ui/version-table';
 @Component({
   selector: 'cd-subject-detail-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  providers: [SubjectDetailStore],
+  providers: [SubjectDetailStore, SubjectSettingsStore],
   imports: [
     RouterLink,
     HlmAlertImports,
@@ -38,6 +51,8 @@ import { VersionTable } from '../ui/version-table';
     IfScope,
     StatusBadge,
     SubjectName,
+    SubjectOwnerEditor,
+    SubjectPolicyEditor,
     VersionTable,
   ],
   template: `
@@ -76,8 +91,27 @@ import { VersionTable } from '../ui/version-table';
               <cd-subject-name [name]="subject.name" />
             </h1>
             <p class="text-muted-foreground mt-1">
-              {{ subject.format }} · owned by {{ subject.owner }} ·
-              <span class="font-mono">{{ environments.name() }}</span>
+              {{ subject.format }} · owned by {{ subject.owner }}
+              @if (subject.lifecycle !== 'RETIRED') {
+                <!--
+                  Absent without a write scope rather than disabled (ADR-018), and absent for a
+                  retired subject, which the registry refuses with 409: retired is terminal, so
+                  nothing a stale page could be wrong about.
+                -->
+                <button
+                  *cdIfScope="schemaWriteScopes"
+                  hlmBtn
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  class="h-auto p-0 align-baseline text-sm"
+                  [attr.aria-expanded]="editing() === 'owner'"
+                  (click)="edit('owner')"
+                >
+                  Change owner
+                </button>
+              }
+              · <span class="font-mono">{{ environments.name() }}</span>
             </p>
           </div>
 
@@ -108,6 +142,52 @@ import { VersionTable } from '../ui/version-table';
           </div>
         </header>
 
+        <!--
+          What the registry said it did, in its own words and not the request's: the owner it
+          stored (it trims) and the policy it answered with. A live region, because the editor
+          that was open has closed and the person's focus has gone with it.
+        -->
+        <div role="status" aria-live="polite">
+          @if (settings.outcome(); as outcome) {
+            <p class="border-success/40 bg-success/5 text-foreground rounded-lg border p-3 text-sm">
+              {{ outcomeText(outcome) }}
+            </p>
+          }
+        </div>
+
+        @if (store.refreshError(); as failure) {
+          <div hlmAlert variant="destructive" role="alert">
+            <h2 hlmAlertTitle>The change is in, but this page could not read it back</h2>
+            <p hlmAlertDescription>
+              {{ failure.detail }} What is shown may be out of date; reload to see the registry's
+              account.
+            </p>
+          </div>
+        }
+
+        @switch (editing()) {
+          @case ('owner') {
+            <cd-subject-owner-editor
+              [subject]="subject.name"
+              [current]="subject.owner"
+              [error]="settings.ownerError()?.detail ?? null"
+              [saving]="settings.ownerSaving()"
+              (confirmed)="settings.changeOwner({ subject: subject.name, owner: $event })"
+              (cancelled)="closeEditor()"
+            />
+          }
+          @case ('policy') {
+            <cd-subject-policy-editor
+              [subject]="subject.name"
+              [current]="subject.compatibilityPolicy"
+              [error]="settings.policyError()?.detail ?? null"
+              [saving]="settings.policySaving()"
+              (confirmed)="settings.setPolicy({ subject: subject.name, policy: $event })"
+              (cancelled)="closeEditor()"
+            />
+          }
+        }
+
         <dl
           class="border-border bg-card grid grid-cols-2 gap-4 rounded-xl border p-5 sm:grid-cols-4"
         >
@@ -131,7 +211,29 @@ import { VersionTable } from '../ui/version-table';
               difference between "nothing is checked" and "checked, by somebody else's rule".
             -->
             <dd class="text-foreground mt-1 font-mono font-medium">
-              {{ subject.compatibilityPolicy.mode ?? 'Inherited' }}
+              @if (subject.compatibilityPolicy.mode === null) {
+                <span>Inherited</span>
+              } @else {
+                <span>{{ subject.compatibilityPolicy.mode }}</span>
+                <span class="text-muted-foreground font-normal"
+                  >· {{ subject.compatibilityPolicy.surface }}</span
+                >
+              }
+              @if (subject.lifecycle !== 'RETIRED') {
+                <!-- Narrower than the owner's control: the registry asks subject:admin for this one. -->
+                <button
+                  *cdIfScope="policyScopes"
+                  hlmBtn
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  class="ms-1 h-auto p-0 align-baseline font-sans text-xs"
+                  [attr.aria-expanded]="editing() === 'policy'"
+                  (click)="edit('policy')"
+                >
+                  Change policy
+                </button>
+              }
             </dd>
           </div>
           <div>
@@ -164,10 +266,20 @@ export class SubjectDetailPage {
   readonly name = input.required<string>();
 
   protected readonly store = inject(SubjectDetailStore);
+  protected readonly settings = inject(SubjectSettingsStore);
   protected readonly environments = inject(ActiveEnvironmentStore);
 
-  /** The scopes that permit registering a version, from the one list (ADR-018). */
+  /**
+   * The scopes that permit registering a version, and changing the owner: the registry asks
+   * `subject:write` for both, from the one list (ADR-018).
+   */
   protected readonly schemaWriteScopes = SCHEMA_WRITE_SCOPES;
+
+  /** The scopes that permit changing the compatibility policy, which the registry holds to `subject:admin`. */
+  protected readonly policyScopes = POLICY_WRITE_SCOPES;
+
+  /** Which editor is open. At most one: a person changing an owner is not also changing a policy. */
+  protected readonly editing = signal<'owner' | 'policy' | null>(null);
 
   constructor() {
     // Reloads on the name changing and on an environment switch alike. Reading both signals
@@ -175,6 +287,44 @@ export class SubjectDetailPage {
     effect(() => {
       this.environments.name();
       this.store.load(this.name());
+
+      // An editor left open on the previous subject would offer to change the next one's owner
+      // from a value that is not its own.
+      untracked(() => {
+        this.editing.set(null);
+        this.settings.reset();
+      });
     });
+
+    // A change that landed closes the editor that made it: what is on screen from here on is the
+    // registry's answer, in the status line, and the subject re-read behind it.
+    effect(() => {
+      if (this.settings.outcome() !== null) {
+        untracked(() => this.editing.set(null));
+      }
+    });
+  }
+
+  protected edit(which: 'owner' | 'policy'): void {
+    this.settings.reset();
+    this.editing.set(this.editing() === which ? null : which);
+  }
+
+  protected closeEditor(): void {
+    this.editing.set(null);
+    this.settings.reset();
+  }
+
+  /** What the registry said it did, as a sentence. */
+  protected outcomeText(outcome: SettingsOutcome): string {
+    return outcome.kind === 'owner'
+      ? `The owner of ${outcome.subject} is now ${outcome.owner}, as the registry stored it.`
+      : this.policyText(outcome.subject, outcome.policy);
+  }
+
+  private policyText(subject: string, policy: CompatibilityPolicy): string {
+    return policy.mode === null
+      ? `${subject} now has no policy of its own. The registry answered that it inherits.`
+      : `The policy of ${subject} is now ${describePolicy(policy)}, as the registry answered.`;
   }
 }

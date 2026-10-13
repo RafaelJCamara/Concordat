@@ -3,18 +3,23 @@ import { Injectable, inject } from '@angular/core';
 import { map, type Observable } from 'rxjs';
 import { CONCORDAT_CONFIG } from '../../../core/config/app-config';
 import { environmentRoot } from '../../../core/http/api-url';
+import type { CompatibilityPolicy } from '../../../domain/registry/compatibility';
 import type { VersionDiff } from '../../../domain/registry/diff';
 import type { NewSubject } from '../../../domain/registry/new-subject';
 import type { RegistrationOutcome } from '../../../domain/registry/registration';
 import type { Subject } from '../../../domain/registry/subject';
 import {
   toCreateSubjectDto,
+  toPolicy,
   toRegistrationOutcome,
   toSubject,
   toVersionDiff,
+  type ChangeOwnerDto,
   type DiffDto,
+  type PolicyDto,
   type RegisterVersionDto,
   type RegistrationDto,
+  type SetPolicyDto,
   type SubjectDto,
 } from './subject-dtos';
 
@@ -60,11 +65,44 @@ export class SubjectsApi {
       .pipe(map(toSubject));
   }
 
+  /**
+   * Changes a subject's owner, and answers with the subject as the registry holds it afterwards.
+   *
+   * The body is the owner and nothing else (`ChangeOwnerDto`). The registry trims it, so what
+   * comes back can differ from what was sent, and the caller shows what comes back. The writer is
+   * not sent: the audit entry carries the authenticated caller (M8.2), and the owner is a property
+   * of the subject — a team as often as a person — and not an attribution of this change.
+   */
+  changeOwner(environment: string, name: string, owner: string): Observable<Subject> {
+    const body: ChangeOwnerDto = { owner };
+
+    return this.http
+      .patch<SubjectDto>(this.subjectUrl(environment, name), body)
+      .pipe(map(toSubject));
+  }
+
+  /**
+   * Sets a subject's compatibility policy, or clears it so the subject inherits.
+   *
+   * <b>Answers with the policy and not the subject.</b> `PUT` returns a `PolicyResponse`, so a
+   * caller that wants the subject asks for it again; nothing here pretends the answer is more than
+   * it is. Both members null clears it.
+   */
+  setPolicy(
+    environment: string,
+    name: string,
+    policy: CompatibilityPolicy,
+  ): Observable<CompatibilityPolicy> {
+    const body: SetPolicyDto = { mode: policy.mode, surface: policy.surface };
+
+    return this.http
+      .put<PolicyDto>(`${this.subjectUrl(environment, name)}/compatibility-policy`, body)
+      .pipe(map(toPolicy));
+  }
+
   /** One subject and all of its versions. */
   getSubject(environment: string, name: string): Observable<Subject> {
-    return this.http
-      .get<SubjectDto>(`${this.root(environment)}/subjects/${encodeURIComponent(name)}`)
-      .pipe(map(toSubject));
+    return this.http.get<SubjectDto>(this.subjectUrl(environment, name)).pipe(map(toSubject));
   }
 
   /**
@@ -144,6 +182,11 @@ export class SubjectsApi {
         body,
       )
       .pipe(map(toRegistrationOutcome));
+  }
+
+  /** A subject's own address. The name is percent-encoded: it is user-chosen, and could name another route. */
+  private subjectUrl(environment: string, name: string): string {
+    return `${this.root(environment)}/subjects/${encodeURIComponent(name)}`;
   }
 
   private root(environment: string): string {

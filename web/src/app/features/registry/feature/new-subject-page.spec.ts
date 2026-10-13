@@ -325,7 +325,9 @@ describe('NewSubjectPage', () => {
       expect(r.host.textContent).toContain('The name is permanent');
       expect(r.host.textContent).toContain('cannot be renamed or deleted');
       expect(r.host.textContent).toContain('JSON Schema, open');
-      expect(r.host.textContent).toContain('only through the API');
+      expect(r.host.textContent).toContain('can be changed later, from the subject’s own page');
+      expect(r.host.textContent).toContain('Changing the policy takes an admin');
+      expect(r.host.textContent).not.toContain('only through the API');
     });
 
     it('sends exactly what the first click named, on the second', () => {

@@ -3,6 +3,7 @@ import { checkNewSubject, type NewSubjectDraft } from '../src/app/domain/registr
 import { isRegistryWhitespace } from '../src/app/domain/registry/registry-text';
 import { checkSubjectName, slugSubjectName } from '../src/app/domain/registry/subject-name';
 import { accepted, createSubjectRaw, ensureEnvironment, ownerCredential } from './registry';
+import { NOT_STRIPPED, STRIPPED } from './trim-table';
 
 /**
  * What a new subject's fields have to be, held against the registry's own answer.
@@ -53,19 +54,6 @@ const row = (label: string, text: string, unreadable = false): Row => ({
   text,
   ...(unreadable ? { unreadable } : {}),
 });
-
-// Characters .NET's `Trim()` strips, and which the client has to strip too. Each is sent on both
-// sides of a name of its own, so a verdict of "accepted" also shows the stored name is trimmed.
-const STRIPPED = [
-  0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x20, 0x85, 0xa0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004,
-  0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200a, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000,
-];
-
-// And the ones that look as if they should be and are not: refused when they are on the end.
-const NOT_STRIPPED = [
-  0xfeff, 0x180e, 0x200b, 0x200c, 0x200d, 0x2060, 0x001c, 0x001d, 0x001e, 0x001f, 0x0001, 0x007f,
-  0x0080, 0x00ad,
-];
 
 const NAME_ROWS: readonly Row[] = [
   // The grammar.

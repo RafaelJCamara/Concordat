@@ -1,12 +1,13 @@
 # What is missing
 
-**As of 2026-08-15**, except [the create-subject screen, 2026-10-13](#the-create-subject-screen-and-a-500-that-was-not-what-it-looked-like-2026-10-13),
+**As of 2026-08-15**, except [the subject settings, 2026-10-13](#a-subjects-owner-and-policy-are-editable-and-the-registry-did-three-things-nobody-had-written-down-2026-10-13),
+[the create-subject screen, 2026-10-13](#the-create-subject-screen-and-a-500-that-was-not-what-it-looked-like-2026-10-13),
 [the schema editor and the web container, 2026-10-13](#the-schema-editor-and-the-web-container-2026-10-13),
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-13: 1,615 .NET,
-1,319 Angular, 195 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-13: 1,624 .NET,
+1,411 Angular, 218 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
 aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
@@ -20,6 +21,80 @@ container image and a real PostgreSQL. Everything else is claimed on the strengt
 
 ---
 
+## A subject's owner and policy are editable, and the registry did three things nobody had written down, 2026-10-13
+
+The hole recorded below ("No screen edits a subject afterwards") is closed: a subject's page has
+**Change owner** (`subject:write` or `subject:admin`) and **Change policy** (`subject:admin` only), each a
+panel above the page, each two clicks, each ending in what the registry *answered* and a fresh read of the
+subject ([ADR-032](adr/032-subject-settings.md)). Absent, not disabled, for anyone without the scope and for
+a retired subject; both present for a deprecated one. The Angular suite is **1,411** tests (from 1,319), the
+browser suite **218** across eighteen specs (from 195 across sixteen), run against the dev server **and the
+production image**, and the .NET suite **1,624** (from 1,615). **Measured, production build:** the initial
+bundle went 410.89 → 411.36 kB raw (the transferred figure moved less than the ~0.1 kB build-to-build noise);
+the subject page's chunk went from 8.79 to 28.39 kB raw (3.16 → 7.36 kB transferred), which is where both
+editors live. The create screen's confirmation no longer says "only through the API".
+
+**What the real registry said that reading the C# did not.** Every claim on the screen was sent to the real
+endpoint first, and three were different from what the code suggested:
+
+- **An owner change was recorded as made by the *new owner*.** `UpdateSubjectHandler` built the audit actor
+  from the owner in the request (`unknown` when there was none), so `bob` took ownership and the trail said
+  bob did it. **Fixed** (it records the authenticated caller, like every handler that changes something) with
+  four tests, each red on the old behaviour.
+- **`{"owner":"   "}` answered 500.** The same line: the actor was built from the text the owner rule had just
+  declined to apply, `ActorId.Create("   ")` failed, `.Value` threw. **Fixed by the same change**, with a
+  theory over three blank spellings in the application tests and two in the HTTP tests. The web form never
+  sends one (a blank field has no request), so this was found by the parity table, not by the screen.
+- **A subject with no policy of its own is judged by `BACKWARD · WIRE_JSON`, not by its environment's default.**
+  With an environment whose default is `NONE`, a breaking second version of an inheriting subject was *held*.
+  `RegisterVersion` (measured), the dry-run `check` and the diff (by reading) call
+  `EffectivePolicy(CompatibilityPolicy.Default)`; impact analysis and promotion call it with the environment's.
+  So the environment settings screen's "takes effect at once for every subject that has not set its own" is
+  false at registration, and one subject has two answers to "what is my policy". **Not fixed**: it changes which
+  versions are held in every environment whose default is not the built-in, which is exactly the people who
+  set one, and wants its own change. The policy confirmation says what happens today, and
+  `e2e/subject-settings.spec.ts` goes red the day it changes, naming the sentence to update.
+- **A policy change leaves no audit entry** (the endpoint has no audit or outbox call), so the confirmation says
+  so. Pinned by an HTTP test and the browser journey. It is the registry's gap and not a decision anyone
+  recorded; whether it should be audited is yours, and the day it is both tests go red.
+
+**What a policy does, measured:** it takes effect for the *next* registration. Tightening it does not judge
+versions already registered, and relaxing it does not release a version held at the approval gate (`AWAITING_APPROVAL`
+stayed, with `latest` unmoved, after the policy went to `NONE`).
+
+**The forms block on two kinds of thing.** The registry's own refusals (an owner over 256 characters after its
+`Trim()`, half a policy), held against `PATCH` and `PUT` by `e2e/subject-settings-parity.spec.ts`; and drafts with
+no request to make (a blank owner, or the owner or policy the page already shows). **That second kind is the one
+place the client is knowingly stricter than the registry**, only where its snapshot is stale, recorded in the
+ADR. Its first draft passed every row, and five mutations each turn it red for the right reason: JavaScript's
+`trim()` (U+0085 and U+FEFF), a 255-character limit, no both-or-neither rule, the policy gate admitting
+`subject:write`, and a blank owner that sends. Run against the registry *before* the fix it fails on the
+whitespace 500, and the audit test fails on `actor: team-after`.
+
+**Found on the way, and not fixed** (all in the holes table): retiring a subject records *the subject's owner* as
+the actor, the same defect as the one fixed here; a `PATCH` that changes nothing (`{}`, a blank owner) still
+writes an entry reading "owner changed"; and the brief's "probe everything the client will check" included the
+registry's own scope split, which only an API key can show (no role holds `subject:write` without `subject:admin`),
+so it is held through keys and not through a browser.
+
+**Not covered.** Deprecating and retiring a subject, which are on the same `PATCH` and `DELETE` and are left out on
+purpose (ADR-032: neither can be undone, one notifies every subscriber). A `subject:write`-only account *in a
+browser*, since the sign-in screen only offers roles. Touch input, right-to-left text, a cross-origin registry. A
+lone surrogate typed into the owner field, where the form is *looser* (the registry refuses the whole envelope with a
+bare 400). `smoke-web-image.sh` was not re-run: `docker/web*` was not touched, though the production image was rebuilt
+and the whole browser suite run against it. Run on this machine, on Windows, only; GitHub has not run them. The screen
+was looked at in a real browser at 1280 and 390 px, light and dark, from a fresh page load each, which found one
+defect the tests had not (a long subject name in the confirmation's heading overflowed its box at phone width; it
+wraps now). **The local compose database now holds** 149 subjects in `dev`, of which this stretch made seven per
+suite run: 32 `acme.e2e.settings.*`, 18 `acme.e2e.settingsparity.*` and 18 `acme.e2e.settingslife.*` (every
+mutation run made its own, and two ran against the pre-fix registry), and the `e2e-inherit` environment, whose
+default is `NONE` and must never be changed. From probing rather than the suite: 8 `acme.e2e.probe.*` subjects, one of
+them retired, and the `e2e-inherit-probe` environment, which nothing uses. The three probe API keys were revoked. The
+`concordat/api:mutant` image tag, built to run the suite against the pre-fix handler, still exists because the exited
+`concordat-migrate` container references that image.
+
+---
+
 ## The create-subject screen, and a 500 that was not what it looked like, 2026-10-13
 
 **M4's exit criterion is met.** "Create a subject, register a version, view a diff and an impact
@@ -29,12 +104,12 @@ HTTP: a subject made on that screen, then a version registered on the next. The 
 **1,319** tests (from 1,106), the browser suite **195** across sixteen specs (from 178 across
 fourteen), run against the dev server **and the production image**, and the .NET suite **1,615** (the
 first pass in this stretch to touch it; it was 1,532). Decisions: [ADR-030](adr/030-create-subject-screen.md)
-and [ADR-031](adr/031-unpaired-surrogates-are-refused.md).
+and [ADR-031](adr/031-unpaired-surrogates-are-refused.md). *(That day's figures: all three have grown since, see the section above.)*
 
 **The screen.** A title suggests the subject name and the name follows it until it is edited by hand
 (the prototype's "touched" flag); creating takes two clicks, and the second says that the name, the
 format and the content model are permanent and that the owner and compatibility policy can be changed
-only through the API. Every refusal the form makes is the registry's own, held against the real create
+only through the API (*that day; the section above this one is the screen that changed it*). Every refusal the form makes is the registry's own, held against the real create
 endpoint by `e2e/subject-name-parity.spec.ts`; a name that is taken, or differs from one only in case,
 is advice and never blocks. It is reached from the subject list's "New subject" and from the empty
 list and empty dashboard, **absent without a write scope** and behind `schemaWriteGuard`. The list's
@@ -99,8 +174,8 @@ cannot reach the schema at all: the request envelope is refused with a bare 400 
 is a refusal and not a crash, carries no code, and the editor does not claim to know it. Protobuf is not JSON
 and is unaffected. The screen was looked at in a real browser at desktop and phone width in both themes, not on
 a touch device, and not right-to-left. A cross-origin API was not signed into (as ADR-029). `docker/web*` was
-not touched, so `smoke-web-image.sh` was not re-run. **No screen edits an owner or a compatibility policy** — only
-the API does — and the compatibility tooltips remain unbuilt. **The local compose database now holds** two
+not touched, so `smoke-web-image.sh` was not re-run. **No screen edited an owner or a compatibility policy** that day — only
+the API did, and one does now (the section above) — and the compatibility tooltips remain unbuilt. **The local compose database now holds** two
 environments and subjects that cannot be deleted: `e2e-names` (116 as measured, the parity table's and
 the ones I made while probing, one of which was the poisoned row), `e2e-empty` (empty on purpose), and two
 `acme.e2e.created.*` per run in `dev` (six at the last count). The `compose_concordat-postgres` volume was
@@ -474,7 +549,7 @@ conflict".
 
 **Done 2026-08-15:** the design-system port — the prototype's tokens, a light theme, self-hosted
 fonts ([ADR-026](adr/026-self-hosted-web-fonts.md)), the sidebar shell, the icon set and the
-cards — and the Playwright suite that now pins it. The E2E suite stands at **195 tests across sixteen
+cards — and the Playwright suite that now pins it. The E2E suite stands at **218 tests across eighteen
 specs** as of 2026-10-13, up from the 11 it launched with; `design-system.spec.ts` asserts the palette, both
 themes, the typography and the shell as **computed styles rather than pixel screenshots**, which
 are exact and identical on Windows and on CI's Linux. It exists because the placeholder palette
@@ -537,7 +612,11 @@ These matter more than the two lists above, because the surface exists and looks
 | **Approval reviewers do not exist** | Anyone with `subject:admin` can approve anything. A reviewer *set* was deferred to M8 and M8 did not build it. |
 | **A contract's bindings cannot be edited or removed** | There is an `add` endpoint for each kind and nothing else, so a binding added without a precedence can never be separated from a later overlapping one — the registry's own refusal says to "give the two bindings different precedence values", and the first has none to change. Found by the web app's first real overlap test (2026-10-13); the form now says to set precedence up front, which is a workaround, not a fix. |
 | ~~No screen creates a subject~~ | **Closed 2026-10-13** by `/subjects/new-subject` ([ADR-030](adr/030-create-subject-screen.md)): M4's exit criterion had been recorded as met when its first step was not, and the list's "New subject" was a button with no handler. What is left of it is the next row. |
-| **No screen edits a subject afterwards** | A subject's owner and compatibility policy can be changed (`PATCH`, `PUT …/compatibility-policy`) and nothing in the web app does either, nor does the CLI. Everything else about a subject is permanent — name, format and content model, probed rather than read — and the create screen's confirmation says so. Found while writing what that confirmation could truthfully promise. |
+| ~~No screen edits a subject afterwards~~ | **Closed 2026-10-13** by the panels on a subject's page ([ADR-032](adr/032-subject-settings.md)): Change owner (`subject:write` or `subject:admin`) and Change policy (`subject:admin`), each two clicks, each saying only what the registry was measured to do. Name, format and content model remain permanent (probed: `PATCH` ignores them and answers 200). **Deprecating and retiring are left out on purpose**: neither can be undone, and deprecating notifies every subscriber. The CLI still edits neither. |
+| **A subject with no policy of its own is judged by `BACKWARD · WIRE_JSON`, not by its environment's default** | Measured: with an environment defaulting to `NONE`, a breaking second version of an inheriting subject was held. Registration is measured; the dry-run `check` and the diff read the same constant (by reading the code), and impact analysis and promotion read the environment's. The environment settings screen says a changed default "takes effect at once for every subject that has not set its own", which is false at registration. Not fixed: it changes which versions are held in every environment whose default is not the built-in. The subject page's inherit confirmation says what happens today, and `e2e/subject-settings.spec.ts` goes red when it changes. |
+| **A policy change is not in the audit log** | `PUT …/compatibility-policy` writes no audit entry and notifies nobody, though what it changes decides what the gate lets through. The subject page says so. Pinned by `APolicyChangeLeavesNoAuditEntry`, which goes red when it is closed. Closing it is a new audit action, which the frontend pins by name. |
+| **A `PATCH` that changes nothing still writes "owner changed"** | `{}`, a `null` owner and `{"owner":""}` answer 200, change nothing, and write a `SUBJECT_UPDATED` entry reading "owner changed" (and so does setting the owner it already has). The web form never sends one. |
+| **Retiring a subject records the subject's owner as the actor** | `RetireSubjectHandler` still builds the audit entry from `subject.Value.Owner`, which is the defect `UpdateSubjectHandler` had until 2026-10-13 (it attributed an owner change to the *new* owner, and answered 500 for a whitespace-only one, both fixed). Retiring is not on any screen. |
 | **The registry accepts a schema that is not valid JSON Schema** | `{"type":"bogus"}` registers. Canonicalisation and the portability check never read the document against the 2020-12 metaschema, so it is stored, given an id and offered to consumers — and fails every message validated against it. The web editor reports it as advice (`ajv`); the registry does not. Whether registration should refuse it is a product decision, not a bug fix: refusing changes what existing users can register. |
 | ~~A lone-surrogate escape in a schema answers 500~~ | **Closed 2026-10-13** ([ADR-031](adr/031-unpaired-surrogates-are-refused.md)): `schema_malformed`, from registration, the dry run and the lookup, in values and keys and in Avro, pinned by five conformance fixtures. It had been recorded as a bare 500 from the writer; it was a generic Problem Details body from the *reader*, and wider than the one string. |
 | ~~An undefined enum number is stored, and then breaks every list that reads it~~ | **Closed 2026-10-13**, at six sites. `compatibilityMode: "99"` parsed (`Enum.TryParse` accepts any integer), was committed, answered 500 while projecting its own response, and every `GET …/subjects` in that environment answered 500 for every caller after it; environment defaults, the registration policy and contract enforcement parsed the same way. `WireEnums.TryParseDefined` refuses it, and a comma list that silently meant a third member. Not part of the brief; found by the probes the brief asked for. A number that *is* a member is still read as it always was. |
@@ -546,7 +625,7 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | ~~A page reload signs you out~~ | **Closed 2026-08-14** by decision 26 — an httpOnly `SameSite=Strict` cookie and a `/auth/resume` route that is the only thing accepting it. The credential still never touches `localStorage`. |
 | ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Still on, and now audible** (decision 27). The API logs a warning naming both ways to close it and repeats hourly until claimed; the web app shows a banner. Verified against a real container. |
-| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 195 tests today across sixteen specs, up from the 11 it launched with, and run against the production image as well as the dev server. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
+| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 218 tests today across eighteen specs, up from the 11 it launched with, and run against the production image as well as the dev server. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
 | ~~`Tenant` is not an aggregate~~ | **Closed by M9.1**, recorded here 2026-09-24 — `Tenant.Create` carries the name and slug invariants, signup writes a row per organisation, bootstrap writes the self-hosted one, and `CloudTenancyTests` drives two organisations through the real host. Self-hosted still holds exactly one row, `TenantId.SelfHosted`: the profiles differ in how many rows there are, not in whether the table means anything. |
 | ~~The derived-environment-id decision is unmade~~ | **Closed 2026-08-14.** Adopted, by creating rows that carry the derived id. No migration, and no orphaned subjects. |
 
@@ -570,20 +649,20 @@ Nothing here can be done from inside the repository.
 
 ## What the tests actually cover
 
-Six kinds, not one. Worth knowing which, because "1,615 tests" says nothing about what would
+Six kinds, not one. Worth knowing which, because "1,624 tests" says nothing about what would
 survive being wrong.
 
 | Kind | Where | Tests | What it proves |
 |---|---|---|---|
 | Domain unit | `Domain.Tests`, three `Formats.*` | ~910 | Invariants in isolation. No I/O |
-| Application handler | `Application.Tests` | 157 | Handler refusals and **ordering**, with hand-written fakes |
-| HTTP integration | `Api.IntegrationTests` | 254 | Real HTTP against real PostgreSQL, via Testcontainers |
+| Application handler | `Application.Tests` | 162 | Handler refusals and **ordering**, with hand-written fakes |
+| HTTP integration | `Api.IntegrationTests` | 258 | Real HTTP against real PostgreSQL, via Testcontainers |
 | Conformance corpus | `Conformance` | 104, over 103 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 64 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
-| Browser end-to-end | `web/e2e` | 195 | A real Chromium against the real stack, design system included — and against the production image |
+| Browser end-to-end | `web/e2e` | 218 | A real Chromium against the real stack, design system included — and against the production image |
 
-Plus 1,319 Angular unit tests. *(Counts above re-measured 2026-10-13; the unit rows are approximate because
+Plus 1,411 Angular unit tests. *(Counts above re-measured 2026-10-13; the unit rows are approximate because
 the assemblies that do not fit a row — the client, the CLI and the contract testing — are not in them.)*
 
 **No mocking framework, deliberately.** No Moq, NSubstitute, FluentAssertions or AutoFixture —

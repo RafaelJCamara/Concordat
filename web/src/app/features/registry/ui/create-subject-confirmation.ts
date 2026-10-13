@@ -9,9 +9,12 @@ import { HlmButton } from '@spartan-ng/helm/button';
  * against the real registry rather than read off its code: `PATCH` ignores a new name, format or
  * content model and answers 200 with them unchanged; there is no delete, retiring is terminal;
  * and a retired name answers 409 when somebody tries to create it again, so the name stays taken
- * for good. What *can* change is the owner and the compatibility policy — through the API, which
- * is said plainly, because this app has no screen for either and a confirmation that promised
- * "you can change that later" would be sending somebody to a button that is not there.
+ * for good. What *can* change is the owner and the compatibility policy, and the subject's own
+ * page has a control for each (ADR-032) — which is said only because it is true now: until that
+ * page existed this line said "only through the API", since a confirmation that promised "you
+ * can change that later" would have been sending somebody to a button that was not there. The
+ * policy's control needs `subject:admin` where creating needs only `subject:write`, so the line
+ * says so rather than promising a creator something they may not see.
  *
  * The first click asks, naming exactly what will exist and where; the second does it. What is
  * named here is a snapshot of the form (the page withdraws the confirmation if any of it is
@@ -45,8 +48,8 @@ import { HlmButton } from '@spartan-ng/helm/button';
           {{ formatLabel() }}, {{ contentModelLabel() }}.
         </li>
         <li>
-          The owner and the compatibility policy can be changed later, but only through the API —
-          this app has no screen for either yet.
+          <span class="text-foreground">The owner and the compatibility policy can be changed</span>
+          later, from the subject’s own page. Changing the policy takes an admin.
         </li>
       </ul>
 

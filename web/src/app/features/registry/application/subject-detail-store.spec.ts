@@ -181,6 +181,67 @@ describe('SubjectDetailStore', () => {
     });
   });
 
+  describe('refresh', () => {
+    it('replaces the subject in place, without the loading state that blanks the page', () => {
+      // After a save the screen must show the registry's account of the subject, and a skeleton
+      // in between reads as the page having lost what the person just did.
+      store.load('orders.created');
+      api.latest().next(subject([version(1)], 1));
+
+      store.refresh('orders.created');
+      expect(store.loading()).toBe(false);
+      expect(store.subject()?.owner).toBe('orders-team');
+
+      api.latest().next({ ...subject([version(1)], 1), owner: 'new-team' });
+
+      expect(store.subject()?.owner).toBe('new-team');
+    });
+
+    it('says the change is in and the page cannot show it, apart from the failure of a load', () => {
+      // `error` replaces the whole screen with "could not load", which after a write that
+      // succeeded would be a lie.
+      store.load('orders.created');
+      api.latest().next(subject([version(1)], 1));
+
+      store.refresh('orders.created');
+      api.latest().error(new Error('offline'));
+
+      expect(store.error()).toBeNull();
+      expect(store.refreshError()).toBeInstanceOf(ConcordatError);
+      expect(store.subject()?.name).toBe('orders.created');
+    });
+
+    it('clears that notice on a successful refresh and on a load', () => {
+      store.load('orders.created');
+      api.latest().next(subject([version(1)], 1));
+      store.refresh('orders.created');
+      api.latest().error(new Error('offline'));
+
+      store.refresh('orders.created');
+      api.latest().next(subject([version(1)], 1));
+      expect(store.refreshError()).toBeNull();
+
+      store.refresh('orders.created');
+      api.latest().error(new Error('offline'));
+      store.load('orders.created');
+      expect(store.refreshError()).toBeNull();
+    });
+
+    it('drops a late answer for a subject the page has moved on from', () => {
+      // The page is reused when somebody follows a link from one subject to another.
+      store.load('orders.created');
+      api.latest().next(subject([version(1)], 1));
+      store.refresh('orders.created');
+      const late = api.latest();
+
+      store.load('orders.shipped');
+      api.latest().next({ ...subject([version(9)], 9), name: 'orders.shipped' });
+      late.next({ ...subject([version(1)], 1), owner: 'stale' });
+
+      expect(store.subject()?.name).toBe('orders.shipped');
+    });
+  });
+
   it('discards a slow response that a newer request has superseded', () => {
     // Navigating between two subjects quickly must not leave the first one's versions on
     // screen under the second one's heading.

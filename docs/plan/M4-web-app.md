@@ -93,10 +93,34 @@ sign-in screen that lets someone pass it, which is recorded as
       hand** (the prototype's touched flag) by a rule derived from what the registry refuses and
       pinned by creating every suggestion for real. **Creating takes two clicks, and the second says
       what is permanent** — name, format and content model, with the owner and policy changeable
-      only through the API — as a snapshot of what would be sent, so the second click cannot send
+      from the subject's own page (next item; it said "only through the API" until that existed) — as a snapshot of what would be sent, so the second click cannot send
       something the first did not show. Nothing is applied ahead of the registry: it navigates to
       the *name in the answer* (the registry trims), and the page it lands on reads afresh. Not
-      here: editing an owner or a policy, which no screen does
+      here: editing an owner or a policy, which is the next item
+- [x] **Changing a subject's owner and compatibility policy** — on `SubjectDetailPage`, **inline, with no
+      route and no sidebar row** ([ADR-032](../adr/032-subject-settings.md)). A button beside each value
+      opens a panel above them; both are **absent, not disabled**, for a caller without the scope and for a
+      retired subject (both present for a deprecated one). They are gated on *different* lists on purpose:
+      the owner on `SCHEMA_WRITE_SCOPES` (`subject:write` or `subject:admin`), the policy on a new
+      `POLICY_WRITE_SCOPES` (`subject:admin`), the registry's own split — which is why there is no route
+      guard to add: one guard could not express "either", and a route would be a page nobody opens except
+      from the page it edits. **Each takes two clicks and says what it does, and every sentence was measured
+      against the real registry rather than read.** An owner change records one `SUBJECT_UPDATED` entry reading
+      "owner changed", naming the account that made it and neither owner, and notifies nobody. A policy change
+      takes effect for the *next* registration (a held version stays held when it is relaxed), is **not
+      written to the audit log**, and notifies nobody. "Inherit" is a different request from choosing today's
+      default (`isInherited`), and the confirmation says what registration does for a subject with no policy of
+      its own — which is to judge it by the registry's built-in `BACKWARD · WIRE_JSON`, not its environment's
+      default (a registry defect, in STATUS, pinned so the sentence cannot go stale in silence). **Blocks only
+      on what the registry certainly refuses** (an owner over 256 characters after its `Trim()`, half a
+      policy) **and on drafts with no request** (a blank owner; what the page already shows), held against the
+      real `PATCH` and `PUT` by `e2e/subject-settings-parity.spec.ts` — which also holds the scope split with
+      one API key per scope. Nothing is applied ahead of the registry: the status line is what it *answered*
+      (it trims; `PUT` answers a policy, not a subject) and the subject is then re-read, without the loading
+      state that would blank the page. **Not here:** Deprecate and Retire, on the same `PATCH` and `DELETE`,
+      which cannot be undone — and the request the app sends cannot carry `deprecate`. **The first thing
+      reading the code got wrong** was who the audit entry names: `UpdateSubjectHandler` attributed an owner
+      change to the *new owner* and answered 500 for a whitespace-only one; fixed in the same change.
 - [x] `ContractsPage` — two screens, `/contracts` and `/contracts/:name`, with a sidebar row.
       List, create, read the bindings (each subject links to its own screen, with its version
       selector beside it), move the enforcement mode, add publish and consume bindings. **Every
@@ -250,7 +274,7 @@ rather than deleted, because "why is there no zod here?" is a question worth ans
 
 ## M4.5 Tests
 
-- [x] Playwright E2E against a real API — `web/e2e/`, 195 tests, **against the dev server and
+- [x] Playwright E2E against a real API — `web/e2e/`, 218 tests, **against the dev server and
       against the production image** (`CONCORDAT_WEB_URL=http://localhost:5063`). Found the subject list
       broken on its first run (see [STATUS.md](../STATUS.md)), and on 2026-08-15 found two
       more: a first-hit lazy-route compile that made a correct page look absent, and a

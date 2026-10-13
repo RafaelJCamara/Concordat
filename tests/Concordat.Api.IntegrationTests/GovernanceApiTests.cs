@@ -609,6 +609,80 @@ public class GovernanceApiTests(ApiFactory factory)
     }
 
     [Fact]
+    public async Task AnOwnerChangeIsRecordedAsTheCallerAndSaysNothingMore()
+    {
+        // The subject screen's owner confirmation says exactly this, so it is pinned here rather
+        // than left to a reading of the handler: one SUBJECT_UPDATED row, attributed to whoever
+        // made the request — not to the owner they named, which is what it recorded until the
+        // owner screen was written — and reading only "owner changed", with neither the previous
+        // owner nor the new one in it.
+        var (client, environment) = await NewEnvironmentAsync();
+        var subject = await NewSubjectAsync(client, environment);
+
+        var patched = await client.PatchAsJsonAsync(
+            $"/v1/environments/{environment}/subjects/{subject}",
+            new UpdateSubjectRequest(Owner: "bob"),
+            ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.OK, patched.StatusCode);
+
+        var entries = await client.GetFromJsonAsync<IReadOnlyList<AuditResponse>>(
+            $"/v1/audit?env={environment}", ApiFactory.Json);
+
+        var changed = Assert.Single(entries!, e => e.Action == "SUBJECT_UPDATED");
+        var registered = Assert.Single(entries!, e => e.Action == "VERSION_REGISTERED");
+
+        Assert.Equal(registered.Actor, changed.Actor);
+        Assert.NotEqual("bob", changed.Actor);
+        Assert.Equal("owner changed", changed.Detail);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ABlankOwnerIsNothingToChangeAndNotACrash(string owner)
+    {
+        // `{"owner":"   "}` answered 500: the audit row's actor was built from the owner text,
+        // which the owner rule had just declined to apply as blank.
+        var (client, environment) = await NewEnvironmentAsync();
+        var subject = await NewSubjectAsync(client, environment);
+
+        var patched = await client.PatchAsJsonAsync(
+            $"/v1/environments/{environment}/subjects/{subject}",
+            new UpdateSubjectRequest(Owner: owner),
+            ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.OK, patched.StatusCode);
+        Assert.Equal("alice", (await ApiFactory.ReadAsync<SubjectResponse>(patched)).Owner);
+    }
+
+    [Fact]
+    public async Task APolicyChangeLeavesNoAuditEntry()
+    {
+        // A gap, not a decision, and recorded as one: changing a subject's compatibility policy
+        // changes what the registry will let through, and the trail does not say it happened.
+        // The subject screen tells the person so, and this is the test that goes red when the
+        // registry starts recording it — at which point that sentence, STATUS.md's row and
+        // ADR-032 need to change with it.
+        var (client, environment) = await NewEnvironmentAsync();
+        var subject = await NewSubjectAsync(client, environment);
+
+        var put = await client.PutAsJsonAsync(
+            $"/v1/environments/{environment}/subjects/{subject}/compatibility-policy",
+            new SetCompatibilityPolicyRequest("FULL", "SOURCE"),
+            ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+
+        var entries = await client.GetFromJsonAsync<IReadOnlyList<AuditResponse>>(
+            $"/v1/audit?env={environment}", ApiFactory.Json);
+
+        Assert.DoesNotContain(entries!, e => e.Action == "SUBJECT_UPDATED");
+        Assert.DoesNotContain(
+            entries!, e => e.Action.Contains("POLICY", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task HealthChecksAreNotAudited()
     {
         // A probe on a timer would produce most of the rows in the table and none of the

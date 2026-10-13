@@ -131,6 +131,7 @@ public sealed record UpdateSubjectCommand(
 /// <summary>Handles <see cref="UpdateSubjectCommand"/>.</summary>
 public sealed class UpdateSubjectHandler(
     ISubjectRepository subjects,
+    ICallerContext caller,
     IAuditLog audit,
     IOutbox outbox,
     IUnitOfWork unitOfWork,
@@ -175,13 +176,17 @@ public sealed class UpdateSubjectHandler(
             }
         }
 
-        // "unknown" rather than a fabricated identity: the command carries no actor, and M8 is
-        // where one starts existing. An audit row that names the wrong person is worse than one
-        // that admits it does not know.
+        // The authenticated caller, as every handler that changes something records. This row
+        // used to name the *new owner* as its actor ("unknown" when none was given), so an owner
+        // change was attributed to whoever was being made responsible; and a PATCH whose owner
+        // was only whitespace answered 500, because the actor was built from the very text the
+        // owner rule had just declined to apply. The command carries no actor on purpose (a
+        // client-supplied name is attacker-assertable, see `DecideVersionCommand`); the caller
+        // is the one who made the change.
         audit.Append(AuditEntry.Record(
             command.EnvironmentId,
             AuditAction.SubjectUpdated,
-            ActorId.Create(command.Owner is { Length: > 0 } ? command.Owner : "unknown").Value,
+            caller.Current.Actor,
             subject.Value.Name.Value,
             clock.GetUtcNow(),
             command.Deprecate ? "deprecated" : "owner changed"));

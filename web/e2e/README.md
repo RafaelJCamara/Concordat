@@ -118,6 +118,31 @@ Three arrangements keep that from costing anything:
   form and stop. They aim the app at it by answering `config.json`, the one request in this suite
   that is stubbed, and the one a deployment itself supplies; everything else is the real registry.
 
+**Changing a subject has no dry run, and what it is tried on is permanent.** An owner or a policy can be
+changed back, but the subject cannot be deleted and the audit trail an owner change writes into is
+append-only. So the two specs about it follow the rule creating one does, and add one fixture:
+
+- `subject-settings.spec.ts` makes **five subjects of its own per run** in `dev`, named
+  `acme.e2e.settings.<stem>.<timestamp>`, and one in `e2e-inherit`. A test that changes an owner or a
+  policy changes one of these and nothing else: **never `acme.e2e.PaymentTaken`, `acme.e2e.LedgerPosted`,
+  `acme.e2e.OrderCreated`, or the defaults of `dev`** — other specs read them, and they are what makes the
+  rest of the suite repeatable. (Its reader test opens `acme.e2e.OrderCreated` and only _looks_.)
+- `subject-settings-parity.spec.ts` makes **two more** (`acme.e2e.settingsparity.<timestamp>`, and
+  `acme.e2e.settingslife.<timestamp>`, which it deprecates and then retires) and writes to them about a
+  hundred times: every owner row is another change to the same subject. It is plain Node like
+  `subject-name-parity.spec.ts`, and it issues one API key per scope the registry has, so it can ask
+  what each may do — **and revokes them in a `finally`**, so a run leaves no working credential behind.
+  `trim-table.ts` holds the whitespace table both parity specs measure, so the two cannot drift.
+- **`e2e-inherit` is an environment whose default compatibility policy is `NONE`**, created once and
+  **never changed**. It exists for one test: a subject that sets no policy of its own is _held_ when it
+  breaks, because registration judges it by the registry's built-in default and not by the environment's. That
+  is a registry defect the policy editor's confirmation describes, and this is the test that goes red when it
+  is fixed — the failure to act on is "update the sentence in `subject-policy-editor.ts`, STATUS.md and
+  ADR-032", not "fix the test". Do not point other specs at it.
+- The audit assertions in `subject-settings.spec.ts` are the confirmations' own claims: an owner change leaves
+  exactly one `SUBJECT_UPDATED` row attributed to the signed-in account, and a policy change leaves none. They
+  are what stop a sentence on the screen from going stale when the registry starts recording more.
+
 **Match the account control, not the account's email.** A subject the browser creates is owned by
 the signed-in account, so its email now appears in a table cell on the list as well as in the
 sidebar, and `getByText(email)` stopped being unique the first time `new-subject.spec.ts` ran. The

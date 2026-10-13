@@ -1,5 +1,6 @@
 using Concordat.Application.Registry;
 using Concordat.Application.Tests.TestSupport;
+using Concordat.Domain.Governance;
 using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
@@ -36,7 +37,7 @@ public class SubjectCommandHandlerTests
 
     private Task<Result<Subject>> UpdateAsync(
         string name = Name, string? owner = null, bool deprecate = false) =>
-        new UpdateSubjectHandler(_subjects, _audit, _outbox, _unitOfWork, _clock).HandleAsync(
+        new UpdateSubjectHandler(_subjects, _caller, _audit, _outbox, _unitOfWork, _clock).HandleAsync(
             new UpdateSubjectCommand(_environment, name, owner, deprecate),
             CancellationToken.None);
 
@@ -234,6 +235,56 @@ public class SubjectCommandHandlerTests
         Assert.True(result.IsSuccess, result.Error?.Message);
         Assert.Equal("alice", subject.Owner.Value);
         Assert.Equal(SubjectLifecycle.Deprecated, subject.Lifecycle);
+    }
+
+    [Fact]
+    public async Task AnOwnerChange_IsAuditedAsTheCallerAndNotAsTheNewOwner()
+    {
+        // The row used to name whoever was *becoming* the owner as the actor, so the trail said
+        // that bob had changed the owner to bob. The screen that edits an owner tells the person
+        // what is recorded, and that sentence has to be true of this row.
+        _caller.Current = _caller.Current with { Actor = ActorId.Create("carol").Value };
+        _subjects.Seed(Build.Subject(_environment));
+
+        var result = await UpdateAsync(owner: "bob");
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        var entry = Assert.Single(_audit.Entries);
+        Assert.Equal(AuditAction.SubjectUpdated, entry.Action);
+        Assert.Equal("carol", entry.Actor.Value);
+        Assert.Equal("owner changed", entry.Detail);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("\t \n")]
+    public async Task ABlankOwner_ChangesNothingAndIsNotACrash(string owner)
+    {
+        // Whitespace is what the owner rule declines to apply, and an audit row used to be built
+        // from that same text: `ActorId.Create("   ")` failed, `.Value` threw, and the endpoint
+        // answered 500 for a request it should simply have found nothing to do in.
+        var subject = Build.Subject(_environment);
+        _subjects.Seed(subject);
+
+        var result = await UpdateAsync(owner: owner);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Equal("alice", subject.Owner.Value);
+    }
+
+    [Fact]
+    public async Task AnOwnerChange_NotifiesNobody()
+    {
+        // Only deprecation is staged: it is a signal to every team consuming the subject. The
+        // owner-editing screen says nobody is told, and this is what makes that a measured
+        // claim and not a reading of the handler.
+        _subjects.Seed(Build.Subject(_environment));
+
+        var result = await UpdateAsync(owner: "bob");
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Empty(_outbox.Staged);
     }
 
     [Fact]

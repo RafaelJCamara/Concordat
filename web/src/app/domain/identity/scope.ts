@@ -69,6 +69,19 @@ export const ORG_ADMIN_SCOPES: readonly Scope[] = ['org:admin'];
  */
 export const APPROVAL_SCOPES: readonly Scope[] = ['subject:admin'];
 
+/**
+ * The scopes that permit changing a subject's compatibility policy.
+ *
+ * <b>Narrower than the scopes for changing its owner, and that is the registry's own line</b>
+ * (`PUT …/compatibility-policy` is `subject:admin`; `PATCH …/subjects/{subject}` is
+ * `subject:write`, which `subject:admin` implies). A policy decides what the gate lets through,
+ * so it sits with approving and rejecting rather than with registering. The owner's control reads
+ * {@link SCHEMA_WRITE_SCOPES} and this one reads this list, which is what lets a key holding only
+ * `subject:write` see the first control and not the second — probed against the real registry
+ * with exactly such a key (200 on one, 403 on the other).
+ */
+export const POLICY_WRITE_SCOPES: readonly Scope[] = ['subject:admin'];
+
 /** Whether a granted set includes any of the scopes an action requires. */
 export function grants(granted: readonly Scope[], required: readonly Scope[]): boolean {
   return required.some((scope) => granted.includes(scope));

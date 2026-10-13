@@ -8,6 +8,7 @@ import { ConcordatError } from '../../../core/http/problem-details';
 import type { Scope } from '../../../domain/identity/scope';
 import type { SchemaVersion, Subject } from '../../../domain/registry/subject';
 import { SubjectDetailStore } from '../application/subject-detail-store';
+import { SubjectSettingsStore, type SettingsOutcome } from '../application/subject-settings-store';
 import { SubjectDetailPage } from './subject-detail-page';
 
 // The screen's own logic is which of four states it draws, and how it words two of them.
@@ -51,6 +52,7 @@ function storeIn(state: {
   subject?: Subject | null;
   loading?: boolean;
   error?: ConcordatError | null;
+  refreshError?: ConcordatError | null;
 }) {
   const value = state.subject ?? null;
 
@@ -58,6 +60,7 @@ function storeIn(state: {
     subject: signal(value),
     loading: signal(state.loading ?? false),
     error: signal(state.error ?? null),
+    refreshError: signal(state.refreshError ?? null),
     latest: signal(value?.versions.find((v) => v.ordinal === value.latest) ?? null),
     pending: signal(value?.versions.filter((v) => v.status === 'AWAITING_APPROVAL') ?? []),
     versions: signal([...(value?.versions ?? [])].sort((a, b) => b.ordinal - a.ordinal)),
@@ -65,12 +68,38 @@ function storeIn(state: {
   } as unknown as InstanceType<typeof SubjectDetailStore>;
 }
 
+/**
+ * A `SubjectSettingsStore` that records what the page asks of it, and holds whatever state a test
+ * wants shown. The writes themselves are the store's own spec's business.
+ */
+function settingsStub(
+  state: { outcome?: SettingsOutcome | null; ownerSaving?: boolean; policySaving?: boolean } = {},
+) {
+  const owners: { subject: string; owner: string }[] = [];
+  const policies: { subject: string; policy: unknown }[] = [];
+
+  return {
+    owners,
+    policies,
+    outcome: signal(state.outcome ?? null),
+    ownerSaving: signal(state.ownerSaving ?? false),
+    ownerError: signal(null),
+    policySaving: signal(state.policySaving ?? false),
+    policyError: signal(null),
+    changeOwner: (request: { subject: string; owner: string }) => owners.push(request),
+    setPolicy: (request: { subject: string; policy: unknown }) => policies.push(request),
+    reset: () => {},
+  };
+}
+
 function render(
   state: Parameters<typeof storeIn>[0],
   scopes: readonly Scope[] = [],
+  settings: ReturnType<typeof settingsStub> = settingsStub(),
 ): {
   fixture: ComponentFixture<SubjectDetailPage>;
   host: HTMLElement;
+  settings: ReturnType<typeof settingsStub>;
 } {
   TestBed.configureTestingModule({
     providers: [provideRouter([]), provideConcordatConfig({ defaultEnvironment: 'dev' })],
@@ -79,7 +108,12 @@ function render(
   // `overrideComponent` has to come before the first `inject`, which instantiates the module
   // and freezes the overrides.
   TestBed.overrideComponent(SubjectDetailPage, {
-    set: { providers: [{ provide: SubjectDetailStore, useValue: storeIn(state) }] },
+    set: {
+      providers: [
+        { provide: SubjectDetailStore, useValue: storeIn(state) },
+        { provide: SubjectSettingsStore, useValue: settings },
+      ],
+    },
   });
 
   // Signed in before the component renders, because `*cdIfScope` decides on first render and
@@ -90,7 +124,7 @@ function render(
   fixture.componentRef.setInput('name', state.subject?.name ?? 'orders.created');
   fixture.detectChanges();
 
-  return { fixture, host: fixture.nativeElement as HTMLElement };
+  return { fixture, host: fixture.nativeElement as HTMLElement, settings };
 }
 
 describe('SubjectDetailPage', () => {
@@ -190,6 +224,164 @@ describe('SubjectDetailPage', () => {
       ]);
 
       expect(host.querySelector('a[href="/subjects/orders.created/versions/new"]')).not.toBeNull();
+    });
+  });
+
+  describe('what a subject shows of its compatibility policy', () => {
+    it('names the surface as well as the mode, in separate elements', () => {
+      const { host } = render({
+        subject: subject({ compatibilityPolicy: { mode: 'FULL', surface: 'SOURCE' } }),
+      });
+      const cells = [...host.querySelectorAll('dd span')].map((s) => s.textContent?.trim());
+
+      // Two spans, so a text match on the mode alone still finds it.
+      expect(cells).toContain('FULL');
+      expect(cells).toContain('· SOURCE');
+    });
+  });
+
+  describe('changing the owner and the policy', () => {
+    const buttons = (host: HTMLElement) =>
+      [...host.querySelectorAll('button')].map((b) => b.textContent?.trim());
+
+    it('offers neither to a reader, and renders no disabled control in their place', () => {
+      // ADR-018: absent, not disabled. A disabled "Change owner" invites a request for access.
+      const { host } = render({ subject: subject() }, ['subject:read']);
+
+      expect(buttons(host)).not.toContain('Change owner');
+      expect(buttons(host)).not.toContain('Change policy');
+      expect(host.textContent).not.toContain('Change owner');
+      expect(host.textContent).not.toContain('Change policy');
+    });
+
+    it('offers the owner to a writer and not the policy, which the registry holds to admin', () => {
+      // Probed with a real `subject:write` key: PATCH 200, PUT 403.
+      const { host } = render({ subject: subject() }, ['subject:write']);
+
+      expect(buttons(host)).toContain('Change owner');
+      expect(buttons(host)).not.toContain('Change policy');
+    });
+
+    it('offers both to an admin, whose scope implies the writer’s', () => {
+      const { host } = render({ subject: subject() }, ['subject:admin']);
+
+      expect(buttons(host)).toContain('Change owner');
+      expect(buttons(host)).toContain('Change policy');
+    });
+
+    it('offers neither for a retired subject, which the registry refuses with 409', () => {
+      // Retired is terminal, so there is no snapshot that could be wrong about it.
+      const { host } = render({ subject: subject({ lifecycle: 'RETIRED' }) }, ['subject:admin']);
+
+      expect(buttons(host)).not.toContain('Change owner');
+      expect(buttons(host)).not.toContain('Change policy');
+    });
+
+    it('still offers both for a deprecated subject, which accepts both', () => {
+      const { host } = render({ subject: subject({ lifecycle: 'DEPRECATED' }) }, ['subject:admin']);
+
+      expect(buttons(host)).toContain('Change owner');
+      expect(buttons(host)).toContain('Change policy');
+    });
+
+    it('opens one editor at a time, and closing it again is the same button', () => {
+      const { fixture, host } = render({ subject: subject() }, ['subject:admin']);
+      const click = (label: string) => {
+        [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === label)!.click();
+        fixture.detectChanges();
+      };
+
+      expect(host.querySelector('cd-subject-owner-editor')).toBeNull();
+
+      click('Change owner');
+      expect(host.querySelector('cd-subject-owner-editor')).not.toBeNull();
+      expect(host.querySelector('cd-subject-policy-editor')).toBeNull();
+
+      click('Change policy');
+      expect(host.querySelector('cd-subject-owner-editor')).toBeNull();
+      expect(host.querySelector('cd-subject-policy-editor')).not.toBeNull();
+
+      click('Change policy');
+      expect(host.querySelector('cd-subject-policy-editor')).toBeNull();
+    });
+
+    it('hands what was confirmed to the store, with the subject it is for', () => {
+      const { fixture, host, settings } = render({ subject: subject() }, ['subject:admin']);
+
+      [...host.querySelectorAll('button')]
+        .find((b) => b.textContent?.trim() === 'Change owner')!
+        .click();
+      fixture.detectChanges();
+
+      const editor = fixture.debugElement.query((d) => d.name === 'cd-subject-owner-editor');
+      (editor.componentInstance as { confirmed: { emit(v: string): void } }).confirmed.emit('bob');
+
+      expect(settings.owners).toEqual([{ subject: 'orders.created', owner: 'bob' }]);
+    });
+
+    it('says what the registry answered, in a status line, once a change has landed', () => {
+      // The editor that was open has closed and focus has gone with it, so the outcome is a live
+      // region and the words are the registry's: the owner it stored, not the one typed.
+      const { host } = render(
+        { subject: subject() },
+        ['subject:admin'],
+        settingsStub({ outcome: { kind: 'owner', subject: 'orders.created', owner: 'bob' } }),
+      );
+      const status = host.querySelector('[role="status"]');
+
+      expect(status?.textContent).toContain('The owner of orders.created is now bob');
+      expect(host.querySelector('cd-subject-owner-editor')).toBeNull();
+    });
+
+    it('says an inheriting answer as inheriting, not as a policy', () => {
+      const { host } = render(
+        { subject: subject() },
+        ['subject:admin'],
+        settingsStub({
+          outcome: {
+            kind: 'policy',
+            subject: 'orders.created',
+            policy: { mode: null, surface: null },
+          },
+        }),
+      );
+
+      expect(host.querySelector('[role="status"]')?.textContent).toContain(
+        'now has no policy of its own',
+      );
+    });
+
+    it('says a policy the way the registry answered it', () => {
+      const { host } = render(
+        { subject: subject() },
+        ['subject:admin'],
+        settingsStub({
+          outcome: {
+            kind: 'policy',
+            subject: 'orders.created',
+            policy: { mode: 'FULL_TRANSITIVE', surface: 'WIRE_JSON' },
+          },
+        }),
+      );
+
+      expect(host.querySelector('[role="status"]')?.textContent).toContain(
+        'FULL_TRANSITIVE · WIRE_JSON',
+      );
+    });
+
+    it('says the change is in when the page cannot read it back, apart from a failed load', () => {
+      const { host } = render({
+        subject: subject(),
+        refreshError: new ConcordatError({
+          status: 0,
+          code: 'network_error',
+          detail: 'The registry did not answer.',
+        }),
+      });
+
+      expect(host.textContent).toContain('The change is in, but this page could not read it back');
+      expect(host.textContent).toContain('The registry did not answer.');
+      expect(host.textContent).not.toContain('Could not load');
     });
   });
 });

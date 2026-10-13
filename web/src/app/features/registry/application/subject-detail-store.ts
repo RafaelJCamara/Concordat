@@ -11,12 +11,21 @@ interface SubjectDetailState {
   readonly subject: Subject | null;
   readonly loading: boolean;
   readonly error: ConcordatError | null;
+  /**
+   * Why the subject could not be read back after a change that *did* land, or null.
+   *
+   * Kept apart from `error`: that one replaces the whole screen with a failure, which would be a
+   * lie after a write that succeeded. This one says the change is in and the page is not yet
+   * showing it.
+   */
+  readonly refreshError: ConcordatError | null;
 }
 
 const INITIAL: SubjectDetailState = {
   subject: null,
   loading: false,
   error: null,
+  refreshError: null,
 };
 
 /**
@@ -71,7 +80,7 @@ export const SubjectDetailStore = signalStore(
        */
       load: rxMethod<string>(
         pipe(
-          tap(() => patchState(store, { loading: true, error: null })),
+          tap(() => patchState(store, { loading: true, error: null, refreshError: null })),
           switchMap((name) =>
             api.getSubject(environments.name(), name).pipe(
               tap((subject) => patchState(store, { subject, loading: false })),
@@ -83,6 +92,40 @@ export const SubjectDetailStore = signalStore(
                 });
                 // Swallowed on purpose — see `SubjectListStore`. Letting it propagate tears
                 // down the rxMethod's subscription and the next `load()` does nothing at all.
+                return of(null);
+              }),
+            ),
+          ),
+        ),
+      ),
+
+      /**
+       * Reads the subject again after somebody changed it, without blanking the page.
+       *
+       * <b>Not `load`.</b> `load` raises the loading flag and the screen swaps itself for a
+       * skeleton, which after a save reads as the page having lost what it just did. This replaces
+       * the subject in place, so the owner or policy on screen is the registry's own account of it
+       * and not a prediction made from what was sent (the registry trims an owner, and reads
+       * `backward` as `BACKWARD`).
+       *
+       * A failure here is *not* a failed save, and is kept apart (`refreshError`): the change is
+       * in, and the page cannot yet show it.
+       *
+       * A late answer for another subject is dropped. This store lives as long as the page does,
+       * and the page is reused when somebody follows a link from one subject to another.
+       */
+      refresh: rxMethod<string>(
+        pipe(
+          switchMap((name) =>
+            api.getSubject(environments.name(), name).pipe(
+              tap((subject) => {
+                if (store.subject()?.name === subject.name) {
+                  patchState(store, { subject, refreshError: null });
+                }
+              }),
+              catchError((error: unknown) => {
+                patchState(store, { refreshError: toConcordatError(error) });
+
                 return of(null);
               }),
             ),

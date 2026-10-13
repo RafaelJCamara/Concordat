@@ -46,3 +46,4 @@ it; write a new one and mark the old **Superseded by**.
 | [029](029-web-container.md) | The web app is an nginx image, configured when it starts | Accepted |
 | [030](030-create-subject-screen.md) | A subject is created on a screen that says what is permanent, and blocks only on what the registry certainly refuses | Accepted |
 | [031](031-unpaired-surrogates-are-refused.md) | A schema containing an unpaired surrogate escape is refused, not repaired | Accepted |
+| [032](032-subject-settings.md) | A subject's owner and policy are changed on its own page, and each confirmation says only what the registry was measured to do | Accepted |

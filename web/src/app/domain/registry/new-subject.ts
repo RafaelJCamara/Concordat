@@ -38,6 +38,20 @@ export const CONTENT_MODEL_CHOICES: readonly {
 /** `ActorId.MaxLength`, in UTF-16 code units, counted after the registry has trimmed. */
 export const OWNER_MAX_LENGTH = 256;
 
+/**
+ * The registry's refusal of an owner that is too long, or null.
+ *
+ * Shared by creating a subject and by changing its owner (`subject-settings.ts`), because both
+ * go through `ActorId.Create` and a limit written out twice is a limit that drifts. Takes the
+ * text *after* the registry's trim: the limit is counted on what is stored, so a 256-character
+ * owner padded with spaces is accepted.
+ */
+export function ownerLengthRefusal(trimmedOwner: string): string | null {
+  return trimmedOwner.length > OWNER_MAX_LENGTH
+    ? `An owner may be at most ${OWNER_MAX_LENGTH} characters; this one is ${trimmedOwner.length}.`
+    : null;
+}
+
 /** What the form holds, as typed. Nothing here has been judged yet. */
 export interface NewSubjectDraft {
   readonly name: string;
@@ -124,13 +138,17 @@ export function checkNewSubject(
       code: 'actor_id_invalid',
       message: 'An owner is required: the person or team answerable for this contract.',
     });
-  } else if (owner.length > OWNER_MAX_LENGTH) {
-    findings.push({
-      field: 'owner',
-      severity: 'refusal',
-      code: 'actor_id_invalid',
-      message: `An owner may be at most ${OWNER_MAX_LENGTH} characters; this one is ${owner.length}.`,
-    });
+  } else {
+    const tooLong = ownerLengthRefusal(owner);
+
+    if (tooLong !== null) {
+      findings.push({
+        field: 'owner',
+        severity: 'refusal',
+        code: 'actor_id_invalid',
+        message: tooLong,
+      });
+    }
   }
 
   if ((draft.mode === null) !== (draft.surface === null)) {

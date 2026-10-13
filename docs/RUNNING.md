@@ -251,7 +251,7 @@ cd web && CONCORDAT_WEB_URL=http://localhost:5063 npm run e2e
 
 ## Running the tests
 
-### The .NET suite — 1,615 tests
+### The .NET suite — 1,624 tests
 
 ```bash
 dotnet test Concordat.slnx
@@ -265,7 +265,7 @@ takes several minutes. The other eight are pure unit tests and finish in seconds
 dotnet test tests/Concordat.Domain.Tests        # 541 tests, no Docker, ~1s
 ```
 
-### The web suite — 1,319 tests
+### The web suite — 1,411 tests
 
 ```bash
 cd web
@@ -276,7 +276,7 @@ npm run codes:check     # fails if the error-code union has drifted from the .NE
 npm run monaco:check    # fails if the vendored editor stylesheet is not the installed Monaco's
 ```
 
-### The browser end-to-end suite — 195 tests
+### The browser end-to-end suite — 218 tests
 
 Two processes Playwright deliberately does not start for you, then the tests — a config that
 quietly started its own copy of either half would produce a suite that passes against the
@@ -301,9 +301,11 @@ an unrelated dashboard, and the suite failed at sign-in looking for a form that 
 a port nobody else has.
 
 **The suite creates things that cannot be deleted** — a subject is permanent, and a retired one keeps its
-name. A run adds two to `dev`, and the first run on a database adds a fixed table of them to an
-environment of its own, `e2e-names`; later runs add nothing there. See
-[web/e2e/README.md](../web/e2e/README.md) for which, and why `e2e-empty` must stay empty.
+name. A run adds nine to `dev` (two from creating one on the create screen, seven from changing owners and
+policies on the subject page), one to `e2e-inherit` (an environment whose default is `NONE`, which nothing may
+change), and the first run on a database adds a fixed table of them to an environment of its own, `e2e-names`;
+later runs add nothing there. See [web/e2e/README.md](../web/e2e/README.md) for which, and why `e2e-empty` must
+stay empty.
 
 The suite claims the instance and creates its own fixtures, all idempotently. See
 [web/e2e/README.md](../web/e2e/README.md) for what it assumes and why it exists.

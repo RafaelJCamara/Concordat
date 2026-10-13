@@ -586,3 +586,177 @@ export async function createSubjectRaw(
 export function accepted(verdict: CreateVerdict): boolean {
   return verdict.status === 201 || verdict.code === 'subject_already_exists';
 }
+
+/** What the registry said to a change of a subject, reduced to what a comparison needs. */
+export interface ChangeVerdict {
+  readonly status: number;
+  /** The registry's `concordatCode` when it refused, else null. */
+  readonly code: string | null;
+  readonly detail: string | null;
+}
+
+async function verdictOf(response: Response): Promise<ChangeVerdict> {
+  let parsed: { concordatCode?: string; detail?: string } = {};
+
+  try {
+    parsed = (await response.json()) as typeof parsed;
+  } catch {
+    // A 500 may have no body, and so may a 400 for a request the registry could not read at all.
+    // Reported as what it is, so a comparison says "crashed" or "unreadable" and not "failed".
+  }
+
+  return {
+    status: response.status,
+    code: parsed.concordatCode ?? null,
+    detail: parsed.detail ?? null,
+  };
+}
+
+/**
+ * Sends a `PATCH` to a subject exactly as given.
+ *
+ * The body is a string so a case can be a body no client would build (`{}`, a number for the
+ * owner); `JSON.stringify` of an object is the ordinary way to call it. Which credential is the
+ * caller's, so a scope can be tried: the default is the suite's owner.
+ */
+export async function patchSubjectRaw(
+  credential: string,
+  environment: string,
+  subject: string,
+  body: unknown,
+): Promise<ChangeVerdict> {
+  return verdictOf(
+    await call(`/v1/environments/${environment}/subjects/${subject}`, {
+      method: 'PATCH',
+      headers: { authorization: `Bearer ${credential}` },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    }),
+  );
+}
+
+/** Sends a `PUT` to a subject's compatibility policy exactly as given. */
+export async function putPolicyRaw(
+  credential: string,
+  environment: string,
+  subject: string,
+  body: unknown,
+): Promise<
+  ChangeVerdict & { readonly policy: { mode: string | null; surface: string | null } | null }
+> {
+  const response = await call(
+    `/v1/environments/${environment}/subjects/${subject}/compatibility-policy`,
+    {
+      method: 'PUT',
+      headers: { authorization: `Bearer ${credential}` },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    },
+  );
+  const copy = response.clone();
+  const verdict = await verdictOf(response);
+
+  return {
+    ...verdict,
+    policy: response.ok
+      ? ((await copy.json()) as { mode: string | null; surface: string | null })
+      : null,
+  };
+}
+
+/** Retires a subject. Terminal: the name stays taken, and the subject accepts no further change. */
+export async function retireSubject(
+  credential: string,
+  environment: string,
+  subject: string,
+): Promise<void> {
+  const response = await call(`/v1/environments/${environment}/subjects/${subject}`, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${credential}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Retiring '${subject}' failed with ${response.status}.`);
+  }
+}
+
+/** Issues an API key holding exactly these scopes, for trying what a narrower credential may do. */
+export async function issueKey(
+  credential: string,
+  label: string,
+  scopes: readonly string[],
+): Promise<{ readonly id: string; readonly secret: string }> {
+  const response = await call('/v1/api-keys', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${credential}` },
+    body: JSON.stringify({ label, scopes }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Issuing a key for ${scopes.join(',')} failed with ${response.status}.`);
+  }
+
+  const issued = (await response.json()) as { key: { id: string }; secret: string };
+
+  return { id: issued.key.id, secret: issued.secret };
+}
+
+/** Revokes a key a test issued, so a run does not leave working credentials behind. */
+export async function revokeKey(credential: string, id: string): Promise<void> {
+  await call(`/v1/api-keys/${id}`, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${credential}` },
+  });
+}
+
+/** One line of the audit trail, as the registry serves it. */
+export interface AuditRow {
+  readonly action: string;
+  readonly actor: string;
+  readonly target: string;
+  readonly detail: string | null;
+}
+
+/** The audit trail for one target in one environment, newest first. */
+export async function readAudit(
+  credential: string,
+  environment: string,
+  target: string,
+): Promise<readonly AuditRow[]> {
+  const response = await call(
+    `/v1/audit?env=${environment}&target=${encodeURIComponent(target)}&limit=200`,
+    { headers: { authorization: `Bearer ${credential}` } },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Reading the audit trail failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as AuditRow[];
+}
+
+/**
+ * Makes sure an environment exists with a given compatibility default.
+ *
+ * Idempotent like `ensureEnvironment`, and for a different reason to have its own: a default can
+ * only be chosen when an environment is created without changing it afterwards, and these
+ * fixtures must never be moved — an environment whose default had been changed by a run is a
+ * fixture the next run cannot trust.
+ */
+export async function ensureEnvironmentWithDefault(
+  credential: string,
+  name: string,
+  policy: { mode: string; surface: string },
+): Promise<void> {
+  const created = await call('/v1/environments', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${credential}` },
+    body: JSON.stringify({
+      name,
+      compatibilityMode: policy.mode,
+      compatibilitySurface: policy.surface,
+    }),
+  });
+
+  if (!created.ok && created.status !== 409) {
+    throw new Error(`Creating environment '${name}' failed with ${created.status}.`);
+  }
+}
