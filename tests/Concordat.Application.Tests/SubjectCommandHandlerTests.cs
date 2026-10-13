@@ -258,7 +258,51 @@ public class SubjectCommandHandlerTests
         var entry = Assert.Single(_audit.Entries);
         Assert.Equal(AuditAction.SubjectUpdated, entry.Action);
         Assert.Equal("carol", entry.Actor.Value);
-        Assert.Equal("owner changed", entry.Detail);
+        Assert.Equal("owner alice -> bob", entry.Detail);
+    }
+
+    [Fact]
+    public async Task AnOwnerChange_RecordsTheNewOwnerAsTheRegistryStoredIt()
+    {
+        // After its trim, and not as typed: the row has to agree with the subject it describes.
+        _subjects.Seed(Build.Subject(_environment));
+
+        await UpdateAsync(owner: "  team-after  ");
+
+        Assert.Equal("owner alice -> team-after", Assert.Single(_audit.Entries).Detail);
+    }
+
+    [Fact]
+    public async Task ChangingTheOwnerAndDeprecating_RecordsBothInOneRow()
+    {
+        // The row used to say only "deprecated" and lose the owner change made in the same call.
+        _subjects.Seed(Build.Subject(_environment));
+
+        await UpdateAsync(owner: "bob", deprecate: true);
+
+        Assert.Equal("owner alice -> bob; deprecated", Assert.Single(_audit.Entries).Detail);
+    }
+
+    [Fact]
+    public async Task Deprecating_StillReadsDeprecatedAndNamesNoOwner()
+    {
+        _subjects.Seed(Build.Subject(_environment));
+
+        await UpdateAsync(deprecate: true);
+
+        Assert.Equal("deprecated", Assert.Single(_audit.Entries).Detail);
+    }
+
+    [Fact]
+    public async Task APatchThatChangesNothing_KeepsItsOldWording()
+    {
+        // A recorded hole (STATUS.md), pinned so it is not changed by accident while the owner
+        // row is being made precise: nothing was changed, so no owner is named.
+        _subjects.Seed(Build.Subject(_environment));
+
+        await UpdateAsync(owner: "   ");
+
+        Assert.Equal("owner changed", Assert.Single(_audit.Entries).Detail);
     }
 
     [Theory]

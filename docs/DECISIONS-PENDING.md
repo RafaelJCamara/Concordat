@@ -129,9 +129,8 @@ the way that were **yours to decide**, which I did not. **Both are decided and f
     leaking, but would have cost the filter its meaning: that row is already an owner change and a deprecation.
     It records the old and new policy as the authenticated caller, in the same transaction; a no-op and a refusal
     write nothing. **No notification**: no `NotificationEvent` is a policy change and a new one is a decision about who
-    is told, so *Nobody is notified* stays true. **Still yours:** the owner-change entry reads "owner changed"
-    with neither the previous nor the new owner. I think it should record both; it is a separate decision and
-    I did not make it.
+    is told, so *Nobody is notified* stays true. **Then decided, once asked:** the owner-change entry
+    now reads `owner <previous> -> <new>` instead of "owner changed" (a separate commit; a no-op `PATCH` keeps the old text).
 
 ### 33. `ci` is a marker scope, and no role grants it
 

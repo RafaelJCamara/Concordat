@@ -37,8 +37,8 @@ export interface SubjectSettingsFinding {
  * - **Blank.** `PATCH` with an empty or whitespace-only owner answers 200 and changes nothing
  *   (it used to answer 500 for whitespace; ADR-032). There is no request that means "blank", so
  *   an empty field is a field nobody has filled in.
- * - **The owner already shown.** The registry would accept it and record an audit entry reading
- *   "owner changed" for a change that did not happen.
+ * - **The owner already shown.** The registry would accept it and record an audit entry
+ *   ("owner a -> a") for a change that did not happen.
  *
  * The second is the one place this form is knowingly stricter than the registry, and it is
  * stricter only in the case where the snapshot is stale: somebody else changed the owner since

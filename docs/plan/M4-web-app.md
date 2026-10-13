@@ -106,7 +106,8 @@ sign-in screen that lets someone pass it, which is recorded as
       guard to add: one guard could not express "either", and a route would be a page nobody opens except
       from the page it edits. **Each takes two clicks and says what it does, and every sentence was measured
       against the real registry rather than read.** An owner change records one `SUBJECT_UPDATED` entry reading
-      "owner changed", naming the account that made it and neither owner, and notifies nobody. A policy change
+      `owner <previous> -> <new>` (it read only "owner changed" until ADR-033), naming the account that made it, and
+      notifies nobody. A policy change
       takes effect for the *next* registration (a held version stays held when it is relaxed), is
       recorded as one **`SUBJECT_POLICY_CHANGED`** entry naming the caller and the old and new policy
       ([ADR-033](../adr/033-inherit-means-the-environments-default.md); until then it was not written to the audit

@@ -7,7 +7,7 @@
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-13: 1,660 .NET,
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-13: 1,664 .NET,
 1,414 Angular, 223 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
@@ -28,7 +28,7 @@ Both registry defects recorded in the section below are **fixed** ([ADR-033](adr
 as two separable changes: **A**, a subject with no policy of its own is judged by its environment's default, and **B**,
 a policy change is written to the audit trail. The Angular suite is **1,414** tests (from 1,411), the browser suite
 **223** across nineteen specs (from 218 across eighteen), run against the dev server **and the production image**, and the
-.NET suite **1,660** (from 1,624). **Measured, production build:** the initial bundle is unchanged at 411.36 kB raw; the
+.NET suite **1,664** (from 1,624). **Measured, production build:** the initial bundle is unchanged at 411.36 kB raw; the
 subject page's chunk went 28.39 → 28.57 kB.
 
 ### A. Registration, the dry run and the diff read the environment
@@ -81,16 +81,17 @@ is told, and *Nobody is notified* stays true, measured by the outbox not deepeni
 the repeated policy and the repeated inherit wrote none; half a policy was `400`, a retired subject `409`, an unknown one
 `404`; filtering the audit by the action returned the three.
 
-**A decision for you, not made:** the owner-change entry still reads "owner changed" with neither the previous nor the new
-owner. I think it should record both (the policy entry just made it the odd one out, owners are not secrets, and it is the
-first question after an incident); it changes a sentence ADR-032 pinned and a detail anyone may have parsed.
+**The owner-change entry now records both owners** (a separate commit, once asked): `owner <previous> -> <new>`, the new
+one as stored after the registry's trim, and `owner a -> b; deprecated` when one request does both. A `PATCH` that changes
+nothing keeps the old "owner changed" (the hole in the table below, pinned so it is not altered by accident). Anything
+that parsed the old fixed string will see a different one.
 
 **A cost to know:** the audit table is read by action *token*, and the registry throws on a stored token its build does not
 know. Rolling the registry back past this change breaks the audit page for as long as a `SUBJECT_POLICY_CHANGED` row exists.
 
 ### What was verified, and what was not
 
-Run on this machine, on Windows, only; GitHub has not run them. **Verified:** the full .NET suite (1,660, Docker running);
+Run on this machine, on Windows, only; GitHub has not run them. **Verified:** the full .NET suite (1,664, Docker running);
 the web suite, lint, prettier, `codes:check`, `monaco:check` and `ng build`; `dotnet format --verify-no-changes`; the whole
 browser suite against the dev server **and the production image**, each after a registry restart (223 and 223); every new
 .NET test red against the code it replaces (handler by handler, a mutant for each of: no entry, wrong actor, entry after
@@ -706,7 +707,7 @@ These matter more than the two lists above, because the surface exists and looks
 | **The environment settings screen cannot change a default by changing one select** | The form sends only the member that changed (`changesBetween`) and the registry refuses half a policy: `400` "A compatibility policy needs both a mode and a surface (ADR-016)". So a default is changed by choosing a whole pair. Found while writing `environment-default.spec.ts`, which pins it (it goes red when the form sends the pair). The unit test asserts the one-member shape, which is the opposite of what the registry accepts. |
 | **The web app has a "not set" environment default that the registry never produces** | `environment.ts` documents both members null as "unset", the DTO maps it and the settings form offers "Not set"; but the registry stores a value (an environment created with no default stores `BACKWARD · WIRE_JSON`, and an update with neither member leaves it alone). Dead branch; harmless. |
 | ~~A policy change is not in the audit log~~ | **Closed 2026-10-13** by [ADR-033](adr/033-inherit-means-the-environments-default.md): `PUT …/compatibility-policy` is a command and writes `SUBJECT_POLICY_CHANGED` in the same transaction, as the caller, reading `policy <old> -> <new>`; a no-op and a refused change write nothing; nobody is notified. Pinned by `APolicyChangeIsRecordedAsTheCallerWithTheOldAndNewPolicy` (the inverse of `APolicyChangeLeavesNoAuditEntry`) and the policy journey in `e2e/subject-settings.spec.ts`. Rolling the registry back past it breaks the audit page while a row exists. |
-| **A `PATCH` that changes nothing still writes "owner changed"** | `{}`, a `null` owner and `{"owner":""}` answer 200, change nothing, and write a `SUBJECT_UPDATED` entry reading "owner changed" (and so does setting the owner it already has). The web form never sends one. |
+| **A `PATCH` that changes nothing still writes "owner changed"** | `{}`, a `null` owner and `{"owner":""}` answer 200, change nothing, and write a `SUBJECT_UPDATED` entry reading "owner changed" (setting the owner it already has now writes `owner a -> a`, since the entry names both owners). The web form never sends one. |
 | **Retiring a subject records the subject's owner as the actor** | `RetireSubjectHandler` still builds the audit entry from `subject.Value.Owner`, which is the defect `UpdateSubjectHandler` had until 2026-10-13 (it attributed an owner change to the *new* owner, and answered 500 for a whitespace-only one, both fixed). Retiring is not on any screen. |
 | **The registry accepts a schema that is not valid JSON Schema** | `{"type":"bogus"}` registers. Canonicalisation and the portability check never read the document against the 2020-12 metaschema, so it is stored, given an id and offered to consumers — and fails every message validated against it. The web editor reports it as advice (`ajv`); the registry does not. Whether registration should refuse it is a product decision, not a bug fix: refusing changes what existing users can register. |
 | ~~A lone-surrogate escape in a schema answers 500~~ | **Closed 2026-10-13** ([ADR-031](adr/031-unpaired-surrogates-are-refused.md)): `schema_malformed`, from registration, the dry run and the lookup, in values and keys and in Avro, pinned by five conformance fixtures. It had been recorded as a bare 500 from the writer; it was a generic Problem Details body from the *reader*, and wider than the one string. |
@@ -740,13 +741,13 @@ Nothing here can be done from inside the repository.
 
 ## What the tests actually cover
 
-Six kinds, not one. Worth knowing which, because "1,660 tests" says nothing about what would
+Six kinds, not one. Worth knowing which, because "1,664 tests" says nothing about what would
 survive being wrong.
 
 | Kind | Where | Tests | What it proves |
 |---|---|---|---|
 | Domain unit | `Domain.Tests`, three `Formats.*` | ~910 | Invariants in isolation. No I/O |
-| Application handler | `Application.Tests` | 188 | Handler refusals and **ordering**, with hand-written fakes |
+| Application handler | `Application.Tests` | 192 | Handler refusals and **ordering**, with hand-written fakes |
 | HTTP integration | `Api.IntegrationTests` | 268 | Real HTTP against real PostgreSQL, via Testcontainers |
 | Conformance corpus | `Conformance` | 104, over 103 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 64 | Publish and consume through real RabbitMQ |

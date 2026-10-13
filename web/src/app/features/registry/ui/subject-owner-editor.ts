@@ -22,8 +22,8 @@ const INPUT =
  * Changing a subject's owner.
  *
  * <b>Everything the confirmation says was measured, not read.</b> A change records one audit entry
- * (`SUBJECT_UPDATED`, "owner changed", attributed to the account that made it) and says nothing
- * about which owner it was or became; it notifies nobody (only deprecating does); and it moves
+ * (`SUBJECT_UPDATED`, reading both the previous owner and the new one, attributed to the account
+ * that made it; it read only "owner changed" until ADR-033); it notifies nobody (only deprecating does); and it moves
  * nothing but the owner — the name, format, content model, policy and versions are what they were.
  * The owner is not an access control either: anybody holding `subject:write` may change it whoever
  * owns the subject. `e2e/subject-settings.spec.ts` and the registry's own tests pin each sentence,
@@ -106,9 +106,8 @@ const INPUT =
               owns it.
             </li>
             <li>
-              The audit log gets one entry, <span class="font-mono">SUBJECT_UPDATED</span>, reading
-              “owner changed” and naming the account that made it. It does not record the previous
-              owner or the new one.
+              The audit log gets one entry, <span class="font-mono">SUBJECT_UPDATED</span>, naming
+              the account that made it and recording the previous owner and the new one.
             </li>
             <li>Nobody is notified.</li>
           </cd-change-confirmation>

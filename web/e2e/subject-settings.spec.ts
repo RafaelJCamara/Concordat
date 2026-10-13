@@ -117,7 +117,7 @@ test.describe('changing the owner', () => {
     ).toBeVisible();
     await expect(page.getByText('Only the owner changes.')).toBeVisible();
     await expect(page.getByText('It is a label, not access')).toBeVisible();
-    await expect(page.getByText('“owner changed”')).toBeVisible();
+    await expect(page.getByText(/recording the previous owner and the new one/)).toBeVisible();
     await expect(page.getByText('Nobody is notified.')).toBeVisible();
     expect(sent.patches).toHaveLength(0);
     expect((await readSubject(credential, ENVIRONMENT, name)).owner).toBe('arranged-by-e2e');
@@ -145,17 +145,19 @@ test.describe('changing the owner', () => {
     });
   });
 
-  test('is recorded as one entry that names who made it and not what changed', async () => {
-    // The confirmation's third sentence, held against the audit trail: one SUBJECT_UPDATED, read
-    // "owner changed", attributed to the account that signed in and not to the owner it named,
-    // and naming neither the previous owner nor the new one.
+  test('is recorded as one entry that names who made it and both owners', async () => {
+    // The confirmation's third sentence, held against the audit trail: one SUBJECT_UPDATED,
+    // attributed to the account that signed in and not to the owner it named, reading the
+    // previous owner and the new one (the new one as the registry stored it, after its trim; until
+    // ADR-033 it read only "owner changed").
     const rows = await readAudit(await ownerCredential(), ENVIRONMENT, name);
     const updates = rows.filter((r) => r.action === 'SUBJECT_UPDATED');
 
     expect(updates).toHaveLength(1);
-    expect(updates[0]).toMatchObject({ actor: OWNER.email, detail: 'owner changed' });
-    expect(JSON.stringify(updates[0])).not.toContain('team-after');
-    expect(JSON.stringify(updates[0])).not.toContain('arranged-by-e2e');
+    expect(updates[0]).toMatchObject({
+      actor: OWNER.email,
+      detail: 'owner arranged-by-e2e -> team-after',
+    });
   });
 
   test('withdraws the confirmation when the owner is edited, and sends nothing', async ({

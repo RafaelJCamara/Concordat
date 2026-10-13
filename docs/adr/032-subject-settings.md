@@ -10,7 +10,9 @@
 > Context, the last three rows of the confirmation table, Alternatives, Consequences and "Found and not fixed").
 > Read those passages as the registry stood when this was written. The inheriting sentence now says the opposite and
 > `e2e-inherit` asserts it; the policy sentence now says what is recorded (`SUBJECT_POLICY_CHANGED`, the caller, the old
-> and new policy), and the policy journey asserts it.
+> and new policy), and the policy journey asserts it. The owner entry now reads both owners ("owner a -> b") rather
+> than "owner changed" (ADR-033), so the owner row of the table and the "owner changed" detail described below are the
+> registry as it stood when this was written.
 
 ## Context
 

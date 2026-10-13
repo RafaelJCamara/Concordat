@@ -148,11 +148,18 @@ subscription screen), and that is a decision about who is told, not a side effec
 no outbox, the confirmation keeps saying *Nobody is notified*, and `APolicyChangeNotifiesNobody` measures it where a
 notification would show: the tenant's outbox does not deepen.
 
-**The owner-change entry is not changed here.** It reads "owner changed", with neither the previous nor the new
-owner. My view: it should record both. Who owned a contract before, and who took it, is the first question after an
-incident, owners are not secrets (any reader sees them on the subject page), and the policy entry just made it the odd
-one out. It changes a sentence ADR-032 pinned ("not the previous owner or the new one") and a detail anyone may have
-parsed, so it is a decision for the maintainer and not part of this change.
+**The owner-change entry was left alone in this change, and changed in the next one (2026-10-13, at the maintainer's
+word).** It read "owner changed", with neither the previous nor the new owner, and the policy entry made it the odd one
+out. Who owned a contract before, and who took it, is the first question after an incident, and owners are not secrets
+(any reader sees them on the subject page). It now reads `owner <previous> -> <new>`, the new one as the registry stored
+it (after its trim). A request that changes the owner *and* deprecates writes one row reading
+`owner a -> b; deprecated` (it used to read only "deprecated" and lose the owner); a deprecation alone still reads
+"deprecated". **A PATCH that changes nothing (an empty body, a blank owner) keeps the old "owner changed"**, because
+nothing was changed and no owner is named: that is the separate recorded hole, and it is pinned so it is not altered by
+accident. Setting the owner a subject already has now reads `owner a -> a`, which is at least honest about what was
+asked; the form still blocks it. It changes a sentence ADR-032 pinned ("not the previous owner or the new one"), which
+its amendment note and the web confirmation now reflect. Anything that parsed the old fixed string will see a
+different one.
 
 **The web app.** The policy confirmation says what is now true: the audit log gets one entry, `SUBJECT_POLICY_CHANGED`,
 naming the account that made it and the policy before and after ("inherited" for none of its own), and nobody is
@@ -175,7 +182,7 @@ notified. The policy journey asserts the row (its action, the signed-in account 
 - **Reuse `SUBJECT_UPDATED` for a policy change, with a detail.** Above: it saves a vocabulary change and a rollback
   hazard (below) and costs the filter its meaning.
 - **Stage a notification for a policy change.** Above: a new event is a decision about who is told.
-- **Record the previous and new owner in the same change.** Above; it is the maintainer's call, and I think yes.
+- **Record the previous and new owner in the same change.** Done afterwards, as its own commit, once asked.
 - **Write an entry for a change that changes nothing**, as the owner path does. The owner path's entry is a recorded
   defect ("owner changed" for `{}`); this one did not have to inherit it.
 

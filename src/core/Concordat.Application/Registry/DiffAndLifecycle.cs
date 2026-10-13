@@ -161,6 +161,8 @@ public sealed class UpdateSubjectHandler(
             return subject;
         }
 
+        string? ownerChange = null;
+
         if (!string.IsNullOrWhiteSpace(command.Owner))
         {
             var owner = ActorId.Create(command.Owner);
@@ -169,11 +171,19 @@ public sealed class UpdateSubjectHandler(
                 return Result<Subject>.Failure(owner.Error!);
             }
 
+            var previous = subject.Value.Owner;
+
             var changed = subject.Value.ChangeOwner(owner.Value);
             if (changed.IsFailure)
             {
                 return Result<Subject>.Failure(changed.Error!);
             }
+
+            // Both owners, as stored (the new one after the registry's own trim). Who owned a
+            // contract before, and who took it, is the first question after an incident, and an
+            // owner is not a secret: any reader sees it on the subject. The row used to say only
+            // "owner changed" (ADR-033).
+            ownerChange = $"owner {previous.Value} -> {owner.Value.Value}";
         }
 
         if (command.Deprecate)
@@ -198,7 +208,7 @@ public sealed class UpdateSubjectHandler(
             caller.Current.Actor,
             subject.Value.Name.Value,
             clock.GetUtcNow(),
-            command.Deprecate ? "deprecated" : "owner changed"));
+            Describe(ownerChange, command.Deprecate)));
 
         if (command.Deprecate)
         {
@@ -216,6 +226,18 @@ public sealed class UpdateSubjectHandler(
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return subject;
     }
+
+    // What the request did, in one line. A PATCH that did neither (an empty body, a blank owner)
+    // still writes a row, which is a recorded hole, and keeps its old wording rather than
+    // inventing an owner change it did not make.
+    private static string Describe(string? ownerChange, bool deprecate) =>
+        (ownerChange, deprecate) switch
+        {
+            (null, true) => "deprecated",
+            ({ } change, true) => $"{change}; deprecated",
+            ({ } change, false) => change,
+            _ => "owner changed",
+        };
 
     internal static async Task<Result<Subject>> Find(
         ISubjectRepository subjects,

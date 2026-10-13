@@ -609,13 +609,13 @@ public class GovernanceApiTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task AnOwnerChangeIsRecordedAsTheCallerAndSaysNothingMore()
+    public async Task AnOwnerChangeIsRecordedAsTheCallerWithThePreviousAndNewOwner()
     {
         // The subject screen's owner confirmation says exactly this, so it is pinned here rather
         // than left to a reading of the handler: one SUBJECT_UPDATED row, attributed to whoever
         // made the request — not to the owner they named, which is what it recorded until the
-        // owner screen was written — and reading only "owner changed", with neither the previous
-        // owner nor the new one in it.
+        // owner screen was written — and reading both owners (it read only "owner changed" until
+        // ADR-033).
         var (client, environment) = await NewEnvironmentAsync();
         var subject = await NewSubjectAsync(client, environment);
 
@@ -634,7 +634,7 @@ public class GovernanceApiTests(ApiFactory factory)
 
         Assert.Equal(registered.Actor, changed.Actor);
         Assert.NotEqual("bob", changed.Actor);
-        Assert.Equal("owner changed", changed.Detail);
+        Assert.Equal("owner alice -> bob", changed.Detail);
     }
 
     [Theory]

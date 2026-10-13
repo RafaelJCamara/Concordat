@@ -86,11 +86,11 @@ describe('SubjectOwnerEditor', () => {
     it('says only what was measured the registry does', () => {
       const text = host.textContent ?? '';
 
-      // One entry, what it reads, whom it names, what it leaves out.
+      // One entry, whom it names, what it records.
       expect(text).toContain('SUBJECT_UPDATED');
-      expect(text).toContain('“owner changed”');
       expect(text).toContain('naming the account that made it');
-      expect(text).toContain('does not record the previous owner or the new one');
+      expect(text).toContain('recording the previous owner and the new one');
+      expect(text).not.toContain('does not record the previous owner');
       expect(text).toContain('Nobody is notified');
       // And that it moves nothing else.
       expect(text).toContain('Only the owner changes');

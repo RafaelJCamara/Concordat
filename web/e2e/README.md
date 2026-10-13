@@ -149,7 +149,7 @@ append-only. So the two specs about it follow the rule creating one does, and ad
   by choosing a whole pair (the form sends the one member that changed and the registry refuses half a policy),
   which the spec pins as a defect.
 - The audit assertions in `subject-settings.spec.ts` are the confirmations' own claims: an owner change leaves
-  exactly one `SUBJECT_UPDATED` row attributed to the signed-in account, and a policy change exactly one
+  exactly one `SUBJECT_UPDATED` row attributed to the signed-in account and reading both owners, and a policy change exactly one
   `SUBJECT_POLICY_CHANGED` row attributed to the same account and reading `policy <old> -> <new>`. They
   are what stop a sentence on the screen from going stale when the registry starts recording more.
 
