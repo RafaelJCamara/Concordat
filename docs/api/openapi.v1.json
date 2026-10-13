@@ -3403,7 +3403,7 @@
           "Subjects"
         ],
         "summary": "Set the compatibility policy",
-        "description": "Send nulls to clear it and inherit the environment default.\n\nRequires scope: `subject:admin`.",
+        "description": "Send nulls to clear it and inherit the environment default. It takes effect for the next version registered; versions already registered, or held at the approval gate, are not judged again. A change is recorded in the audit trail as SUBJECT_POLICY_CHANGED, naming the caller and the old and new policy; setting the policy the subject already has records nothing. Nobody is notified.\n\nRequires scope: `subject:admin`.",
         "parameters": [
           {
             "name": "env",

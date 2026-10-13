@@ -100,7 +100,8 @@ one change, the second of which was **not in the brief** and is the one to look 
 ### 39. A subject's owner and policy are changed on its page, and the confirmations say only what the registry was measured to do
 
 **Implemented** ([ADR-032](adr/032-subject-settings.md)). Five calls, and two registry behaviours found on
-the way that are **yours to decide**, which I did not.
+the way that were **yours to decide**, which I did not. **Both are decided and fixed, 2026-10-13**
+([ADR-033](adr/033-inherit-means-the-environments-default.md)), below.
 
 - **Inline on the subject page, not a route.** The two controls have different scopes (`subject:write` for
   the owner, `subject:admin` for the policy), so one route guard would admit a writer to a page with half its
@@ -114,16 +115,23 @@ the way that are **yours to decide**, which I did not.
 - **I changed the registry in one place**, and it is separable: `UpdateSubjectHandler` recorded the *new owner*
   as the actor of an owner change, and answered 500 for a whitespace-only owner. It records the caller now. It
   is one handler and nine tests; if you would rather take it as its own commit, nothing else depends on it.
-- **The confirmations say what the registry does today, including two things it should probably not do**, and
-  each is pinned by a test that goes red when it changes:
+- **The confirmations said what the registry did that day, including two things it should not have done**, each
+  pinned by a test that went red when it changed. Both did, and both are fixed:
   - ~~**A subject with no policy of its own is judged by the built-in `BACKWARD · WIRE_JSON` at registration, not
     by its environment's default.**~~ **Decided 2026-10-13: fix the registry** ([ADR-033](adr/033-inherit-means-the-environments-default.md)).
     Registration, the dry-run check and the diff read the environment's default, as impact analysis and promotion
     always did. It is a behaviour change for every environment whose default is not the built-in; nothing already
     registered or held is judged again; STATUS says what an operator should check. The confirmation now says an
     inheriting subject is judged by its environment's default.
-  - **A policy change is not written to the audit log.** **Decision for you:** whether it should be (a new
-    audit action, which the frontend pins by name).
+  - ~~**A policy change is not written to the audit log.**~~ **Decided 2026-10-13: it is, as a new action,
+    `SUBJECT_POLICY_CHANGED`** (the frontend pins the vocabulary by name, so it touched `AuditTokens`, `WireTokenTests`, the
+    web `AUDIT_ACTIONS` and the audit page's filter). Reuse of `SUBJECT_UPDATED` with a detail could say it without
+    leaking, but would have cost the filter its meaning: that row is already an owner change and a deprecation.
+    It records the old and new policy as the authenticated caller, in the same transaction; a no-op and a refusal
+    write nothing. **No notification**: no `NotificationEvent` is a policy change and a new one is a decision about who
+    is told, so *Nobody is notified* stays true. **Still yours:** the owner-change entry reads "owner changed"
+    with neither the previous nor the new owner. I think it should record both; it is a separate decision and
+    I did not make it.
 
 ### 33. `ci` is a marker scope, and no role grants it
 
@@ -613,7 +621,7 @@ it is for.
 **The browser E2E half is now done too, 2026-08-15.** Playwright is in, `web/e2e/` holds 11
 tests, and the reload case above is one of them — the only way to prove a *browser* keeps the
 cookie across a real navigation and that the app asks for it before the first render. That count
-is the day's snapshot and nothing else: the suite stands at **218 tests across eighteen specs** as of
+is the day's snapshot and nothing else: the suite stands at **223 tests across nineteen specs** as of
 2026-10-13, which is the figure [STATUS.md](STATUS.md) carries.
 
 It earned its place in the first ten seconds: the subject list was **broken** against a real

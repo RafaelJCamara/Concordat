@@ -131,7 +131,12 @@ public static class SubjectEndpoints
 
         group.MapPut("/{subject}/compatibility-policy", SetPolicy)
             .WithSummary("Set the compatibility policy")
-            .WithDescription("Send nulls to clear it and inherit the environment default.")
+            .WithDescription(
+                "Send nulls to clear it and inherit the environment default. It takes effect for " +
+                "the next version registered; versions already registered, or held at the " +
+                "approval gate, are not judged again. A change is recorded in the audit trail as " +
+                "SUBJECT_POLICY_CHANGED, naming the caller and the old and new policy; setting " +
+                "the policy the subject already has records nothing. Nobody is notified.")
             .Produces<PolicyResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
@@ -408,32 +413,24 @@ public static class SubjectEndpoints
         SetCompatibilityPolicyRequest request,
         IDispatcher dispatcher,
         IEnvironmentResolver environments,
-        IUnitOfWork unitOfWork,
         CancellationToken cancellationToken)
     {
+        // The body is read first and a malformed policy answers before any lookup, as it always
+        // did: the order of refusals (400, then 404, then 409) is part of what is held.
         var parsed = ParsePolicy(request.Mode, request.Surface, out var policy);
         if (parsed.IsFailure)
         {
             return ProblemDetailsMapping.From(parsed.Error!);
         }
 
-        var found = await dispatcher.QueryAsync(
-            new GetSubjectQuery(environments.Resolve(env), subject), cancellationToken)
-            .ConfigureAwait(false);
+        // A command, so that the audit entry is written in the same transaction as the change.
+        var result = await dispatcher.SendAsync(
+            new SetCompatibilityPolicyCommand(environments.Resolve(env), subject, policy),
+            cancellationToken).ConfigureAwait(false);
 
-        if (found.IsFailure)
-        {
-            return ProblemDetailsMapping.From(found.Error!);
-        }
-
-        var applied = found.Value.SetCompatibilityPolicy(policy);
-        if (applied.IsFailure)
-        {
-            return ProblemDetailsMapping.From(applied.Error!);
-        }
-
-        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return TypedResults.Ok(PolicyResponse.From(found.Value.CompatibilityPolicy));
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(PolicyResponse.From(result.Value.CompatibilityPolicy));
     }
 
     // --------------------------------------------------------------- parsing

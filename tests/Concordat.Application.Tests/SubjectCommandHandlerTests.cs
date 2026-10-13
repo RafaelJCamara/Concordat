@@ -41,6 +41,12 @@ public class SubjectCommandHandlerTests
             new UpdateSubjectCommand(_environment, name, owner, deprecate),
             CancellationToken.None);
 
+    private Task<Result<Subject>> SetPolicyAsync(
+        CompatibilityPolicy? policy, string name = Name) =>
+        new SetCompatibilityPolicyHandler(_subjects, _caller, _audit, _unitOfWork, _clock).HandleAsync(
+            new SetCompatibilityPolicyCommand(_environment, name, policy),
+            CancellationToken.None);
+
     private Task<Result<Subject>> RetireAsync(string name = Name) =>
         new RetireSubjectHandler(_subjects, _audit, _unitOfWork, _clock).HandleAsync(
             new RetireSubjectCommand(_environment, name), CancellationToken.None);
@@ -329,6 +335,155 @@ public class SubjectCommandHandlerTests
 
         Assert.Equal(SubjectLifecycle.Deprecated, subject.Lifecycle);
         Assert.Single(subject.Versions);
+    }
+
+    // ------------------------------------------------------------------ policy
+
+    private static readonly CompatibilityPolicy FullSource =
+        new(CompatibilityMode.Full, CompatibilitySurface.Source);
+
+    private static readonly CompatibilityPolicy BackwardWire =
+        new(CompatibilityMode.Backward, CompatibilitySurface.Wire);
+
+    [Fact]
+    public async Task APolicyChange_IsAuditedAsTheCallerWithTheOldAndNewPolicy()
+    {
+        // The subject page's policy confirmation says exactly this, so it is pinned here and not
+        // left to a reading of the handler. The trail answers "who made this stricter, and when"
+        // only if it names the caller (never anything in the request) and both policies.
+        _caller.Current = _caller.Current with { Actor = ActorId.Create("carol").Value };
+        _subjects.Seed(Build.Subject(_environment, policy: BackwardWire));
+
+        var result = await SetPolicyAsync(FullSource);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Equal(FullSource, result.Value.CompatibilityPolicy);
+
+        var entry = Assert.Single(_audit.Entries);
+        Assert.Equal(AuditAction.SubjectPolicyChanged, entry.Action);
+        Assert.Equal("carol", entry.Actor.Value);
+        Assert.Equal(Name, entry.Target);
+        Assert.Equal(_environment, entry.EnvironmentId);
+        Assert.Equal("policy BACKWARD/WIRE -> FULL/SOURCE", entry.Detail);
+        Assert.Equal(1, _unitOfWork.Saves);
+    }
+
+    [Fact]
+    public async Task PinningASubjectThatInherits_SaysInheritedForTheOldPolicy()
+    {
+        _subjects.Seed(Build.Subject(_environment));
+
+        await SetPolicyAsync(FullSource);
+
+        Assert.Equal("policy inherited -> FULL/SOURCE", Assert.Single(_audit.Entries).Detail);
+    }
+
+    [Fact]
+    public async Task ClearingAPolicy_SaysInheritedForTheNewOne()
+    {
+        _subjects.Seed(Build.Subject(_environment, policy: FullSource));
+
+        var result = await SetPolicyAsync(null);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Null(result.Value.CompatibilityPolicy);
+        Assert.Equal("policy FULL/SOURCE -> inherited", Assert.Single(_audit.Entries).Detail);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SettingThePolicyTheSubjectAlreadyHas_WritesNothingToTheTrail(bool inheriting)
+    {
+        // Answered as before (200, the policy), but the trail is not told that something happened
+        // which did not: an entry reading "FULL/SOURCE -> FULL/SOURCE" would bury the changes
+        // somebody opens the log to find.
+        CompatibilityPolicy? current = inheriting ? null : FullSource;
+        var subject = Build.Subject(_environment, policy: current);
+        _subjects.Seed(subject);
+
+        var result = await SetPolicyAsync(current);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Empty(_audit.Entries);
+        Assert.Equal(current, subject.CompatibilityPolicy);
+    }
+
+    [Fact]
+    public async Task APolicyChange_IsRecordedInTheSameUnitOfWorkAsTheChange()
+    {
+        // One SaveChanges carries both, so the entry cannot outlive a rolled-back change or be
+        // lost while the change survives. The entry is appended before the save and not after.
+        _subjects.Seed(Build.Subject(_environment));
+        var appendedAtSave = -1;
+        _unitOfWork.OnSave = () => appendedAtSave = _audit.Entries.Count;
+
+        await SetPolicyAsync(FullSource);
+
+        Assert.Equal(1, appendedAtSave);
+    }
+
+    [Fact]
+    public async Task ARetiredSubject_RefusesAPolicyChangeAndRecordsNothing()
+    {
+        // Refused before anything is recorded: a refused request never reaches a commit, and the
+        // trail "records what happened, not what was attempted".
+        var subject = Build.Subject(_environment, policy: BackwardWire);
+        Assert.True(subject.Retire().IsSuccess);
+        _subjects.Seed(subject);
+
+        var result = await SetPolicyAsync(FullSource);
+
+        Assert.Equal(ConcordatCodes.LifecycleTransitionInvalid, result.Error!.Code);
+        Assert.Equal(BackwardWire, subject.CompatibilityPolicy);
+        Assert.Empty(_audit.Entries);
+        Assert.Equal(0, _unitOfWork.Saves);
+    }
+
+    [Fact]
+    public async Task ADeprecatedSubject_TakesAPolicyChange()
+    {
+        var subject = Build.Subject(_environment);
+        Assert.True(subject.Deprecate().IsSuccess);
+        _subjects.Seed(subject);
+
+        var result = await SetPolicyAsync(FullSource);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Equal(SubjectLifecycle.Deprecated, subject.Lifecycle);
+        Assert.Single(_audit.Entries);
+    }
+
+    [Fact]
+    public async Task ChangingThePolicyOfAnUnknownSubject_IsSubjectNotFoundAndRecordsNothing()
+    {
+        var result = await SetPolicyAsync(FullSource);
+
+        Assert.Equal(ConcordatCodes.SubjectNotFound, result.Error!.Code);
+        Assert.Empty(_audit.Entries);
+        Assert.Equal(0, _unitOfWork.Saves);
+    }
+
+    [Fact]
+    public async Task ChangingThePolicyOfAnInvalidName_IsRefusedBeforeTheRepositoryIsTouched()
+    {
+        var result = await SetPolicyAsync(FullSource, name: "acme.orders.Order-Created");
+
+        Assert.Equal(ConcordatCodes.SubjectNameInvalid, result.Error!.Code);
+        Assert.Equal(0, _subjects.Finds);
+    }
+
+    [Fact]
+    public async Task APolicyChange_IsNotAnOwnerChangeOrADeprecation()
+    {
+        // SUBJECT_UPDATED stays the row for an owner change and a deprecation. Reusing it for a
+        // policy change would make a filter on it return all three, which is the whole reason the
+        // policy has an action of its own (ADR-033).
+        _subjects.Seed(Build.Subject(_environment));
+
+        await SetPolicyAsync(FullSource);
+
+        Assert.DoesNotContain(AuditAction.SubjectUpdated, _audit.Actions);
     }
 
     // ------------------------------------------------------------------ retire

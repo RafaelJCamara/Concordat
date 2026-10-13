@@ -107,8 +107,10 @@ sign-in screen that lets someone pass it, which is recorded as
       from the page it edits. **Each takes two clicks and says what it does, and every sentence was measured
       against the real registry rather than read.** An owner change records one `SUBJECT_UPDATED` entry reading
       "owner changed", naming the account that made it and neither owner, and notifies nobody. A policy change
-      takes effect for the *next* registration (a held version stays held when it is relaxed), is **not
-      written to the audit log**, and notifies nobody. "Inherit" is a different request from choosing today's
+      takes effect for the *next* registration (a held version stays held when it is relaxed), is
+      recorded as one **`SUBJECT_POLICY_CHANGED`** entry naming the caller and the old and new policy
+      ([ADR-033](../adr/033-inherit-means-the-environments-default.md); until then it was not written to the audit
+      log, and the confirmation said so), and notifies nobody. "Inherit" is a different request from choosing today's
       default (`isInherited`), and the confirmation says what the registry does for a subject with no policy of
       its own — which is to judge it by its environment's default ([ADR-033](../adr/033-inherit-means-the-environments-default.md);
       until then registration, the dry run and the diff read the built-in `BACKWARD · WIRE_JSON` instead, which
@@ -275,7 +277,7 @@ rather than deleted, because "why is there no zod here?" is a question worth ans
 
 ## M4.5 Tests
 
-- [x] Playwright E2E against a real API — `web/e2e/`, 218 tests, **against the dev server and
+- [x] Playwright E2E against a real API — `web/e2e/`, 223 tests, **against the dev server and
       against the production image** (`CONCORDAT_WEB_URL=http://localhost:5063`). Found the subject list
       broken on its first run (see [STATUS.md](../STATUS.md)), and on 2026-08-15 found two
       more: a first-hit lazy-route compile that made a correct page look absent, and a

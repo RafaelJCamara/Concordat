@@ -1,4 +1,4 @@
-# ADR-033: A subject with no policy of its own is judged by its environment's default
+# ADR-033: A subject with no policy of its own is judged by its environment's default, and changing a policy is audited
 
 - **Status:** Accepted
 - **Date:** 2026-10-13
@@ -7,9 +7,12 @@
 ## Context
 
 [ADR-032](032-subject-settings.md) put an owner and policy editor on the subject's page and, to say
-only what the registry was measured to do, ended up describing a registry defect in a confirmation
-rather than fixing it. It was left as a decision for the maintainer. This is the decision: fix it, and
-make the sentence say what is now true.
+only what the registry was measured to do, ended up describing two registry defects in its confirmations
+rather than fixing them. Both were left as decisions for the maintainer. This is the decision: fix them, and
+make the sentences say what is now true. Two changes, kept separable (Task A and Task B in the history):
+**A** is a behaviour change to what the registry holds; **B** is a new audit action.
+
+### A. "Inherit" did not mean what every document says it means
 
 `Subject.CompatibilityPolicy` is nullable so that *inheriting* and *choosing the current default* stay
 distinguishable ([M1.1](../plan/M1-registry-core.md)). `Subject.EffectivePolicy(environmentDefault)`
@@ -43,7 +46,17 @@ an option for it; the registry cannot produce one. See "Found, not fixed".) The 
 with no environment row is legacy data from before environments were rows, or a command built by hand without
 a name; that is the one place a fallback is needed, and it is `CompatibilityPolicy.Default`.
 
+### B. A policy change was not in the audit trail
+
+`PUT …/compatibility-policy` saved through the endpoint handler itself (`SubjectEndpoints.SetPolicy`), which had
+no `IAuditLog` or `IOutbox` in reach, so changing what the registry will let through left no trace, while the
+owner change next to it (`PATCH`, `UpdateSubjectHandler`) did. The audit action is a vocabulary the frontend
+pins by name (`WireTokenTests.AuditActionsMatchWhatTheFrontendPublishes`, `web/src/app/domain/governance/audit.ts`),
+so recording it touches both sides.
+
 ## Decision
+
+### A. Registration, the dry run and the diff read the environment
 
 Registration, the dry-run check and the diff resolve an inheriting subject's policy against the environment's
 default, through one function, `EnvironmentPolicies.EffectiveFor(subject, environment)`, so that there is one
@@ -96,6 +109,56 @@ now true at registration, and says what "at once" is: the next version registere
 already registered or held are not judged again. A new spec, `environment-default.spec.ts`, holds it against an
 environment of its own (`e2e-follows`) and moves nothing shared.
 
+### B. A policy change is audited, in the same transaction, as the caller
+
+`PUT …/compatibility-policy` is a command (`SetCompatibilityPolicyCommand`) with a handler
+(`SetCompatibilityPolicyHandler`) beside `UpdateSubjectHandler`, so the audit append and the save are one unit of
+work and the handler is tested with the same fakes (`RecordingAuditLog`, and a unit of work that says what had been
+appended at the moment of commit). The endpoint still parses the body first and answers `invalid_request` before
+any lookup, then dispatches: the order of refusals (400, 404, 409) and every status and body are what they were,
+which the parity spec runs against the registry in full.
+
+**A new action, `SUBJECT_POLICY_CHANGED`, not `SUBJECT_UPDATED` with a detail.** The brief preferred reuse if the
+detail could say what changed without leaking anything and the action filter stayed useful. The first holds (a
+policy is two enum tokens; nothing in it is private) and the second does not. The question this entry exists to
+answer is *who made this stricter or laxer, and when*, across an environment: an auditor filters the trail for it.
+`SUBJECT_UPDATED` is already the row for an owner change and for a deprecation, so under reuse that filter returns
+all three and the person reads every detail to find the one kind they wanted. A separate action is also what
+`ENVIRONMENT_UPDATED`, `CONTRACT_ENFORCEMENT_CHANGED` and `MEMBER_ROLE_CHANGED` already are: the registry names a
+change to a rule by what it changed. It is the only vocabulary change in this decision, and it touches every place
+that pins the vocabulary: `AuditAction` and `AuditTokens`, `WireTokenTests.AuditActionsMatchWhatTheFrontendPublishes`,
+the web app's `AUDIT_ACTIONS` (which is the audit page's action filter, and its spec's option count), and the
+confirmation. The audit table tones it neutral like every ordinary action. Stored as its token in
+`audit_entry.action` (`varchar(64)`), so no migration. The `SubjectUpdated` member's own comment said it covered "a
+subject's policy, description or lifecycle", which was never true of the code; it says owner or deprecation now.
+
+**What the row says.** The actor is `ICallerContext.Current.Actor`, never anything in the request (the defect ADR-032
+fixed in `UpdateSubjectHandler`; a `PUT` carries no actor). The detail is the old and new policy, each as
+`MODE/SURFACE` (the spelling `ENVIRONMENT_UPDATED` already uses) or `inherited`: `policy inherited -> FULL/SOURCE`,
+`policy BACKWARD/WIRE_JSON -> inherited`. That answers "who made this stricter" without anything else on the page.
+**A change that changes nothing writes nothing**: setting the policy the subject already has (including inherit on an
+inheriting subject) answers 200 as before and the trail is not told something happened that did not, the same rule an
+idempotent registration follows. A refused request (half a policy, an unknown subject, a retired one) writes nothing.
+
+**No notification.** `NotificationEvent` has seven members (a version registered, a breaking change submitted,
+approved or rejected, a version promoted, a subject deprecated, an enforcement violation); none is a policy change,
+and a deprecation is the only subject-level one. A consumer team *would* plausibly want to hear that a subject they
+read became laxer, but a new event is a new subscription vocabulary (`NotificationTokens`, webhook bodies, the
+subscription screen), and that is a decision about who is told, not a side effect of an audit entry. The handler holds
+no outbox, the confirmation keeps saying *Nobody is notified*, and `APolicyChangeNotifiesNobody` measures it where a
+notification would show: the tenant's outbox does not deepen.
+
+**The owner-change entry is not changed here.** It reads "owner changed", with neither the previous nor the new
+owner. My view: it should record both. Who owned a contract before, and who took it, is the first question after an
+incident, owners are not secrets (any reader sees them on the subject page), and the policy entry just made it the odd
+one out. It changes a sentence ADR-032 pinned ("not the previous owner or the new one") and a detail anyone may have
+parsed, so it is a decision for the maintainer and not part of this change.
+
+**The web app.** The policy confirmation says what is now true: the audit log gets one entry, `SUBJECT_POLICY_CHANGED`,
+naming the account that made it and the policy before and after ("inherited" for none of its own), and nobody is
+notified. The policy journey asserts the row (its action, the signed-in account as actor, the exact detail
+`policy inherited -> FULL_TRANSITIVE/SOURCE`) and then finds it on the audit page by filtering on the new action.
+
 ## Alternatives considered
 
 - **Weaken the claims instead** (make the docs and the screen say "inherit means the built-in"). Rejected by the
@@ -109,20 +172,34 @@ environment of its own (`e2e-follows`) and moves nothing shared.
   query already holds.
 - **Copy the environment's default onto a subject when it is created.** Destroys the distinction between
   inheriting and pinned (`ANullPolicyIsStoredAsNull…`), and is the thing nullable policy exists to avoid.
+- **Reuse `SUBJECT_UPDATED` for a policy change, with a detail.** Above: it saves a vocabulary change and a rollback
+  hazard (below) and costs the filter its meaning.
+- **Stage a notification for a policy change.** Above: a new event is a decision about who is told.
+- **Record the previous and new owner in the same change.** Above; it is the maintainer's call, and I think yes.
+- **Write an entry for a change that changes nothing**, as the owner path does. The owner path's entry is a recorded
+  defect ("owner changed" for `{}`); this one did not have to inherit it.
 
 ## Consequences
 
 - **Positive:** a subject has one policy. The dry run, the registration, the diff, the impact report and a
   promotion agree, in every environment, and ADR-016's "configured per environment and overridable per subject"
   is true of the code.
-- **Positive:** the confirmation no longer describes a registry defect. The sentence was pinned by tests that went
-  red on purpose; they are now inverted and pin the new behaviour.
+- **Positive:** "who made this subject stricter, and when" has an answer, by action, across an environment, and a
+  policy change is attributed to the authenticated caller like every other recorded change.
+- **Positive:** the confirmations no longer describe registry defects. Both sentences were pinned by tests that went
+  red on purpose; they are now inverted and pin the new behaviour (`APolicyChangeLeavesNoAuditEntry` became
+  `APolicyChangeIsRecordedAsTheCallerWithTheOldAndNewPolicy`).
 - **Negative: a behaviour change for any environment whose default is not `BACKWARD · WIRE_JSON`**, described above
   with what to check. Nothing already registered or held changes.
+- **Negative: rolling the registry back past this change breaks the audit page** for as long as a
+  `SUBJECT_POLICY_CHANGED` row exists. `AuditEntryConfiguration` throws on a stored action the build does not know
+  ("the audit trail contains action…"), which is deliberate (it names the row rather than reading it as the first
+  member) and is the cost of any new action, written down because a rollback is when it is paid.
 - **Negative:** the dry run and the diff each cost one more read (the environment row).
 - **Not covered:** an environment with no row, in the browser or over HTTP (only legacy data produces one; it is
-  tested at the application layer, once per call site); the `concordat` CLI and the GitHub Action, which call the
-  same endpoints and so change with them, but were not run for this.
+  tested at the application layer, once per call site); a policy-change notification; the owner entry's detail; the
+  `concordat` CLI and the GitHub Action, which call the same endpoints and so change with them, but were not run for
+  this; a `subject:write`-only account (it cannot `PUT` a policy, and no browser role is one).
 - **Found, not fixed** (separable, all in [STATUS.md](../STATUS.md)): **the environment settings screen cannot change
   a default by changing one select** — it sends only the member that changed and the registry refuses half a
   policy (`400`, "needs both a mode and a surface"), so a default is changed by choosing a whole pair; pinned by
@@ -136,5 +213,7 @@ environment of its own (`e2e-follows`) and moves nothing shared.
   [ADR-028](028-schema-editor.md), [ADR-032](032-subject-settings.md)
 - [STATUS.md](../STATUS.md), [DECISIONS-PENDING.md](../DECISIONS-PENDING.md) decision 39
 - `src/core/Concordat.Application/Registry/` (`EnvironmentCommands.cs`: `EnvironmentPolicies`;
-  `RegisterVersion.cs`, `SubjectQueries.cs`, `DiffAndLifecycle.cs`), `web/e2e/environment-default.spec.ts`,
-  `web/e2e/subject-settings.spec.ts`, `tests/Concordat.Api.IntegrationTests/InheritedPolicyApiTests.cs`
+  `RegisterVersion.cs`, `SubjectQueries.cs`, `DiffAndLifecycle.cs`: `SetCompatibilityPolicyHandler`),
+  `src/core/Concordat.Domain/Governance/AuditEntry.cs`, `web/e2e/environment-default.spec.ts`,
+  `web/e2e/subject-settings.spec.ts`, `tests/Concordat.Api.IntegrationTests/InheritedPolicyApiTests.cs`,
+  `tests/Concordat.Api.IntegrationTests/GovernanceApiTests.cs`

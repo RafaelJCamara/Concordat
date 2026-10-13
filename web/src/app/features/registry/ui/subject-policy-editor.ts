@@ -49,9 +49,10 @@ const INPUT =
  *
  * <b>What the confirmation says changes, and what it does not, was measured.</b> The new policy
  * judges the *next* registration. Versions already registered are not judged again, and a version
- * held at the approval gate stays held when the policy is relaxed. The change is not written to
- * the audit log (a gap in the registry, pinned by an integration test that goes red when it is
- * closed) and notifies nobody.
+ * held at the approval gate stays held when the policy is relaxed. The change is written to the
+ * audit log as `SUBJECT_POLICY_CHANGED`, naming the account that made it and the old and new
+ * policy (ADR-033; until then it was not written at all, and this screen said so), and notifies
+ * nobody.
  */
 @Component({
   selector: 'cd-subject-policy-editor',
@@ -157,7 +158,11 @@ const INPUT =
                 If the environment’s default changes later, this subject does not follow.
               </li>
             }
-            <li>This change is not written to the audit log.</li>
+            <li>
+              The audit log gets one entry, <span class="font-mono">SUBJECT_POLICY_CHANGED</span>,
+              naming the account that made it and the policy before and after (“inherited”, for none
+              of its own).
+            </li>
             <li>Nobody is notified.</li>
           </cd-change-confirmation>
         } @else {

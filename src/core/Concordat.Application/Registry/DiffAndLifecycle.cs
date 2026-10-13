@@ -239,6 +239,97 @@ public sealed class UpdateSubjectHandler(
     }
 }
 
+/// <summary>Sets a subject's compatibility policy, or clears it so the subject inherits.</summary>
+/// <param name="EnvironmentId">The environment.</param>
+/// <param name="SubjectName">The subject.</param>
+/// <param name="Policy">The new policy, or <see langword="null"/> to inherit.</param>
+public sealed record SetCompatibilityPolicyCommand(
+    EnvironmentId EnvironmentId, string SubjectName, CompatibilityPolicy? Policy)
+    : ICommand<Subject>;
+
+/// <summary>Handles <see cref="SetCompatibilityPolicyCommand"/>.</summary>
+/// <remarks>
+/// <para>
+/// <b>A command handler, so that the audit entry and the save are one unit of work.</b> This was the
+/// endpoint's own body (load the subject, set the policy, save), with no <c>IAuditLog</c> in reach,
+/// so changing what the registry will let through left no trace while the owner change beside it
+/// did. A row saved separately can outlive a rolled-back change or be lost while the change
+/// survives; this one rides the same <c>SaveChanges</c> as the change (ADR-033).
+/// </para>
+/// <para>
+/// <b>Attributed to the authenticated caller</b>, never to anything in the request: the command
+/// carries no actor on purpose, for the reason <see cref="UpdateSubjectHandler"/> spells out.
+/// </para>
+/// <para>
+/// <b>A change that changes nothing writes nothing.</b> Setting the policy a subject already has
+/// (including inherit on one that inherits) is answered as before, and the trail is not told that
+/// something happened which did not. The same rule an idempotent registration follows.
+/// </para>
+/// <para>
+/// <b>Nobody is notified</b>: there is no <c>IOutbox</c> here, and no <see cref="NotificationEvent"/>
+/// is a policy change. A consumer team might well want to hear that a subject they read became
+/// laxer, but that is a new subscription vocabulary and a decision about who is told, not a side
+/// effect of recording who did it.
+/// </para>
+/// </remarks>
+public sealed class SetCompatibilityPolicyHandler(
+    ISubjectRepository subjects,
+    ICallerContext caller,
+    IAuditLog audit,
+    IUnitOfWork unitOfWork,
+    TimeProvider clock)
+    : ICommandHandler<SetCompatibilityPolicyCommand, Subject>
+{
+    /// <inheritdoc />
+    public async Task<Result<Subject>> HandleAsync(
+        SetCompatibilityPolicyCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var subject = await UpdateSubjectHandler
+            .Find(subjects, command.EnvironmentId, command.SubjectName, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (subject.IsFailure)
+        {
+            return subject;
+        }
+
+        var previous = subject.Value.CompatibilityPolicy;
+
+        // Refuses a retired subject, which is why it is asked before anything is recorded: a
+        // refused request never reaches a commit, so there is no entry to be wrong.
+        var applied = subject.Value.SetCompatibilityPolicy(command.Policy);
+        if (applied.IsFailure)
+        {
+            return Result<Subject>.Failure(applied.Error!);
+        }
+
+        if (previous != command.Policy)
+        {
+            // Old and new, which is what answers "who made this stricter". Nothing here is
+            // private: a policy is two enum tokens, and the subject page shows it to any reader.
+            audit.Append(AuditEntry.Record(
+                command.EnvironmentId,
+                AuditAction.SubjectPolicyChanged,
+                caller.Current.Actor,
+                subject.Value.Name.Value,
+                clock.GetUtcNow(),
+                $"policy {Describe(previous)} -> {Describe(command.Policy)}"));
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return subject;
+    }
+
+    // MODE/SURFACE, the spelling ENVIRONMENT_UPDATED already uses for an environment's default,
+    // or "inherited" for no policy of the subject's own.
+    private static string Describe(CompatibilityPolicy? policy) =>
+        policy is { } set
+            ? $"{WireTokens.For(set.Mode)}/{WireTokens.For(set.Surface)}"
+            : "inherited";
+}
+
 /// <summary>Retires a subject. This is the soft delete and is terminal.</summary>
 /// <param name="EnvironmentId">The environment.</param>
 /// <param name="SubjectName">The subject.</param>

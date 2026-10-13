@@ -17,8 +17,9 @@ import {
  *
  * <b>Every sentence in a confirmation is asserted here against what the registry then does.</b>
  * Nothing about what these two changes affect is guessed: a change of owner leaves one audit
- * entry naming the account that made it and no more, a change of policy leaves none, the next
- * registration is the first to feel a policy and a held version stays held when it is relaxed, and
+ * entry naming the account that made it and no more, a change of policy leaves one naming the
+ * account and the policy before and after, the next registration is the first to feel a policy and
+ * a held version stays held when it is relaxed, and
  * a subject with no policy of its own is judged by its environment's default (ADR-033; until then
  * it was the registry's built-in, and this file said so). This is the file that goes red when a
  * sentence stops being true — at which point a sentence in `subject-owner-editor.ts` or
@@ -249,7 +250,9 @@ test.describe('changing the compatibility policy', () => {
     await arrange(name);
   });
 
-  test('pins one, says what it does, and leaves no audit entry', async ({ page }) => {
+  test('pins one, says what it does, and records it as the account that made it', async ({
+    page,
+  }) => {
     const credential = await ownerCredential();
     const sent = writes(page);
 
@@ -268,7 +271,11 @@ test.describe('changing the compatibility policy', () => {
     await expect(page.getByText(`Pin ${name} to FULL_TRANSITIVE · SOURCE?`)).toBeVisible();
     await expect(page.getByText(/takes effect for the next version registered/)).toBeVisible();
     await expect(page.getByText(/Versions already registered are not judged again/)).toBeVisible();
-    await expect(page.getByText('This change is not written to the audit log.')).toBeVisible();
+    await expect(page.getByText('SUBJECT_POLICY_CHANGED', { exact: true })).toBeVisible();
+    await expect(
+      page.getByText(/naming the account that made it and the policy before and after/),
+    ).toBeVisible();
+    await expect(page.getByText('not written to the audit log')).toHaveCount(0);
     await expect(page.getByText('Nobody is notified.')).toBeVisible();
     expect(sent.puts).toHaveLength(0);
     expect((await readSubject(credential, ENVIRONMENT, name)).compatibilityPolicy).toEqual({
@@ -292,11 +299,33 @@ test.describe('changing the compatibility policy', () => {
       surface: 'SOURCE',
     });
 
-    // The confirmation's "not written to the audit log", held: arranged, then changed, and the
-    // trail has only the creation.
+    // The confirmation's audit sentence, held against the trail (ADR-033; until then this asserted
+    // that the trail had only the creation). One new row of its own action, newest first,
+    // attributed to the account that signed in (never to anything in the request: a PUT carries no
+    // actor), reading the policy before and after, which for a subject that inherited is
+    // "inherited". SUBJECT_UPDATED stays the row for an owner change.
     const rows = await readAudit(credential, ENVIRONMENT, name);
 
-    expect(rows.map((r) => r.action)).toEqual(['SUBJECT_CREATED']);
+    expect(rows.map((r) => r.action)).toEqual(['SUBJECT_POLICY_CHANGED', 'SUBJECT_CREATED']);
+    expect(rows[0]).toMatchObject({
+      actor: OWNER.email,
+      target: name,
+      detail: 'policy inherited -> FULL_TRANSITIVE/SOURCE',
+    });
+
+    // And the audit page can be asked for it by action, which is the reason it has one of its own:
+    // an auditor filters for who made a subject stricter or laxer and gets only those.
+    await page.goto('/audit');
+    await page.getByLabel('Action').selectOption('SUBJECT_POLICY_CHANGED');
+    await page.getByLabel('Target').fill(name);
+    await page.getByRole('button', { name: 'Apply' }).click();
+
+    const row = page.getByRole('row').filter({ hasText: name });
+
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText('SUBJECT_POLICY_CHANGED');
+    await expect(row).toContainText('policy inherited -> FULL_TRANSITIVE/SOURCE');
+    await expect(row).toContainText(OWNER.email);
   });
 
   test('inheriting asks a different question, and says what it is not', async ({ page }) => {

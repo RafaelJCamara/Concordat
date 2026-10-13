@@ -15,8 +15,18 @@ public enum AuditAction
     /// <summary>A subject was created.</summary>
     SubjectCreated,
 
-    /// <summary>A subject's policy, description or lifecycle changed.</summary>
+    /// <summary>A subject's owner changed, or it was deprecated.</summary>
     SubjectUpdated,
+
+    /// <summary>
+    /// A subject's compatibility policy was set, changed or cleared to inherit (ADR-033).
+    /// </summary>
+    /// <remarks>
+    /// Its own action rather than a detail on <see cref="SubjectUpdated"/>, because "who made this
+    /// stricter, or laxer, and when" is a question asked across an environment, by action, and
+    /// <see cref="SubjectUpdated"/> is already the row for an owner change and for a deprecation.
+    /// </remarks>
+    SubjectPolicyChanged,
 
     /// <summary>A subject was retired.</summary>
     SubjectRetired,
@@ -216,6 +226,7 @@ public static class AuditTokens
     {
         [AuditAction.SubjectCreated] = "SUBJECT_CREATED",
         [AuditAction.SubjectUpdated] = "SUBJECT_UPDATED",
+        [AuditAction.SubjectPolicyChanged] = "SUBJECT_POLICY_CHANGED",
         [AuditAction.SubjectRetired] = "SUBJECT_RETIRED",
         [AuditAction.VersionRegistered] = "VERSION_REGISTERED",
         [AuditAction.VersionSubmitted] = "VERSION_SUBMITTED",

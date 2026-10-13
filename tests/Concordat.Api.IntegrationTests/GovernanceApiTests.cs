@@ -657,13 +657,14 @@ public class GovernanceApiTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task APolicyChangeLeavesNoAuditEntry()
+    public async Task APolicyChangeIsRecordedAsTheCallerWithTheOldAndNewPolicy()
     {
-        // A gap, not a decision, and recorded as one: changing a subject's compatibility policy
-        // changes what the registry will let through, and the trail does not say it happened.
-        // The subject screen tells the person so, and this is the test that goes red when the
-        // registry starts recording it — at which point that sentence, STATUS.md's row and
-        // ADR-032 need to change with it.
+        // Until ADR-033 this test asserted the opposite and said so: a gap, not a decision.
+        // Changing a subject's compatibility policy changes what the registry will let through,
+        // and the trail did not say it happened. The subject screen's policy confirmation says
+        // what is recorded, and this is the registry-side pin for each word of it: one entry of
+        // its own action (SUBJECT_UPDATED stays the row for an owner change), attributed to the
+        // caller, reading the old policy and the new.
         var (client, environment) = await NewEnvironmentAsync();
         var subject = await NewSubjectAsync(client, environment);
 
@@ -677,9 +678,105 @@ public class GovernanceApiTests(ApiFactory factory)
         var entries = await client.GetFromJsonAsync<IReadOnlyList<AuditResponse>>(
             $"/v1/audit?env={environment}", ApiFactory.Json);
 
+        var changed = Assert.Single(entries!, e => e.Action == "SUBJECT_POLICY_CHANGED");
+        var registered = Assert.Single(entries!, e => e.Action == "VERSION_REGISTERED");
+
+        Assert.Equal(subject, changed.Target);
+        Assert.Equal(registered.Actor, changed.Actor);
+        Assert.Equal("policy inherited -> FULL/SOURCE", changed.Detail);
         Assert.DoesNotContain(entries!, e => e.Action == "SUBJECT_UPDATED");
-        Assert.DoesNotContain(
-            entries!, e => e.Action.Contains("POLICY", StringComparison.Ordinal));
+
+        // And back: clearing it is a change too, and says what it was.
+        var cleared = await client.PutAsJsonAsync(
+            $"/v1/environments/{environment}/subjects/{subject}/compatibility-policy",
+            new SetCompatibilityPolicyRequest(null, null),
+            ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.OK, cleared.StatusCode);
+
+        var filtered = await client.GetFromJsonAsync<IReadOnlyList<AuditResponse>>(
+            $"/v1/audit?env={environment}&action=SUBJECT_POLICY_CHANGED", ApiFactory.Json);
+
+        // Newest first, and the filter by action returns only these: the point of an action of
+        // its own.
+        Assert.Equal(
+            ["policy FULL/SOURCE -> inherited", "policy inherited -> FULL/SOURCE"],
+            filtered!.Select(e => e.Detail));
+    }
+
+    [Fact]
+    public async Task SettingThePolicyASubjectAlreadyHasWritesNothingAndStillAnswers200()
+    {
+        var (client, environment) = await NewEnvironmentAsync();
+        var subject = await NewSubjectAsync(client, environment);
+
+        // It inherits, and inheriting again changes nothing.
+        var put = await client.PutAsJsonAsync(
+            $"/v1/environments/{environment}/subjects/{subject}/compatibility-policy",
+            new SetCompatibilityPolicyRequest(null, null),
+            ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+
+        var entries = await client.GetFromJsonAsync<IReadOnlyList<AuditResponse>>(
+            $"/v1/audit?env={environment}", ApiFactory.Json);
+
+        Assert.DoesNotContain(entries!, e => e.Action == "SUBJECT_POLICY_CHANGED");
+    }
+
+    [Fact]
+    public async Task ARefusedPolicyChangeLeavesNoEntry()
+    {
+        // "Records what happened, not what was attempted": half a policy, an unknown subject and a
+        // retired one are each refused and none reaches a commit.
+        var (client, environment) = await NewEnvironmentAsync();
+        var subject = await NewSubjectAsync(client, environment);
+        var route = $"/v1/environments/{environment}/subjects/{subject}/compatibility-policy";
+
+        var half = await client.PutAsJsonAsync(
+            route, new SetCompatibilityPolicyRequest("FULL", null), ApiFactory.Json);
+        var unknown = await client.PutAsJsonAsync(
+            $"/v1/environments/{environment}/subjects/acme.gov.Missing/compatibility-policy",
+            new SetCompatibilityPolicyRequest("FULL", "SOURCE"),
+            ApiFactory.Json);
+
+        await client.DeleteAsync($"/v1/environments/{environment}/subjects/{subject}");
+        var retired = await client.PutAsJsonAsync(
+            route, new SetCompatibilityPolicyRequest("FULL", "SOURCE"), ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, half.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, retired.StatusCode);
+
+        var entries = await client.GetFromJsonAsync<IReadOnlyList<AuditResponse>>(
+            $"/v1/audit?env={environment}", ApiFactory.Json);
+
+        Assert.DoesNotContain(entries!, e => e.Action == "SUBJECT_POLICY_CHANGED");
+    }
+
+    [Fact]
+    public async Task APolicyChangeNotifiesNobody()
+    {
+        // The confirmation says "Nobody is notified", and the handler holds no outbox to say it
+        // with, so this is measured where a notification would show: the tenant's outbox does not
+        // deepen. Relative, because the outbox is tenant-wide, and nothing else runs in between.
+        var (client, environment) = await NewEnvironmentAsync();
+        var subject = await NewSubjectAsync(client, environment);
+
+        var before = await client.GetFromJsonAsync<OutboxDepthResponse>(
+            "/v1/notifications/outbox", ApiFactory.Json);
+
+        var put = await client.PutAsJsonAsync(
+            $"/v1/environments/{environment}/subjects/{subject}/compatibility-policy",
+            new SetCompatibilityPolicyRequest("FULL", "SOURCE"),
+            ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+
+        var after = await client.GetFromJsonAsync<OutboxDepthResponse>(
+            "/v1/notifications/outbox", ApiFactory.Json);
+
+        Assert.Equal(before!.Pending, after!.Pending);
     }
 
     [Fact]

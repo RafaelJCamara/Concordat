@@ -140,9 +140,18 @@ describe('SubjectPolicyEditor', () => {
       expect(host.textContent).toContain('does not follow');
     });
 
-    it('says what the registry does not do: audit it, or tell anybody', () => {
-      expect(host.textContent).toContain('not written to the audit log');
-      expect(host.textContent).toContain('Nobody is notified');
+    it('says what the registry records, and that it tells nobody', () => {
+      // Measured against the real registry (ADR-033): one SUBJECT_POLICY_CHANGED entry, attributed
+      // to the caller, reading the old policy and the new. `e2e/subject-settings.spec.ts` holds it.
+      const text = host.textContent ?? '';
+
+      expect(text).toContain('SUBJECT_POLICY_CHANGED');
+      expect(text).toContain('naming the account that made it and the policy before and after');
+      expect(text).toContain('Nobody is notified');
+    });
+
+    it('no longer says the change is missing from the audit log, which was true until ADR-033', () => {
+      expect(host.textContent).not.toContain('not written to the audit log');
     });
 
     it('does not say the subject is judged by the environment’s default, which is about inheriting', () => {

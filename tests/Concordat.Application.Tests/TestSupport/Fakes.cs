@@ -159,9 +159,16 @@ internal sealed class RecordingUnitOfWork : IUnitOfWork
     /// <summary>How many times the handler committed.</summary>
     public int Saves { get; private set; }
 
+    /// <summary>
+    /// Run at the moment of each commit, so a test can ask what had been staged by then: an audit
+    /// entry that is appended after the save is not in the same unit of work as the change.
+    /// </summary>
+    public Action? OnSave { get; set; }
+
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken)
     {
         Saves++;
+        OnSave?.Invoke();
         return Task.FromResult(0);
     }
 }
