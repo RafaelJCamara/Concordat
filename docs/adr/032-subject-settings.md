@@ -4,6 +4,12 @@
 - **Date:** 2026-10-13
 - **Deciders:** Rafael Camara
 
+> **Amended 2026-10-13 by [ADR-033](033-inherit-means-the-environments-default.md).** The registry behaviour this
+> ADR describes as a defect — a subject with no policy of its own judged by the built-in `BACKWARD · WIRE_JSON`
+> instead of its environment's default (in Context, the last two rows of the confirmation table, Alternatives,
+> Consequences and "Found and not fixed") — was fixed the same day. Read those passages as the registry stood when
+> this was written. The sentence about inheriting now says the opposite, and `e2e-inherit` asserts it.
+
 ## Context
 
 [ADR-030](030-create-subject-screen.md) found that a subject's owner and compatibility policy are the

@@ -116,10 +116,12 @@ the way that are **yours to decide**, which I did not.
   is one handler and nine tests; if you would rather take it as its own commit, nothing else depends on it.
 - **The confirmations say what the registry does today, including two things it should probably not do**, and
   each is pinned by a test that goes red when it changes:
-  - **A subject with no policy of its own is judged by the built-in `BACKWARD · WIRE_JSON` at registration, not
-    by its environment's default.** The environment settings screen says the opposite. **Decision for you:**
-    fix it (three call sites and tests; it changes which versions are held in every environment whose default
-    is not the built-in), or change what the screen and the docs claim.
+  - ~~**A subject with no policy of its own is judged by the built-in `BACKWARD · WIRE_JSON` at registration, not
+    by its environment's default.**~~ **Decided 2026-10-13: fix the registry** ([ADR-033](adr/033-inherit-means-the-environments-default.md)).
+    Registration, the dry-run check and the diff read the environment's default, as impact analysis and promotion
+    always did. It is a behaviour change for every environment whose default is not the built-in; nothing already
+    registered or held is judged again; STATUS says what an operator should check. The confirmation now says an
+    inheriting subject is judged by its environment's default.
   - **A policy change is not written to the audit log.** **Decision for you:** whether it should be (a new
     audit action, which the frontend pins by name).
 

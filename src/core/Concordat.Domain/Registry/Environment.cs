@@ -235,6 +235,8 @@ public sealed class Environment
     /// <remarks>
     /// Takes effect immediately for every subject that has not set its own, which is the point
     /// of inheritance — and worth knowing before changing it on an environment with traffic.
+    /// "Immediately" means the next registration, dry-run check or diff (ADR-033); versions
+    /// already registered, or held at the approval gate, are not judged again.
     /// </remarks>
     public void SetDefaultCompatibilityPolicy(CompatibilityPolicy policy) =>
         DefaultCompatibilityPolicy = policy;

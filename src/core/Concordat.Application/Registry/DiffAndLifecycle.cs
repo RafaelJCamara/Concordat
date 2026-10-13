@@ -38,7 +38,10 @@ public sealed record DiffResult(
 /// that matter to a reader whose consumer generates code.
 /// </remarks>
 public sealed class DiffVersionsHandler(
-    ISubjectRepository subjects, ISchemaRepository schemas, ISchemaFormatRegistry formats)
+    ISubjectRepository subjects,
+    ISchemaRepository schemas,
+    IEnvironmentRepository environments,
+    ISchemaFormatRegistry formats)
     : IQueryHandler<DiffVersionsQuery, DiffResult>
 {
     /// <inheritdoc />
@@ -74,7 +77,13 @@ public sealed class DiffVersionsHandler(
             return Result<DiffResult>.Failure(to.Error!);
         }
 
-        var policy = subject.EffectivePolicy(CompatibilityPolicy.Default);
+        // The policy that governs the subject, which for one with none of its own is its
+        // environment's default (not the built-in), so the diff names the same rules the
+        // registration did. Only reported here -- the comparison below runs under Full.
+        var environment = await environments.FindAsync(query.EnvironmentId, cancellationToken)
+            .ConfigureAwait(false);
+
+        var policy = EnvironmentPolicies.EffectiveFor(subject, environment);
 
         // Full, so both directions are reported. A diff filtered to one direction would answer
         // a different question than the one the caller asked.

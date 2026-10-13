@@ -145,8 +145,8 @@ describe('SubjectPolicyEditor', () => {
       expect(host.textContent).toContain('Nobody is notified');
     });
 
-    it('does not carry the inheriting caveat, which is about something else', () => {
-      expect(host.textContent).not.toContain('As this registry stands');
+    it('does not say the subject is judged by the environment’s default, which is about inheriting', () => {
+      expect(host.textContent).not.toContain('judged by its environment’s default');
     });
 
     it('sends the whole policy on the second click, once', () => {
@@ -187,13 +187,25 @@ describe('SubjectPolicyEditor', () => {
       );
     });
 
-    it('says what registration actually judges an inheriting subject against', () => {
-      // Measured: with the environment's default set to NONE, a subject with no policy of its own
-      // still had a breaking change held. The sentence is the registry's behaviour and not its
-      // intent, and `e2e/subject-settings.spec.ts` is what notices when that changes.
-      expect(host.textContent).toContain('As this registry stands');
-      expect(host.textContent).toContain('BACKWARD · WIRE_JSON');
-      expect(host.textContent).toContain('whatever the environment’s default is set to');
+    it('says an inheriting subject is judged by its environment’s default, everywhere it is read', () => {
+      // Measured against the real registry (ADR-033): in an environment whose default is NONE a
+      // breaking version of a subject with no policy of its own is accepted. `e2e/subject-settings.spec.ts`
+      // holds the sentence; this holds that the screen says it and says nothing the old registry did.
+      const text = host.textContent ?? '';
+
+      expect(text).toContain('this subject is judged by its environment’s default');
+      expect(text).toContain('Registering a version, checking a schema without registering it');
+      expect(text).toContain('impact analysis and promotion');
+    });
+
+    it('no longer describes the built-in default as what an inheriting subject is judged by', () => {
+      // The registry used to judge it by BACKWARD · WIRE_JSON whatever the environment said, and
+      // this screen told the person so. A leftover would now be false, and silently.
+      const text = host.textContent ?? '';
+
+      expect(text).not.toContain('As this registry stands');
+      expect(text).not.toContain('BACKWARD · WIRE_JSON');
+      expect(text).not.toContain('whatever the environment’s default is set to');
     });
   });
 

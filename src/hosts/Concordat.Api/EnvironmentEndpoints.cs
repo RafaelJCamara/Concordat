@@ -47,7 +47,9 @@ public static class EnvironmentEndpoints
             .WithDescription(
                 "Changing the default compatibility policy takes effect immediately for every " +
                 "subject that has not set its own — which is the point of inheritance, and " +
-                "worth knowing before changing it on an environment with traffic.")
+                "worth knowing before changing it on an environment with traffic. The next " +
+                "version registered, checked or compared is judged by it; versions already " +
+                "registered, or held at the approval gate, are not judged again.")
             .Produces<EnvironmentResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)

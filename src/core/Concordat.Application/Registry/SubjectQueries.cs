@@ -206,7 +206,10 @@ public sealed record CompatibilityCheckResult(
 /// <summary>Handles <see cref="CheckCompatibilityQuery"/>.</summary>
 /// <remarks>Never writes. A dry run that persisted anything would be a trap in CI.</remarks>
 public sealed class CheckCompatibilityHandler(
-    ISubjectRepository subjects, ISchemaRepository schemas, ICompatibilityEvaluator evaluator)
+    ISubjectRepository subjects,
+    ISchemaRepository schemas,
+    IEnvironmentRepository environments,
+    ICompatibilityEvaluator evaluator)
     : IQueryHandler<CheckCompatibilityQuery, CompatibilityCheckResult>
 {
     /// <inheritdoc />
@@ -247,7 +250,15 @@ public sealed class CheckCompatibilityHandler(
             .Select(v => new PriorSchema(v.Ordinal, bodies[v.SchemaId].Body))
             .ToList();
 
-        var policy = subject.EffectivePolicy(CompatibilityPolicy.Default);
+        // The same environment registration reads, found the way its gate finds it (by id: the
+        // query carries no name). A dry run that judged an inheriting subject by the built-in
+        // while registration judged it by the environment's default would go green or red for a
+        // reason the real registration then did not share. No row is not a refusal: this is a read
+        // about a subject, and one can outlive an environment that was never a row.
+        var environment = await environments.FindAsync(query.EnvironmentId, cancellationToken)
+            .ConfigureAwait(false);
+
+        var policy = EnvironmentPolicies.EffectiveFor(subject, environment);
         var evaluated = evaluator.Evaluate(
             subject.Format, query.Body, priors, policy, subject.ContentModel);
 

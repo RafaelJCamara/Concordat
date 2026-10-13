@@ -134,11 +134,20 @@ append-only. So the two specs about it follow the rule creating one does, and ad
   what each may do — **and revokes them in a `finally`**, so a run leaves no working credential behind.
   `trim-table.ts` holds the whitespace table both parity specs measure, so the two cannot drift.
 - **`e2e-inherit` is an environment whose default compatibility policy is `NONE`**, created once and
-  **never changed**. It exists for one test: a subject that sets no policy of its own is _held_ when it
-  breaks, because registration judges it by the registry's built-in default and not by the environment's. That
-  is a registry defect the policy editor's confirmation describes, and this is the test that goes red when it
-  is fixed — the failure to act on is "update the sentence in `subject-policy-editor.ts`, STATUS.md and
-  ADR-032", not "fix the test". Do not point other specs at it.
+  **never changed**. It exists for one test: a subject that sets no policy of its own is judged by the
+  environment's default, so a breaking second version is _accepted_ there (`ACTIVE`). Until
+  [ADR-033](../../docs/adr/033-inherit-means-the-environments-default.md) it was _held_, because registration
+  read the registry's built-in default instead, and this test asserted that; if it goes red the other way the
+  registry has stopped reading the environment, and the failure to act on is "the sentence in
+  `subject-policy-editor.ts`, STATUS.md and ADR-033", not "fix the test". Do not point other specs at it.
+- **`e2e-follows` is the one environment whose default a spec moves, because it is the only one a spec
+  owns.** `environment-default.spec.ts` creates it once (default `BACKWARD · WIRE_JSON`, chosen at creation),
+  puts that default back before every run (it is its own, and nothing else reads it), then changes it on the
+  real environment settings screen and watches an inheriting subject follow it and a pinned one not. It makes
+  **two subjects per run** in `e2e-follows`. **Do not point other specs at it**, and do not make a second
+  spec move a default: `dev` and `e2e-inherit` are read by everything else. The screen only changes a default
+  by choosing a whole pair (the form sends the one member that changed and the registry refuses half a policy),
+  which the spec pins as a defect.
 - The audit assertions in `subject-settings.spec.ts` are the confirmations' own claims: an owner change leaves
   exactly one `SUBJECT_UPDATED` row attributed to the signed-in account, and a policy change leaves none. They
   are what stop a sentence on the screen from going stale when the registry starts recording more.

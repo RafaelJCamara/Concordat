@@ -21,6 +21,42 @@ container image and a real PostgreSQL. Everything else is claimed on the strengt
 
 ---
 
+## A subject with no policy of its own follows its environment's default, 2026-10-13
+
+The registry defect recorded in the section below ("A subject with no policy of its own is judged by
+`BACKWARD · WIRE_JSON`, not by its environment's default") is **fixed**
+([ADR-033](adr/033-inherit-means-the-environments-default.md)). Registration, the dry-run `check` and the diff now
+resolve an inheriting subject's policy against its environment's default, through one function
+(`EnvironmentPolicies.EffectiveFor`), as impact analysis and promotion always did.
+
+**Measured, before and after, against the real registry** (new environments and subjects named by timestamp; `dev`,
+`e2e-inherit` and the shared fixtures untouched). An environment defaulting to `NONE`, an inheriting subject, v1 then a
+breaking v2: **before**, v2 was `AWAITING_APPROVAL`, the dry run said `compatible: false`, and both it and the diff
+reported `BACKWARD · WIRE_JSON`; **after**, v2 is `ACTIVE`, the dry run says `compatible: true`, and both report
+`NONE · WIRE_JSON`. The pinned subject beside it is unchanged (held, `BACKWARD · WIRE_JSON`). Impact analysis (the surface
+of a `BACKWARD · WIRE` environment decided what a consumer pinned to v1 was told) and promotion (into a `NONE`
+environment: `ACTIVE`) were right before and are unchanged.
+
+**A behaviour change, and for whom.** Only an environment whose default is not `BACKWARD · WIRE_JSON`: laxer ones start
+accepting what the built-in held (and `latest` moves), stricter ones start holding what it accepted, and `concordat check`
+in a pipeline follows. **An operator with such an environment should check**, before upgrading, `GET /v1/environments` for
+each default and which of its subjects have `compatibilityPolicy: {mode: null, surface: null}`; pin any that were relying
+on the built-in. **Nothing already registered or held is judged again** (measured and tested: a version held under the old
+default stays held after it is relaxed).
+
+**An environment has no "unset" default.** The brief asked what one resolves to. The registry stores a value: creating an
+environment with no mode or surface stores `BACKWARD · WIRE_JSON`, and an update with neither leaves it alone (measured).
+The only fallback is for an environment with **no row** (legacy data, or a command built by hand without a name), and it is
+the same value. Tested at all three sites.
+
+**Found on the way, not fixed** (separable; rows in the holes table): **the environment settings screen cannot change a
+default by changing one select.** It sends only the member that changed and the registry answers 400 "needs both a mode and
+a surface", so a default is changed by choosing a whole pair. Pinned by `environment-default.spec.ts` so it goes red when
+fixed. And the screen's "Not set" default (and `environment.ts`'s `null` members) describe a state the registry never
+produces.
+
+---
+
 ## A subject's owner and policy are editable, and the registry did three things nobody had written down, 2026-10-13
 
 The hole recorded below ("No screen edits a subject afterwards") is closed: a subject's page has
@@ -53,7 +89,7 @@ endpoint first, and three were different from what the code suggested:
   false at registration, and one subject has two answers to "what is my policy". **Not fixed**: it changes which
   versions are held in every environment whose default is not the built-in, which is exactly the people who
   set one, and wants its own change. The policy confirmation says what happens today, and
-  `e2e/subject-settings.spec.ts` goes red the day it changes, naming the sentence to update.
+  `e2e/subject-settings.spec.ts` goes red the day it changes, naming the sentence to update. **Fixed later the same day**: see the section above, and ADR-033.
 - **A policy change leaves no audit entry** (the endpoint has no audit or outbox call), so the confirmation says
   so. Pinned by an HTTP test and the browser journey. It is the registry's gap and not a decision anyone
   recorded; whether it should be audited is yours, and the day it is both tests go red.
@@ -613,7 +649,9 @@ These matter more than the two lists above, because the surface exists and looks
 | **A contract's bindings cannot be edited or removed** | There is an `add` endpoint for each kind and nothing else, so a binding added without a precedence can never be separated from a later overlapping one — the registry's own refusal says to "give the two bindings different precedence values", and the first has none to change. Found by the web app's first real overlap test (2026-10-13); the form now says to set precedence up front, which is a workaround, not a fix. |
 | ~~No screen creates a subject~~ | **Closed 2026-10-13** by `/subjects/new-subject` ([ADR-030](adr/030-create-subject-screen.md)): M4's exit criterion had been recorded as met when its first step was not, and the list's "New subject" was a button with no handler. What is left of it is the next row. |
 | ~~No screen edits a subject afterwards~~ | **Closed 2026-10-13** by the panels on a subject's page ([ADR-032](adr/032-subject-settings.md)): Change owner (`subject:write` or `subject:admin`) and Change policy (`subject:admin`), each two clicks, each saying only what the registry was measured to do. Name, format and content model remain permanent (probed: `PATCH` ignores them and answers 200). **Deprecating and retiring are left out on purpose**: neither can be undone, and deprecating notifies every subscriber. The CLI still edits neither. |
-| **A subject with no policy of its own is judged by `BACKWARD · WIRE_JSON`, not by its environment's default** | Measured: with an environment defaulting to `NONE`, a breaking second version of an inheriting subject was held. Registration is measured; the dry-run `check` and the diff read the same constant (by reading the code), and impact analysis and promotion read the environment's. The environment settings screen says a changed default "takes effect at once for every subject that has not set its own", which is false at registration. Not fixed: it changes which versions are held in every environment whose default is not the built-in. The subject page's inherit confirmation says what happens today, and `e2e/subject-settings.spec.ts` goes red when it changes. |
+| ~~A subject with no policy of its own is judged by `BACKWARD · WIRE_JSON`, not by its environment's default~~ | **Closed 2026-10-13** by [ADR-033](adr/033-inherit-means-the-environments-default.md): registration, the dry-run `check` and the diff read the environment's default, through `EnvironmentPolicies.EffectiveFor`, as impact analysis and promotion always did. **A behaviour change** for every environment whose default is not the built-in (see the section at the top for what to check). Pinned by `InheritedPolicyApiTests`, the three handler test classes, and `e2e/subject-settings.spec.ts` and `e2e/environment-default.spec.ts`. |
+| **The environment settings screen cannot change a default by changing one select** | The form sends only the member that changed (`changesBetween`) and the registry refuses half a policy: `400` "A compatibility policy needs both a mode and a surface (ADR-016)". So a default is changed by choosing a whole pair. Found while writing `environment-default.spec.ts`, which pins it (it goes red when the form sends the pair). The unit test asserts the one-member shape, which is the opposite of what the registry accepts. |
+| **The web app has a "not set" environment default that the registry never produces** | `environment.ts` documents both members null as "unset", the DTO maps it and the settings form offers "Not set"; but the registry stores a value (an environment created with no default stores `BACKWARD · WIRE_JSON`, and an update with neither member leaves it alone). Dead branch; harmless. |
 | **A policy change is not in the audit log** | `PUT …/compatibility-policy` writes no audit entry and notifies nobody, though what it changes decides what the gate lets through. The subject page says so. Pinned by `APolicyChangeLeavesNoAuditEntry`, which goes red when it is closed. Closing it is a new audit action, which the frontend pins by name. |
 | **A `PATCH` that changes nothing still writes "owner changed"** | `{}`, a `null` owner and `{"owner":""}` answer 200, change nothing, and write a `SUBJECT_UPDATED` entry reading "owner changed" (and so does setting the owner it already has). The web form never sends one. |
 | **Retiring a subject records the subject's owner as the actor** | `RetireSubjectHandler` still builds the audit entry from `subject.Value.Owner`, which is the defect `UpdateSubjectHandler` had until 2026-10-13 (it attributed an owner change to the *new* owner, and answered 500 for a whitespace-only one, both fixed). Retiring is not on any screen. |

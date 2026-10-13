@@ -160,7 +160,13 @@ public sealed class RegisterVersionHandler(
         }
 
         var priors = await LoadPriorsAsync(subject, cancellationToken).ConfigureAwait(false);
-        var policy = subject.EffectivePolicy(CompatibilityPolicy.Default);
+
+        // The environment's default, not the built-in: CompatibilityPolicy.Default is what an
+        // environment is created with, so reading it here ignored a default that had been changed
+        // and held (or released) the wrong versions of every subject that inherits. The gate has
+        // already loaded the environment, and it is null only when a hand-built command carried
+        // no name. See EnvironmentPolicies.EffectiveFor.
+        var policy = EnvironmentPolicies.EffectiveFor(subject, admitted.Value.Environment);
 
         var evaluated = evaluator.Evaluate(
             subject.Format, command.Body, priors, policy, subject.ContentModel);

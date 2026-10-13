@@ -28,10 +28,11 @@ public class CheckCompatibilityHandlerTests
     private readonly FakeSchemas _schemas = new();
     private readonly RecordingUnitOfWork _unitOfWork = new();
     private readonly RecordingEvaluator _evaluator = new(new CompatibilityEvaluator(new JsonFormats()));
+    private readonly FakeEnvironmentStore _environments = new();
 
     private Task<Result<CompatibilityCheckResult>> CheckAsync(
         string? body, string subject = "acme.orders.OrderCreated") =>
-        new CheckCompatibilityHandler(_subjects, _schemas, _evaluator).HandleAsync(
+        new CheckCompatibilityHandler(_subjects, _schemas, _environments, _evaluator).HandleAsync(
             new CheckCompatibilityQuery(_environment, subject, body), CancellationToken.None);
 
     [Fact]
@@ -232,6 +233,101 @@ public class CheckCompatibilityHandlerTests
 
         Assert.Equal(policy, result.Value.Policy);
         Assert.Equal(policy, _evaluator.Policy);
+    }
+
+    // ------------------------------------------- which default an inheriting subject is judged by
+
+    private static readonly CompatibilityPolicy NoChecking =
+        new(CompatibilityMode.None, CompatibilitySurface.WireJson);
+
+    [Fact]
+    public async Task AnInheritingSubjectIsCheckedUnderItsEnvironmentsDefaultNotTheBuiltInOne()
+    {
+        // The dry run is the rehearsal for a registration. It judged an inheriting subject by the
+        // built-in BACKWARD x WIRE_JSON, so in an environment set to NONE it said "breaking" about
+        // a change registration (and impact analysis, and promotion) would let straight through.
+        _environments.SeedWithDefault(_environment, "lax", NoChecking);
+        var subject = Build.Subject(_environment);
+        subject.Register(_schemas, V1);
+        _subjects.Seed(subject);
+
+        var result = await CheckAsync(V1Required);
+
+        Assert.True(result.Value.Compatible);
+        Assert.Equal(NoChecking, result.Value.Policy);
+        Assert.Equal(NoChecking, _evaluator.Policy);
+    }
+
+    [Fact]
+    public async Task AStricterEnvironmentDefaultTightensWhatAnInheritingSubjectIsCheckedAgainst()
+    {
+        // The other direction: an environment stricter than the built-in. What the policy then
+        // decides is the engine's business; what this pins is which policy it was given.
+        var strict = new CompatibilityPolicy(CompatibilityMode.Full, CompatibilitySurface.Source);
+        _environments.SeedWithDefault(_environment, "strict", strict);
+        var subject = Build.Subject(_environment);
+        subject.Register(_schemas, V1);
+        _subjects.Seed(subject);
+
+        var result = await CheckAsync(V1PlusOptional);
+
+        Assert.Equal(strict, result.Value.Policy);
+        Assert.Equal(strict, _evaluator.Policy);
+    }
+
+    [Fact]
+    public async Task APinnedSubjectIsCheckedUnderItsOwnPolicyWhateverTheEnvironmentSays()
+    {
+        _environments.SeedWithDefault(_environment, "lax", NoChecking);
+        var pinned = new CompatibilityPolicy(CompatibilityMode.Backward, CompatibilitySurface.WireJson);
+        var subject = Build.Subject(_environment, policy: pinned);
+        subject.Register(_schemas, V1);
+        _subjects.Seed(subject);
+
+        var result = await CheckAsync(V1Required);
+
+        Assert.False(result.Value.Compatible);
+        Assert.Equal(pinned, result.Value.Policy);
+    }
+
+    [Fact]
+    public async Task ChangingTheEnvironmentsDefaultChangesTheNextCheckOfAnInheritingSubjectOnly()
+    {
+        var environment = _environments.SeedWithDefault(
+            _environment, "dev", CompatibilityPolicy.Default);
+        var pinned = new CompatibilityPolicy(CompatibilityMode.Backward, CompatibilitySurface.WireJson);
+
+        var inheriting = Build.Subject(_environment);
+        inheriting.Register(_schemas, V1);
+        _subjects.Seed(inheriting);
+
+        var pinnedSubject = Build.Subject(_environment, name: "acme.orders.OrderPinned", policy: pinned);
+        pinnedSubject.Register(_schemas, V1);
+        _subjects.Seed(pinnedSubject);
+
+        Assert.False((await CheckAsync(V1Required)).Value.Compatible);
+
+        environment.SetDefaultCompatibilityPolicy(NoChecking);
+
+        Assert.True((await CheckAsync(V1Required)).Value.Compatible);
+        Assert.False((await CheckAsync(V1Required, "acme.orders.OrderPinned")).Value.Compatible);
+    }
+
+    [Fact]
+    public async Task AnEnvironmentWithNoRowFallsBackToTheBuiltInDefault()
+    {
+        // Only legacy data (a subject from before environments were rows) reaches this: an
+        // environment cannot have an unset default, so "no row" is the one place that needs a
+        // fallback, and it is the value every environment is created with.
+        var subject = Build.Subject(_environment);
+        subject.Register(_schemas, V1);
+        _subjects.Seed(subject);
+
+        var result = await CheckAsync(V1Required);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.False(result.Value.Compatible);
+        Assert.Equal(CompatibilityPolicy.Default, result.Value.Policy);
     }
 
     [Fact]

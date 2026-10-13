@@ -336,7 +336,7 @@
           "Environments"
         ],
         "summary": "Change an environment's description or policies",
-        "description": "Changing the default compatibility policy takes effect immediately for every subject that has not set its own — which is the point of inheritance, and worth knowing before changing it on an environment with traffic.\n\nRequires scope: `env:write`.",
+        "description": "Changing the default compatibility policy takes effect immediately for every subject that has not set its own — which is the point of inheritance, and worth knowing before changing it on an environment with traffic. The next version registered, checked or compared is judged by it; versions already registered, or held at the approval gate, are not judged again.\n\nRequires scope: `env:write`.",
         "parameters": [
           {
             "name": "env",

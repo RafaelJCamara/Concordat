@@ -271,6 +271,15 @@ describe('EnvironmentSettingsPage', () => {
     expect(renderEnvironment().host.textContent).toContain('every subject here that has not set');
   });
 
+  it('says what “at once” is, and that what is already registered or held is left alone', () => {
+    // True since ADR-033, and measured by `e2e/environment-default.spec.ts`: the next version
+    // registered is judged by the new default, and versions already registered or held are not.
+    const text = renderEnvironment().host.textContent ?? '';
+
+    expect(text).toContain('the next version registered, checked or compared is judged by it');
+    expect(text).toContain('Versions already registered, or held at the approval gate');
+  });
+
   it('shows the registry’s refusal under the form', () => {
     const { host } = renderEnvironment({
       actionErrors: {

@@ -760,3 +760,53 @@ export async function ensureEnvironmentWithDefault(
     throw new Error(`Creating environment '${name}' failed with ${created.status}.`);
   }
 }
+
+/**
+ * Sets an environment's default compatibility policy over the API.
+ *
+ * <b>Only for an environment a spec owns outright.</b> A default decides what every inheriting
+ * subject in the environment is judged by, so moving `dev`'s, or `e2e-inherit`'s, would change what
+ * other specs measure. `environment-default.spec.ts` owns `e2e-follows` and puts its default back
+ * before it starts, which is what makes it repeatable.
+ */
+export async function setEnvironmentDefault(
+  credential: string,
+  name: string,
+  policy: { mode: string; surface: string },
+): Promise<void> {
+  const response = await call(`/v1/environments/${name}`, {
+    method: 'PATCH',
+    headers: { authorization: `Bearer ${credential}` },
+    body: JSON.stringify({ compatibilityMode: policy.mode, compatibilitySurface: policy.surface }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Setting the default of '${name}' failed with ${response.status}.`);
+  }
+}
+
+/** What the dry run said about a document, and under which policy it said it. */
+export interface CheckVerdict {
+  readonly compatible: boolean;
+  readonly policy: { readonly mode: string | null; readonly surface: string | null };
+}
+
+/** Asks the registry whether a schema would be accepted, and which policy judged it. */
+export async function checkSchema(
+  credential: string,
+  environment: string,
+  subject: string,
+  schema: string,
+): Promise<CheckVerdict> {
+  const response = await call(`/v1/environments/${environment}/subjects/${subject}/compatibility`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${credential}` },
+    body: JSON.stringify({ schema }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`The dry run on '${subject}' answered ${response.status}.`);
+  }
+
+  return (await response.json()) as CheckVerdict;
+}

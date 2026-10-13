@@ -444,6 +444,145 @@ public class RegisterVersionHandlerTests
         Assert.Equal(policy, _evaluator.Policy);
     }
 
+    // ------------------------------------------- which default an inheriting subject is judged by
+
+    private const string IntegerField = """{"type":"object","properties":{"n":{"type":"integer"}}}""";
+    private const string NumberField = """{"type":"object","properties":{"n":{"type":"number"}}}""";
+
+    private const string V1RetypedToInteger =
+        """{"type":"object","properties":{"id":{"type":"integer"}}}""";
+
+    private static readonly CompatibilityPolicy NoChecking =
+        new(CompatibilityMode.None, CompatibilitySurface.WireJson);
+
+    private Task<Result<RegisterVersionResult>> RegisterInAsync(
+        string subject, string body, string? environmentName = null) =>
+        Handler().HandleAsync(
+            new RegisterVersionCommand(
+                _environment, subject, body, null, null, "alice", environmentName),
+            CancellationToken.None);
+
+    [Fact]
+    public async Task AnInheritingSubjectIsJudgedByItsEnvironmentsDefaultNotTheBuiltInOne()
+    {
+        // Measured against the real registry before this was fixed: an environment created with
+        // default NONE, a subject with no policy of its own, v1 then a breaking v2 -> v2 came
+        // back AWAITING_APPROVAL, because registration read CompatibilityPolicy.Default (what an
+        // environment is created with) and not the environment's. Impact analysis and promotion
+        // read the environment, so one subject had two answers to "what is my policy".
+        _environments.SeedWithDefault(_environment, "lax", NoChecking);
+        var subject = Build.Subject(_environment);
+        _subjects.Seed(subject);
+
+        Assert.True((await RegisterAsync(V1)).IsSuccess);
+        var breaking = await RegisterAsync(V1Required);
+
+        Assert.True(breaking.IsSuccess, breaking.Error?.Message);
+        Assert.Equal(VersionStatus.Active, breaking.Value.Status);
+        Assert.Equal(2, subject.Latest!.Ordinal);
+        Assert.Equal(NoChecking, _evaluator.Policy);
+    }
+
+    [Fact]
+    public async Task AStricterEnvironmentDefaultHoldsWhatTheBuiltInOneLetsThrough()
+    {
+        // The other direction, which is just as much a behaviour change for whoever set it.
+        // integer -> number is a Source-surface finding: the built-in BACKWARD x WIRE_JSON
+        // tolerates it, BACKWARD x SOURCE does not.
+        var strict = new CompatibilityPolicy(CompatibilityMode.Backward, CompatibilitySurface.Source);
+        _environments.SeedWithDefault(_environment, "strict", strict);
+        var subject = Build.Subject(_environment);
+        _subjects.Seed(subject);
+
+        Assert.True((await RegisterAsync(IntegerField)).IsSuccess);
+        var widened = await RegisterAsync(NumberField);
+
+        Assert.Equal(VersionStatus.AwaitingApproval, widened.Value.Status);
+        Assert.Equal(1, subject.Latest!.Ordinal);
+        Assert.Equal(strict, _evaluator.Policy);
+    }
+
+    [Fact]
+    public async Task APinnedSubjectIgnoresTheEnvironmentsDefault()
+    {
+        _environments.SeedWithDefault(_environment, "lax", NoChecking);
+        var pinned = new CompatibilityPolicy(CompatibilityMode.Backward, CompatibilitySurface.WireJson);
+        var subject = Build.Subject(_environment, policy: pinned);
+        _subjects.Seed(subject);
+
+        Assert.True((await RegisterAsync(V1)).IsSuccess);
+        var breaking = await RegisterAsync(V1Required);
+
+        Assert.Equal(VersionStatus.AwaitingApproval, breaking.Value.Status);
+        Assert.Equal(pinned, _evaluator.Policy);
+    }
+
+    [Fact]
+    public async Task ChangingTheEnvironmentsDefaultChangesTheNextRegistrationOfAnInheritingSubjectOnly()
+    {
+        // And not the past: a version already held stays held when the default is relaxed. A
+        // registration is judged once, when it is made, and re-judging it would make the audit
+        // trail disagree with the data (the same rule a subject's own policy change follows).
+        var environment = _environments.SeedWithDefault(
+            _environment, "dev", CompatibilityPolicy.Default);
+        var pinned = new CompatibilityPolicy(CompatibilityMode.Backward, CompatibilitySurface.WireJson);
+
+        var inheriting = Build.Subject(_environment, name: "acme.orders.Inheriting");
+        var pinnedSubject = Build.Subject(_environment, name: "acme.orders.Pinned", policy: pinned);
+        _subjects.Seed(inheriting);
+        _subjects.Seed(pinnedSubject);
+
+        foreach (var name in new[] { "acme.orders.Inheriting", "acme.orders.Pinned" })
+        {
+            Assert.True((await RegisterInAsync(name, V1)).IsSuccess);
+
+            var held = await RegisterInAsync(name, V1Required);
+            Assert.Equal(VersionStatus.AwaitingApproval, held.Value.Status);
+        }
+
+        environment.SetDefaultCompatibilityPolicy(NoChecking);
+
+        var inheritingNext = await RegisterInAsync("acme.orders.Inheriting", V1RetypedToInteger);
+        var pinnedNext = await RegisterInAsync("acme.orders.Pinned", V1RetypedToInteger);
+
+        Assert.Equal(VersionStatus.Active, inheritingNext.Value.Status);
+        Assert.Equal(VersionStatus.AwaitingApproval, pinnedNext.Value.Status);
+
+        // Version 2 of the inheriting subject was held under the old default and is still held.
+        Assert.Equal(
+            VersionStatus.AwaitingApproval,
+            inheriting.Versions.Single(v => v.Ordinal == 2).Status);
+    }
+
+    [Fact]
+    public async Task AnEnvironmentWithNoRowFallsBackToTheBuiltInDefault()
+    {
+        // A hand-built command carries no environment name, so nothing can create the row and the
+        // gate has none to hand back. The fallback is the value every environment is created with.
+        _subjects.Seed(Build.Subject(_environment));
+
+        Assert.True((await RegisterAsync(V1)).IsSuccess);
+        var breaking = await RegisterAsync(V1Required);
+
+        Assert.Equal(VersionStatus.AwaitingApproval, breaking.Value.Status);
+        Assert.Equal(CompatibilityPolicy.Default, _evaluator.Policy);
+    }
+
+    [Fact]
+    public async Task AnEnvironmentTheFirstWriteCreatesStartsAtTheBuiltInDefault()
+    {
+        // The gate creates the row on the first write (decision 23), and Environment.Create seeds
+        // it with CompatibilityPolicy.Default: so the environment's default and the built-in one
+        // are the same value until somebody changes it, which is why nobody noticed the difference.
+        _subjects.Seed(Build.Subject(_environment));
+
+        Assert.True((await RegisterInAsync("acme.orders.OrderCreated", V1, "fresh")).IsSuccess);
+        var breaking = await RegisterInAsync("acme.orders.OrderCreated", V1Required, "fresh");
+
+        Assert.Equal(VersionStatus.AwaitingApproval, breaking.Value.Status);
+        Assert.Equal(CompatibilityPolicy.Default, _evaluator.Policy);
+    }
+
     [Fact]
     public async Task TheEvaluatorIsAskedForTheSubjectsContentModel()
     {

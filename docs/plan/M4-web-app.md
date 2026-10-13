@@ -109,9 +109,10 @@ sign-in screen that lets someone pass it, which is recorded as
       "owner changed", naming the account that made it and neither owner, and notifies nobody. A policy change
       takes effect for the *next* registration (a held version stays held when it is relaxed), is **not
       written to the audit log**, and notifies nobody. "Inherit" is a different request from choosing today's
-      default (`isInherited`), and the confirmation says what registration does for a subject with no policy of
-      its own — which is to judge it by the registry's built-in `BACKWARD · WIRE_JSON`, not its environment's
-      default (a registry defect, in STATUS, pinned so the sentence cannot go stale in silence). **Blocks only
+      default (`isInherited`), and the confirmation says what the registry does for a subject with no policy of
+      its own — which is to judge it by its environment's default ([ADR-033](../adr/033-inherit-means-the-environments-default.md);
+      until then registration, the dry run and the diff read the built-in `BACKWARD · WIRE_JSON` instead, which
+      the confirmation said, and `e2e-inherit` held). **Blocks only
       on what the registry certainly refuses** (an owner over 256 characters after its `Trim()`, half a
       policy) **and on drafts with no request** (a blank owner; what the page already shows), held against the
       real `PATCH` and `PUT` by `e2e/subject-settings-parity.spec.ts` — which also holds the scope split with

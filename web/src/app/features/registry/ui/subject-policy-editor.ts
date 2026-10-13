@@ -14,7 +14,6 @@ import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
 import {
-  BUILT_IN_POLICY,
   COMPATIBILITY_MODES,
   COMPATIBILITY_SURFACES,
   isInherited,
@@ -41,11 +40,12 @@ const INPUT =
  *
  * <b>Inheriting and choosing the current default are different requests</b> (`isInherited`), and
  * the confirmation says which one this is. A pinned policy stays put when the environment's default
- * changes; an inherited one is meant to follow it. "Meant to" is the honest word, and the
- * confirmation says why: registering a version judges a subject with no policy of its own against
- * the registry's built-in default, whatever the environment's is set to — measured, held by
- * `e2e/subject-settings.spec.ts`, and recorded as a defect in STATUS.md that this screen did not
- * introduce and does not fix.
+ * changes; an inherited one follows it, at registration and everywhere else the registry judges a
+ * subject (ADR-033). Until that ADR it did not: registration, the dry run and the diff judged a
+ * subject with no policy of its own by the registry's built-in default whatever the environment's
+ * was, and this screen said so. The sentence now says what the registry does, and
+ * `e2e/subject-settings.spec.ts` holds it against an environment whose default is not the
+ * built-in one, so it cannot go stale in silence in either direction.
  *
  * <b>What the confirmation says changes, and what it does not, was measured.</b> The new policy
  * judges the *next* registration. Versions already registered are not judged again, and a version
@@ -140,14 +140,16 @@ const INPUT =
                 <span class="text-foreground"
                   >Inheriting is not the same as choosing the current default.</span
                 >
-                A subject with no policy of its own is meant to follow the environment’s default,
-                where a pinned one keeps its policy whatever the default becomes.
+                A subject with no policy of its own follows the environment’s default when it
+                changes, where a pinned one keeps its policy whatever the default becomes.
               </li>
               <li>
-                <span class="text-foreground">As this registry stands,</span>
-                registering a version judges a subject with no policy of its own against
-                <span class="font-mono">{{ builtIn }}</span
-                >, whatever the environment’s default is set to.
+                <span class="text-foreground"
+                  >From the next version, this subject is judged by its environment’s default.</span
+                >
+                Registering a version, checking a schema without registering it, comparing two
+                versions, impact analysis and promotion all read it. The environment’s own settings
+                say what it is.
               </li>
             } @else {
               <li>
@@ -190,7 +192,6 @@ export class SubjectPolicyEditor {
   protected readonly input = INPUT;
   protected readonly modes = COMPATIBILITY_MODES;
   protected readonly surfaces = COMPATIBILITY_SURFACES;
-  protected readonly builtIn = describePolicy(BUILT_IN_POLICY);
 
   private readonly builder = inject(FormBuilder);
 

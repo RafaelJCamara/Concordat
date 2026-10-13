@@ -422,6 +422,18 @@ internal sealed class FakeEnvironmentStore : IEnvironmentRepository
     public void Seed(EnvironmentId id, string name, RegistrationPolicy policy) =>
         _all.Add(RegistryEnvironment.Create(name, Build.At, null, null, policy, id).Value);
 
+    /// <summary>Seeds an environment whose default compatibility policy is the one given.</summary>
+    /// <returns>The environment, so a test can change its default afterwards.</returns>
+    public RegistryEnvironment SeedWithDefault(
+        EnvironmentId id, string name, CompatibilityPolicy defaultPolicy)
+    {
+        var environment = RegistryEnvironment.Create(
+            name, Build.At, null, defaultPolicy, RegistrationPolicy.Open, id).Value;
+        _all.Add(environment);
+
+        return environment;
+    }
+
     public Task<RegistryEnvironment?> FindAsync(EnvironmentName name, CancellationToken cancellationToken) =>
         Task.FromResult(_all.FirstOrDefault(e => e.Name == name));
 

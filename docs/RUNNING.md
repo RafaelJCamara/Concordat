@@ -303,7 +303,8 @@ a port nobody else has.
 **The suite creates things that cannot be deleted** — a subject is permanent, and a retired one keeps its
 name. A run adds nine to `dev` (two from creating one on the create screen, seven from changing owners and
 policies on the subject page), one to `e2e-inherit` (an environment whose default is `NONE`, which nothing may
-change), and the first run on a database adds a fixed table of them to an environment of its own, `e2e-names`;
+change), two to `e2e-follows` (the one environment whose default a spec moves, because the spec owns it and puts
+it back before every run), and the first run on a database adds a fixed table of them to an environment of its own, `e2e-names`;
 later runs add nothing there. See [web/e2e/README.md](../web/e2e/README.md) for which, and why `e2e-empty` must
 stay empty.
 

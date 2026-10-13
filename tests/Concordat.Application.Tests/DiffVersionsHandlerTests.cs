@@ -24,9 +24,10 @@ public class DiffVersionsHandlerTests
     private readonly EnvironmentId _environment = EnvironmentId.New();
     private readonly FakeSubjects _subjects = new();
     private readonly FakeSchemas _schemas = new();
+    private readonly FakeEnvironmentStore _environments = new();
 
     private Task<Result<DiffResult>> DiffAsync(int from, int to, string name = Name) =>
-        new DiffVersionsHandler(_subjects, _schemas, new JsonFormats()).HandleAsync(
+        new DiffVersionsHandler(_subjects, _schemas, _environments, new JsonFormats()).HandleAsync(
             new DiffVersionsQuery(_environment, name, from, to), CancellationToken.None);
 
     [Fact]
@@ -129,6 +130,74 @@ public class DiffVersionsHandlerTests
         var result = await DiffAsync(1, 2);
 
         Assert.Equal(policy, result.Value.Policy);
+    }
+
+    // ------------------------------------------- which default an inheriting subject is judged by
+
+    private static readonly CompatibilityPolicy NoChecking =
+        new(CompatibilityMode.None, CompatibilitySurface.WireJson);
+
+    private Subject TwoVersions(string name = Name, CompatibilityPolicy? policy = null)
+    {
+        var subject = Build.Subject(_environment, name: name, policy: policy);
+        subject.Register(_schemas, V1);
+        subject.Register(_schemas, V1PlusOptional);
+        _subjects.Seed(subject);
+
+        return subject;
+    }
+
+    [Fact]
+    public async Task AnInheritingSubjectsDiffNamesItsEnvironmentsDefault()
+    {
+        // The diff reports the policy that governs the subject. It said BACKWARD x WIRE_JSON for
+        // an inheriting subject in an environment set to NONE: a policy nothing there used.
+        _environments.SeedWithDefault(_environment, "lax", NoChecking);
+        TwoVersions();
+
+        var result = await DiffAsync(1, 2);
+
+        Assert.Equal(NoChecking, result.Value.Policy);
+    }
+
+    [Fact]
+    public async Task APinnedSubjectsDiffNamesItsOwnPolicyWhateverTheEnvironmentSays()
+    {
+        _environments.SeedWithDefault(_environment, "lax", NoChecking);
+        var pinned = new CompatibilityPolicy(CompatibilityMode.Full, CompatibilitySurface.Source);
+        TwoVersions(policy: pinned);
+
+        var result = await DiffAsync(1, 2);
+
+        Assert.Equal(pinned, result.Value.Policy);
+    }
+
+    [Fact]
+    public async Task ChangingTheEnvironmentsDefaultChangesTheNextDiffOfAnInheritingSubjectOnly()
+    {
+        var environment = _environments.SeedWithDefault(
+            _environment, "dev", CompatibilityPolicy.Default);
+        var pinned = new CompatibilityPolicy(CompatibilityMode.Full, CompatibilitySurface.Source);
+        TwoVersions();
+        TwoVersions("acme.orders.OrderPinned", pinned);
+
+        Assert.Equal(CompatibilityPolicy.Default, (await DiffAsync(1, 2)).Value.Policy);
+
+        environment.SetDefaultCompatibilityPolicy(NoChecking);
+
+        Assert.Equal(NoChecking, (await DiffAsync(1, 2)).Value.Policy);
+        Assert.Equal(pinned, (await DiffAsync(1, 2, "acme.orders.OrderPinned")).Value.Policy);
+    }
+
+    [Fact]
+    public async Task AnEnvironmentWithNoRowFallsBackToTheBuiltInDefault()
+    {
+        TwoVersions();
+
+        var result = await DiffAsync(1, 2);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Equal(CompatibilityPolicy.Default, result.Value.Policy);
     }
 
     [Fact]

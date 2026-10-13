@@ -53,7 +53,15 @@ interface FormValue {
  *
  * <b>Changing a default takes effect at once for every subject that has not set its own</b> —
  * that is what inheritance is for — and the form says so beside the control, because it is the
- * one setting here whose blast radius is not visible from the field.
+ * one setting here whose blast radius is not visible from the field. "At once" is the next version
+ * registered, checked or compared, and it is true at registration only since ADR-033 (before it,
+ * registration, the dry run and the diff read the registry's built-in default instead); versions
+ * already registered or held are not judged again, and the sentence says so.
+ *
+ * <b>The registry never answers "not set".</b> An environment created without a default stores
+ * the built-in one and an update with neither member leaves it alone (ADR-033), so the state this
+ * form keeps is one the registry cannot produce today. It costs nothing to keep and is not what
+ * this change was about.
  */
 @Component({
   selector: 'cd-environment-settings-page',
@@ -185,7 +193,9 @@ interface FormValue {
           </div>
           <p class="text-muted-foreground -mt-2 text-xs">
             Takes effect at once for every subject here that has not set its own — which is what
-            inheriting means, and worth knowing before changing it on an environment with traffic.
+            inheriting means: the next version registered, checked or compared is judged by it.
+            Versions already registered, or held at the approval gate, are not judged again. Worth
+            knowing before changing it on an environment with traffic.
           </p>
 
           <div class="flex items-start gap-3">

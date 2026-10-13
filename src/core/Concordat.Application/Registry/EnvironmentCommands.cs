@@ -375,9 +375,42 @@ public sealed class GetEnvironmentHandler(IEnvironmentRepository environments)
     }
 }
 
-/// <summary>Parsing shared by the environment handlers.</summary>
+/// <summary>Parsing, and the one policy resolution, shared by the handlers that read an environment.</summary>
 internal static class EnvironmentPolicies
 {
+    /// <summary>
+    /// The policy a subject is judged by: its own, or else its environment's default.
+    /// </summary>
+    /// <param name="subject">The subject.</param>
+    /// <param name="environment">
+    /// The subject's environment, or null when it has no row (data from before environments were
+    /// rows, or a command built by hand without a name).
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// <b>One rule, so that three call sites cannot disagree about it again.</b> Registration, the
+    /// dry-run check and the diff each used to pass <c>CompatibilityPolicy.Default</c> here, which
+    /// is the value an environment is <em>created with</em> and not a fallback for a subject, so an
+    /// environment whose default was anything else was ignored at exactly the places that decide
+    /// what is held: a breaking version of an inheriting subject was held in an environment set to
+    /// <c>NONE</c>, and the dry run CI calls first agreed with it. Impact analysis and promotion
+    /// read the environment all along, so one subject had two answers to "what is my policy".
+    /// </para>
+    /// <para>
+    /// <b>The fallback is <c>CompatibilityPolicy.Default</c> and only for a missing row.</b> An
+    /// environment cannot have an <em>unset</em> default (it is stored, and an environment created
+    /// without one stores that same value), so an environment nobody has configured resolves to what
+    /// it would have said had somebody created it.
+    /// </para>
+    /// </remarks>
+    public static CompatibilityPolicy EffectiveFor(Subject subject, Environment? environment)
+    {
+        ArgumentNullException.ThrowIfNull(subject);
+
+        return subject.EffectivePolicy(
+            environment?.DefaultCompatibilityPolicy ?? CompatibilityPolicy.Default);
+    }
+
     /// <summary>Loads an environment by name, or fails with a code the API can map.</summary>
     public static async Task<Result<Environment>> RequireAsync(
         IEnvironmentRepository environments, string? name, CancellationToken cancellationToken)

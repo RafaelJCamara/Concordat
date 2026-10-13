@@ -19,11 +19,10 @@ import {
  * Nothing about what these two changes affect is guessed: a change of owner leaves one audit
  * entry naming the account that made it and no more, a change of policy leaves none, the next
  * registration is the first to feel a policy and a held version stays held when it is relaxed, and
- * a subject with no policy of its own is judged by the registry's built-in default and not by the
- * environment's. The last three are things the registry *does*, not things anyone designed, and
- * this is the file that goes red when they change — at which point a sentence in
- * `subject-owner-editor.ts` or `subject-policy-editor.ts`, a row in STATUS.md and ADR-032 need to
- * change with them.
+ * a subject with no policy of its own is judged by its environment's default (ADR-033; until then
+ * it was the registry's built-in, and this file said so). This is the file that goes red when a
+ * sentence stops being true — at which point a sentence in `subject-owner-editor.ts` or
+ * `subject-policy-editor.ts`, a row in STATUS.md and the ADR need to change with it.
  *
  * <b>A change cannot be dry-run and a subject cannot be deleted.</b> Each describe makes subjects
  * of its own, named for the run (`acme.e2e.settings.<stem>.<timestamp>`), and a run leaves four
@@ -316,8 +315,14 @@ test.describe('changing the compatibility policy', () => {
     await expect(
       page.getByText('Inheriting is not the same as choosing the current default.'),
     ).toBeVisible();
-    await expect(page.getByText('As this registry stands,')).toBeVisible();
-    await expect(page.getByText('BACKWARD · WIRE_JSON', { exact: true })).toBeVisible();
+    await expect(
+      page.getByText('From the next version, this subject is judged by its environment’s default.'),
+    ).toBeVisible();
+
+    // What it used to say, which was true of the registry until ADR-033 and would now be false:
+    // the built-in default is not what an inheriting subject is judged by.
+    await expect(page.getByText('As this registry stands')).toHaveCount(0);
+    await expect(page.getByText('BACKWARD · WIRE_JSON')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Yes, inherit' }).click();
     await expect(page.getByText(/now has no policy of its own/)).toBeVisible();
@@ -414,12 +419,14 @@ test.describe('what a policy change does to registration', () => {
 });
 
 test.describe('the sentence about inheriting, against an environment whose default is something else', () => {
-  test('registration judges a subject with no policy of its own by the built-in default', async () => {
-    // The environment's default is NONE, which holds nothing. If a subject that inherits followed
-    // it, a breaking second version would register. It is held instead: judged by BACKWARD ·
-    // WIRE_JSON, the registry's own. That is what `subject-policy-editor.ts` tells somebody who is
-    // about to inherit, and this is where it is measured. When the registry starts reading the
-    // environment's default this goes red, and that sentence, STATUS.md's row and ADR-032 change.
+  test('registration judges a subject with no policy of its own by the environment’s default', async () => {
+    // The environment's default is NONE, which holds nothing, so a subject that inherits it takes
+    // a breaking second version straight in. Until ADR-033 it was *held*: judged by BACKWARD ·
+    // WIRE_JSON, the registry's built-in, whatever the environment said, and this test asserted
+    // that, because the confirmation on `subject-policy-editor.ts` told people so. It is the
+    // opposite now, and this is where the sentence that replaced it ("judged by its environment's
+    // default") is measured. If it goes red the other way, the registry has stopped reading the
+    // environment, and that sentence, STATUS.md and ADR-033 change with it.
     const credential = await ownerCredential();
     const name = named('inherits');
 
@@ -434,7 +441,7 @@ test.describe('the sentence about inheriting, against an environment whose defau
     ).toBe(201);
     const second = await registerVersion(credential, INHERIT_ENVIRONMENT, name, schema('boolean'));
 
-    expect(second.body).toMatchObject({ status: 'AWAITING_APPROVAL' });
+    expect(second.body).toMatchObject({ status: 'ACTIVE' });
     expect((await readSubject(credential, INHERIT_ENVIRONMENT, name)).compatibilityPolicy).toEqual({
       mode: null,
       surface: null,
