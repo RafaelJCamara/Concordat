@@ -251,7 +251,7 @@ cd web && CONCORDAT_WEB_URL=http://localhost:5063 npm run e2e
 
 ## Running the tests
 
-### The .NET suite — 1,532 tests
+### The .NET suite — 1,615 tests
 
 ```bash
 dotnet test Concordat.slnx
@@ -262,10 +262,10 @@ containers through Testcontainers rather than mocking them, so a cold run pulls 
 takes several minutes. The other eight are pure unit tests and finish in seconds:
 
 ```bash
-dotnet test tests/Concordat.Domain.Tests        # 523 tests, no Docker, ~1s
+dotnet test tests/Concordat.Domain.Tests        # 541 tests, no Docker, ~1s
 ```
 
-### The web suite — 1,106 tests
+### The web suite — 1,319 tests
 
 ```bash
 cd web
@@ -276,7 +276,7 @@ npm run codes:check     # fails if the error-code union has drifted from the .NE
 npm run monaco:check    # fails if the vendored editor stylesheet is not the installed Monaco's
 ```
 
-### The browser end-to-end suite — 178 tests
+### The browser end-to-end suite — 195 tests
 
 Two processes Playwright deliberately does not start for you, then the tests — a config that
 quietly started its own copy of either half would produce a suite that passes against the
@@ -294,7 +294,16 @@ cd web && npm run e2e
 `npm run e2e:headed` watches it happen; `npm run e2e:ui` opens Playwright's runner. Override
 either endpoint with `CONCORDAT_REGISTRY` and `CONCORDAT_WEB_URL` — the second is how the same
 suite runs against the production image from [§7](#7-or-run-all-of-it-from-containers), which it
-should, because the dev server is not what ships.
+should, because the dev server is not what ships. It is also the way out when `4300` is not yours:
+another project's container can be published there (on one machine Docker Desktop was forwarding it to
+an unrelated dashboard, and the suite failed at sign-in looking for a form that was not this app's), so
+`npm start -- --port 4301` and `CONCORDAT_WEB_URL=http://localhost:4301 npm run e2e` is the same suite on
+a port nobody else has.
+
+**The suite creates things that cannot be deleted** — a subject is permanent, and a retired one keeps its
+name. A run adds two to `dev`, and the first run on a database adds a fixed table of them to an
+environment of its own, `e2e-names`; later runs add nothing there. See
+[web/e2e/README.md](../web/e2e/README.md) for which, and why `e2e-empty` must stay empty.
 
 The suite claims the instance and creates its own fixtures, all idempotently. See
 [web/e2e/README.md](../web/e2e/README.md) for what it assumes and why it exists.

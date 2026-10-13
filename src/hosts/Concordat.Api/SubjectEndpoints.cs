@@ -481,14 +481,14 @@ public static class SubjectEndpoints
                 "A compatibility policy needs both a mode and a surface, or neither to inherit.");
         }
 
-        if (!Enum.TryParse<CompatibilityMode>(
-                mode.Replace("_", "", StringComparison.Ordinal), true, out var parsedMode))
+        if (!WireEnums.TryParseDefined<CompatibilityMode>(
+                mode.Replace("_", "", StringComparison.Ordinal), out var parsedMode))
         {
             return Result.Failure("invalid_request", $"Unknown compatibility mode '{mode}'.");
         }
 
-        if (!Enum.TryParse<CompatibilitySurface>(
-                surface.Replace("_", "", StringComparison.Ordinal), true, out var parsedSurface))
+        if (!WireEnums.TryParseDefined<CompatibilitySurface>(
+                surface.Replace("_", "", StringComparison.Ordinal), out var parsedSurface))
         {
             return Result.Failure("invalid_request", $"Unknown compatibility surface '{surface}'.");
         }

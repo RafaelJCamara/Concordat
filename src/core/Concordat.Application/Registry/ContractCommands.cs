@@ -598,7 +598,7 @@ internal static class ContractPolicies
             return Result.Success();
         }
 
-        if (!Enum.TryParse<EnforcementMode>(value.Trim(), true, out var parsed))
+        if (!WireEnums.TryParseDefined<EnforcementMode>(value.Trim(), out var parsed))
         {
             return Result.Failure(
                 ConcordatCodes.ContractNameInvalid,

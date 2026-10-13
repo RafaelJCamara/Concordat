@@ -62,6 +62,40 @@ not:
 > this is in the way: nginx and `config.json` become the API host's static files and its own
 > response headers.
 
+### 37. A subject is created at `/subjects/new-subject`, named from a title by a rule that never picks a casing
+
+**Implemented** ([ADR-030](adr/030-create-subject-screen.md)). Five small calls:
+
+- **The path is not `/subjects/new`.** `new` is a valid subject name, and that route would hide one. A
+  hyphen is outside the name grammar, so nothing can be named `new-subject`.
+- **There is a *Title* field the registry does not keep**, because the prototype's "auto-slugged id with
+  a touched flag" needs something to slug *from*, and a subject has no display name. The screen says so.
+  The alternative is no title and no slug, which drops the prototype feature.
+- **The slug never chooses a casing:** `Order created` becomes `Order_created`, not `OrderCreated` or
+  `order_created`. Names are case-sensitive (`orders.Created` and `orders.created` are two subjects), so
+  picking a style is picking which subject somebody meant. If you want PascalCase it is one function,
+  and a name already in the repo's style is returned unchanged either way.
+- **A name that is taken, or differs only in case from one, is *advice*, not a refusal.** The list the
+  page read is a snapshot; the registry's own 409 is what refuses.
+- **The confirmation says the owner and policy "can be changed later, but only through the API"**,
+  because that is true and the app has no screen for either. Adding one is the real fix.
+
+### 38. A schema with an unpaired surrogate escape is refused with `schema_malformed`; and six enum parses refuse numbers that are no member
+
+**Implemented** ([ADR-031](adr/031-unpaired-surrogates-are-refused.md), STATUS). Two separate things in
+one change, the second of which was **not in the brief** and is the one to look at:
+
+- **The schema.** Refused rather than canonicalised (there is no UTF-8 spelling to canonicalise *to*) or
+  replaced with U+FFFD (two different schemas would share an id), and with the existing code rather than a
+  new one (a client could do nothing different with it). It is a normative rule in the canonicalisation spec
+  and five conformance fixtures, so every SDK must reproduce it.
+- **The enums.** `compatibilityMode: "99"` was stored and then broke every subject list in its environment,
+  and five other parses had the same shape. They refuse an undefined number now, and a comma list
+  (`"Backward,Forward"` used to be silently `FULL`). **Behaviour change:** that comma form no longer
+  works, and nobody should have been sending it; a number that *is* a member still does. If you would
+  rather take this as its own commit, it is `WireEnums.cs`, six one-line call-site changes and their tests,
+  and nothing else depends on it.
+
 ### 33. `ci` is a marker scope, and no role grants it
 
 **Implemented.** `RegistrationPolicy.CiOnly` has to tell a build pipeline apart from a running
@@ -550,7 +584,7 @@ it is for.
 **The browser E2E half is now done too, 2026-08-15.** Playwright is in, `web/e2e/` holds 11
 tests, and the reload case above is one of them — the only way to prove a *browser* keeps the
 cookie across a real navigation and that the app asks for it before the first render. That count
-is the day's snapshot and nothing else: the suite stands at **178 tests across fourteen specs** as of
+is the day's snapshot and nothing else: the suite stands at **195 tests across sixteen specs** as of
 2026-10-13, which is the figure [STATUS.md](STATUS.md) carries.
 
 It earned its place in the first ten seconds: the subject list was **broken** against a real

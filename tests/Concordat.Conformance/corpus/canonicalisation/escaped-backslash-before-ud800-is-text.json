@@ -1,0 +1,7 @@
+{
+  "name": "an-escaped-backslash-followed-by-ud800-is-ordinary-text",
+  "why": "The mirror of the fixtures above, and the mistake a hand-written scanner makes: in JSON text, backslash-backslash-u-d-8-0-0 is an escaped backslash followed by the letters u d 8 0 0, not a surrogate escape. An implementation that looks for 'backslash-u' without consuming the escaped backslash first refuses a description that merely mentions one, which documentation about this very rule would.",
+  "format": "json",
+  "input": "{\"description\":\"\\\\ud800\"}",
+  "canonical": "{\"description\":\"\\\\ud800\"}"
+}

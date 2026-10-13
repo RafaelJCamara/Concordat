@@ -17,7 +17,7 @@ test.describe('a session', () => {
     await page.getByRole('textbox', { name: 'Password' }).fill(OWNER.password);
     await page.getByRole('button', { name: /sign in|create owner account/i }).click();
 
-    await expect(page.getByText(OWNER.email)).toBeVisible();
+    await expect(page.locator('cd-app-sidebar').getByText(OWNER.email)).toBeVisible();
   });
 
   test('survives a full page reload', async ({ page }) => {
@@ -26,7 +26,7 @@ test.describe('a session', () => {
     // except an httpOnly cookie it cannot read, and one route that will trade it back.
     await page.goto('/subjects');
 
-    await expect(page.getByText(OWNER.email)).toBeVisible();
+    await expect(page.locator('cd-app-sidebar').getByText(OWNER.email)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   });
 
@@ -55,7 +55,7 @@ test.describe('a session', () => {
 
     await expect(page).toHaveURL(/\/sign-in\?returnTo=%2Fsubjects/);
     await expect(page.getByRole('button', { name: /sign in|create owner account/i })).toBeVisible();
-    await expect(page.getByText(OWNER.email)).toHaveCount(0);
+    await expect(page.locator('cd-app-sidebar').getByText(OWNER.email)).toHaveCount(0);
   });
 
   test('the session cookie is not readable by script', async ({ page }) => {

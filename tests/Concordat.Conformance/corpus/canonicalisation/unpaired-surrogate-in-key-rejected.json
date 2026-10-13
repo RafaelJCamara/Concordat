@@ -1,0 +1,7 @@
+{
+  "name": "an-unpaired-surrogate-escape-in-an-object-key-is-rejected",
+  "why": "The same rule applies to object keys. It is its own fixture because a key is read before its value is, and because the refusal must not quote the key: a message carrying an unpaired surrogate cannot itself be written as UTF-8, which is how the reference implementation's duplicate-key refusal would have failed on {\"\\ud800\":1,\"\\ud800\":2}.",
+  "format": "json",
+  "input": "{\"\\ud800\":1,\"\\ud800\":2}",
+  "error": "schema_malformed"
+}

@@ -56,6 +56,54 @@ public class EnvironmentApiTests(ApiFactory factory)
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    // The same defect as subjects, in the three places an environment parses an enumeration: the
+    // default compatibility policy (both halves) and the registration policy. `Enum.TryParse` accepts
+    // any integer, so an undefined one used to be stored and then fail whatever projected it.
+    [Theory]
+    [InlineData("99", "WIRE_JSON", null)]
+    [InlineData("BACKWARD", "99", null)]
+    [InlineData(null, null, "99")]
+    public async Task AnUndefinedEnumerationNumber_OnCreate_Is400_AndTheEnvironmentIsNotMade(
+        string? mode, string? surface, string? registration)
+    {
+        var client = factory.CreateClient();
+        var name = Unique();
+
+        var response = await client.PostAsJsonAsync(
+            "/v1/environments",
+            new CreateEnvironmentRequest(name, null, mode, surface, registration),
+            ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(
+            HttpStatusCode.NotFound, (await client.GetAsync($"/v1/environments/{name}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/v1/environments")).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("99", "WIRE_JSON", null)]
+    [InlineData("BACKWARD", "99", null)]
+    [InlineData(null, null, "99")]
+    public async Task AnUndefinedEnumerationNumber_OnUpdate_Is400_AndChangesNothing(
+        string? mode, string? surface, string? registration)
+    {
+        var client = factory.CreateClient();
+        var name = Unique();
+        var before = await CreateAsync(client, name);
+
+        var response = await client.PatchAsJsonAsync(
+            $"/v1/environments/{name}",
+            new UpdateEnvironmentRequest(null, mode, surface, registration),
+            ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var after = await client.GetFromJsonAsync<EnvironmentResponse>(
+            $"/v1/environments/{name}", ApiFactory.Json);
+        Assert.Equal(before.RegistrationPolicy, after!.RegistrationPolicy);
+        Assert.Equal(before.DefaultCompatibilityPolicy, after.DefaultCompatibilityPolicy);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/v1/environments")).StatusCode);
+    }
+
     [Fact]
     public async Task CreatingTheSameNameTwiceIs409()
     {

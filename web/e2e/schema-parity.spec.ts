@@ -103,6 +103,26 @@ const JSON_CASES: readonly Case[] = [
     'a dialect written with escapes',
     '{"$schema":"https:\\u002f\\u002fjson-schema.org/draft/2020-12/schema"}',
   ),
+  ok('a lone high surrogate escape', '{"a":"\\ud800"}'),
+  ok('a lone low surrogate escape', '{"a":"\\udc00"}'),
+  ok('a pair written the wrong way round', '{"a":"\\ude00\\ud83d"}'),
+  ok('a high surrogate followed by text', '{"a":"\\ud800x"}'),
+  ok('a high surrogate at the end of a string', '{"a":"x\\ud83d"}'),
+  ok('a lone surrogate in an object key', '{"\\ud800":1}'),
+  ok(
+    'a lone surrogate in a key written twice, which the duplicate-key refusal would quote',
+    '{"\\ud800":1,"\\ud800":2}',
+  ),
+  ok('a lone surrogate nested in an array of objects', '{"a":["ok",{"b":"\\udfff"}]}'),
+  ok('a lone surrogate in a $id', '{"$id":"https://example.com/\\ud800"}'),
+  ok('a lone surrogate after a valid pair', '{"a":"\\ud83d\\ude00\\ud83d"}'),
+  ok('a lone surrogate beside a duplicate key, which is named first', '{"a":"\\ud800","a":2}'),
+  ok('a surrogate pair', '{"a":"\\ud83d\\ude00"}'),
+  ok('a surrogate pair in capitals', '{"a":"\\uD83D\\uDE00"}'),
+  ok('the first and last pairs', '{"a":"\\ud800\\udc00\\udbff\\udfff"}'),
+  ok('an escaped backslash before the letters ud800', '{"a":"\\\\ud800"}'),
+  ok('an escaped backslash, then a real lone surrogate', '{"a":"\\\\\\ud800"}'),
+  ok('the code units either side of the surrogate block', '{"a":"\\ud7ff\\ue000"}'),
   ok('a number written with a trailing zero', '{"maximum":1.0}'),
   ok('a number too large for a double', '{"maximum":12345678901234567890}'),
   ok('exactly 512 KiB', '"' + 'a'.repeat(512 * 1024 - 2) + '"'),
@@ -111,6 +131,14 @@ const JSON_CASES: readonly Case[] = [
     'multi-byte characters that fit in characters but not in bytes',
     '"' + 'é'.repeat(262_144) + '"',
   ),
+  {
+    label: 'a lone surrogate character, not an escape',
+    text: '{"a":"' + String.fromCharCode(0xd800) + '"}',
+    mirrored: false,
+    why:
+      'it cannot be sent as written: the request body is refused as malformed before the schema ' +
+      'is read (400, no concordatCode), which is a refusal and never a crash',
+  },
   {
     label: 'a keyword that is not valid under the metaschema',
     text: '{"type":"bogus"}',
@@ -135,6 +163,16 @@ const AVRO_CASES: readonly Case[] = [
   ok('a record', '{"type":"record","name":"R","fields":[{"name":"id","type":"string"}]}'),
   ok('unbalanced braces', '{"type": '),
   ok('a duplicate key', '{"type":"record","type":"enum","name":"R","fields":[]}'),
+  ok('a lone surrogate in doc', '{"type":"record","name":"R","doc":"\\ud800","fields":[]}'),
+  ok(
+    'a lone surrogate in a field default',
+    '{"type":"record","name":"R","fields":[{"name":"f","type":"string","default":"\\udc00"}]}',
+  ),
+  ok(
+    'a lone surrogate in the key of a custom attribute',
+    '{"type":"record","name":"R","fields":[],"\\ud800":1}',
+  ),
+  ok('a surrogate pair in doc', '{"type":"record","name":"R","doc":"\\ud83d\\ude00","fields":[]}'),
   ok('nesting past 64 levels', nested(65)),
   ok(
     'a $schema attribute, which Avro has no dialect check for',
@@ -162,6 +200,12 @@ const PROTOBUF_CASES: readonly Case[] = [
     text: 'this is not proto',
     mirrored: false,
     why: "the Protobuf grammar is the registry's to judge",
+  },
+  {
+    label: 'a lone surrogate escape in a .proto comment',
+    text: 'syntax = "proto3"; // \\ud800\nmessage M { string id = 1; }',
+    mirrored: false,
+    why: 'Protobuf is not read as JSON, so the rule about JSON strings does not apply to it',
   },
   {
     label: 'a duplicate-looking key in a .proto',
@@ -206,6 +250,16 @@ test.describe('the schema editor against the registry', () => {
 
         await setSchema(page, item.text);
 
+        // A document is accepted or refused. A 5xx is neither, and it must not be able to hide:
+        // `dryRun` reports a crash as `code: null`, the same as an acceptance, so a registry
+        // that crashed on a document the editor was quiet about once passed this whole test.
+        if (registry.status >= 500) {
+          disagreements.push(
+            `${item.label}: the registry answered ${registry.status}. A document is accepted or ` +
+              'refused with a code, never a crash.',
+          );
+        }
+
         const said = await findingCodes(page, 'refusal');
         const registryCode = registry.code;
         const known = registryCode !== null && CLIENT_CODES.has(registryCode);
@@ -241,22 +295,4 @@ test.describe('the schema editor against the registry', () => {
       expect(disagreements, disagreements.join('\n')).toEqual([]);
     });
   }
-
-  test('the registry still crashes on a lone surrogate escape, which the editor does not claim to know', async ({
-    page,
-  }) => {
-    // Recorded, not asserted as a rule. `"\ud800"` is well-formed JSON and the registry answers
-    // 500 with no Problem Details body — a defect there, not a refusal to mirror. If this
-    // starts failing because the registry now answers 400, delete the case: the editor was
-    // right not to guess.
-    const credential = await ownerCredential();
-    const verdict = await dryRun(credential, ENVIRONMENT, SUBJECTS.json, '{"a":"\\ud800"}');
-
-    await page.goto(`/subjects/${SUBJECTS.json}/versions/new`);
-    await waitForSubject(page);
-    await setSchema(page, '{"a":"\\ud800"}');
-
-    expect(verdict.status).toBe(500);
-    expect(await findingCodes(page, 'refusal')).toEqual([]);
-  });
 });

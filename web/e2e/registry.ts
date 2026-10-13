@@ -463,6 +463,12 @@ export async function registerVersion(
 
 /** A subject as the registry reports it, reduced to what a comparison needs. */
 export interface SubjectView {
+  readonly name: string;
+  readonly format: string;
+  readonly owner: string;
+  readonly lifecycle: string;
+  readonly contentModel: string;
+  readonly compatibilityPolicy: { readonly mode: string | null; readonly surface: string | null };
   readonly latest: number | null;
   readonly versions: readonly {
     ordinal: number;
@@ -520,4 +526,63 @@ export async function schemaIdOf(
   }
 
   return ((await response.json()) as { schemaId: string }).schemaId;
+}
+
+/** What the registry said to a create, reduced to what a comparison needs. */
+export interface CreateVerdict {
+  readonly status: number;
+  /** The registry's `concordatCode` when it refused, else null. */
+  readonly code: string | null;
+  /**
+   * The name the registry holds the subject under, or null when it refused for another reason.
+   *
+   * From the 201 body, or — when the subject already existed, which a re-run of a fixed table
+   * makes the ordinary case — from the 409's own message (`Subject 'x' already exists`), which
+   * names what the registry made of the name after its trim. Either way it is the registry's
+   * account, not the request's.
+   */
+  readonly name: string | null;
+  readonly detail: string | null;
+}
+
+/**
+ * Sends a create exactly as given and reports what the registry made of it.
+ *
+ * <b>There is no dry run for a create, and an accepted one is permanent</b> — so a parity table
+ * built on it names its subjects and runs against an environment of its own (`e2e-names`), and
+ * counts both a 201 and a 409 `subject_already_exists` as "the registry accepted this name": the
+ * 409 is only reached once the name has passed validation, which is the thing being asked.
+ */
+export async function createSubjectRaw(
+  ownerCredential: string,
+  environment: string,
+  body: Record<string, unknown>,
+): Promise<CreateVerdict> {
+  const response = await call(`/v1/environments/${environment}/subjects`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${ownerCredential}` },
+    body: JSON.stringify(body),
+  });
+
+  let parsed: { concordatCode?: string; detail?: string; name?: string } = {};
+
+  try {
+    parsed = (await response.json()) as typeof parsed;
+  } catch {
+    // A 500 may have no body. Reported as what it is, so a comparison says "crashed".
+  }
+
+  const taken = /^Subject '(.*)' already exists/su.exec(parsed.detail ?? '');
+
+  return {
+    status: response.status,
+    code: parsed.concordatCode ?? null,
+    name: response.ok ? (parsed.name ?? null) : (taken?.[1] ?? null),
+    detail: parsed.detail ?? null,
+  };
+}
+
+/** Whether a verdict means the registry took the name: created, or already there under it. */
+export function accepted(verdict: CreateVerdict): boolean {
+  return verdict.status === 201 || verdict.code === 'subject_already_exists';
 }

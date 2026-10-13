@@ -93,6 +93,73 @@ describe('SubjectsApi', () => {
     });
   });
 
+  describe('createSubject', () => {
+    const request = {
+      name: 'orders.created',
+      format: 'json',
+      owner: 'orders-team',
+      contentModel: 'OPEN',
+      compatibility: null,
+    } as const;
+
+    it('posts to the environment’s subjects, with only what was chosen', () => {
+      const { api, backend } = setUp();
+      api.createSubject('dev', request).subscribe();
+
+      const call = backend.expectOne('/v1/environments/dev/subjects');
+
+      expect(call.request.method).toBe('POST');
+      // Inheriting is the *absence* of both policy members, not two nulls.
+      expect(call.request.body).toEqual({
+        name: 'orders.created',
+        format: 'json',
+        owner: 'orders-team',
+        contentModel: 'OPEN',
+      });
+    });
+
+    it('sends a whole policy as the registry’s two members', () => {
+      const { api, backend } = setUp();
+      api
+        .createSubject('dev', {
+          ...request,
+          compatibility: { mode: 'FULL_TRANSITIVE', surface: 'SOURCE' },
+        })
+        .subscribe();
+
+      const call = backend.expectOne('/v1/environments/dev/subjects');
+
+      expect(call.request.body).toMatchObject({
+        compatibilityMode: 'FULL_TRANSITIVE',
+        compatibilitySurface: 'SOURCE',
+      });
+    });
+
+    it('hands back the subject as the registry stored it, not what was sent', () => {
+      // The registry trims before it validates, so the stored name can differ from the one sent,
+      // and a caller that navigated to what it sent would land on a 404.
+      let created: Subject | null = null;
+      const { api, backend } = setUp();
+      api.createSubject('dev', request).subscribe((value) => (created = value));
+
+      backend
+        .expectOne('/v1/environments/dev/subjects')
+        .flush({ ...dto, name: 'stored.by.the.registry', latest: null, versions: [] });
+
+      expect((created as Subject | null)?.name).toBe('stored.by.the.registry');
+      expect((created as Subject | null)?.versions).toEqual([]);
+    });
+
+    it('does not send the owner as the writer or anything else the registry already knows', () => {
+      const { api, backend } = setUp();
+      api.createSubject('dev', request).subscribe();
+
+      const body = backend.expectOne('/v1/environments/dev/subjects').request.body as object;
+
+      expect(Object.keys(body).sort()).toEqual(['contentModel', 'format', 'name', 'owner']);
+    });
+  });
+
   describe('diffVersions', () => {
     const diff = {
       from: 1,

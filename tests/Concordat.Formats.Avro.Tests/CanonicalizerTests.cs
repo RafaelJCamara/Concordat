@@ -299,6 +299,42 @@ public class CanonicalizerTests
         Assert.Equal(ConcordatCodes.SchemaMalformed, result.Error!.Code);
     }
 
+    // Avro keeps `doc`, `default` and any custom attribute (nothing is stripped, unlike PCF), so a
+    // string anywhere in the document reaches the writer. Well-formed JSON, an unrepresentable
+    // string: it used to be a 500 from the writer rather than a refusal.
+    [Theory]
+    [InlineData("""{"type":"record","name":"R","doc":"\ud800","fields":[]}""", "/doc", "\\uD800")]
+    [InlineData(
+        """{"type":"record","name":"R","fields":[{"name":"f","type":"string","default":"\udc00"}]}""",
+        "/fields/0/default",
+        "\\uDC00")]
+    [InlineData("""{"type":"enum","name":"E","symbols":["A"],"x-note":"\ude00\ud83d"}""", "/x-note", "\\uDE00")]
+    [InlineData("""{"type":"record","name":"R","fields":[],"\ud800":1}""", "/\\ud800", "\\uD800")]
+    public void AnUnpairedSurrogateEscape_IsRejectedAndNamedWithoutBeingEchoed(
+        string body, string location, string unit)
+    {
+        var result = Canonicalizer.Canonicalize(body);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ConcordatCodes.SchemaMalformed, result.Error!.Code);
+        Assert.Contains($"'{location}'", result.Error.Message, StringComparison.Ordinal);
+        Assert.Contains(unit, result.Error.Message, StringComparison.Ordinal);
+        // Throws on an unpaired surrogate, which is what a response writer does.
+        _ = new System.Text.UTF8Encoding(false, true).GetByteCount(result.Error.Message);
+    }
+
+    [Fact]
+    public void AWellFormedSurrogatePair_IsStillAccepted()
+    {
+        var backslashU = new string((char)92, 1) + "u";
+        var result = Canonicalizer.Canonicalize(
+            "{\"type\":\"record\",\"name\":\"R\",\"doc\":\"" + char.ConvertFromUtf32(0x1F600) +
+            "\",\"fields\":[]}");
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Contains(backslashU + "D83D" + backslashU + "DE00", result.Value, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

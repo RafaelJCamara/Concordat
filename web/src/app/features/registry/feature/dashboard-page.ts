@@ -3,7 +3,9 @@ import { RouterLink } from '@angular/router';
 import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmSkeleton } from '@spartan-ng/helm/skeleton';
+import { IfScope } from '../../../core/auth/if-scope';
 import { ActiveEnvironmentStore } from '../../../core/config/active-environment-store';
+import { SCHEMA_WRITE_SCOPES } from '../../../domain/identity/scope';
 import { latestVersion, pendingVersions } from '../../../domain/registry/subject';
 import { Icon } from '../../../shared/ui/icon/icon';
 import { StatCard } from '../../../shared/ui/stat-card/stat-card';
@@ -31,7 +33,16 @@ const RECENT_LIMIT = 6;
   selector: 'cd-dashboard-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [SubjectListStore],
-  imports: [RouterLink, HlmAlertImports, HlmButton, HlmSkeleton, Icon, StatCard, SubjectCard],
+  imports: [
+    RouterLink,
+    HlmAlertImports,
+    HlmButton,
+    HlmSkeleton,
+    Icon,
+    IfScope,
+    StatCard,
+    SubjectCard,
+  ],
   template: `
     <section class="mx-auto w-full max-w-6xl space-y-8 p-6 lg:p-8">
       <header>
@@ -98,6 +109,20 @@ const RECENT_LIMIT = 6;
                 A subject has to exist before a version can be registered, so nothing is wrong —
                 there is simply nothing here yet.
               </p>
+              <!--
+                What an empty registry is for, one click away. Absent for a caller who cannot
+                write (ADR-018), who is told nothing it cannot act on: the sentence above is
+                still true for them.
+              -->
+              <a
+                *cdIfScope="schemaWriteScopes"
+                hlmBtn
+                class="glow-primary mt-4 gap-2"
+                routerLink="/subjects/new-subject"
+              >
+                <cd-icon name="plus" size="1rem" />
+                Create the first subject
+              </a>
             </div>
           } @else {
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -127,6 +152,9 @@ export class DashboardPage {
 
   /** Enough cards to fill the grid a short list would occupy, so the layout does not jump. */
   protected readonly skeletonCards = [0, 1, 2];
+
+  /** The scopes that permit creating a subject, from the one list (ADR-018). */
+  protected readonly schemaWriteScopes = SCHEMA_WRITE_SCOPES;
 
   protected readonly subjectCount = computed(() => this.store.subjects().length);
 

@@ -19,5 +19,7 @@ export async function signIn(page: Page, who: typeof OWNER | typeof READER): Pro
   await page.getByRole('textbox', { name: 'Email' }).fill(who.email);
   await page.getByRole('textbox', { name: 'Password' }).fill(who.password);
   await page.getByRole('button', { name: /sign in|create owner account/i }).click();
-  await expect(page.getByText(who.email)).toBeVisible();
+  // The sidebar's account control, not any text on the page: a subject owned by this account
+  // shows the same email in a table cell, and a bare match would be ambiguous.
+  await expect(page.locator('cd-app-sidebar').getByText(who.email)).toBeVisible();
 }

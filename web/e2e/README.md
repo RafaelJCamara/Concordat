@@ -98,6 +98,31 @@ is final, so `approvals.spec.ts` creates a subject of its own per decision, name
 (`acme.e2e.approve.<timestamp>`), and decides that. That costs the registry two subjects per run;
 the shared pair above is never decided, which is what keeps every other spec repeatable.
 
+**Creating a subject is the other thing that cannot be undone, so it leaves things behind.** There
+is no delete and a retired subject keeps its name, so a test that creates one has made it for good.
+Three arrangements keep that from costing anything:
+
+- `new-subject.spec.ts` names what it creates for the run (`acme.e2e.created.<stem>.<timestamp>`)
+  and creates two subjects per run in `dev`, which every run adds to the list for good. The cases
+  about a name that is taken or differs only in case use the shared `acme.e2e.OrderCreated` and
+  create nothing: the registry answers 409 and holds the line.
+- `subject-name-parity.spec.ts` has no dry run to ask — a create either happens or it does not —
+  so it runs in an environment of its own, **`e2e-names`**, and its table is _fixed_ rather than
+  named per run. The first run creates each accepted row; every later run finds the name taken and
+  the registry answers 409 `subject_already_exists`, which is only reached once the name has passed
+  validation and which names the name it holds after its trim. So a re-run proves the same thing
+  and creates nothing. **Do not point other specs at `e2e-names`**, and do not rename a row: that
+  creates another subject.
+- The empty states can only be seen in an empty environment, and `dev` never is. **`e2e-empty`**
+  is created once and **no spec may create a subject in it**: the tests there click through to the
+  form and stop. They aim the app at it by answering `config.json`, the one request in this suite
+  that is stubbed, and the one a deployment itself supplies; everything else is the real registry.
+
+**Match the account control, not the account's email.** A subject the browser creates is owned by
+the signed-in account, so its email now appears in a table cell on the list as well as in the
+sidebar, and `getByText(email)` stopped being unique the first time `new-subject.spec.ts` ran. The
+sign-in helpers look in `cd-app-sidebar`.
+
 **The auth limiter budgets about one run, and the suite is built to stay under it.** Sign-in is
 rate-limited to 20 attempts per five minutes per address. A run makes thirteen: three in
 `global-setup` (the owner through the API, then the owner and the reader through the real form,

@@ -2,7 +2,9 @@ import { signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { SessionStore } from '../../../core/auth/session-store';
 import { provideConcordatConfig } from '../../../core/config/app-config';
+import type { Scope } from '../../../domain/identity/scope';
 import type { Subject } from '../../../domain/registry/subject';
 import { SubjectListStore } from '../application/subject-list-store';
 import { SubjectListPage } from './subject-list-page';
@@ -141,5 +143,65 @@ describe('SubjectListPage', () => {
     const host = search('nonesuch');
 
     expect(host.querySelector('input[type=search]')).not.toBeNull();
+  });
+});
+
+// "New subject" is the only way into the create screen from here, and it used to be a button with
+// no handler: a writer could press it and nothing happened. It is a link now, absent — not
+// disabled — for a caller who cannot write (ADR-018), and the empty list carries the same step.
+describe('SubjectListPage: creating a subject', () => {
+  function renderAs(scopes: readonly Scope[], subjects: readonly Subject[]): HTMLElement {
+    TestBed.configureTestingModule({
+      providers: [provideRouter([]), provideConcordatConfig({ defaultEnvironment: 'dev' })],
+    });
+    TestBed.overrideComponent(SubjectListPage, {
+      set: { providers: [{ provide: SubjectListStore, useValue: loadedStore(subjects) }] },
+    });
+    TestBed.inject(SessionStore).observeInstance({ claimed: true, actor: 'someone', scopes });
+
+    const fixture = TestBed.createComponent(SubjectListPage);
+    fixture.detectChanges();
+
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  const links = (host: HTMLElement) =>
+    [...host.querySelectorAll('a[href="/subjects/new-subject"]')].map((a) => a.textContent?.trim());
+
+  it('links "New subject" to the create screen for someone who can write', () => {
+    expect(links(renderAs(['subject:write'], SUBJECTS))).toEqual(['New subject']);
+  });
+
+  it('offers it to an admin as well, who holds the other write scope', () => {
+    expect(links(renderAs(['subject:admin'], SUBJECTS))).toEqual(['New subject']);
+  });
+
+  it('leaves it out, rather than disabling it, for a reader', () => {
+    const host = renderAs(['subject:read'], SUBJECTS);
+
+    expect(links(host)).toEqual([]);
+    expect(host.textContent).not.toContain('New subject');
+  });
+
+  it('is a link and not a button that does nothing', () => {
+    const host = renderAs(['subject:write'], SUBJECTS);
+
+    expect(
+      [...host.querySelectorAll('button')].some((b) => b.textContent?.includes('New subject')),
+    ).toBe(false);
+  });
+
+  it('puts the next step beside an empty list, for a writer', () => {
+    const host = renderAs(['subject:write'], []);
+
+    expect(host.textContent).toContain('No subjects yet');
+    expect(links(host)).toEqual(['New subject', 'Create the first subject']);
+  });
+
+  it('says the list is empty and offers nothing a reader cannot do', () => {
+    const host = renderAs(['subject:read'], []);
+
+    expect(host.textContent).toContain('No subjects yet');
+    expect(links(host)).toEqual([]);
   });
 });

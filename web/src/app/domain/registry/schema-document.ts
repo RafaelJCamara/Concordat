@@ -51,8 +51,8 @@ export interface DocumentFinding extends EditorFinding {
  * it points at, by exactly the length of the indentation above it.
  *
  * Mirrors, in the registry's order: `schema_body_empty`, `schema_too_large` (measured in
- * UTF-8 bytes, not characters), `schema_malformed` (not JSON, nesting past 64, a duplicate
- * key), then the dialect. JSON Schema and Avro are both JSON and share the first three;
+ * UTF-8 bytes, not characters), `schema_malformed` (not JSON, nesting past 64, a surrogate
+ * escape with no partner, a duplicate key), then the dialect. JSON Schema and Avro are both JSON and share the first three;
  * Protobuf is parsed by a different grammar that is the registry's to judge, so it gets the
  * first two only. Only JSON Schema has a dialect.
  */
@@ -109,6 +109,25 @@ export function checkSchemaText(
   }
 
   const findings: DocumentFinding[] = [];
+
+  if (parsed.unpaired !== null) {
+    const { unit, span } = parsed.unpaired;
+
+    // First, as in the registry, which also refuses to quote the string it found. The underline
+    // is the escape itself rather than the whole string: a long description with one bad
+    // escape in it is findable only if the finding says which six characters.
+    findings.push({
+      severity: 'refusal',
+      code: 'schema_malformed',
+      message:
+        `The surrogate escape \\u${unit.toString(16).toUpperCase().padStart(4, '0')} has no ` +
+        'partner. A surrogate is only a character as a high half followed directly by a low ' +
+        'half, both written as escapes; alone, the string has no UTF-8 spelling and parsers ' +
+        'disagree about what it is, so this document has no single meaning.',
+      position: place(span.start),
+      length: span.end - span.start,
+    });
+  }
 
   if (parsed.duplicate !== null) {
     const { key, span } = parsed.duplicate;

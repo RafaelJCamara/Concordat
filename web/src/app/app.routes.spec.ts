@@ -1,7 +1,7 @@
 import type { Route } from '@angular/router';
 import { describe, expect, it } from 'vitest';
 import { routes } from './app.routes';
-import { signedInGuard } from './core/auth/scope-guard';
+import { schemaWriteGuard, signedInGuard } from './core/auth/scope-guard';
 
 /**
  * Structural tests over the route table.
@@ -13,7 +13,7 @@ import { signedInGuard } from './core/auth/scope-guard';
  */
 
 /** Route paths that write, and must therefore be guarded. */
-const WRITE_ROUTE_MARKERS = ['/new', '/edit'];
+const WRITE_ROUTE_MARKERS = ['/new', '/new-subject', '/edit'];
 
 function paths(table: readonly Route[]): readonly string[] {
   return table.map((route) => route.path ?? '');
@@ -34,6 +34,32 @@ describe('the route table', () => {
     expect(literal).toBeGreaterThanOrEqual(0);
     expect(parameterised).toBeGreaterThanOrEqual(0);
     expect(literal).toBeLessThan(parameterised);
+  });
+
+  it('matches `subjects/new-subject` before `subjects/:name`', () => {
+    /*
+     * Below it, `/subjects/new-subject` would open the detail screen of a subject of that name.
+     * The segment is not `new`, which is a valid subject name and would be hidden by the create
+     * screen: the hyphen is what guarantees no subject is reached by this path, and that is
+     * pinned where the name grammar lives, in `subject-name.spec.ts` (this file is the
+     * composition root and may not import the domain).
+     */
+    const table = paths(routes);
+    const create = table.indexOf('subjects/new-subject');
+    const detail = table.indexOf('subjects/:name');
+
+    expect(create).toBeGreaterThanOrEqual(0);
+    expect(create).toBeLessThan(detail);
+  });
+
+  it('guards the create screen with the schema write scopes, the same as registering a version', () => {
+    // The buttons that lead here read the same constant, so the route and the affordance cannot
+    // disagree about who may see them.
+    const create = routes.find((route) => route.path === 'subjects/new-subject');
+    const register = routes.find((route) => route.path === 'subjects/:name/versions/new');
+
+    expect(create?.canActivate).toEqual([schemaWriteGuard]);
+    expect(register?.canActivate).toEqual(create?.canActivate);
   });
 
   it('guards every write route', () => {

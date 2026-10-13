@@ -6,6 +6,9 @@
  * - It accepts a duplicate key (the last one wins), where the registry refuses the document
  *   (`schema_malformed`) because parsers disagree on which value wins. A client built on it is
  *   *looser* than the registry, and the author learns about the problem from a 400.
+ * - It accepts a surrogate escape with no partner (a lone high or low half), where the registry
+ *   refuses the document (`schema_malformed`): the string has no UTF-8 spelling and parsers
+ *   disagree on what it is. JavaScript keeps it as a string it can no longer encode.
  * - It has no depth limit short of the JS stack, where the registry's reader stops at 64 levels.
  * - It gives no positions, so an editor cannot underline anything.
  * - It cannot be reversed. Re-serialising a parsed document rewrites number literals — `1.0`
@@ -60,13 +63,33 @@ export interface JsonSyntaxError {
 
 /** The outcome of reading a document. */
 export type JsonParse =
-  | { readonly ok: true; readonly root: JsonNode; readonly duplicate: JsonDuplicate | null }
+  | {
+      readonly ok: true;
+      readonly root: JsonNode;
+      readonly duplicate: JsonDuplicate | null;
+      readonly unpaired: JsonUnpairedSurrogate | null;
+    }
   | { readonly ok: false; readonly error: JsonSyntaxError };
 
 /** An object that names one key twice. */
 export interface JsonDuplicate {
   readonly key: string;
   /** The second occurrence: the one the registry would not choose between. */
+  readonly span: Span;
+}
+
+/**
+ * A UTF-16 surrogate escape with no partner, in a value or in a key.
+ *
+ * A surrogate is only a character as a high half (D800 to DBFF) immediately followed by a low
+ * half (DC00 to DFFF), both written as escapes. The registry refuses anything else with
+ * `schema_malformed` and names the string; this names the escape itself, which an editor can
+ * underline.
+ */
+export interface JsonUnpairedSurrogate {
+  /** The code unit, 0xD800 to 0xDFFF. */
+  readonly unit: number;
+  /** The six characters of the escape, as written. */
   readonly span: Span;
 }
 
@@ -83,6 +106,12 @@ const WHITESPACE = new Set([' ', '\t', '\n', '\r']);
 const NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
 const LITERAL = /true|false|null/y;
 
+const HIGH_SURROGATE_START = 0xd800;
+const LOW_SURROGATE_START = 0xdc00;
+const LOW_SURROGATE_END = 0xdfff;
+/** A low half written as an escape, in either case: the only thing that may follow a high half. */
+const LOW_SURROGATE_ESCAPE = /^\\u[dD][c-fC-F][0-9a-fA-F]{2}$/;
+
 /**
  * Reads a document under the same grammar as `System.Text.Json`'s default reader: RFC 8259,
  * no comments, no trailing commas, no leading zeros, nesting no deeper than
@@ -91,6 +120,7 @@ const LITERAL = /true|false|null/y;
 export function parseJsonDocument(text: string): JsonParse {
   let at = 0;
   let duplicate: JsonDuplicate | null = null;
+  let unpaired: JsonUnpairedSurrogate | null = null;
 
   const skip = (): void => {
     while (at < text.length && WHITESPACE.has(text.charAt(at))) {
@@ -135,6 +165,22 @@ export function parseJsonDocument(text: string): JsonParse {
         if (escape === 'u') {
           if (!/^[0-9A-Fa-f]{4}$/.test(text.slice(at + 2, at + 6))) {
             throw new Stop("'\\u' must be followed by four hexadecimal digits.", at);
+          }
+
+          const unit = Number.parseInt(text.slice(at + 2, at + 6), 16);
+
+          if (unit >= HIGH_SURROGATE_START && unit <= LOW_SURROGATE_END) {
+            // Read in order and adjacent: a high half is only a character when the very next
+            // thing is a low half written as an escape, so a reversed pair is two faults.
+            const isHigh = unit < LOW_SURROGATE_START;
+            const partnered = isHigh && LOW_SURROGATE_ESCAPE.test(text.slice(at + 6, at + 12));
+
+            if (partnered) {
+              at += 6;
+            } else {
+              // Only the first is kept, in document order, which is what the registry names.
+              unpaired ??= { unit, span: { start: at, end: at + 6 } };
+            }
           }
 
           at += 6;
@@ -296,7 +342,7 @@ export function parseJsonDocument(text: string): JsonParse {
       throw new Stop(`Unexpected ${describe()} after the end of the document.`, at);
     }
 
-    return { ok: true, root, duplicate };
+    return { ok: true, root, duplicate, unpaired };
   } catch (error) {
     if (error instanceof Stop) {
       return {

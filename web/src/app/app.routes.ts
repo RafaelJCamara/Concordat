@@ -29,6 +29,24 @@ export const routes: Routes = [
       import('./features/registry/feature/subject-list-page').then((m) => m.SubjectListPage),
   },
   {
+    /*
+     * **This must stay above `subjects/:name`, and its last segment is not `new`.** The router
+     * matches in order, so below it `/subjects/new-subject` would open the detail screen of a
+     * subject called `new-subject`. And it is not `/subjects/new`, because `new` is a perfectly
+     * good subject name — the registry accepts it — so that route would hide one. A hyphen is
+     * outside the name grammar (`subject-name.spec.ts` pins that), so no subject can ever be named
+     * this, and the create screen cannot shadow one.
+     *
+     * A write route, so it carries the guard `NewVersionPage` does: the same constant the
+     * "New subject" buttons read, so the route and the affordances that point at it cannot drift.
+     */
+    path: 'subjects/new-subject',
+    title: 'New subject · Concordat',
+    canActivate: [schemaWriteGuard],
+    loadComponent: () =>
+      import('./features/registry/feature/new-subject-page').then((m) => m.NewSubjectPage),
+  },
+  {
     // `:name` is a dotted subject name, which the router hands over already decoded — so a
     // subject containing a slash arrives here intact rather than as two segments, provided
     // whoever built the link encoded it. `routerLink` with an array does that for us.

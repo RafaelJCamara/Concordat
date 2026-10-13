@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { READER_STORAGE_STATE } from './global-setup';
 import { OWNER, READER } from './registry';
 import { signIn } from './sign-in';
 
@@ -23,7 +24,7 @@ test.describe('write affordances', () => {
     // The page renders -- reading is the reader's whole job. What is missing is the way in to
     // a write.
     await expect(page.getByRole('heading', { name: 'Subjects' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'New subject' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'New subject' })).toHaveCount(0);
   });
 
   test('an owner is offered them', async ({ page }) => {
@@ -32,7 +33,7 @@ test.describe('write affordances', () => {
     await signIn(page, OWNER);
     await page.goto('/subjects');
 
-    await expect(page.getByRole('button', { name: 'New subject' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'New subject' })).toBeVisible();
   });
 
   test('an anonymous visitor is offered none either', async ({ page }) => {
@@ -46,7 +47,7 @@ test.describe('write affordances', () => {
     await page.goto('/subjects');
 
     await expect(page).toHaveURL(/\/sign-in\?returnTo=%2Fsubjects/);
-    await expect(page.getByRole('button', { name: 'New subject' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'New subject' })).toHaveCount(0);
   });
 });
 
@@ -97,6 +98,50 @@ test.describe('a direct URL to a write route', () => {
 
     await expect(page).toHaveURL(
       new RegExp(`/sign-in\\?returnTo=${encodeURIComponent(WRITE_ROUTE)}`),
+    );
+  });
+});
+
+/**
+ * The create-subject route, which is a write route like the one above and is held to the same
+ * three cases.
+ *
+ * Done with the browser states global setup saved rather than three more sign-ins: this suite
+ * budgets one run against the auth limiter (see README.md), and a spec about a *route* is not a
+ * spec about signing in. The first case is what makes the others mean anything: a route that
+ * redirected everybody would satisfy them while simply being broken.
+ */
+const CREATE_ROUTE = '/subjects/new-subject';
+
+test.describe('a direct URL to the create-subject route', () => {
+  test('renders for someone who may write', async ({ page }) => {
+    await page.goto(CREATE_ROUTE);
+
+    await expect(page.getByRole('heading', { name: 'New subject' })).toBeVisible();
+    expect(await page.evaluate(() => window.location.pathname)).toBe(CREATE_ROUTE);
+  });
+
+  test.describe('as a reader', () => {
+    test.use({ storageState: READER_STORAGE_STATE });
+
+    test('redirects to the list, which offers no way back to it', async ({ page }) => {
+      await page.goto(CREATE_ROUTE);
+
+      await expect(page.getByRole('heading', { name: 'Subjects' })).toBeVisible();
+      expect(await page.evaluate(() => window.location.pathname)).toBe('/subjects');
+      await expect(page.getByRole('link', { name: 'New subject' })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: 'Create the first subject' })).toHaveCount(0);
+    });
+  });
+
+  test('sends a signed-out visitor to sign in, with somewhere to come back to', async ({
+    page,
+  }) => {
+    await page.context().clearCookies();
+    await page.goto(CREATE_ROUTE);
+
+    await expect(page).toHaveURL(
+      new RegExp(`/sign-in\\?returnTo=${encodeURIComponent(CREATE_ROUTE)}`),
     );
   });
 });

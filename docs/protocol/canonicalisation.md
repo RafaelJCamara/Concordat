@@ -104,6 +104,28 @@ disagree about which value wins, so the document has no single meaning and must 
 at all. Picking a winner would make the same bytes mean different things to producer and consumer
 (`canonicalisation/duplicate-keys-rejected.json`).
 
+**A surrogate escape with no partner is rejected** with `schema_malformed`, in a value or in a
+key, at any depth. A UTF-16 surrogate is only a character as the *high* half (`\uD800`–`\uDBFF`)
+followed **immediately** by the *low* half (`\uDC00`–`\uDFFF`), both written as escapes; a high
+half followed by anything else, and a low half preceded by anything but its high half, are
+unpaired. The grammar allows them, which is the trap: a reader that checks only well-formedness
+accepts them. The string such an escape stands for has no UTF-8 spelling, and parsers disagree
+about it — measured: Go replaces it with U+FFFD while parsing; JavaScript and Python keep it as a
+string they cannot then encode (JavaScript writes U+FFFD, Python raises); .NET's reader throws when
+the string is read — so, like a duplicate key, it has no single meaning and is refused rather than repaired (RFC 7493 forbids
+them for the same reason; RFC 8259 §8.2 only warns that the behaviour is unpredictable). The
+canonical form is UTF-8 text that is hashed, so there is no faithful spelling to canonicalise
+it to.
+
+Two details an implementation gets wrong, each a fixture. **An escaped backslash is not the start
+of an escape:** `\\ud800` in the JSON text is a backslash followed by the letters `ud800`, and is
+accepted (`canonicalisation/escaped-backslash-before-ud800-is-text.json`). **A pair is read in
+order:** `\uDE00\uD83D` is two unpaired halves, not one pair
+(`canonicalisation/unpaired-surrogate-reversed-pair-rejected.json`). The refusal's message may
+not quote the string or key it found — a message carrying an unpaired surrogate cannot itself be
+written as UTF-8 — so it names the JSON Pointer and the escape as written
+(`canonicalisation/unpaired-surrogate-rejected.json`, `…-in-key-rejected.json`).
+
 ### 3.2 Array order is preserved
 
 Never sort an array. Order is semantic in JSON Schema: `prefixItems` is positional, and `enum`
@@ -316,7 +338,9 @@ With `schema_malformed`: a schema that is not a string, array or object; an obje
 string `type`; an unknown type name; a named type with no non-empty `name`; a non-string
 `namespace`; a record with no `fields` array; a field that is not an object with a non-empty `name`;
 a non-string enum symbol; a non-string alias; a `fixed` whose `size` is missing, non-numeric or
-negative. Duplicate object keys are rejected exactly as in §3.1.
+negative. Duplicate object keys and unpaired surrogate escapes are rejected exactly as in §3.1, in
+`doc`, `default`, an alias or any other attribute
+(`canonicalisation/unpaired-surrogate-avro-rejected.json`).
 
 ---
 
@@ -574,6 +598,11 @@ sorted by name, so the id is stable.
 | `canonicalisation/uri-normalisation.json` | `$id`/`$ref` only, absolute only |
 | `canonicalisation/duplicate-keys-rejected.json` | Duplicate keys have no single meaning |
 | `canonicalisation/malformed-rejected.json` | No parser leniency |
+| `canonicalisation/unpaired-surrogate-rejected.json` | A lone surrogate escape in a value has no UTF-8 spelling |
+| `canonicalisation/unpaired-surrogate-in-key-rejected.json` | The same in a key, and the refusal must not quote it |
+| `canonicalisation/unpaired-surrogate-reversed-pair-rejected.json` | A pair is high then low, adjacent |
+| `canonicalisation/unpaired-surrogate-avro-rejected.json` | The rule holds for every JSON-bodied format |
+| `canonicalisation/escaped-backslash-before-ud800-is-text.json` | The mirror: an escaped backslash is not an escape |
 | `canonicalisation/avro-nothing-is-stripped.json` | The PCF deviation: `default`, `aliases` and `doc` all survive |
 | `canonicalisation/avro-fullnames-resolved.json` | Namespace inheritance and fullname folding |
 | `canonicalisation/protobuf-import-order-normalised.json` | Import sorting, comment stripping, field sorting |

@@ -75,6 +75,28 @@ sign-in screen that lets someone pass it, which is recorded as
       `exhaustMap` rather than `switchMap`: this is the one store that writes, and cancelling
       an in-flight POST abandons only the browser's half of a request the registry still
       processes
+- [x] `NewSubjectPage` — `/subjects/new-subject`, **the last step of the exit criterion that was
+      missing** ([ADR-030](../adr/030-create-subject-screen.md)). A write route like `NewVersionPage`,
+      behind the same `schemaWriteGuard`, and **no sidebar row, by the rule above**: it is an action
+      on Subjects, which stays marked on it. The path is not `/subjects/new` because `new` is a
+      valid subject name and the route would hide one; a hyphen is outside the name grammar, so no
+      subject can be named this. It is reached from the list's "New subject" (a button with no
+      handler until now) and from the empty list and empty dashboard, all `*cdIfScope` on the one
+      constant, **absent for a caller who cannot write**. Everything that can block the submit is
+      the registry's own refusal, ported into `domain/` as pure TypeScript (`subject-name.ts`,
+      `new-subject.ts`) and **held against the real create endpoint by
+      `e2e/subject-name-parity.spec.ts`**, which is where two things came from that reading the C#
+      did not give: the registry trims with .NET's `Trim()`, which JavaScript's `trim()` disagrees
+      with in both directions (U+0085 and U+FEFF), and names are case-sensitive. A name that is taken
+      or differs only in case is *advice* — the list is a snapshot, and a check that vetoes on a
+      snapshot is wrong in the strict direction. **The name follows a title until it is edited by
+      hand** (the prototype's touched flag) by a rule derived from what the registry refuses and
+      pinned by creating every suggestion for real. **Creating takes two clicks, and the second says
+      what is permanent** — name, format and content model, with the owner and policy changeable
+      only through the API — as a snapshot of what would be sent, so the second click cannot send
+      something the first did not show. Nothing is applied ahead of the registry: it navigates to
+      the *name in the answer* (the registry trims), and the page it lands on reads afresh. Not
+      here: editing an owner or a policy, which no screen does
 - [x] `ContractsPage` — two screens, `/contracts` and `/contracts/:name`, with a sidebar row.
       List, create, read the bindings (each subject links to its own screen, with its version
       selector beside it), move the enforcement mode, add publish and consume bindings. **Every
@@ -209,9 +231,16 @@ rather than deleted, because "why is there no zod here?" is a question worth ans
       state, Format (**changes whitespace and nothing else**: `1.0`, `1E5` and `12345678901234567890`
       survive, because the registry hashes number literals as written — a test asks the registry
       whether the formatted text has the original's id) and Validate
-- [ ] Preserve, **not built**: *auto-slugged id with a touched flag* — it belongs to creating a
-      subject, and **no screen in the web app creates one** (`POST …/subjects` exists and nothing
-      calls it), so there was nothing to put it on; and *compatibility tooltips*
+- [x] Preserve: **auto-slugged id with a touched flag** — on the create-subject screen
+      ([M4.3](#m43-pages), ADR-030), which is what it had been waiting for. A title suggests the
+      subject name and the name follows it until the author edits it by hand; "touched" is set by
+      the name input's own `input` event, which programmatic updates do not fire, and is not
+      Angular's `touched` (which means blurred). An offer to follow the title again appears once it
+      has been left. The slug rule is the least that makes text acceptable to the registry — a valid
+      name is returned unchanged, `+` and `:` become `.` as `SubjectNormalizer` does for the SDKs,
+      accents are folded, other runs become one `_` — and it never changes case or joins words in a
+      style, because a name is case-sensitive and that would be guessing which subject was meant
+- [ ] Preserve, **not built**: *compatibility tooltips*
 - [x] ~~Collapse the two competing HTTP paths into one typed data-access layer~~ — **moot.**
       There is one: `HttpClient` plus three interceptors, and a typed data-access file per feature
 - [x] ~~Uncontrolled `defaultValue` forms → reactive forms~~ — **moot.** A React idiom; no such
@@ -221,7 +250,7 @@ rather than deleted, because "why is there no zod here?" is a question worth ans
 
 ## M4.5 Tests
 
-- [x] Playwright E2E against a real API — `web/e2e/`, 178 tests, **against the dev server and
+- [x] Playwright E2E against a real API — `web/e2e/`, 195 tests, **against the dev server and
       against the production image** (`CONCORDAT_WEB_URL=http://localhost:5063`). Found the subject list
       broken on its first run (see [STATUS.md](../STATUS.md)), and on 2026-08-15 found two
       more: a first-hit lazy-route compile that made a correct page look absent, and a
@@ -246,9 +275,14 @@ rather than deleted, because "why is there no zod here?" is a question worth ans
 Create a subject, register a version, view a diff and an impact report, and approve a
 pending breaking change — entirely in the UI.
 
-> **Not met, and was recorded as met until 2026-10-13: "create a subject".** Nothing in the web
-> app calls `POST …/subjects`. Everything after it is in the UI; a subject has to be created
-> through the API or the CLI first. The e2e specs arrange subjects over HTTP for the same reason.
+> **Met on 2026-10-13.** It had been recorded as met while its first step — "create a subject" —
+> was not: nothing in the web app called `POST …/subjects`, so a subject had to be made through the
+> API or the CLI before the UI could do anything with it. The create screen
+> ([ADR-030](../adr/030-create-subject-screen.md)) closed it, and
+> `e2e/new-subject.spec.ts` walks the first half with nothing arranged over HTTP: a subject made on
+> that screen, then a version registered on the next. The other specs still arrange their subjects
+> over HTTP, on purpose: a create is permanent, and a spec that is not about creating should not
+> leave one behind.
 
 ---
 

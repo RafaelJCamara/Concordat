@@ -2,7 +2,9 @@ import { signal } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { describe, expect, it } from 'vitest';
+import { SessionStore } from '../../../core/auth/session-store';
 import { provideConcordatConfig } from '../../../core/config/app-config';
+import type { Scope } from '../../../domain/identity/scope';
 import type { SchemaVersion, Subject } from '../../../domain/registry/subject';
 import { SubjectListStore } from '../application/subject-list-store';
 import { DashboardPage } from './dashboard-page';
@@ -174,5 +176,46 @@ describe('DashboardPage', () => {
     const { host } = render([]);
 
     expect(host.textContent).toContain('No subjects yet');
+  });
+});
+
+// An empty registry is what a first run looks like, and the sentence that says "nothing is wrong"
+// is only half of what a first run needs: the other half is the way out. Absent, not disabled, for
+// somebody who could not use it (ADR-018).
+describe('DashboardPage: an empty registry', () => {
+  function renderAs(scopes: readonly Scope[], subjects: readonly Subject[]): HTMLElement {
+    TestBed.configureTestingModule({
+      providers: [provideRouter([]), provideConcordatConfig({ defaultEnvironment: 'dev' })],
+    });
+    TestBed.overrideComponent(DashboardPage, {
+      set: { providers: [{ provide: SubjectListStore, useValue: loadedStore(subjects) }] },
+    });
+    TestBed.inject(SessionStore).observeInstance({ claimed: true, actor: 'someone', scopes });
+
+    const fixture = TestBed.createComponent(DashboardPage);
+    fixture.detectChanges();
+
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  const create = (host: HTMLElement) => host.querySelector('a[href="/subjects/new-subject"]');
+
+  it('offers to create the first subject, to someone who can write', () => {
+    const host = renderAs(['subject:write'], []);
+
+    expect(create(host)?.textContent).toContain('Create the first subject');
+  });
+
+  it('says nothing about it to a reader, who is still told the registry is simply empty', () => {
+    const host = renderAs(['subject:read'], []);
+
+    expect(host.textContent).toContain('No subjects yet');
+    expect(create(host)).toBeNull();
+  });
+
+  it('is not offered once there is something to look at', () => {
+    const host = renderAs(['subject:write'], [subject({ name: 'acme.orders.OrderCreated' })]);
+
+    expect(create(host)).toBeNull();
   });
 });

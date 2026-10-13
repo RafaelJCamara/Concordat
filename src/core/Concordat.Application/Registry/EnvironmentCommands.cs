@@ -416,15 +416,15 @@ internal static class EnvironmentPolicies
                 "A compatibility policy needs both a mode and a surface (ADR-016).");
         }
 
-        if (!Enum.TryParse<CompatibilityMode>(
-                mode.Replace("_", "", StringComparison.Ordinal), true, out var parsedMode))
+        if (!WireEnums.TryParseDefined<CompatibilityMode>(
+                mode.Replace("_", "", StringComparison.Ordinal), out var parsedMode))
         {
             return Result.Failure(
                 ConcordatCodes.EnvironmentNameInvalid, $"Unknown compatibility mode '{mode}'.");
         }
 
-        if (!Enum.TryParse<CompatibilitySurface>(
-                surface.Replace("_", "", StringComparison.Ordinal), true, out var parsedSurface))
+        if (!WireEnums.TryParseDefined<CompatibilitySurface>(
+                surface.Replace("_", "", StringComparison.Ordinal), out var parsedSurface))
         {
             return Result.Failure(
                 ConcordatCodes.EnvironmentNameInvalid, $"Unknown compatibility surface '{surface}'.");
@@ -444,8 +444,8 @@ internal static class EnvironmentPolicies
             return Result.Success();
         }
 
-        if (!Enum.TryParse<RegistrationPolicy>(
-                value.Replace("_", "", StringComparison.Ordinal), true, out var parsed))
+        if (!WireEnums.TryParseDefined<RegistrationPolicy>(
+                value.Replace("_", "", StringComparison.Ordinal), out var parsed))
         {
             return Result.Failure(
                 ConcordatCodes.EnvironmentNameInvalid,

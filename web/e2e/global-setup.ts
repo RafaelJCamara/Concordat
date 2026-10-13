@@ -98,7 +98,9 @@ async function captureSession(
     await page.getByRole('textbox', { name: 'Email' }).fill(who.email);
     await page.getByRole('textbox', { name: 'Password' }).fill(who.password);
     await page.getByRole('button', { name: /sign in|create owner account/i }).click();
-    await page.getByText(who.email).waitFor();
+    // The account control in the sidebar, not any text on the page: a list of subjects owned by
+    // this account shows the same email in a table cell, which made a bare text match ambiguous.
+    await page.locator('cd-app-sidebar').getByText(who.email).waitFor();
 
     await page.context().storageState({ path });
   } finally {

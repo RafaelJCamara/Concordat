@@ -1,0 +1,7 @@
+{
+  "name": "an-unpaired-high-surrogate-escape-is-rejected",
+  "why": "A surrogate escape is only a character as the high half followed by the low half of one pair. Alone, the string it stands for has no UTF-8 spelling, and parsers disagree about it: Go replaces it with U+FFFD while parsing, JavaScript and Python keep it as a string they cannot then encode (JavaScript writes U+FFFD, Python raises), and .NET's reader throws when the string is read. The same bytes would mean different things to producer and consumer, so it is refused like a duplicate key rather than given an id. The grammar allows it, which is the trap: a reader that only checks well-formedness accepts it, and the reference implementation did, then failed with a 500 when it tried to read the string back.",
+  "format": "json",
+  "input": "{\"a\":\"\\ud800\"}",
+  "error": "schema_malformed"
+}

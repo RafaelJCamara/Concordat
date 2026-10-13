@@ -4,9 +4,11 @@ import { map, type Observable } from 'rxjs';
 import { CONCORDAT_CONFIG } from '../../../core/config/app-config';
 import { environmentRoot } from '../../../core/http/api-url';
 import type { VersionDiff } from '../../../domain/registry/diff';
+import type { NewSubject } from '../../../domain/registry/new-subject';
 import type { RegistrationOutcome } from '../../../domain/registry/registration';
 import type { Subject } from '../../../domain/registry/subject';
 import {
+  toCreateSubjectDto,
   toRegistrationOutcome,
   toSubject,
   toVersionDiff,
@@ -38,6 +40,24 @@ export class SubjectsApi {
     return this.http
       .get<readonly SubjectDto[]>(`${this.root(environment)}/subjects`)
       .pipe(map((dtos) => dtos.map(toSubject)));
+  }
+
+  /**
+   * Creates a subject, and answers with the subject as the registry stored it.
+   *
+   * <b>What comes back is what counts.</b> The registry trims the name and the owner before it
+   * judges them, so the stored name can differ from the one sent; a caller that navigates to what
+   * it sent instead of what it was given would land on a 404 whenever the two differ. The answer
+   * is the only thing that is mapped and handed on.
+   *
+   * `owner` is sent because the wire type requires it, and the registry stores what it is given
+   * (a create as one account with `owner: probe` is owned by `probe`): it is a property of the
+   * subject, a team as often as a person, and not an attribution of the write.
+   */
+  createSubject(environment: string, subject: NewSubject): Observable<Subject> {
+    return this.http
+      .post<SubjectDto>(`${this.root(environment)}/subjects`, toCreateSubjectDto(subject))
+      .pipe(map(toSubject));
   }
 
   /** One subject and all of its versions. */

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  toCreateSubjectDto,
   toDivergence,
   toPolicy,
   toSubject,
@@ -122,5 +123,33 @@ describe('toVersionDiff', () => {
     expect(() => toVersionDiff({ ...diff, policy: { mode: 'SIDEWAYS', surface: 'WIRE' } })).toThrow(
       /SIDEWAYS/,
     );
+  });
+});
+
+describe('toCreateSubjectDto', () => {
+  const base = {
+    name: 'orders.created',
+    format: 'avro',
+    owner: 'orders-team',
+    contentModel: 'CLOSED',
+    compatibility: null,
+  } as const;
+
+  it('spells every token as the responses do, so the form holds one vocabulary', () => {
+    expect(toCreateSubjectDto(base)).toEqual({
+      name: 'orders.created',
+      format: 'avro',
+      owner: 'orders-team',
+      contentModel: 'CLOSED',
+    });
+  });
+
+  it('leaves both policy members out to inherit, and sends both to choose', () => {
+    expect(toCreateSubjectDto(base)).not.toHaveProperty('compatibilityMode');
+    expect(toCreateSubjectDto(base)).not.toHaveProperty('compatibilitySurface');
+
+    expect(
+      toCreateSubjectDto({ ...base, compatibility: { mode: 'NONE', surface: 'WIRE' } }),
+    ).toMatchObject({ compatibilityMode: 'NONE', compatibilitySurface: 'WIRE' });
   });
 });

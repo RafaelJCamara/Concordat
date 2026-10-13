@@ -88,6 +88,17 @@ public sealed class JsonSchemaCanonicalizer : ISchemaCanonicalizer
 
         using (document)
         {
+            // Before the duplicate-key check, which quotes the key it finds: quoting a key that
+            // holds an unpaired surrogate escape would put one in the response and fail it.
+            // The document parsed, but the string such an escape stands for cannot be read
+            // from it without throwing, so this looks at the text as written.
+            // See UnpairedSurrogates for why it is refused rather than repaired.
+            var unpaired = UnpairedSurrogates.Find(System.Text.Encoding.UTF8.GetBytes(body));
+            if (unpaired is not null)
+            {
+                return Result<string>.Failure(unpaired);
+            }
+
             var duplicate = FindDuplicateKey(document.RootElement);
             if (duplicate is not null)
             {

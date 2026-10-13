@@ -1,0 +1,7 @@
+{
+  "name": "an-unpaired-surrogate-escape-in-avro-metadata-is-rejected",
+  "why": "Avro keeps doc, default and any custom attribute (nothing is stripped), so a string anywhere in the document reaches the canonical form. The rule is about the JSON text, not about which keywords a format reads, and it holds for every JSON-bodied format.",
+  "format": "avro",
+  "input": "{\"type\":\"record\",\"name\":\"R\",\"doc\":\"\\udc00\",\"fields\":[]}",
+  "error": "schema_malformed"
+}

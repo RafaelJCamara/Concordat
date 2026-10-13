@@ -1,0 +1,7 @@
+{
+  "name": "a-low-surrogate-before-a-high-one-is-two-unpaired-units",
+  "why": "The two halves of a pair are only a pair in order: high, then low, adjacent. Reversed they are two unpaired units, and an implementation that counts halves instead of reading the order would accept this.",
+  "format": "json",
+  "input": "{\"a\":\"\\ude00\\ud83d\"}",
+  "error": "schema_malformed"
+}

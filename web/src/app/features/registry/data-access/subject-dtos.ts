@@ -17,6 +17,7 @@ import {
   COMPATIBILITY_SURFACES,
 } from '../../../domain/registry/compatibility';
 import type { VersionDiff } from '../../../domain/registry/diff';
+import type { NewSubject } from '../../../domain/registry/new-subject';
 import type {
   PortabilityFinding,
   RegistrationOutcome,
@@ -95,6 +96,22 @@ export interface DiffDto {
   readonly divergences: readonly DivergenceDto[];
 }
 
+/**
+ * `CreateSubjectRequest`.
+ *
+ * The two policy members are *absent* to inherit, rather than null: both mean the same to the
+ * registry, and leaving them out says "nothing was chosen" without putting a null on the wire
+ * for a field whose pairing rule (both or neither) is the first thing a mistake would trip.
+ */
+export interface CreateSubjectDto {
+  readonly name: string;
+  readonly format: string;
+  readonly owner: string;
+  readonly contentModel: string;
+  readonly compatibilityMode?: string;
+  readonly compatibilitySurface?: string;
+}
+
 /** `RegisterVersionRequest`. */
 export interface RegisterVersionDto {
   readonly schema: string;
@@ -112,6 +129,29 @@ export interface RegistrationDto {
   readonly created: boolean;
   readonly divergences: readonly DivergenceDto[];
   readonly portability: readonly PortabilityDto[];
+}
+
+/**
+ * The request that creates a subject.
+ *
+ * Every token is the domain's own spelling, sent as it is: the registry reads `OPEN` and `CLOSED`
+ * as it reads `open` and `closed` (it lower-cases them), so the form holds the one vocabulary the
+ * responses use rather than a second, request-only one. A real create is what proves that — see
+ * `e2e/new-subject.spec.ts`.
+ */
+export function toCreateSubjectDto(subject: NewSubject): CreateSubjectDto {
+  return {
+    name: subject.name,
+    format: subject.format,
+    owner: subject.owner,
+    contentModel: subject.contentModel,
+    ...(subject.compatibility === null
+      ? {}
+      : {
+          compatibilityMode: subject.compatibility.mode,
+          compatibilitySurface: subject.compatibility.surface,
+        }),
+  };
 }
 
 export function toSubject(dto: SubjectDto): Subject {

@@ -233,6 +233,34 @@ public class ContractApiTests(ApiFactory factory)
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("99")]
+    [InlineData("0")]
+    public async Task AnUndefinedEnforcementNumber_IsRefused_OnCreateAndOnChange(string number)
+    {
+        // `Enum.TryParse` accepts any integer; the undefined one was stored, and what read the
+        // contract back could not name it.
+        var (client, environment) = await NewEnvironmentAsync();
+        var contract = UniqueContract();
+
+        var created = await client.PostAsJsonAsync(
+            $"/v1/environments/{environment}/contracts",
+            new CreateContractRequest(UniqueContract(), number),
+            ApiFactory.Json);
+        Assert.Equal(HttpStatusCode.BadRequest, created.StatusCode);
+
+        await CreateAsync(client, environment, contract);
+        var changed = await client.PutAsJsonAsync(
+            $"/v1/environments/{environment}/contracts/{contract}/enforcement",
+            new SetEnforcementRequest(number),
+            ApiFactory.Json);
+        Assert.Equal(HttpStatusCode.BadRequest, changed.StatusCode);
+
+        var reread = await client.GetFromJsonAsync<ContractResponse>(
+            $"/v1/environments/{environment}/contracts/{contract}", ApiFactory.Json);
+        Assert.Equal("MONITOR", reread!.Enforcement);
+    }
+
     [Fact]
     public async Task ListingReturnsOnlyThisEnvironmentsContracts()
     {

@@ -265,6 +265,182 @@ public class RegistryApiTests(ApiFactory factory)
         Assert.Equal("schema_malformed", problem.RootElement.GetProperty("concordatCode").GetString());
     }
 
+    // `Enum.TryParse` says yes to any integer, so "99" used to become a CompatibilityMode that is no
+    // member. It was stored, the create answered 500 when it tried to project it, and then every
+    // `GET .../subjects` in the environment answered 500 as well, for every caller. These cover
+    // each way in, and what they assert is as much "nothing was left behind" as "it was refused".
+    [Theory]
+    [InlineData("99", "WIRE")]
+    [InlineData("0", "WIRE")]
+    [InlineData("-1", "WIRE")]
+    [InlineData("FULL", "99")]
+    [InlineData("FULL", "0")]
+    public async Task AnUndefinedPolicyNumber_OnCreate_Is400_AndLeavesNothingToBreakTheList(
+        string mode, string surface)
+    {
+        var client = Client();
+        var name = Unique("poison");
+
+        var response = await client.PostAsJsonAsync(
+            $"/v1/environments/{Env}/subjects",
+            new CreateSubjectRequest(name, "json", "alice", mode, surface),
+            ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("invalid_request", problem.RootElement.GetProperty("concordatCode").GetString());
+
+        // Not stored: it would have been, and the next read of the list is what failed.
+        Assert.Equal(
+            HttpStatusCode.NotFound,
+            (await client.GetAsync($"/v1/environments/{Env}/subjects/{name}")).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.OK, (await client.GetAsync($"/v1/environments/{Env}/subjects")).StatusCode);
+    }
+
+    [Fact]
+    public async Task AnUndefinedPolicyNumber_OnSetPolicy_Is400_AndLeavesThePolicyAlone()
+    {
+        var client = Client();
+        var subject = await NewSubjectAsync(client, mode: "FULL", surface: "SOURCE");
+
+        var response = await client.PutAsJsonAsync(
+            $"/v1/environments/{Env}/subjects/{subject}/compatibility-policy",
+            new SetCompatibilityPolicyRequest("99", "WIRE"),
+            ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var read = await client.GetAsync($"/v1/environments/{Env}/subjects/{subject}");
+        var body = await ApiFactory.ReadAsync<SubjectResponse>(read);
+        Assert.Equal("FULL", body.CompatibilityPolicy.Mode);
+        Assert.Equal("SOURCE", body.CompatibilityPolicy.Surface);
+        Assert.Equal(
+            HttpStatusCode.OK, (await client.GetAsync($"/v1/environments/{Env}/subjects")).StatusCode);
+    }
+
+    [Fact]
+    public async Task ANumberThatNumbersAMember_IsStillReadAsThatMember()
+    {
+        // As it always was: refusing the undefined is not narrowing what is accepted.
+        var client = Client();
+        var name = Unique("numbered");
+
+        var response = await client.PostAsJsonAsync(
+            $"/v1/environments/{Env}/subjects",
+            new CreateSubjectRequest(name, "json", "alice", "2", "WIRE"),
+            ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await ApiFactory.ReadAsync<SubjectResponse>(response);
+        Assert.Equal("BACKWARD", body.CompatibilityPolicy.Mode);
+    }
+
+    /// <summary>
+    /// A lone surrogate escape, spelled without writing one in source: backslash, 'u', D800.
+    /// </summary>
+    private static readonly string LoneSurrogateEscape = new string((char)92, 1) + "ud800";
+
+    [Theory]
+    [InlineData("register")]
+    [InlineData("dry-run")]
+    [InlineData("lookup")]
+    public async Task AnUnpairedSurrogateEscape_Is400WithAConcordatCode_NotA500(string route)
+    {
+        // Well-formed JSON the registry used to accept and then fail on: reading the string the
+        // escape stands for throws, and nothing caught it, so every route that canonicalises a
+        // schema answered 500. All three share one choke point, and a test per route is what
+        // notices the day one of them stops going through it.
+        var client = Client();
+        var subject = await NewSubjectAsync(client);
+        var schema = "{\"a\":\"" + LoneSurrogateEscape + "\"}";
+
+        var response = route switch
+        {
+            "register" => await RegisterAsync(client, subject, schema),
+            "dry-run" => await client.PostAsJsonAsync(
+                $"/v1/environments/{Env}/subjects/{subject}/compatibility",
+                new CheckCompatibilityRequest(schema),
+                ApiFactory.Json),
+            _ => await client.PostAsJsonAsync(
+                "/v1/schemas/lookup", new LookupSchemaRequest("json", schema), ApiFactory.Json),
+        };
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("schema_malformed", problem.RootElement.GetProperty("concordatCode").GetString());
+        // Names the string and the unit, so someone can find it in a 400 KB document.
+        var detail = problem.RootElement.GetProperty("detail").GetString()!;
+        Assert.Contains("'/a'", detail, StringComparison.Ordinal);
+        Assert.Contains("D800", detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ARefusedSurrogateEscape_AllocatesNoVersion()
+    {
+        var client = Client();
+        var subject = await NewSubjectAsync(client);
+
+        await RegisterAsync(client, subject, "{\"a\":\"" + LoneSurrogateEscape + "\"}");
+
+        var read = await client.GetAsync($"/v1/environments/{Env}/subjects/{subject}");
+        var body = await ApiFactory.ReadAsync<SubjectResponse>(read);
+        Assert.Empty(body.Versions);
+    }
+
+    [Fact]
+    public async Task AnUnpairedSurrogateEscapeInAKey_IsRefusedWithoutTheDuplicateKeyMessageQuotingIt()
+    {
+        // The duplicate-key refusal quotes the key it found. Quoting this one would put an
+        // unpaired surrogate into the Problem Details body and fail the response, which is the
+        // 500 this is here to prevent coming back by the other door.
+        var client = Client();
+        var subject = await NewSubjectAsync(client);
+        var key = "\"" + LoneSurrogateEscape + "\"";
+
+        var response = await RegisterAsync(client, subject, "{" + key + ":1," + key + ":2}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("schema_malformed", problem.RootElement.GetProperty("concordatCode").GetString());
+    }
+
+    [Fact]
+    public async Task AnEscapedBackslashBeforeUd800_IsOrdinaryTextAndRegisters()
+    {
+        // The other direction: a description that merely mentions the escape is a legal schema,
+        // and a scanner that did not consume the escaped backslash first would refuse it.
+        var client = Client();
+        var subject = await NewSubjectAsync(client);
+        var backslash = new string((char)92, 1);
+        var schema = "{\"description\":\"" + backslash + backslash + "ud800\"}";
+
+        var response = await RegisterAsync(client, subject, schema);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AnUnpairedSurrogateEscape_InAnAvroSchema_IsRefusedTheSameWay()
+    {
+        var client = Client();
+        var name = Unique("avro");
+        var create = await client.PostAsJsonAsync(
+            $"/v1/environments/{Env}/subjects",
+            new CreateSubjectRequest(name, "avro", "alice"),
+            ApiFactory.Json);
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+
+        var response = await RegisterAsync(
+            client,
+            name,
+            "{\"type\":\"record\",\"name\":\"R\",\"doc\":\"" + LoneSurrogateEscape + "\",\"fields\":[]}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("schema_malformed", problem.RootElement.GetProperty("concordatCode").GetString());
+    }
+
     [Fact]
     public async Task SchemaLookup_ReturnsTheIdAndWhetherItIsKnown()
     {

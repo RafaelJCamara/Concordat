@@ -107,6 +107,68 @@ describe('parseJsonDocument', () => {
       expect(parsed.ok && parsed.duplicate).toBeNull();
     });
   });
+
+  // `JSON.parse` keeps a lone surrogate as a string it can no longer encode as UTF-8, and the
+  // registry refuses the document. The cases are the ones the registry's own scanner is tested
+  // on, and `schema-parity.spec.ts` holds the list against the real dry-run endpoint.
+  describe('surrogate escapes', () => {
+    const unpaired = (text: string) => {
+      const parsed = parseJsonDocument(text);
+
+      return parsed.ok ? parsed.unpaired : undefined;
+    };
+
+    it.each([
+      ['a lone high half', '{"a": "\\ud800"}', 0xd800],
+      ['a lone low half', '{"a": "\\udc00"}', 0xdc00],
+      ['a high half followed by text', '{"a": "\\ud800x"}', 0xd800],
+      ['a high half at the end of a string', '{"a": "x\\ud83d"}', 0xd83d],
+      ['a pair written the wrong way round', '{"a": "\\ude00\\ud83d"}', 0xde00],
+      ['a high half followed by another high half', '{"a": "\\ud83d\\ud83d\\ude00"}', 0xd83d],
+      ['a high half followed by a non-surrogate escape', '{"a": "\\ud83d\\u0041"}', 0xd83d],
+      ['a lone half in a key', '{"\\ud800": 1}', 0xd800],
+      ['a lone half nested deep', '{"a": [{"b": ["\\udfff"]}]}', 0xdfff],
+    ])('finds %s', (_label, text, unit) => {
+      expect(unpaired(text)?.unit).toBe(unit);
+    });
+
+    it('points at the six characters of the escape, not at the string', () => {
+      const text = '{"description": "see \\ud800 here"}';
+      const found = unpaired(text);
+
+      expect(found && text.slice(found.span.start, found.span.end)).toBe('\\ud800');
+    });
+
+    it('reports the first in document order', () => {
+      // A key is read before its value, and both before anything after them.
+      expect(unpaired('{"\\udc00": "\\ud800"}')?.unit).toBe(0xdc00);
+      expect(unpaired('{"a": "\\ud800", "b": "\\udc00"}')?.unit).toBe(0xd800);
+    });
+
+    it.each([
+      ['a pair', '{"a": "\\ud83d\\ude00"}'],
+      ['a pair in capitals', '{"a": "\\uD83D\\uDE00"}'],
+      ['a pair in mixed case', '{"a": "\\ud83D\\uDe00"}'],
+      ['the first and the last pair', '{"a": "\\ud800\\udc00\\udbff\\udfff"}'],
+      ['two pairs in a row', '{"a": "\\ud83d\\ude00\\ud83d\\ude00"}'],
+      ['the character itself', '{"a": "\u{1F600}"}'],
+      ['the code units either side of the block', '{"a": "\\ud7ff\\ue000"}'],
+    ])('accepts %s', (_label, text) => {
+      expect(unpaired(text)).toBeNull();
+    });
+
+    it('does not read an escaped backslash as the start of an escape', () => {
+      // JSON text `"\\ud800"` is a backslash and then the letters u d 8 0 0. A scan that looks
+      // for backslash-u without consuming the escaped backslash first would refuse it.
+      expect(unpaired('{"a": "\\\\ud800"}')).toBeNull();
+      expect(unpaired('{"a": "\\\\\\\\ud800"}')).toBeNull();
+      expect(unpaired('{"a": "\\\\\\ud800"}')?.unit).toBe(0xd800);
+    });
+
+    it('leaves a document that does not read to the syntax error', () => {
+      expect(parseJsonDocument('{"a": "\\ud800').ok).toBe(false);
+    });
+  });
 });
 
 describe('formatJsonDocument', () => {

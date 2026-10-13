@@ -119,6 +119,64 @@ public class CanonicalizerTests
         Assert.Equal(ConcordatCodes.SchemaMalformed, result.Error!.Code);
     }
 
+    // Each of these is well-formed JSON: the grammar allows any \uXXXX, and System.Text.Json's
+    // reader accepts them. What cannot exist is the string they decode to, which has no UTF-8
+    // spelling -- so the failure used to arrive from the writer, as a 500, after the document
+    // had been accepted as valid.
+    [Theory]
+    [InlineData("""{"a":"\ud800"}""", "/a", "\\uD800")]
+    [InlineData("""{"a":"\udc00"}""", "/a", "\\uDC00")]
+    [InlineData("""{"a":"\ude00\ud83d"}""", "/a", "\\uDE00")]
+    [InlineData("""{"a":"\ud800x"}""", "/a", "\\uD800")]
+    [InlineData("""{"a":"x\ud83d"}""", "/a", "\\uD83D")]
+    [InlineData("""{"\ud800":1}""", "/\\ud800", "\\uD800")]
+    [InlineData("""{"a":["ok",{"b":"\udfff"}]}""", "/a/1/b", "\\uDFFF")]
+    [InlineData("""{"$id":"https://x/\ud800"}""", "/$id", "\\uD800")]
+    public void AnUnpairedSurrogateEscape_IsRejectedAndNamedWithoutBeingEchoed(
+        string body, string location, string unit)
+    {
+        var result = Canonicalizer.Canonicalize(body);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ConcordatCodes.SchemaMalformed, result.Error!.Code);
+        Assert.Contains($"'{location}'", result.Error.Message, StringComparison.Ordinal);
+        Assert.Contains(unit, result.Error.Message, StringComparison.Ordinal);
+        AssertHasUtf8Spelling(result.Error.Message);
+    }
+
+    [Fact]
+    public void AnUnpairedSurrogate_IsReportedBeforeADuplicateKeyThatWouldEchoIt()
+    {
+        // The duplicate-key refusal quotes the key. Quoting this one would put an unpaired
+        // surrogate into the Problem Details body and fail the response the same way the
+        // writer used to.
+        var result = Canonicalizer.Canonicalize("""{"\ud800":1,"\ud800":2}""");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ConcordatCodes.SchemaMalformed, result.Error!.Code);
+        AssertHasUtf8Spelling(result.Error.Message);
+    }
+
+    [Fact]
+    public void AWellFormedSurrogatePair_IsStillAccepted_AndSpelledTheSameWhicheverWayItWasWritten()
+    {
+        // The rule is about *unpaired* units. A pair is one character, and section 3.4 spells it
+        // as two upper-case escapes whether it arrived as escapes, in either case, or as the
+        // character itself. Built from code points so no source line depends on how an editor
+        // or a tool decodes a backslash-u sequence.
+        var backslashU = new string((char)92, 1) + "u";
+        var expected = "{\"a\":\"" + backslashU + "D83D" + backslashU + "DE00\"}";
+        string Document(string value) => "{\"a\":\"" + value + "\"}";
+
+        Assert.Equal(expected, Canonical(Document(backslashU + "d83d" + backslashU + "de00")));
+        Assert.Equal(expected, Canonical(Document(backslashU + "D83D" + backslashU + "DE00")));
+        Assert.Equal(expected, Canonical(Document(char.ConvertFromUtf32(0x1F600))));
+    }
+
+    private static void AssertHasUtf8Spelling(string text) =>
+        // Throws on an unpaired surrogate, which is what a response writer does.
+        _ = new System.Text.UTF8Encoding(false, true).GetByteCount(text);
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

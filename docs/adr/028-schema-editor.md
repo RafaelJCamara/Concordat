@@ -125,12 +125,15 @@ applied: the right bump depends on a verdict only the registry has.
 - **Negative:** `ajv` is CommonJS and the build warns about it on every run, so `angular.json`
   allows it, which also silences a warning about any later CommonJS dependency named `ajv`.
 - **Neutral, and worth knowing:** the registry accepts a schema that is not valid under the 2020-12
-  metaschema, and answers **500** (no Problem Details body) to a lone-surrogate escape such as
-  `"\ud800"` in a string. The first is why `ajv`'s findings are advice; the second is a registry
-  defect, recorded in [STATUS.md](../STATUS.md), and the editor does not pretend to know it.
-- **Not covered:** the prototype's *auto-slugged id with a "touched" flag* belongs to creating a
-  subject, and the web app has no screen that does (`POST /subjects` exists; nothing calls it), so
-  there was nothing to put it on. *Compatibility tooltips* were not built.
+  metaschema, which is why `ajv`'s findings are advice. It also answered **500** to a lone-surrogate
+  escape such as `"\ud800"` in a string; that was a registry defect, which
+  [ADR-031](031-unpaired-surrogates-are-refused.md) closed on 2026-10-13 by refusing it with
+  `schema_malformed`, and the editor now says the same, with the same code, held against the registry
+  by the parity test. (The parity test could not have seen the crash before: it reported a 5xx as
+  "accepted".)
+- **Not covered:** *compatibility tooltips* were not built. The prototype's *auto-slugged id with a
+  "touched" flag* belongs to creating a subject, which no screen did when this was written; it shipped
+  later the same day on the screen that does ([ADR-030](030-create-subject-screen.md)).
 
 ## References
 

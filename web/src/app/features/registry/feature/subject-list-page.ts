@@ -6,6 +6,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmSkeleton } from '@spartan-ng/helm/skeleton';
@@ -26,13 +27,16 @@ import { SubjectTable } from '../ui/subject-table';
  *
  * The "New subject" affordance is wrapped in `*cdIfScope` and is **absent** for a non-admin
  * rather than disabled (ADR-018). A disabled button invites a support ticket; an absent one
- * does not raise the question.
+ * does not raise the question. It is a link and not a button: it goes to the create screen,
+ * which until 2026-10-13 did not exist, so this control sat here for a writer to press and did
+ * nothing at all. The empty list carries the same action, because "nothing is wrong, there is
+ * simply nothing here" is a sentence that wants its next step beside it.
  */
 @Component({
   selector: 'cd-subject-list-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [SubjectListStore],
-  imports: [HlmAlertImports, HlmButton, HlmSkeleton, Icon, IfScope, SubjectTable],
+  imports: [HlmAlertImports, HlmButton, HlmSkeleton, Icon, IfScope, RouterLink, SubjectTable],
   template: `
     <section class="mx-auto w-full max-w-6xl space-y-6 p-6 lg:p-8">
       <header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -49,10 +53,15 @@ import { SubjectTable } from '../ui/subject-table';
           support ticket asking to be given the permission; an absent one does not raise the
           question. The server refuses the same request with 403 either way.
         -->
-        <button *cdIfScope="schemaWriteScopes" hlmBtn class="glow-primary gap-2">
+        <a
+          *cdIfScope="schemaWriteScopes"
+          hlmBtn
+          class="glow-primary gap-2"
+          routerLink="/subjects/new-subject"
+        >
           <cd-icon name="plus" size="1rem" />
           New subject
-        </button>
+        </a>
       </header>
 
       @if (store.error(); as error) {
@@ -76,6 +85,16 @@ import { SubjectTable } from '../ui/subject-table';
             A subject has to exist before a version can be registered, so nothing is wrong — there
             is simply nothing here yet.
           </p>
+          <!-- Absent for a caller who cannot write, like the header's: ADR-018. -->
+          <a
+            *cdIfScope="schemaWriteScopes"
+            hlmBtn
+            class="glow-primary mt-4 gap-2"
+            routerLink="/subjects/new-subject"
+          >
+            <cd-icon name="plus" size="1rem" />
+            Create the first subject
+          </a>
         </div>
       } @else {
         <!--

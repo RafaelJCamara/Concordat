@@ -42,6 +42,46 @@ describe('checkSchemaText', () => {
     expect(finding.message).toContain("'type'");
   });
 
+  describe('a surrogate escape with no partner', () => {
+    it('is the registry’s own refusal, schema_malformed, not a new code', () => {
+      const [finding] = checkSchemaText('{"a":"\\ud800"}', 'json');
+
+      expect(finding?.code).toBe('schema_malformed');
+      expect(finding?.severity).toBe('refusal');
+      expect(finding?.message).toContain('\\uD800');
+    });
+
+    it('underlines the escape itself, in the text as the editor holds it', () => {
+      // Leading whitespace is trimmed before the registry sees the text, and positions are
+      // still reported in what the author is looking at.
+      const text = '  {"note": "ok \\udc00 ok"}';
+      const [finding] = checkSchemaText(text, 'json');
+      const start = finding?.position?.offset ?? -1;
+
+      expect(text.slice(start, start + (finding?.length ?? 0))).toBe('\\udc00');
+    });
+
+    it('is reported ahead of a duplicate key, as the registry does, and both are kept', () => {
+      const findings = checkSchemaText('{"a":"\\ud800","a":2}', 'json');
+
+      expect(findings.map((f) => f.code)).toEqual(['schema_malformed', 'schema_malformed']);
+      expect(findings[0]?.message).toContain('surrogate');
+      expect(findings[1]?.message).toContain('Duplicate');
+    });
+
+    it('applies to Avro, which is JSON, and not to Protobuf, which is not', () => {
+      expect(codes('{"type":"record","name":"R","doc":"\\ud800","fields":[]}', 'avro')).toEqual([
+        'schema_malformed',
+      ]);
+      expect(codes('syntax = "proto3"; // \\ud800', 'protobuf')).toEqual([]);
+    });
+
+    it('accepts a pair, and a description that merely mentions one', () => {
+      expect(codes('{"a":"\\ud83d\\ude00"}')).toEqual([]);
+      expect(codes('{"description":"write \\\\ud800 as an escape"}')).toEqual([]);
+    });
+  });
+
   describe('dialect', () => {
     it.each([
       ['https://json-schema.org/draft/2020-12/schema'],

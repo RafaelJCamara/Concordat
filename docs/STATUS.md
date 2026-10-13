@@ -1,10 +1,12 @@
 # What is missing
 
-**As of 2026-08-15**, except [the schema editor and the web container, 2026-10-13](#the-schema-editor-and-the-web-container-2026-10-13),
+**As of 2026-08-15**, except [the create-subject screen, 2026-10-13](#the-create-subject-screen-and-a-500-that-was-not-what-it-looked-like-2026-10-13),
+[the schema editor and the web container, 2026-10-13](#the-schema-editor-and-the-web-container-2026-10-13),
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30. A consistency audit on **2026-09-24** corrected
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-13: 1,615 .NET,
+1,319 Angular, 195 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
 aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
@@ -18,13 +20,102 @@ container image and a real PostgreSQL. Everything else is claimed on the strengt
 
 ---
 
+## The create-subject screen, and a 500 that was not what it looked like, 2026-10-13
+
+**M4's exit criterion is met.** "Create a subject, register a version, view a diff and an impact
+report, and approve a pending breaking change — entirely in the UI" had every step but the first;
+`/subjects/new-subject` is the first, and `e2e/new-subject.spec.ts` walks it with nothing arranged over
+HTTP: a subject made on that screen, then a version registered on the next. The Angular suite is
+**1,319** tests (from 1,106), the browser suite **195** across sixteen specs (from 178 across
+fourteen), run against the dev server **and the production image**, and the .NET suite **1,615** (the
+first pass in this stretch to touch it; it was 1,532). Decisions: [ADR-030](adr/030-create-subject-screen.md)
+and [ADR-031](adr/031-unpaired-surrogates-are-refused.md).
+
+**The screen.** A title suggests the subject name and the name follows it until it is edited by hand
+(the prototype's "touched" flag); creating takes two clicks, and the second says that the name, the
+format and the content model are permanent and that the owner and compatibility policy can be changed
+only through the API. Every refusal the form makes is the registry's own, held against the real create
+endpoint by `e2e/subject-name-parity.spec.ts`; a name that is taken, or differs from one only in case,
+is advice and never blocks. It is reached from the subject list's "New subject" and from the empty
+list and empty dashboard, **absent without a write scope** and behind `schemaWriteGuard`. The list's
+"New subject" had been a button with no handler since M4.3 — pressable by a writer, doing nothing.
+**Measured, production build:** the initial bundle went 410.6 → 410.9 kB raw (104.3 → 104.4 kB
+transferred); the screen is its own lazy chunk of 18.8 kB raw / 6.0 kB transferred.
+
+**The 500 the editor's parity test found, which was none of the things it was recorded as.** The brief
+and this file said *"a bare 500 with no Problem Details body, from the canonical writer"* for
+`{"a":"\ud800"}`. Reproduced against the real registry:
+
+- It **has** a Problem Details body — the framework's generic one, with no `concordatCode`.
+- It is **not the writer**: `JsonDocument.Parse` accepts the escape, and *reading the string back*
+  (`GetString()`, `JsonProperty.Name`) throws, so the first walk of the tree died — the duplicate-key
+  check, before the writer was reached.
+- It is wider: keys as well as values, Avro (`doc`, `default`, any attribute), a *reversed* pair, and a
+  duplicate-key refusal that quoted its own key and would have failed building the response.
+
+It is now `schema_malformed`, from a scan of the escapes as written (`UnpairedSurrogates`) that runs
+before the duplicate-key check and never quotes the string. Five conformance fixtures pin it, including
+the mirror case a hand-written scanner gets wrong (an escaped backslash before `ud800` is text), the
+canonicalisation spec says so (§3.1, §4.2), and the editor says the same with the same code. **The
+parity test could not have seen the crash**: it reported a 5xx as "accepted". It fails on any 5xx now,
+and a mutation (the editor's change removed) turns it red for the right reason.
+
+**What the real stack corrected, or found, that reading the code did not:**
+
+- **JavaScript's `trim()` is wrong for a subject name in both directions.** The registry trims before it
+  validates, with .NET's set: it strips U+0085, which JavaScript does not (so a client using `trim()` is
+  *stricter* and blocks a name the registry takes), and it does not strip U+FEFF, which JavaScript does
+  (*looser*). Measured character by character; swapping in `trim()` turns the parity spec red for exactly
+  those two. I had also half-remembered U+001C–U+001F as stripped; the registry refuses them.
+- **Names are case-sensitive and the registry says nothing about it.** `orders.Created` and
+  `orders.created` coexist. The form says so, as advice.
+- **A subject can only be permanent in the ways it says.** Probed, not read: `PATCH` answers 200 and
+  ignores a new name, format or content model; a retired name answers 409 on re-create; the owner and
+  the compatibility policy are the only things that change.
+- **A third 500, and this one persisted.** `compatibilityMode: "99"` — any integer string — parsed
+  (`Enum.TryParse` accepts any number), was **stored**, answered 500 while projecting its own response, and
+  then **every `GET …/subjects` in that environment answered 500 for every caller**. One request from
+  anyone able to write poisoned an environment's list. I did it to my own `e2e-names` test environment
+  while probing, found it when the list would not load, and repaired the one row through the API's own
+  `PUT …/compatibility-policy` with nulls. The same pattern was at **six sites** (subject create and
+  policy, environment default policy and registration policy, contract enforcement); all fourteen new
+  integration cases go red on the old behaviour, so none was a theory. `WireEnums.TryParseDefined` refuses
+  any number that is no member, and a comma list (`"Backward,Forward"` was silently `FULL`). A number that
+  *is* a member (`"2"` is `BACKWARD`) is still read as it always was. **This was not part of the brief**:
+  it is separate, small, and easy to drop from the commit if you would rather take it on its own.
+- **The e2e suite had been assuming no subject was owned by its own account.** A subject the browser
+  creates is owned by the signed-in account, so that email now sits in a table cell on the list as well as
+  in the sidebar, and `getByText(email)` stopped being unique in five places. They look in the sidebar now.
+  And an existing authorization test asserted `getByRole('button', { name: 'New subject' })`, which was the
+  dead button; it is a link.
+- **Port 4300 was another project's.** `npm start -- --port 4300` is what the docs say; on this machine
+  Docker Desktop was forwarding 4300 to a different project's container, so the suite ran on 4301 through
+  `CONCORDAT_WEB_URL`. Nothing was stopped.
+
+**Not covered.** The new specs have run on this machine only, on Windows; GitHub has not run them. CI retries
+a failed test once, and `new-subject.spec.ts` names its subjects at module load, so a retry of a test that had
+already created one would meet 409 — not exercised. A *raw* lone-surrogate character (as opposed to an escape)
+cannot reach the schema at all: the request envelope is refused with a bare 400 before any rule runs, which
+is a refusal and not a crash, carries no code, and the editor does not claim to know it. Protobuf is not JSON
+and is unaffected. The screen was looked at in a real browser at desktop and phone width in both themes, not on
+a touch device, and not right-to-left. A cross-origin API was not signed into (as ADR-029). `docker/web*` was
+not touched, so `smoke-web-image.sh` was not re-run. **No screen edits an owner or a compatibility policy** — only
+the API does — and the compatibility tooltips remain unbuilt. **The local compose database now holds** two
+environments and subjects that cannot be deleted: `e2e-names` (116 as measured, the parity table's and
+the ones I made while probing, one of which was the poisoned row), `e2e-empty` (empty on purpose), and two
+`acme.e2e.created.*` per run in `dev` (six at the last count). The `compose_concordat-postgres` volume was
+not touched otherwise.
+
+---
+
 ## The schema editor and the web container, 2026-10-13
 
 M4.4's last three boxes — Monaco, `ajv`, and the prototype's editing conveniences — shipped on
 `NewVersionPage`, and the web app joined the compose stack: `docker compose --profile registry up`
 now brings up the registry **and** its UI (`127.0.0.1:5063`). The Angular suite went from 858 to
 **1,106** tests and the browser suite from 144 to **178**, the latter run against the dev server **and
-against the production image**; the .NET suite is **1,532** and was not touched. Decisions:
+against the production image**; the .NET suite was **1,532** and was not touched. *(That day's figures:
+all three have grown since — see the section above.)* Decisions:
 [ADR-028](adr/028-schema-editor.md), [ADR-029](adr/029-web-container.md).
 
 **The one rule the editor is built on:** a check that can block a registration must be one the
@@ -60,8 +151,10 @@ found by running the production build:
 **What the editor is not allowed to claim, and the two registry facts the work surfaced:** the
 registry **accepts a schema that is not valid under the 2020-12 metaschema** (`{"type":"bogus"}` is
 registered; it only fails when a message is validated against it), which is why `ajv`'s findings
-are advice; and it answers **500, with no Problem Details body, to a lone-surrogate escape**
-(`"\ud800"` in a string), which is well-formed JSON. Both are in the holes table below.
+are advice; and it answered **500 to a lone-surrogate escape** (`"\ud800"` in a string), which is
+well-formed JSON. *(This paragraph recorded it as "with no Problem Details body", from the canonical
+writer. Both were wrong, and it was closed the same day: see the section above and
+[ADR-031](adr/031-unpaired-surrogates-are-refused.md).)* The first is still in the holes table below.
 
 **Measured, 2026-10-13, production build.** Initial bundle 405.9 → 410.6 kB raw (102.5 → 104.3 kB
 transferred): the editor is not in it. On demand: Monaco 3.32 MB raw / 667 kB transferred, its
@@ -69,7 +162,8 @@ worker 307 / 75 kB, the checker's worker (with `ajv`) 136 / 36 kB, the styleshee
 icon font 153 kB. The screen's own chunk grew from 9.7 to 50.2 kB.
 
 **Not covered.** The prototype's *auto-slugged id* and *compatibility tooltips* — the first belongs to
-creating a subject, which **no screen does** (see below). A cross-origin API
+creating a subject, which no screen did when this was written and one does now (the section above); the
+second is still unbuilt. A cross-origin API
 (`CONCORDAT_API_BASE_URL` set to another origin) was checked as far as `config.json`, the rendered
 header and the validation, **not by signing in across origins**. The CI and `Publish images`
 changes parse as YAML and have not been run by GitHub. Right-to-left text, very large documents
@@ -288,13 +382,15 @@ only when a cookie was presented and rejected.
 | M1 registry core | 65 / 68 |
 | M2 .NET client | 32 / 41 |
 | M3 CLI | **19 / 19** |
-| M4 web app | 27 / 31, plus the part-built Dashboard |
+| M4 web app | **28 / 30**, counted from [the plan](plan/M4-web-app.md) on 2026-10-13 with its struck-through items left out; the Dashboard is the part-built one of the two still open |
 | M5 formats | 14 / 15 |
 | M6 SDKs | 5 / 24 |
 | M7 governance | **30 / 31** |
 | M8 identity | 13 / 15 |
 | M9 cloud | 11 / 16 |
-| **Total** | **238 / 285** |
+| **Total** | **239 / 284** |
+
+*M4's row was re-counted on 2026-10-13, since it had not been since the pages shipped; the others are as of 2026-08-30.*
 
 **Do not read that as a progress bar.** Auditing the 53 remaining boxes found 9 that are not
 work at all:
@@ -315,7 +411,8 @@ from the plan 2026-09-24**, which is why this list is 9 rather than the 12 it co
 carrying an item as "not work at all" is a way of saying it should not have been a box, and the
 honest fix is to stop counting it rather than to annotate it forever.
 
-Real remaining work is therefore **11 items**, and 4 of those are M4. The rest of the arithmetic:
+Real remaining work was **11 items** when this was written, 4 of them M4; M4 is **2** now (the
+part-built Dashboard and the compatibility tooltips), so **9**. The rest of the arithmetic:
 **22 are deferred by an ADR** (M6's four SDKs, OIDC, SAML, Helm) and **5 are blocked on an account
 or a purchase** you have to make — see *Blocked on you* below. Sorted that way the picture is much
 narrower than that: a handful of schema-editor enhancements, and a pile of decisions.
@@ -331,17 +428,19 @@ described shipped code since decision 25 landed the day before.
 ### M4 — the web application
 
 The honest count is **2** — the part-built Dashboard, and the one box M4.4 still has open
-(two prototype conveniences, below). **No page is missing**, and the schema editor's three boxes
+(the compatibility tooltips, below). **No page is missing**, and the schema editor's three boxes
 are done ([the section above](#the-schema-editor-and-the-web-container-2026-10-13)). On
 2026-10-13 the seven pages that were missing — the version diff, impact analysis, approvals,
 contracts, the audit log, the settings split and notification forms — shipped, each driven in a
-browser against the real registry.
+browser against the real registry, and later the same day so did the screen that creates a subject
+([the first section](#the-create-subject-screen-and-a-500-that-was-not-what-it-looked-like-2026-10-13)).
 
-**Genuinely missing:** the prototype's *auto-slugged id with a "touched" flag*, which belongs to
-**creating a subject — and no screen creates one.** `POST …/subjects` exists and nothing in the web
-app calls it, so a subject has to be made through the API or the CLI before the UI can do anything
-with it. M4's exit criterion ("create a subject, register a version, …entirely in the UI") was
-recorded as met and is **not**; it is every step but the first. And *compatibility tooltips*.
+**Genuinely missing:** the prototype's *compatibility tooltips*. The *auto-slugged id with a "touched"
+flag* was waiting on a screen that creates a subject, and ~~**no screen creates one**~~ one does now:
+M4's exit criterion ("create a subject, register a version, …entirely in the UI"), which had been
+recorded as met while its first step was not, **is met**, and `e2e/new-subject.spec.ts` walks the first
+two steps in a browser. What is *not* in the UI is editing a subject afterwards — its owner and its
+compatibility policy change through the API only — which is recorded in the holes table below.
 
 ~~SubjectDetail / VersionDetail / NewVersion pages~~ headed that list until this audit.
 **They shipped 2026-08-15 with M4.3** — `subject-detail-page.ts`, `version-detail-page.ts` and
@@ -375,7 +474,7 @@ conflict".
 
 **Done 2026-08-15:** the design-system port — the prototype's tokens, a light theme, self-hosted
 fonts ([ADR-026](adr/026-self-hosted-web-fonts.md)), the sidebar shell, the icon set and the
-cards — and the Playwright suite that now pins it. The E2E suite stands at **178 tests across fourteen
+cards — and the Playwright suite that now pins it. The E2E suite stands at **195 tests across sixteen
 specs** as of 2026-10-13, up from the 11 it launched with; `design-system.spec.ts` asserts the palette, both
 themes, the typography and the shell as **computed styles rather than pixel screenshots**, which
 are exact and identical on Windows and on CI's Linux. It exists because the placeholder palette
@@ -405,13 +504,12 @@ The Monaco item's stated reason had expired — it was framed as fixing the prot
 `dangerouslySetInnerHTML` XSS hole, and that code was never ported either — and it shipped on its
 own merits.
 
-**What exists today:** seventeen screens — sign-in, the dashboard slice on `/`, the subject list,
-subject detail, version detail, the register-a-version form, the version diff, impact analysis,
-approvals, the contract list and a contract, the audit log, and the five settings tabs
-(environment, brokers, members, API keys, notifications) — and the routing, guards and
-interceptors under them. Every flow in the exit criterion after the first — register a
-version, view a diff and an impact report, approve a pending breaking change — is now possible
-entirely in the UI, **except the first: nothing creates a subject.**
+**What exists today:** eighteen screens — sign-in, the dashboard slice on `/`, the subject list, the
+create-a-subject form, subject detail, version detail, the register-a-version form, the version
+diff, impact analysis, approvals, the contract list and a contract, the audit log, and the five
+settings tabs (environment, brokers, members, API keys, notifications) — and the routing, guards and
+interceptors under them. Every flow in the exit criterion — create a subject, register a version,
+view a diff and an impact report, approve a pending breaking change — is possible entirely in the UI.
 
 ### M6 — Tier 2 SDKs
 
@@ -438,15 +536,17 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~Signup named its reason for refusing~~ | **Narrowed 2026-09-24.** The neutral `detail` was the only neutral part; the code, title and type URI all said `user_already_exists`. Now `signup_refused`. Not closed: synchronous provisioning still distinguishes refusal from creation — [M9.2](plan/M9-cloud.md) says what closing it would take. |
 | **Approval reviewers do not exist** | Anyone with `subject:admin` can approve anything. A reviewer *set* was deferred to M8 and M8 did not build it. |
 | **A contract's bindings cannot be edited or removed** | There is an `add` endpoint for each kind and nothing else, so a binding added without a precedence can never be separated from a later overlapping one — the registry's own refusal says to "give the two bindings different precedence values", and the first has none to change. Found by the web app's first real overlap test (2026-10-13); the form now says to set precedence up front, which is a workaround, not a fix. |
-| **No screen creates a subject** | `POST /v1/environments/{env}/subjects` is built and tested and nothing in the web app calls it, so M4's exit criterion has been recorded as met when its first step is not. Found 2026-10-13 while looking for the prototype's "auto-slugged id", which has nowhere to live without it. |
+| ~~No screen creates a subject~~ | **Closed 2026-10-13** by `/subjects/new-subject` ([ADR-030](adr/030-create-subject-screen.md)): M4's exit criterion had been recorded as met when its first step was not, and the list's "New subject" was a button with no handler. What is left of it is the next row. |
+| **No screen edits a subject afterwards** | A subject's owner and compatibility policy can be changed (`PATCH`, `PUT …/compatibility-policy`) and nothing in the web app does either, nor does the CLI. Everything else about a subject is permanent — name, format and content model, probed rather than read — and the create screen's confirmation says so. Found while writing what that confirmation could truthfully promise. |
 | **The registry accepts a schema that is not valid JSON Schema** | `{"type":"bogus"}` registers. Canonicalisation and the portability check never read the document against the 2020-12 metaschema, so it is stored, given an id and offered to consumers — and fails every message validated against it. The web editor reports it as advice (`ajv`); the registry does not. Whether registration should refuse it is a product decision, not a bug fix: refusing changes what existing users can register. |
-| **A lone-surrogate escape in a schema answers 500** | `{"a":"\ud800"}` is well-formed JSON to the registry's reader and then fails in the writer: a bare 500 with no Problem Details body, from both registration and the dry run. Found by the editor's parity test, which records it rather than mirroring it. |
+| ~~A lone-surrogate escape in a schema answers 500~~ | **Closed 2026-10-13** ([ADR-031](adr/031-unpaired-surrogates-are-refused.md)): `schema_malformed`, from registration, the dry run and the lookup, in values and keys and in Avro, pinned by five conformance fixtures. It had been recorded as a bare 500 from the writer; it was a generic Problem Details body from the *reader*, and wider than the one string. |
+| ~~An undefined enum number is stored, and then breaks every list that reads it~~ | **Closed 2026-10-13**, at six sites. `compatibilityMode: "99"` parsed (`Enum.TryParse` accepts any integer), was committed, answered 500 while projecting its own response, and every `GET …/subjects` in that environment answered 500 for every caller after it; environment defaults, the registration policy and contract enforcement parsed the same way. `WireEnums.TryParseDefined` refuses it, and a comma list that silently meant a third member. Not part of the brief; found by the probes the brief asked for. A number that *is* a member is still read as it always was. |
 | **Hard delete does not exist** | Soft delete is all there is. The full rule — no registered consumers, force flag, audit entry — is an outstanding commitment. |
 | **Subject prefix search is not implemented** | Value converters do not translate `StartsWith`; it needs a `ComplexProperty` mapping or a shadow column. |
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | ~~A page reload signs you out~~ | **Closed 2026-08-14** by decision 26 — an httpOnly `SameSite=Strict` cookie and a `/auth/resume` route that is the only thing accepting it. The credential still never touches `localStorage`. |
 | ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Still on, and now audible** (decision 27). The API logs a warning naming both ways to close it and repeats hourly until claimed; the web app shows a banner. Verified against a real container. |
-| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 178 tests today across fourteen specs, up from the 11 it launched with, and run against the production image as well as the dev server. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
+| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 195 tests today across sixteen specs, up from the 11 it launched with, and run against the production image as well as the dev server. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
 | ~~`Tenant` is not an aggregate~~ | **Closed by M9.1**, recorded here 2026-09-24 — `Tenant.Create` carries the name and slug invariants, signup writes a row per organisation, bootstrap writes the self-hosted one, and `CloudTenancyTests` drives two organisations through the real host. Self-hosted still holds exactly one row, `TenantId.SelfHosted`: the profiles differ in how many rows there are, not in whether the table means anything. |
 | ~~The derived-environment-id decision is unmade~~ | **Closed 2026-08-14.** Adopted, by creating rows that carry the derived id. No migration, and no orphaned subjects. |
 
@@ -470,20 +570,21 @@ Nothing here can be done from inside the repository.
 
 ## What the tests actually cover
 
-Six kinds, not one. Worth knowing which, because "1,532 tests" says nothing about what would
+Six kinds, not one. Worth knowing which, because "1,615 tests" says nothing about what would
 survive being wrong.
 
 | Kind | Where | Tests | What it proves |
 |---|---|---|---|
-| Domain unit | `Domain.Tests`, three `Formats.*` | ~850 | Invariants in isolation. No I/O |
+| Domain unit | `Domain.Tests`, three `Formats.*` | ~910 | Invariants in isolation. No I/O |
 | Application handler | `Application.Tests` | 157 | Handler refusals and **ordering**, with hand-written fakes |
-| HTTP integration | `Api.IntegrationTests` | 232 | Real HTTP against real PostgreSQL, via Testcontainers |
-| Conformance corpus | `Conformance` | 99, over 98 fixtures | The protocol as an executable spec |
+| HTTP integration | `Api.IntegrationTests` | 254 | Real HTTP against real PostgreSQL, via Testcontainers |
+| Conformance corpus | `Conformance` | 104, over 103 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 64 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
-| Browser end-to-end | `web/e2e` | 178 | A real Chromium against the real stack, design system included — and against the production image |
+| Browser end-to-end | `web/e2e` | 195 | A real Chromium against the real stack, design system included — and against the production image |
 
-Plus 1,106 Angular unit tests.
+Plus 1,319 Angular unit tests. *(Counts above re-measured 2026-10-13; the unit rows are approximate because
+the assemblies that do not fit a row — the client, the CLI and the contract testing — are not in them.)*
 
 **No mocking framework, deliberately.** No Moq, NSubstitute, FluentAssertions or AutoFixture —
 `Directory.Packages.props` carries xunit, Testcontainers and `TimeProvider.Testing`. Every double
@@ -499,7 +600,7 @@ alone — and measures whether `concordat-*` headers survive dead-lettering, sho
 STOMP, MQTT and the AMQP 1.0 conversion. Those measurements are load-bearing: they are what
 scoped binary framing out of v1 (decision 19).
 
-**The corpus is a specification, not a suite.** 98 fixtures, each carrying a `why`, enforced by
+**The corpus is a specification, not a suite.** 103 fixtures, each carrying a `why`, enforced by
 `EveryFixtureExplainsWhyItExists`. It is what M6's SDKs will be built against, which is why
 recent protocol changes landed there rather than only in C#.
 
@@ -533,7 +634,7 @@ What is left splits three ways:
 
 | | |
 |---|---|
-| **Recent calls of mine, to confirm or overturn** | #30 contract beats local `Mode` · #31 `BasicConsumeAsync` wraps consumers · #32 pinned bindings judge `latest` · #33 `ci` is a marker scope · #34 the policy gates subject creation |
+| **Recent calls of mine, to confirm or overturn** | #30 contract beats local `Mode` · #31 `BasicConsumeAsync` wraps consumers · #32 pinned bindings judge `latest` · #33 `ci` is a marker scope · #34 the policy gates subject creation · #35 `ajv` in a worker, and the refusal/advice line · #36 the web container · #37 the create screen and its slug rule · #38 unpaired surrogates, and **six enum parses that were not in the brief** |
 | **Product decisions still genuinely open** | #15 hard-delete semantics · #24 whether the audit trail records refusals |
 | **Accounts and admin** | #1 repo rename (two clicks) · #3 reserve the unreserved names · #28 is informational |
 
