@@ -119,6 +119,15 @@ builder.Services.AddSingleton<ISchemaBundler, ProtoSchemaBundler>();
 // exception 500. See DbConflictExceptionHandler for why nothing upstream catches these itself.
 builder.Services.AddExceptionHandler<DbConflictExceptionHandler>();
 builder.Services.AddProblemDetails();
+
+// A request body the registry cannot read (not JSON, a number where a string goes, a lone
+// surrogate in a string) is a 400 in every environment. The framework's default for this is
+// "throw it into the exception handler" in Development and "log it and answer 400" everywhere
+// else, so with the default `dotnet run` answered 500 to bodies a deployment refuses with 400:
+// CI's browser job, the one place the registry ran as Development, failed five parity specs on
+// exactly that, and no local run saw it because every local run used the Production image.
+// Nothing here maps a BadHttpRequestException, and a 500 is not what a malformed envelope is.
+builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = false);
 builder.Services.AddOpenApi("v1", options =>
 {
     // ADR-019 names this document artifact 1 of the protocol; RequireScope's own doc comment
