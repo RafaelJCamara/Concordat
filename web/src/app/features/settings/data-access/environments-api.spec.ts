@@ -144,14 +144,25 @@ describe('EnvironmentsApi', () => {
 });
 
 describe('toEnvironment', () => {
-  it('keeps an unset default compatibility unset, apart from a default the registry chose', () => {
-    const mapped = toEnvironment({
-      ...dto,
-      defaultCompatibilityPolicy: { mode: null, surface: null },
+  it('maps the default compatibility as the pair the registry holds', () => {
+    expect(toEnvironment(dto).defaultCompatibility).toEqual({
+      mode: 'BACKWARD',
+      surface: 'WIRE_JSON',
     });
-
-    expect(mapped.defaultCompatibility).toEqual({ mode: null, surface: null });
   });
+
+  it.each([
+    ['both members', { mode: null, surface: null }],
+    ['the mode', { mode: null, surface: 'WIRE' }],
+    ['the surface', { mode: 'FULL', surface: null }],
+  ])(
+    'refuses a null for %s, because an environment never has an unset default (ADR-033)',
+    (_which, policy) => {
+      expect(() => toEnvironment({ ...dto, defaultCompatibilityPolicy: policy })).toThrow(
+        /defaultCompatibilityPolicy/,
+      );
+    },
+  );
 
   it.each(['OPEN', 'CI_ONLY', 'CLOSED'])('accepts the registration policy %s', (policy) => {
     expect(toEnvironment({ ...dto, registrationPolicy: policy }).registrationPolicy).toBe(policy);

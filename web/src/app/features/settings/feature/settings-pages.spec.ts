@@ -176,17 +176,61 @@ describe('changesBetween', () => {
     });
   });
 
-  it('does not treat an unset default that is still unset as a change', () => {
-    const unset = environment({ defaultCompatibility: { mode: null, surface: null } });
-
-    expect(changesBetween(unset, { ...same, mode: '', surface: '' })).toEqual({});
+  // The registry answers a lone member with a 400, "needs both a mode and a surface" (ADR-016),
+  // measured against the real thing: mode alone, surface alone and a mode with a null surface were
+  // each refused and stored nothing, while both, both null and an unchanged pair were 200. So the
+  // two compatibility members go together or not at all.
+  it('sends the surface as stored when only the mode changed, because the registry refuses half a policy', () => {
+    expect(changesBetween(current, { ...same, mode: 'FULL' })).toEqual({
+      compatibilityMode: 'FULL',
+      compatibilitySurface: 'WIRE_JSON',
+    });
   });
 
-  it('never sends an empty string for a compatibility member, which would be a 400 about a value nobody picked', () => {
-    const changes = changesBetween(current, { ...same, mode: '' });
+  it('sends the mode as stored when only the surface changed', () => {
+    expect(changesBetween(current, { ...same, surface: 'SOURCE' })).toEqual({
+      compatibilityMode: 'BACKWARD',
+      compatibilitySurface: 'SOURCE',
+    });
+  });
 
+  it('sends the pair when both changed', () => {
+    expect(changesBetween(current, { ...same, mode: 'NONE', surface: 'WIRE' })).toEqual({
+      compatibilityMode: 'NONE',
+      compatibilitySurface: 'WIRE',
+    });
+  });
+
+  it('sends neither compatibility member when neither changed, whatever else did', () => {
+    const changes = changesBetween(current, { ...same, description: 'new', preRelease: true });
+
+    expect(changes).toEqual({ description: 'new', allowPreReleaseVersions: true });
     expect('compatibilityMode' in changes).toBe(false);
+    expect('compatibilitySurface' in changes).toBe(false);
   });
+
+  it('sends the pair beside a description that changed too, as one request', () => {
+    expect(changesBetween(current, { ...same, description: 'new', mode: 'FULL' })).toEqual({
+      description: 'new',
+      compatibilityMode: 'FULL',
+      compatibilitySurface: 'WIRE_JSON',
+    });
+  });
+
+  it.each([
+    ['the mode', { mode: '' }],
+    ['the surface', { surface: '' }],
+    ['both', { mode: '', surface: '' }],
+  ])(
+    'sends no half of the pair when %s is empty, which would be a 400 about a value nobody picked',
+    (_which, empty) => {
+      // The form is empty until it is reset to the environment on arrival.
+      const changes = changesBetween(current, { ...same, ...empty });
+
+      expect('compatibilityMode' in changes).toBe(false);
+      expect('compatibilitySurface' in changes).toBe(false);
+    },
+  );
 
   it('sends false when pre-release is turned off, which is a change and not an omission', () => {
     const on = environment({ allowPreReleaseVersions: true });
@@ -207,12 +251,44 @@ describe('EnvironmentSettingsPage', () => {
     expect(host.textContent).toContain('Shared development');
   });
 
-  it('says "Not set" for an unset default, not a made-up one', () => {
-    const { host } = renderEnvironment({
-      environment: environment({ defaultCompatibility: { mode: null, surface: null } }),
-    });
+  it('offers no "Not set" default, because the registry never has one (ADR-033)', () => {
+    const { host } = renderEnvironment();
 
-    expect(host.textContent).toContain('Not set');
+    for (const id of ['env-mode', 'env-surface']) {
+      const options = [...host.querySelectorAll(`#${id} option`)].map((o) => o.textContent?.trim());
+
+      expect(options, id).not.toContain('Not set');
+      expect(options, id).not.toContain('');
+    }
+  });
+
+  it('sends the whole default when only the mode is changed, which is the case the registry refuses by halves', () => {
+    const { fixture, host, update } = renderEnvironment();
+
+    fill(host, 'env-mode', 'FULL');
+    fixture.detectChanges();
+
+    expect(button(host, 'Save changes')!.disabled).toBe(false);
+
+    host.querySelector('form')!.dispatchEvent(new Event('submit'));
+
+    expect(update).toHaveBeenCalledWith({
+      compatibilityMode: 'FULL',
+      compatibilitySurface: 'WIRE_JSON',
+    });
+  });
+
+  it('sends the whole default when only the surface is changed', () => {
+    const { fixture, host, update } = renderEnvironment();
+
+    fill(host, 'env-surface', 'SOURCE');
+    fixture.detectChanges();
+    host.querySelector('form')!.dispatchEvent(new Event('submit'));
+
+    expect(update).toHaveBeenCalledWith({
+      compatibilityMode: 'BACKWARD',
+      compatibilitySurface: 'SOURCE',
+    });
   });
 
   it('offers the form to someone with env:write', () => {

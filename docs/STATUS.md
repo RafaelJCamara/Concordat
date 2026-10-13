@@ -8,7 +8,7 @@
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
 throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-13: 1,664 .NET,
-1,414 Angular, 223 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
+1,425 Angular, 223 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
 aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
@@ -57,11 +57,11 @@ environment with no mode or surface stores `BACKWARD · WIRE_JSON`, and an updat
 The only fallback is for an environment with **no row** (legacy data, or a command built by hand without a name), and it is
 the same value. Tested at all three sites.
 
-**Found on the way, not fixed** (separable; rows in the holes table): **the environment settings screen cannot change a
-default by changing one select.** It sends only the member that changed and the registry answers 400 "needs both a mode and
-a surface", so a default is changed by choosing a whole pair. Pinned by `environment-default.spec.ts` so it goes red when
-fixed. And the screen's "Not set" default (and `environment.ts`'s `null` members) describe a state the registry never
-produces.
+**Found on the way, not fixed then; both closed later the same day** (see the holes table): **the environment settings
+screen could not change a default by changing one select.** It sent only the member that changed and the registry answers 400
+"needs both a mode and a surface", so a default could only be changed by choosing a whole pair. Pinned by
+`environment-default.spec.ts` so it would go red when fixed, and it was. And the screen's "Not set" default (and
+`environment.ts`'s `null` members) described a state the registry never produces; it is gone.
 
 ### B. A policy change is in the audit log
 
@@ -704,8 +704,8 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~No screen creates a subject~~ | **Closed 2026-10-13** by `/subjects/new-subject` ([ADR-030](adr/030-create-subject-screen.md)): M4's exit criterion had been recorded as met when its first step was not, and the list's "New subject" was a button with no handler. What is left of it is the next row. |
 | ~~No screen edits a subject afterwards~~ | **Closed 2026-10-13** by the panels on a subject's page ([ADR-032](adr/032-subject-settings.md)): Change owner (`subject:write` or `subject:admin`) and Change policy (`subject:admin`), each two clicks, each saying only what the registry was measured to do. Name, format and content model remain permanent (probed: `PATCH` ignores them and answers 200). **Deprecating and retiring are left out on purpose**: neither can be undone, and deprecating notifies every subscriber. The CLI still edits neither. |
 | ~~A subject with no policy of its own is judged by `BACKWARD · WIRE_JSON`, not by its environment's default~~ | **Closed 2026-10-13** by [ADR-033](adr/033-inherit-means-the-environments-default.md): registration, the dry-run `check` and the diff read the environment's default, through `EnvironmentPolicies.EffectiveFor`, as impact analysis and promotion always did. **A behaviour change** for every environment whose default is not the built-in (see the section at the top for what to check). Pinned by `InheritedPolicyApiTests`, the three handler test classes, and `e2e/subject-settings.spec.ts` and `e2e/environment-default.spec.ts`. |
-| **The environment settings screen cannot change a default by changing one select** | The form sends only the member that changed (`changesBetween`) and the registry refuses half a policy: `400` "A compatibility policy needs both a mode and a surface (ADR-016)". So a default is changed by choosing a whole pair. Found while writing `environment-default.spec.ts`, which pins it (it goes red when the form sends the pair). The unit test asserts the one-member shape, which is the opposite of what the registry accepts. |
-| **The web app has a "not set" environment default that the registry never produces** | `environment.ts` documents both members null as "unset", the DTO maps it and the settings form offers "Not set"; but the registry stores a value (an environment created with no default stores `BACKWARD · WIRE_JSON`, and an update with neither member leaves it alone). Dead branch; harmless. |
+| ~~The environment settings screen cannot change a default by changing one select~~ | **Closed 2026-10-13.** The form sent only the member that changed (`changesBetween`) and the registry refuses half a policy: `400` "A compatibility policy needs both a mode and a surface (ADR-016)". Now a change to either select sends both, the unchanged one as the registry holds it, and a change to neither sends neither. Probed first against the real registry (a new environment): mode alone, surface alone and a mode with a null surface were each `400` and stored nothing; both, both null and an unchanged pair were `200`. `e2e/environment-default.spec.ts` had pinned the defect and was inverted (changing only the mode now saves, and the registry reports the new mode beside the old surface); the unit test that asserted the one-member shape was inverted with it. |
+| ~~The web app has a "not set" environment default that the registry never produces~~ | **Closed 2026-10-13**, with the row above, by removing it rather than keeping it: `Environment.defaultCompatibility` is now a whole pair (`EnvironmentDefaultPolicy`), the settings form has no "Not set" option, and a `null` member on the wire is refused by name like any token the build does not know. Nothing else read the null members. The wire DTO still mirrors `PolicyResponse`, which is nullable because a *subject's* policy is. |
 | **The browser job in CI has been red since `803822c`, for a reason that is not the code under test** | CI starts the registry with `dotnet run`, which takes `launchSettings.json` and so runs as **Development**; every local run uses the container image, **Production**. In Development ASP.NET Core throws a minimal API's body-binding errors into `UseExceptionHandler`, so a body the registry answers `400` in Production (a lone surrogate, a number where a string goes) comes back `500`. Five parity tests fail on that and nothing else (`schema-parity` json, `subject-name-parity` name, three in `subject-settings-parity`); the other 218 pass. `803822c` had two of them, `f446091` and `e1f8623` five, because each added parity probes; `afe19bc` and everything before was green. Read from the CI registry log (`Hosting environment: Development`, `BadHttpRequestException … Cannot read incomplete UTF-16 JSON text`). **Not fixed**: the likely one-line fix is `RouteHandlerOptions.ThrowOnBadRequest = false`, which makes Development answer what Production does, or CI could run the registry as Production; either is a decision about the registry's behaviour in Development. The other six jobs (`build & test`, `web app`, `contract drift gate`, `protocol docs gate`, `Web container`, `CLI container`) were green on all three. |
 | ~~A policy change is not in the audit log~~ | **Closed 2026-10-13** by [ADR-033](adr/033-inherit-means-the-environments-default.md): `PUT …/compatibility-policy` is a command and writes `SUBJECT_POLICY_CHANGED` in the same transaction, as the caller, reading `policy <old> -> <new>`; a no-op and a refused change write nothing; nobody is notified. Pinned by `APolicyChangeIsRecordedAsTheCallerWithTheOldAndNewPolicy` (the inverse of `APolicyChangeLeavesNoAuditEntry`) and the policy journey in `e2e/subject-settings.spec.ts`. Rolling the registry back past it breaks the audit page while a row exists. |
 | **A `PATCH` that changes nothing still writes "owner changed"** | `{}`, a `null` owner and `{"owner":""}` answer 200, change nothing, and write a `SUBJECT_UPDATED` entry reading "owner changed" (setting the owner it already has now writes `owner a -> a`, since the entry names both owners). The web form never sends one. |
@@ -755,7 +755,7 @@ survive being wrong.
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
 | Browser end-to-end | `web/e2e` | 223 | A real Chromium against the real stack, design system included — and against the production image |
 
-Plus 1,414 Angular unit tests. *(Counts above re-measured 2026-10-13; the unit rows are approximate because
+Plus 1,425 Angular unit tests. *(Counts above re-measured 2026-10-13; the unit rows are approximate because
 the assemblies that do not fit a row — the client, the CLI and the contract testing — are not in them.)*
 
 **No mocking framework, deliberately.** No Moq, NSubstitute, FluentAssertions or AutoFixture —

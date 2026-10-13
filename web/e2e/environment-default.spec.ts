@@ -95,18 +95,22 @@ test.describe('changing an environment’s default on the settings screen', () =
     expect(check.policy).toEqual(STRICT);
   });
 
-  test('changing only one of the two members is refused, and the screen says so', async ({
-    page,
-  }) => {
-    // A defect, pinned so it cannot go stale in silence: the form sends only the member that
-    // changed, and the registry refuses half a policy (ADR-016). Nothing changes. When the form
-    // sends the pair this goes red, and the test below should then pick one select only.
+  test('changing only the mode saves, and the surface stays as it was', async ({ page }) => {
+    // The registry refuses half a policy (ADR-016: 400, "needs both a mode and a surface"), so a
+    // form that sent only the select that moved could not save the most ordinary edit there is.
+    // This was once pinned here as a defect, and went red when the form began to send the pair:
+    // the mode alone must now be saved, and the registry must report the new mode beside the
+    // surface nobody touched.
     await page.goto('/settings/environment');
-    await page.getByLabel('Default compatibility mode').selectOption('FULL');
+    await page.getByLabel('Default compatibility mode').selectOption('NONE');
     await page.getByRole('button', { name: 'Save changes' }).click();
 
-    await expect(page.getByText('Could not save the settings')).toBeVisible();
-    await expect(page.getByText(/needs both a mode and a surface/)).toBeVisible();
+    await expect(page.getByRole('status')).toContainText('Settings saved');
+    await expect(page.getByText('Could not save the settings')).toHaveCount(0);
+
+    await page.reload();
+    await expect(page.getByLabel('Default compatibility mode')).toHaveValue('NONE');
+    await expect(page.getByLabel('Default compatibility surface')).toHaveValue(STRICT.surface);
 
     const check = await checkSchema(
       await ownerCredential(),
@@ -115,17 +119,19 @@ test.describe('changing an environment’s default on the settings screen', () =
       schema('boolean'),
     );
 
-    expect(check.policy).toEqual(STRICT);
+    expect(check.policy).toEqual({ mode: 'NONE', surface: STRICT.surface });
   });
 
-  test('saves a new default, and the screen says what that does and does not touch', async ({
+  test('changing only the surface saves too, and the screen says what a default does and does not touch', async ({
     page,
   }) => {
     const credential = await ownerCredential();
 
     await page.goto('/settings/environment');
     await expect(page.locator('dt', { hasText: 'Default compatibility' })).toBeVisible();
-    await expect(page.getByLabel('Default compatibility mode')).toHaveValue('BACKWARD');
+    // Where the previous test left it, which is also what the screen must show after a reload.
+    await expect(page.getByLabel('Default compatibility mode')).toHaveValue('NONE');
+    await expect(page.getByLabel('Default compatibility surface')).toHaveValue(STRICT.surface);
 
     // The sentence beside the control, which is what this spec makes true: the next version is
     // judged by the new default, and what is already registered or held is not.
@@ -136,18 +142,15 @@ test.describe('changing an environment’s default on the settings screen', () =
       page.getByText('Versions already registered, or held at the approval gate'),
     ).toBeVisible();
 
-    // Both members, not the one the person means to change. The screen sends only what changed and
-    // the registry refuses half a policy (see the next test), so a default is changed by choosing a
-    // whole one. Moving to NONE × WIRE, which is also not the built-in surface, makes the policy
-    // that judges the subject differ from the built-in one on both axes.
-    await page.getByLabel('Default compatibility mode').selectOption('NONE');
-    await page.getByLabel('Default compatibility surface').selectOption('WIRE');
+    // One select, the other one. Moving to NONE × WIRE, which is also not the built-in surface,
+    // makes the policy that judges the subject differ from the built-in one on both axes.
+    await page.getByLabel('Default compatibility surface').selectOption(NEXT.surface);
     await page.getByRole('button', { name: 'Save changes' }).click();
     await expect(page.getByRole('status')).toContainText('Settings saved');
 
     await page.reload();
-    await expect(page.getByLabel('Default compatibility mode')).toHaveValue('NONE');
-    await expect(page.getByLabel('Default compatibility surface')).toHaveValue('WIRE');
+    await expect(page.getByLabel('Default compatibility mode')).toHaveValue(NEXT.mode);
+    await expect(page.getByLabel('Default compatibility surface')).toHaveValue(NEXT.surface);
 
     // The registry agrees, and it is the environment's own default that moved.
     const check = await checkSchema(credential, ENVIRONMENT, inheriting, schema('boolean'));

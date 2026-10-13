@@ -42,14 +42,12 @@ interface FormValue {
  * <b>Readable by anyone, editable only with `env:write`</b> (ADR-018). Without the scope the
  * values are shown as text and there is no form to be disabled.
  *
- * <b>Only what changed is sent.</b> The registry leaves an omitted member alone, so saving a
- * new description does not also restate the compatibility default and quietly turn an
- * inherited setting into one somebody chose.
- *
- * <b>The default policy has a "not set" state and the form keeps it.</b> Both members null
- * means nothing is set at this level, which is not the same as the registry's built-in
- * default, and the select says so rather than showing an arbitrary first option as if it had
- * been picked. Choosing one is a change; leaving it alone sends nothing.
+ * <b>Only what changed is sent, except that the compatibility default is one thing, not two.</b>
+ * The registry leaves an omitted member alone, so saving a new description does not also
+ * restate the default, and a default nobody touched is not sent. But it refuses half a policy
+ * (`400`, "needs both a mode and a surface", ADR-016), so changing either select sends both: the
+ * one that moved and the one that did not, as the registry holds it. The form used to send only
+ * the member that changed, so changing the mode alone, the obvious edit, could not be saved.
  *
  * <b>Changing a default takes effect at once for every subject that has not set its own</b> —
  * that is what inheritance is for — and the form says so beside the control, because it is the
@@ -58,10 +56,9 @@ interface FormValue {
  * registration, the dry run and the diff read the registry's built-in default instead); versions
  * already registered or held are not judged again, and the sentence says so.
  *
- * <b>The registry never answers "not set".</b> An environment created without a default stores
- * the built-in one and an update with neither member leaves it alone (ADR-033), so the state this
- * form keeps is one the registry cannot produce today. It costs nothing to keep and is not what
- * this change was about.
+ * <b>There is no "not set" default to choose or to show.</b> An environment created without one
+ * stores the built-in `BACKWARD · WIRE_JSON`, and an update with neither member leaves it alone
+ * (ADR-033), so both selects always hold a real token.
  */
 @Component({
   selector: 'cd-environment-settings-page',
@@ -168,9 +165,6 @@ interface FormValue {
             <div class="space-y-1.5">
               <label class="text-sm font-medium" for="env-mode">Default compatibility mode</label>
               <select id="env-mode" formControlName="mode" [class]="input">
-                @if (environment.defaultCompatibility.mode === null) {
-                  <option value="">Not set</option>
-                }
                 @for (mode of modes; track mode) {
                   <option [value]="mode">{{ mode }}</option>
                 }
@@ -182,9 +176,6 @@ interface FormValue {
                 Default compatibility surface
               </label>
               <select id="env-surface" formControlName="surface" [class]="input">
-                @if (environment.defaultCompatibility.surface === null) {
-                  <option value="">Not set</option>
-                }
                 @for (surface of surfaces; track surface) {
                   <option [value]="surface">{{ surface }}</option>
                 }
@@ -318,9 +309,7 @@ export class EnvironmentSettingsPage {
   protected defaultPolicy(environment: Environment): string {
     const { mode, surface } = environment.defaultCompatibility;
 
-    return mode === null && surface === null
-      ? 'Not set'
-      : `${mode ?? 'not set'} · ${surface ?? 'not set'}`;
+    return `${mode} · ${surface}`;
   }
 
   protected policyTone(policy: RegistrationPolicy): 'success' | 'warning' | 'destructive' {
@@ -331,8 +320,8 @@ export class EnvironmentSettingsPage {
 function toFormValue(environment: Environment): FormValue {
   return {
     description: environment.description ?? '',
-    mode: environment.defaultCompatibility.mode ?? '',
-    surface: environment.defaultCompatibility.surface ?? '',
+    mode: environment.defaultCompatibility.mode,
+    surface: environment.defaultCompatibility.surface,
     policy: environment.registrationPolicy,
     preRelease: environment.allowPreReleaseVersions,
   };
@@ -342,9 +331,13 @@ function toFormValue(environment: Environment): FormValue {
  * What the form would change about an environment, and nothing it would not.
  *
  * A member the form leaves as it found it is left out, so saving one field never restates the
- * others. An unset compatibility member that is still unset is not a change — choosing "Not
- * set" is not an instruction the registry has, and sending an empty string for it would be a
- * 400 about a value nobody picked.
+ * others. The exception is the compatibility default, whose two members are sent together
+ * whenever either differs: the registry answers a lone one with a 400 (ADR-016), so a person
+ * who changes only the mode has to be sent as changing the pair, with the surface as stored.
+ *
+ * <b>An empty select is not a choice.</b> The form starts empty and is reset to the environment
+ * on arrival, and in that window a select has no value; a pair with an empty half would be a 400
+ * about a value nobody picked, so it is left out of the changes rather than sent.
  */
 export function changesBetween(environment: Environment, value: FormValue): EnvironmentChanges {
   const was = toFormValue(environment);
@@ -356,11 +349,10 @@ export function changesBetween(environment: Environment, value: FormValue): Envi
     changes.description = value.description;
   }
 
-  if (value.mode !== was.mode && value.mode !== '') {
-    changes.compatibilityMode = value.mode as CompatibilityMode;
-  }
+  const defaultChanged = value.mode !== was.mode || value.surface !== was.surface;
 
-  if (value.surface !== was.surface && value.surface !== '') {
+  if (defaultChanged && value.mode !== '' && value.surface !== '') {
+    changes.compatibilityMode = value.mode as CompatibilityMode;
     changes.compatibilitySurface = value.surface as CompatibilitySurface;
   }
 

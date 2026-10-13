@@ -145,9 +145,12 @@ append-only. So the two specs about it follow the rule creating one does, and ad
   puts that default back before every run (it is its own, and nothing else reads it), then changes it on the
   real environment settings screen and watches an inheriting subject follow it and a pinned one not. It makes
   **two subjects per run** in `e2e-follows`. **Do not point other specs at it**, and do not make a second
-  spec move a default: `dev` and `e2e-inherit` are read by everything else. The screen only changes a default
-  by choosing a whole pair (the form sends the one member that changed and the registry refuses half a policy),
-  which the spec pins as a defect.
+  spec move a default: `dev` and `e2e-inherit` are read by everything else. The registry refuses half a policy
+  (`400`), so the form sends both members when either select changed, and the spec changes the default one
+  select at a time: the mode alone (`BACKWARD · WIRE_JSON` → `NONE · WIRE_JSON`), then the surface alone
+  (→ `NONE · WIRE`), asking the registry after each. It used to pin the one-member `400` as a defect, and that
+  test was inverted when the form was fixed; a test that goes red on a "Could not save the settings" alert
+  means the form has gone back to sending one member.
 - The audit assertions in `subject-settings.spec.ts` are the confirmations' own claims: an owner change leaves
   exactly one `SUBJECT_UPDATED` row attributed to the signed-in account and reading both owners, and a policy change exactly one
   `SUBJECT_POLICY_CHANGED` row attributed to the same account and reading `policy <old> -> <new>`. They

@@ -265,7 +265,7 @@ takes several minutes. The other eight are pure unit tests and finish in seconds
 dotnet test tests/Concordat.Domain.Tests        # 541 tests, no Docker, ~1s
 ```
 
-### The web suite — 1,414 tests
+### The web suite — 1,425 tests
 
 ```bash
 cd web

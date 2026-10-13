@@ -1,10 +1,6 @@
 // Environments and the brokers registered in them.
 
-import type {
-  CompatibilityMode,
-  CompatibilityPolicy,
-  CompatibilitySurface,
-} from '../registry/compatibility';
+import type { CompatibilityMode, CompatibilitySurface } from '../registry/compatibility';
 
 /**
  * Who may register schemas into an environment.
@@ -54,12 +50,25 @@ export interface Broker {
   readonly lastError: string | null;
 }
 
+/**
+ * The compatibility policy an environment hands to every subject that sets none of its own.
+ *
+ * <b>Always a whole pair, unlike a subject's {@link CompatibilityPolicy}.</b> A subject can
+ * inherit, so its members are null together; an environment cannot. Creating one without a
+ * default stores the built-in `BACKWARD · WIRE_JSON` and an update with neither member leaves it
+ * alone (ADR-033), so the registry never answers "not set" and this type has no way to say it.
+ */
+export interface EnvironmentDefaultPolicy {
+  readonly mode: CompatibilityMode;
+  readonly surface: CompatibilitySurface;
+}
+
 /** An environment: a place schemas live, with the rules for registering them. */
 export interface Environment {
   readonly name: string;
   readonly description: string | null;
-  /** What a subject that sets none of its own inherits. Both members are null together when unset. */
-  readonly defaultCompatibility: CompatibilityPolicy;
+  /** What a subject that sets none of its own inherits. */
+  readonly defaultCompatibility: EnvironmentDefaultPolicy;
   readonly registrationPolicy: RegistrationPolicy;
   readonly allowPreReleaseVersions: boolean;
   readonly createdAt: Date;
@@ -68,8 +77,11 @@ export interface Environment {
 
 /**
  * What can be changed about an environment. A member left out is left alone by the registry, so
- * saving one field never restates the others — and an inherited setting is never quietly turned
- * into one somebody chose.
+ * saving one field never restates the others.
+ *
+ * <b>The two compatibility members go together or not at all.</b> The registry refuses half a
+ * policy (`400`, "needs both a mode and a surface", ADR-016) however much of the other half is
+ * already stored, so a change to either is sent as the pair.
  */
 export interface EnvironmentChanges {
   readonly description?: string;

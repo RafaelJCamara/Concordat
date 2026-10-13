@@ -30,7 +30,7 @@ function environment(overrides: Partial<Environment> = {}): Environment {
   return {
     name: 'dev',
     description: null,
-    defaultCompatibility: { mode: null, surface: null },
+    defaultCompatibility: { mode: 'BACKWARD', surface: 'WIRE_JSON' },
     registrationPolicy: 'OPEN',
     allowPreReleaseVersions: false,
     createdAt: new Date('2026-08-01T09:00:00Z'),

@@ -212,7 +212,10 @@ notified. The policy journey asserts the row (its action, the signed-in account 
   policy (`400`, "needs both a mode and a surface"), so a default is changed by choosing a whole pair; pinned by
   `environment-default.spec.ts`. The screen and the web model also carry a "not set" default that the registry
   never produces. A `PATCH` that changes nothing still writes "owner changed". Retiring a subject records the
-  subject's owner as the actor.
+  subject's owner as the actor. *Note, 2026-10-13, later the same day: the first two are closed.* The form now sends
+  both compatibility members when either select changed (probed against the real registry first: one member `400`,
+  both or none `200`), and the "not set" default is removed from the web model and the screen rather than kept.
+  `environment-default.spec.ts` was inverted and now changes the default one select at a time. The last two stand.
 
 ## References
 

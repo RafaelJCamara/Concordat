@@ -10,13 +10,13 @@ import {
   type Broker,
   type BrokerStatus,
   type Environment,
+  type EnvironmentDefaultPolicy,
   type RegistrationPolicy,
 } from '../../../domain/environments/environment';
 import {
   COMPATIBILITY_MODES,
   COMPATIBILITY_SURFACES,
   type CompatibilityMode,
-  type CompatibilityPolicy,
   type CompatibilitySurface,
 } from '../../../domain/registry/compatibility';
 
@@ -87,13 +87,10 @@ export function toBroker(dto: BrokerDto): Broker {
   };
 }
 
-function toPolicy(dto: EnvironmentDto['defaultCompatibilityPolicy']): CompatibilityPolicy {
-  // Nulls together mean nothing is set at this level, which is not the same as a default the
-  // registry chose: the type keeps the two apart so the form can say which it is showing.
-  if (dto.mode === null && dto.surface === null) {
-    return { mode: null, surface: null };
-  }
-
+function toPolicy(dto: EnvironmentDto['defaultCompatibilityPolicy']): EnvironmentDefaultPolicy {
+  // The wire shape is the subject's, whose members are nullable, but an environment never has an
+  // unset default (ADR-033), so a null is refused by name like any token this build does not
+  // know, not carried into a screen that would have to invent something to show for it.
   return {
     mode: wireToken(
       'defaultCompatibilityPolicy.mode',
