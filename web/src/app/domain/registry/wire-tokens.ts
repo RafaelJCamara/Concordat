@@ -26,6 +26,19 @@ export const VERSION_STATUSES = ['ACTIVE', 'AWAITING_APPROVAL', 'REJECTED', 'DIS
 /** A version's status. */
 export type VersionStatus = (typeof VERSION_STATUSES)[number];
 
+/**
+ * Why an impact verdict is, or is not, a verdict.
+ *
+ * `CHECKED` means the registry compared two schemas and knows. `FOLLOWS_LATEST` means the
+ * consumer tracks the pointer, so the registry cannot say whether it breaks. `UNRESOLVABLE`
+ * means the version it pinned no longer exists. Spelled explicitly server-side rather than
+ * derived from the member name — the class of bug M6.1 found across the API.
+ */
+export const IMPACT_CERTAINTIES = ['CHECKED', 'FOLLOWS_LATEST', 'UNRESOLVABLE'] as const;
+
+/** An impact certainty. */
+export type ImpactCertainty = (typeof IMPACT_CERTAINTIES)[number];
+
 /** A subject's lifecycle. `RETIRED` is the soft delete and is terminal. */
 export const SUBJECT_LIFECYCLES = ['ACTIVE', 'DEPRECATED', 'RETIRED'] as const;
 

@@ -38,6 +38,37 @@ export type Scope = (typeof SCOPES)[number];
  */
 export const SCHEMA_WRITE_SCOPES: readonly Scope[] = ['subject:write', 'subject:admin'];
 
+/**
+ * The scopes that permit changing a contract: creating one, adding a binding, or moving its
+ * enforcement mode (ADR-018). Separate from the schema write scopes because a contract is a
+ * different resource with its own role grant, and a subject writer is not thereby a person who
+ * should be able to start refusing the fleet's messages.
+ */
+export const CONTRACT_WRITE_SCOPES: readonly Scope[] = ['contract:write'];
+
+/** The scopes that permit changing an environment's own settings (ADR-018). */
+export const ENV_WRITE_SCOPES: readonly Scope[] = ['env:write'];
+
+/** The scopes that permit adding, checking or removing a broker, and setting its credentials. */
+export const BROKER_WRITE_SCOPES: readonly Scope[] = ['broker:write'];
+
+/**
+ * The scope that admits someone to members and API keys at all. Unlike the lists above it gates
+ * *reading* too — the whole group is `org:admin` — so a screen behind it is absent to everyone
+ * else, and a route to it redirects rather than rendering an empty page.
+ */
+export const ORG_ADMIN_SCOPES: readonly Scope[] = ['org:admin'];
+
+/**
+ * The scopes that permit approving or rejecting a held version.
+ *
+ * Narrower than {@link SCHEMA_WRITE_SCOPES} on purpose: a writer may register the change,
+ * and only an admin may decide whether it goes live. Letting the author of a breaking change
+ * be the one to approve it is the arrangement the gate (ADR-017) exists to prevent, and it is
+ * why this is a separate list rather than a reuse of the write one.
+ */
+export const APPROVAL_SCOPES: readonly Scope[] = ['subject:admin'];
+
 /** Whether a granted set includes any of the scopes an action requires. */
 export function grants(granted: readonly Scope[], required: readonly Scope[]): boolean {
   return required.some((scope) => granted.includes(scope));

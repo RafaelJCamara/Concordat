@@ -171,10 +171,28 @@ describe('VersionDetailPage', () => {
     expect(host.textContent).not.toContain('Changelog');
   });
 
-  it('does not offer a comparison yet, because there is no diff route', () => {
-    // Guards against re-adding the link before `CompatibilityDiffPage` exists: it would hit
-    // the wildcard and redirect to the dashboard.
+  it('offers a comparison with the previous version, baseline first', () => {
+    // `from` is the baseline and `to` is checked against it, so the previous version comes
+    // first: the link answers "what did this version change", not its inverse.
     const { host } = render({ version: version(), previous: version({ ordinal: 1 }) });
+
+    const link = host.querySelector('a[href="/subjects/orders.created/versions/1/diff/2"]');
+
+    expect(link?.textContent).toContain('Compare with v1');
+  });
+
+  it('offers the impact analysis on every version, the first included', () => {
+    // Unlike the comparison, a consumer question exists for v1 too — and "nobody has
+    // declared" is itself an answer the impact screen gives.
+    const { host } = render({ version: version({ ordinal: 1 }), previous: null });
+
+    expect(
+      host.querySelector('a[href="/subjects/orders.created/versions/1/impact"]')?.textContent,
+    ).toContain('Who is affected');
+  });
+
+  it('offers no comparison on the first version, rather than a disabled one', () => {
+    const { host } = render({ version: version({ ordinal: 1 }), previous: null });
 
     expect(host.textContent).not.toContain('Compare with');
   });

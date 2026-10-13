@@ -1,4 +1,6 @@
+using Concordat.Domain.Contracts;
 using Concordat.Domain.Governance;
+using Concordat.Domain.Identity;
 using Concordat.Domain.Registry;
 using Concordat.Domain.Results;
 
@@ -51,6 +53,113 @@ public class WireTokenTests
         Assert.Equal(
             ["ACTIVE", "DEPRECATED", "RETIRED"],
             Enum.GetValues<SubjectLifecycle>().Select(WireTokens.For)
+                .Order(StringComparer.Ordinal).ToArray());
+
+    /// <summary>
+    /// Every audit action the registry can record is one the web app's filter offers.
+    /// </summary>
+    /// <remarks>
+    /// Unlike the vocabularies around it, the web app does not <i>reject</i> an action it has
+    /// not heard of — a row renders as received, because a log that cannot show the newest kind
+    /// of entry hides exactly what somebody opened it to find. What a missing action costs is
+    /// that it cannot be filtered for, which is quiet, and so is pinned here. See
+    /// <c>web/src/app/domain/governance/audit.ts</c>.
+    /// </remarks>
+    [Fact]
+    public void AuditActionsMatchWhatTheFrontendPublishes() =>
+        Assert.Equal(
+            [
+                "API_KEY_ISSUED",
+                "API_KEY_REVOKED",
+                "BROKER_ADDED",
+                "BROKER_CREDENTIAL_REMOVED",
+                "BROKER_CREDENTIAL_SET",
+                "BROKER_REMOVED",
+                "CONTRACT_BINDING_ADDED",
+                "CONTRACT_CREATED",
+                "CONTRACT_ENFORCEMENT_CHANGED",
+                "ENVIRONMENT_CREATED",
+                "ENVIRONMENT_UPDATED",
+                "MEMBER_ADDED",
+                "MEMBER_ROLE_CHANGED",
+                "SERVICE_REGISTERED",
+                "SUBJECT_CREATED",
+                "SUBJECT_RETIRED",
+                "SUBJECT_UPDATED",
+                "VERSION_APPROVED",
+                "VERSION_DISMISSED",
+                "VERSION_PROMOTED",
+                "VERSION_REGISTERED",
+                "VERSION_REJECTED",
+                "VERSION_SUBMITTED",
+            ],
+            Enum.GetValues<AuditAction>().Select(AuditTokens.For)
+                .Order(StringComparer.Ordinal).ToArray());
+
+    /// <summary>Every enforcement mode the registry can emit is one the web app knows.</summary>
+    /// <remarks>
+    /// Strict on the web side: a contract shown as one thing that is in fact another is a
+    /// contract somebody believes is not blocking, and enforcement is the one setting where that
+    /// mistake has a cost.
+    /// </remarks>
+    [Fact]
+    public void EnforcementModesMatchWhatTheFrontendPublishes() =>
+        Assert.Equal(
+            ["ENFORCE", "MONITOR", "OFF"],
+            Enum.GetValues<EnforcementMode>().Select(WireTokens.For)
+                .Order(StringComparer.Ordinal).ToArray());
+
+    /// <summary>Every role the registry can emit is one the web app knows.</summary>
+    [Fact]
+    public void RolesMatchWhatTheFrontendPublishes() =>
+        Assert.Equal(
+            ["ADMIN", "OWNER", "READER"],
+            Enum.GetValues<Role>().Select(Roles.For).Order(StringComparer.Ordinal).ToArray());
+
+    /// <summary>
+    /// Every broker status the registry can emit is one the web app knows.
+    /// </summary>
+    /// <remarks>
+    /// Derived on the wire the way the API derives it — the member name, upper-cased — which is
+    /// safe for these three single words and is exactly what would break if a member were ever
+    /// renamed to a compound one, so this is where that would be noticed.
+    /// </remarks>
+    [Fact]
+    public void BrokerStatusesMatchWhatTheFrontendPublishes() =>
+        Assert.Equal(
+            ["REACHABLE", "UNKNOWN", "UNREACHABLE"],
+            Enum.GetValues<BrokerStatus>().Select(s => s.ToString().ToUpperInvariant())
+                .Order(StringComparer.Ordinal).ToArray());
+
+    /// <summary>
+    /// Every notification event the registry can emit is one the web app's form offers.
+    /// </summary>
+    /// <remarks>
+    /// Lenient on the web side for display, like the audit actions: a subscription's events are
+    /// shown as received. What a missing event costs is that it cannot be ticked, which is quiet,
+    /// and so is pinned here. See <c>web/src/app/domain/notifications/subscription.ts</c>.
+    /// </remarks>
+    [Fact]
+    public void NotificationEventsMatchWhatTheFrontendPublishes() =>
+        Assert.Equal(
+            [
+                "BREAKING_CHANGE_APPROVED",
+                "BREAKING_CHANGE_REJECTED",
+                "BREAKING_CHANGE_SUBMITTED",
+                "ENFORCEMENT_VIOLATION",
+                "SUBJECT_DEPRECATED",
+                "VERSION_PROMOTED",
+                "VERSION_REGISTERED",
+            ],
+            Enum.GetValues<NotificationEvent>().Select(NotificationTokens.For)
+                .Order(StringComparer.Ordinal).ToArray());
+
+    /// <summary>Every notification channel the registry can emit is one the web app knows.</summary>
+    [Fact]
+    public void NotificationChannelsMatchWhatTheFrontendPublishes() =>
+        Assert.Equal(
+            ["EMAIL", "WEBHOOK"],
+            Enum.GetValues<NotificationChannel>().Select(ChannelTokens.For)
                 .Order(StringComparer.Ordinal).ToArray());
 
     /// <summary>Every schema format the registry can emit is one the web app knows.</summary>

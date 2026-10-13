@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { toDivergence, toPolicy, toSubject, type SubjectDto } from './subject-dtos';
+import {
+  toDivergence,
+  toPolicy,
+  toSubject,
+  toVersionDiff,
+  type DiffDto,
+  type SubjectDto,
+} from './subject-dtos';
 
 // The mapping is where a wire change shows up first, and where it is cheapest to catch.
 // These cases are the ones that are not obvious from reading the DTO types.
@@ -87,5 +94,33 @@ describe('surface spelling', () => {
     // The leniency is gone on purpose: accepting both would mean a future divergence in the
     // protocol passed silently, which is exactly how this one survived five milestones.
     expect(() => toPolicy({ mode: 'BACKWARD', surface: 'WIREJSON' })).toThrow();
+  });
+});
+
+describe('toVersionDiff', () => {
+  const diff: DiffDto = {
+    from: 1,
+    to: 2,
+    fromSchemaId: 'aaa',
+    toSchemaId: 'bbb',
+    identical: false,
+    policy: { mode: 'BACKWARD', surface: 'WIRE_JSON' },
+    divergences: [],
+  };
+
+  it('keeps identical separate from an empty divergence list', () => {
+    // Two different schema ids with nothing reported is a real answer under an open content
+    // model, and collapsing the two flags is what would render it as "no changes".
+    const mapped = toVersionDiff(diff);
+
+    expect(mapped.identical).toBe(false);
+    expect(mapped.divergences).toEqual([]);
+  });
+
+  it('refuses a policy token it does not recognise', () => {
+    // Strict by design: an unknown token means a newer server, and guessing is worse.
+    expect(() => toVersionDiff({ ...diff, policy: { mode: 'SIDEWAYS', surface: 'WIRE' } })).toThrow(
+      /SIDEWAYS/,
+    );
   });
 });

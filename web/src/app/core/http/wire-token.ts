@@ -5,7 +5,7 @@
 // drifts: the second copy grows a fallback because someone hit a token in a hurry, and the
 // strictness the first one documents quietly stops being true of the app.
 
-import { ConcordatError } from '../../../core/http/problem-details';
+import { ConcordatError } from './problem-details';
 
 /**
  * Checks a wire token against the set this build knows.

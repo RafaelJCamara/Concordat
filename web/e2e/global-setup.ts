@@ -1,11 +1,15 @@
 import { chromium } from '@playwright/test';
 import {
+  ensureConsumers,
   ensureEnvironment,
   ensureHeldVersion,
   ensureOwner,
   ensureReader,
   ensureSubject,
   OWNER,
+  READER,
+  rememberOwnerCredential,
+  TYPE_CHANGE_SCHEMAS,
 } from './registry';
 
 const REGISTRY = process.env.CONCORDAT_REGISTRY ?? 'http://localhost:5062';
@@ -13,6 +17,9 @@ const WEB = process.env.CONCORDAT_WEB_URL ?? 'http://localhost:4300';
 
 /** Where the signed-in-as-OWNER browser state lands, for playwright.config.ts to load by default. */
 export const OWNER_STORAGE_STATE = 'e2e/.auth/owner.json';
+
+/** The same for a READER, for the specs whose subject is what a reader is offered. */
+export const READER_STORAGE_STATE = 'e2e/.auth/reader.json';
 
 /**
  * Checks both halves are up, then arranges the accounts every test needs.
@@ -30,6 +37,7 @@ export default async function globalSetup(): Promise<void> {
   );
 
   const owner = await ensureOwner();
+  rememberOwnerCredential(owner);
   await ensureReader(owner);
 
   // The app's default environment. Without it the subject list renders a 404 and every
@@ -45,12 +53,26 @@ export default async function globalSetup(): Promise<void> {
   // ensureHeldVersion: this is the shape of the defect that shipped once already.
   await ensureHeldVersion(owner, 'dev', 'acme.e2e.PaymentTaken');
 
-  await captureOwnerSession();
+  // Registered consumers, so impact analysis has something to judge. PaymentTaken's proposal
+  // only adds a required field, which does not break a reader pinned to v1 — so billing is
+  // genuinely COMPATIBLE and the dashboard, on `latest`, is genuinely unjudgeable. LedgerPosted
+  // changes a property's type, which does break an old reader: that is the BREAKS case.
+  await ensureConsumers(owner, 'dev', 'acme.e2e.PaymentTaken', [
+    ['e2e-billing', '1'],
+    ['e2e-dashboard', 'latest'],
+  ]);
+  await ensureHeldVersion(owner, 'dev', 'acme.e2e.LedgerPosted', TYPE_CHANGE_SCHEMAS);
+  await ensureConsumers(owner, 'dev', 'acme.e2e.LedgerPosted', [['e2e-ledger-reader', '1']]);
+
+  await captureSession(OWNER, OWNER_STORAGE_STATE);
+  await captureSession(READER, READER_STORAGE_STATE);
 }
 
 /**
- * Signs in as OWNER through the real form once, and saves the resulting browser state so every
- * test starts already signed in.
+ * Signs in through the real form once per caller, and saves the resulting browser state so a
+ * test starts already signed in as that caller. OWNER is the default for every test; a spec about
+ * what a reader is offered opts into READER with `test.use({ storageState })` instead of signing
+ * in again, which would spend the auth limiter's budget (20 per five minutes) on every test.
  *
  * <b>Most of this suite is about reading, and reading now requires a caller (H1).</b> Signing in
  * inside every read-only test would work, but it would also mean every one of them is partly a
@@ -64,18 +86,21 @@ export default async function globalSetup(): Promise<void> {
  * could capture on its own, and the point is to reproduce exactly what a signed-in tab already
  * looks like to the app.
  */
-async function captureOwnerSession(): Promise<void> {
+async function captureSession(
+  who: { email: string; password: string },
+  path: string,
+): Promise<void> {
   const browser = await chromium.launch();
   const page = await browser.newPage();
 
   try {
     await page.goto(`${WEB}/sign-in`);
-    await page.getByRole('textbox', { name: 'Email' }).fill(OWNER.email);
-    await page.getByRole('textbox', { name: 'Password' }).fill(OWNER.password);
+    await page.getByRole('textbox', { name: 'Email' }).fill(who.email);
+    await page.getByRole('textbox', { name: 'Password' }).fill(who.password);
     await page.getByRole('button', { name: /sign in|create owner account/i }).click();
-    await page.getByText(OWNER.email).waitFor();
+    await page.getByText(who.email).waitFor();
 
-    await page.context().storageState({ path: OWNER_STORAGE_STATE });
+    await page.context().storageState({ path });
   } finally {
     await browser.close();
   }

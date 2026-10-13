@@ -3,11 +3,14 @@ import { Injectable, inject } from '@angular/core';
 import { map, type Observable } from 'rxjs';
 import { CONCORDAT_CONFIG } from '../../../core/config/app-config';
 import { environmentRoot } from '../../../core/http/api-url';
+import type { VersionDiff } from '../../../domain/registry/diff';
 import type { RegistrationOutcome } from '../../../domain/registry/registration';
 import type { Subject } from '../../../domain/registry/subject';
 import {
   toRegistrationOutcome,
   toSubject,
+  toVersionDiff,
+  type DiffDto,
   type RegisterVersionDto,
   type RegistrationDto,
   type SubjectDto,
@@ -41,6 +44,52 @@ export class SubjectsApi {
   getSubject(environment: string, name: string): Observable<Subject> {
     return this.http
       .get<SubjectDto>(`${this.root(environment)}/subjects/${encodeURIComponent(name)}`)
+      .pipe(map(toSubject));
+  }
+
+  /**
+   * Compares two versions of one subject.
+   *
+   * **Every difference, not only the ones the policy forbids** — the endpoint reports both
+   * directions and leaves the verdict to the reader, because a diff filtered by policy would
+   * hide changes a consumer generating code from the schema cares about. `from` is the
+   * baseline and `to` is the schema checked against it, so a divergence reads as "what `to`
+   * does that `from` did not".
+   */
+  diffVersions(
+    environment: string,
+    subject: string,
+    from: number,
+    to: number,
+  ): Observable<VersionDiff> {
+    return this.http
+      .get<DiffDto>(
+        `${this.root(environment)}/subjects/${encodeURIComponent(subject)}/versions/${from}/diff/${to}`,
+      )
+      .pipe(map(toVersionDiff));
+  }
+
+  /**
+   * Approves or rejects a version held at the gate. Answers with the subject as it stands
+   * afterwards, so a caller can replace its copy rather than guess what changed.
+   *
+   * `decidedBy` is sent because the wire type requires it, and it is not what the registry
+   * records: the audit trail and the version's own history carry the authenticated caller
+   * (M8.2). Sending the session's own actor keeps the two agreeing instead of putting a
+   * second, unverified answer to a question the server has already settled.
+   */
+  decideVersion(
+    environment: string,
+    subject: string,
+    ordinal: number,
+    decision: 'approve' | 'reject',
+    decidedBy: string,
+  ): Observable<Subject> {
+    return this.http
+      .post<SubjectDto>(
+        `${this.root(environment)}/subjects/${encodeURIComponent(subject)}/versions/${ordinal}/${decision}`,
+        { decidedBy },
+      )
       .pipe(map(toSubject));
   }
 

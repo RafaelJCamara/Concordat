@@ -1,5 +1,5 @@
 import type { Routes } from '@angular/router';
-import { schemaWriteGuard, signedInGuard } from './core/auth/scope-guard';
+import { orgAdminGuard, schemaWriteGuard, signedInGuard } from './core/auth/scope-guard';
 
 /**
  * The route table.
@@ -63,6 +63,109 @@ export const routes: Routes = [
     canActivate: [signedInGuard],
     loadComponent: () =>
       import('./features/registry/feature/version-detail-page').then((m) => m.VersionDetailPage),
+  },
+  {
+    // The API's own path with the resource prefix dropped, so a link read out of a registry
+    // log and one pasted from the address bar are the same shape. Six segments against the
+    // version screen's four, so neither can shadow the other and order does not matter here.
+    path: 'subjects/:name/versions/:from/diff/:to',
+    title: 'Compare versions · Concordat',
+    canActivate: [signedInGuard],
+    loadComponent: () =>
+      import('./features/registry/feature/compatibility-diff-page').then(
+        (m) => m.CompatibilityDiffPage,
+      ),
+  },
+  {
+    // `:ordinal` takes `latest` here too; the screen names the version it resolved to.
+    path: 'subjects/:name/versions/:ordinal/impact',
+    title: 'Impact · Concordat',
+    canActivate: [signedInGuard],
+    loadComponent: () =>
+      import('./features/registry/feature/impact-analysis-page').then((m) => m.ImpactAnalysisPage),
+  },
+  {
+    // Readable by any signed-in caller: DESIGN §9 has non-admins see the pending diff and impact
+    // without the decision controls, which are `*cdIfScope` inside the page. Guarding the route
+    // by scope would hide the queue from the people who most need to see what is waiting.
+    path: 'approvals',
+    title: 'Approvals · Concordat',
+    canActivate: [signedInGuard],
+    loadComponent: () =>
+      import('./features/registry/feature/approvals-page').then((m) => m.ApprovalsPage),
+  },
+  {
+    // Any read scope admits a caller to the trail, so this is a plain read route: the audit log
+    // spans every resource type and a reader should be able to browse all of it.
+    path: 'audit',
+    title: 'Audit log · Concordat',
+    canActivate: [signedInGuard],
+    loadComponent: () =>
+      import('./features/governance/feature/audit-log-page').then((m) => m.AuditLogPage),
+  },
+  {
+    path: 'contracts',
+    title: 'Contracts · Concordat',
+    canActivate: [signedInGuard],
+    loadComponent: () =>
+      import('./features/contracts/feature/contracts-page').then((m) => m.ContractsPage),
+  },
+  {
+    // Resource identity in the path, like subjects. The write forms are on this screen and are
+    // `*cdIfScope` inside it, so there is no separate write route to guard.
+    path: 'contracts/:name',
+    title: 'Contract · Concordat',
+    canActivate: [signedInGuard],
+    loadComponent: () =>
+      import('./features/contracts/feature/contract-detail-page').then((m) => m.ContractDetailPage),
+  },
+  {
+    // The settings area opens on its first tab. A redirect rather than a screen of its own: an
+    // index with nothing on it is a click every visitor pays to reach the thing they came for.
+    path: 'settings',
+    pathMatch: 'full',
+    redirectTo: 'settings/environment',
+  },
+  {
+    // Readable by any signed-in caller; the edit form is `*cdIfScope` inside the page.
+    path: 'settings/environment',
+    title: 'Environment settings · Concordat',
+    canActivate: [signedInGuard],
+    loadComponent: () =>
+      import('./features/settings/feature/environment-settings-page').then(
+        (m) => m.EnvironmentSettingsPage,
+      ),
+  },
+  {
+    path: 'settings/brokers',
+    title: 'Brokers · Concordat',
+    canActivate: [signedInGuard],
+    loadComponent: () =>
+      import('./features/settings/feature/brokers-page').then((m) => m.BrokersPage),
+  },
+  {
+    // The whole members endpoint group is `org:admin`, reads included, so there is no read-only
+    // version to fall back to: a route guard redirects anyone else rather than rendering a screen
+    // that would fail every request it makes.
+    path: 'settings/members',
+    title: 'Members · Concordat',
+    canActivate: [signedInGuard, orgAdminGuard],
+    loadComponent: () =>
+      import('./features/settings/feature/members-page').then((m) => m.MembersPage),
+  },
+  {
+    path: 'settings/api-keys',
+    title: 'API keys · Concordat',
+    canActivate: [signedInGuard, orgAdminGuard],
+    loadComponent: () =>
+      import('./features/settings/feature/api-keys-page').then((m) => m.ApiKeysPage),
+  },
+  {
+    path: 'settings/notifications',
+    title: 'Notifications · Concordat',
+    canActivate: [signedInGuard],
+    loadComponent: () =>
+      import('./features/settings/feature/notifications-page').then((m) => m.NotificationsPage),
   },
   {
     // The landing screen, on `/` rather than `/dashboard`. An overview is what the root of

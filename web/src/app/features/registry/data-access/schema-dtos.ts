@@ -7,7 +7,7 @@
 
 import type { SchemaDocument, SchemaReference } from '../../../domain/registry/schema';
 import { SCHEMA_FORMATS, type SchemaFormat } from '../../../domain/registry/wire-tokens';
-import { wireToken } from './wire-token';
+import { wireToken } from '../../../core/http/wire-token';
 
 /** `ReferenceResponse`. */
 export interface ReferenceDto {

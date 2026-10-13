@@ -55,6 +55,31 @@ as before, which simply overwrites the default session.
 **One worker, serially.** Every test signs in against one shared registry; parallel workers would
 race over a single global state.
 
+**Shared fixtures that read can use and decisions must not touch.** `global-setup.ts` arranges two
+subjects whose proposals are held at the approval gate — `acme.e2e.PaymentTaken` (adds a required
+field, which does _not_ break a reader pinned to v1) and `acme.e2e.LedgerPosted` (changes a
+property's type, which does) — and registered consumers of each, so the diff, impact and approval
+screens have real engine answers to render. Both are idempotent: they look before they write.
+
+**Deciding is the one thing that cannot be.** Approving a version makes it `latest` and rejecting
+is final, so `approvals.spec.ts` creates a subject of its own per decision, named by the run
+(`acme.e2e.approve.<timestamp>`), and decides that. That costs the registry two subjects per run;
+the shared pair above is never decided, which is what keeps every other spec repeatable.
+
+**The auth limiter budgets about one run, and the suite is built to stay under it.** Sign-in is
+rate-limited to 20 attempts per five minutes per address. A run makes thirteen: three in
+`global-setup` (the owner through the API, then the owner and the reader through the real form,
+whose browser states every test starts from), four in `session.spec.ts`, which is about signing
+in, and six in `authorization.spec.ts` and `registry-data.spec.ts`. **A spec that is not about
+signing in must not sign in.** The default browser is already the owner; a spec about what a
+reader is offered uses `test.use({ storageState: READER_STORAGE_STATE })`; and arranging data
+through the API uses `ownerCredential()`, which reads what global setup saved. When this suite
+went over ninety tests it overran the budget by one and failed an unrelated sign-in near the end
+— a red run that said nothing about the screen under test, and would have been red in CI too.
+
+Two runs inside five minutes will still exceed it. Restarting the registry resets the limiter
+(it is in-memory); CI runs once.
+
 ## What is deliberately not here
 
 **A network stub.** `design-system.spec.ts` asserts the page makes _no_ cross-origin request

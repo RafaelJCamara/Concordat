@@ -75,12 +75,103 @@ sign-in screen that lets someone pass it, which is recorded as
       `exhaustMap` rather than `switchMap`: this is the one store that writes, and cancelling
       an in-flight POST abandons only the browser's half of a request the registry still
       processes
-- [ ] `ContractsPage` — bindings, enforcement mode, version selectors
-- [ ] `CompatibilityDiffPage`, `ImpactAnalysisPage`
-- [ ] `ApprovalsPage` — pending breaking changes with diff and impact; approve/reject (admin only)
-- [ ] `AuditLogPage` — `LoginPage` shipped with [M8.2](M8-identity.md) as `sign-in-page.ts`
-- [ ] Settings split: `EnvironmentSettings`, `Brokers`, `ApiKeys`, `Members`
-- [ ] Notifications as reactive forms that actually persist
+- [x] `ContractsPage` — two screens, `/contracts` and `/contracts/:name`, with a sidebar row.
+      List, create, read the bindings (each subject links to its own screen, with its version
+      selector beside it), move the enforcement mode, add publish and consume bindings. **Every
+      control is absent without `contract:write`** (`CONTRACT_WRITE_SCOPES`, not the schema write
+      scopes: a subject admin is not thereby someone who should be able to start refusing the
+      fleet's messages), and the contract is fully readable without it. **Moving to `ENFORCE`
+      takes two clicks and says what it does** — a contract's mode wins over a service's own
+      configuration in both directions ([decisions-pending #30](../DECISIONS-PENDING.md)), so
+      every service resolving one of its routes starts refusing non-conforming messages; `OFF`
+      and `MONITOR` are the safe direction and take one. Creating leaves the mode to the
+      registry when none is chosen, because its default — `MONITOR` — is a decision it owns. A
+      binding is shown only once the registry says it stored it, and a refusal renders under the
+      form that caused it, leaving the contract and the other form alone. All three writes go
+      through one gate: each rxMethod's own `exhaustMap` only guards against itself.
+      **The real registry corrected the first draft here too.** Overlap is decided by
+      intersecting patterns (`orders.*` and `*.created` both match `orders.created`), which the
+      browser cannot see, and separating two overlapping bindings needs a *distinct precedence on
+      both* — one binding with a value and one without is still a conflict. Bindings cannot be
+      edited or removed (there is no endpoint), so the form says to set one up front. Not here:
+      choosing a broker for a binding, which waits on the brokers page, so bindings apply to
+      every broker in the environment
+- [x] `CompatibilityDiffPage` — `/subjects/:name/versions/:from/diff/:to`, the API's own path with the
+      resource prefix dropped. **Three different answers, because "no divergences" is not one of
+      them:** the same document, a difference no rule reads, or a list of divergences. The middle
+      one is real — under an open content model adding a property is invisible to the engine
+      ([decisions-pending #12](../DECISIONS-PENDING.md)) — and rendering it as "no changes"
+      would contradict the two different schema ids in the header. Reached from the version
+      screen's "Compare with v*n−1*", which is absent on v1 rather than disabled. `latest` is
+      refused as an endpoint of a comparison: it would change meaning under the reader after the
+      next approval. The subject is fetched alongside the diff so a held proposal is labelled as
+      one before the verdict renders
+- [x] `ImpactAnalysisPage` — `/subjects/:name/versions/:ordinal/impact`, registered versions only
+      (the `POST` form, for a schema nobody has registered, is what CI calls and has no screen
+      to call it from). **The verdict is read from `certainty` before `breaks`**: a consumer on
+      `latest` carries `breaks: false`, which is the absence of an answer rather than a good
+      one, so it is badged `FOLLOWS LATEST` and counted separately — "0 of 3 break" would
+      otherwise be true and misleading at once. An empty list says it is a statement about
+      declarations, not about safety. **Its first browser run corrected the fixture, not the
+      page:** the e2e draft expected a v1-pinned consumer to break under a newly required
+      field, and the engine said otherwise — impact is judged FORWARD, and an old reader
+      ignores an extra property. The suite now carries both a compatible reader and a type
+      change that genuinely breaks one
+- [x] `ApprovalsPage` — `/approvals`, with its sidebar row in the same change. Pending breaking
+      changes across the environment, oldest first, each opening to its diff and impact — the
+      same stores and components the two screens above use, so what the reviewer reads here is
+      what those screens would say. **Anyone may read the queue; only `subject:admin` may act on
+      it** (`APPROVAL_SCOPES`, narrower than the write scopes on purpose: the author of a
+      breaking change approving it is the arrangement the gate exists to prevent), and the
+      buttons are *absent*, not disabled (ADR-018). Deciding takes two clicks, and the second
+      says what it does — approving moves `latest` for every consumer, rejecting is final for
+      that version. A decision replaces the subject with the one the registry returned rather
+      than removing a row, because approving moves `latest` and with it every other pending
+      version's baseline. The outcome is announced in a `role="status"` line: a row that leaves
+      the queue without a word reads as the page having lost it. The queue is derived from the
+      subject list like the dashboard's counts, and is bound by the same limit — a held version
+      on page two of a paginated list would silently not be in it
+- [x] `AuditLogPage` — `/audit`, the first screen of a new `governance` feature. (`LoginPage`
+      shipped with [M8.2](M8-identity.md) as `sign-in-page.ts`.) Filter by action, target, whole
+      local days and environment-or-all; **applied on submit, not on typing**, because a request
+      per keystroke is a query per letter against a table that only grows. **It says when the
+      answer was cut off**: the registry returns the newest `limit` with no cursor, so a full
+      page and a complete one look identical unless somebody counts. **An empty result carries
+      the same caveat the table's caption does** — the trail records what happened, not what was
+      attempted, so a `403` leaves no row and "no entries" is not evidence nobody tried
+      ([decisions-pending #24](../DECISIONS-PENDING.md)). Deliberately the *opposite* of the
+      other wire guards on one point: an action this build has never heard of renders as
+      received rather than failing the page, because a log that cannot show the newest kind of
+      entry hides exactly what somebody opened it to find. What that costs — the action cannot
+      be filtered for — is quiet, so `WireTokenTests.AuditActionsMatchWhatTheFrontendPublishes`
+      pins the list
+- [x] Settings split — `/settings/environment`, `/settings/brokers`, `/settings/members`,
+      `/settings/api-keys` and `/settings/notifications`, behind one sidebar row and one tab
+      strip. **Environment** shows the rules as text for anyone and a form for `env:write`, which
+      sends only what changed (the registry leaves an omitted member alone, so saving a
+      description never restates the compatibility default) and keeps "not set" as a state apart
+      from a default the registry chose; it also carries the **pre-release toggle** that
+      [decisions-pending #8](../DECISIONS-PENDING.md) left owing. **Brokers** shows an unreachable
+      broker as a finding, never an error — the check is a real AMQP handshake and a dead broker
+      is the registry doing its job. Credentials are write-only ([ADR-012](../adr/012-environment-over-brokers.md)): the form is always
+      empty, the password field is `autocomplete="new-password"` so a manager does not offer the
+      registry's own, it empties itself, and the store never holds the password. **Members and
+      API keys are `org:admin` to read as well as write**, so they have a route guard and an
+      absent tab rather than a read-only fallback. A key's **secret is shown once, in a panel
+      that stays until dismissed** (the shared `OneTimeSecret`, also used for a webhook's
+      signing key), only the issuer's own scopes are offered, and none is pre-ticked. The
+      browser run checks the credential is real: an issued key authenticates, carries exactly
+      what was ticked, and stops working when revoked. A refused role change puts the selector
+      back — the browser had already moved it, and a selector saying READER beside an OWNER is a
+      screen that lies about the one thing it is for
+- [x] Notifications as reactive forms that actually persist — the last settings tab. "None
+      ticked" is said, beside the boxes, to mean **every event**: the registry reads an empty
+      list as all so a subscription can never be enabled and silently deliver nothing, and the
+      list renders it as "Every event" rather than as none. The outbox's **parked count is
+      surfaced above the list** — a webhook whose receiver is down is retried and then parked
+      quietly, and the depth is the only place that shows — and a failure to read it does not
+      fail the list. Subscriptions are shown with events as received, so a newer registry's new
+      event renders as itself
 
 ## M4.4 Port corrections
 
@@ -103,7 +194,7 @@ rather than deleted, because "why is there no zod here?" is a question worth ans
 
 ## M4.5 Tests
 
-- [x] Playwright E2E against a real API — `web/e2e/`, 43 tests. Found the subject list
+- [x] Playwright E2E against a real API — `web/e2e/`, 144 tests. Found the subject list
       broken on its first run (see [STATUS.md](../STATUS.md)), and on 2026-08-15 found two
       more: a first-hit lazy-route compile that made a correct page look absent, and a
       fixture of its own that was growing the registry by two versions per run

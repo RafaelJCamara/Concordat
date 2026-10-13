@@ -1,0 +1,604 @@
+import { signal } from '@angular/core';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { describe, expect, it, vi } from 'vitest';
+import { SessionStore } from '../../../core/auth/session-store';
+import { provideConcordatConfig } from '../../../core/config/app-config';
+import { ConcordatError } from '../../../core/http/problem-details';
+import type { Broker, Environment } from '../../../domain/environments/environment';
+import type { Scope } from '../../../domain/identity/scope';
+import { EnvironmentStore } from '../application/environment-store';
+import { BrokersPage } from './brokers-page';
+import { changesBetween, EnvironmentSettingsPage } from './environment-settings-page';
+import { SettingsNav } from './settings-nav';
+
+// The screens' own decisions: that nothing is sent that did not change, that every control is
+// absent without its scope, that a credential form never shows a credential and empties itself,
+// and that a destructive action takes two clicks.
+
+function broker(overrides: Partial<Broker> = {}): Broker {
+  return {
+    brokerId: 'b1',
+    displayName: 'primary',
+    uri: 'amqps://rabbit.example.com:5671',
+    virtualHost: '/',
+    useTls: true,
+    hasCredentials: true,
+    status: 'REACHABLE',
+    lastCheckedAt: new Date('2026-08-13T09:00:00Z'),
+    lastError: null,
+    ...overrides,
+  };
+}
+
+function environment(overrides: Partial<Environment> = {}): Environment {
+  return {
+    name: 'dev',
+    description: 'Shared development',
+    defaultCompatibility: { mode: 'BACKWARD', surface: 'WIRE_JSON' },
+    registrationPolicy: 'OPEN',
+    allowPreReleaseVersions: false,
+    createdAt: new Date('2026-08-01T09:00:00Z'),
+    brokers: [broker()],
+    ...overrides,
+  };
+}
+
+interface State {
+  environment?: Environment | null;
+  loading?: boolean;
+  error?: ConcordatError | null;
+  saving?: string | null;
+  actionErrors?: Record<string, ConcordatError>;
+  lastSaved?: string | null;
+}
+
+function provideStore(state: State) {
+  const calls = {
+    update: vi.fn(),
+    addBroker: vi.fn(),
+    checkBroker: vi.fn(),
+    setCredential: vi.fn(),
+    removeCredential: vi.fn(),
+    removeBroker: vi.fn(),
+    load: vi.fn(),
+  };
+
+  const lastSaved = signal(state.lastSaved ?? null);
+
+  return {
+    calls,
+    lastSaved,
+    provider: {
+      provide: EnvironmentStore,
+      useValue: {
+        environment: signal('environment' in state ? state.environment : environment()),
+        loading: signal(state.loading ?? false),
+        error: signal(state.error ?? null),
+        saving: signal(state.saving ?? null),
+        actionErrors: signal(state.actionErrors ?? {}),
+        lastSaved,
+        ...calls,
+      },
+    },
+  };
+}
+
+function renderEnvironment(state: State = {}, scopes: readonly Scope[] = ['env:write']) {
+  const { calls, provider } = provideStore(state);
+
+  TestBed.configureTestingModule({
+    providers: [provideRouter([]), provideConcordatConfig({ defaultEnvironment: 'dev' })],
+  });
+  TestBed.overrideComponent(EnvironmentSettingsPage, { set: { providers: [provider] } });
+  TestBed.inject(SessionStore).signIn({ credential: 'c', actor: 'alice', scopes });
+
+  const fixture = TestBed.createComponent(EnvironmentSettingsPage);
+  fixture.detectChanges();
+
+  return { fixture, host: fixture.nativeElement as HTMLElement, ...calls };
+}
+
+function renderBrokers(
+  state: State = {},
+  scopes: readonly Scope[] = ['broker:write'],
+): { fixture: ComponentFixture<BrokersPage>; host: HTMLElement } & ReturnType<
+  typeof provideStore
+>['calls'] & { lastSaved: ReturnType<typeof provideStore>['lastSaved'] } {
+  const { calls, provider, lastSaved } = provideStore(state);
+
+  TestBed.configureTestingModule({
+    providers: [provideRouter([]), provideConcordatConfig({ defaultEnvironment: 'dev' })],
+  });
+  TestBed.overrideComponent(BrokersPage, { set: { providers: [provider] } });
+  // The rows inject the store their page provides; give them the same fake.
+  TestBed.overrideProvider(EnvironmentStore, provider);
+  TestBed.inject(SessionStore).signIn({ credential: 'c', actor: 'alice', scopes });
+
+  const fixture = TestBed.createComponent(BrokersPage);
+  fixture.detectChanges();
+
+  return { fixture, host: fixture.nativeElement as HTMLElement, lastSaved, ...calls };
+}
+
+function fill(host: HTMLElement, id: string, value: string | boolean): void {
+  const element = host.querySelector(`#${id}`) as HTMLInputElement | HTMLSelectElement;
+
+  if (typeof value === 'boolean') {
+    (element as HTMLInputElement).checked = value;
+    element.dispatchEvent(new Event('change'));
+    return;
+  }
+
+  element.value = value;
+  element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? 'change' : 'input'));
+}
+
+function button(host: HTMLElement, text: string): HTMLButtonElement | undefined {
+  return [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === text);
+}
+
+describe('changesBetween', () => {
+  const current = environment();
+  const same = {
+    description: 'Shared development',
+    mode: 'BACKWARD',
+    surface: 'WIRE_JSON',
+    policy: 'OPEN',
+    preRelease: false,
+  };
+
+  it('is empty when nothing differs', () => {
+    expect(changesBetween(current, same)).toEqual({});
+  });
+
+  it('names only the member that changed, so saving one field restates none of the others', () => {
+    expect(changesBetween(current, { ...same, description: 'new' })).toEqual({
+      description: 'new',
+    });
+  });
+
+  it('maps each form field to the registry’s own member name', () => {
+    expect(
+      changesBetween(current, {
+        description: 'x',
+        mode: 'FULL',
+        surface: 'SOURCE',
+        policy: 'CI_ONLY',
+        preRelease: true,
+      }),
+    ).toEqual({
+      description: 'x',
+      compatibilityMode: 'FULL',
+      compatibilitySurface: 'SOURCE',
+      registrationPolicy: 'CI_ONLY',
+      allowPreReleaseVersions: true,
+    });
+  });
+
+  it('does not treat an unset default that is still unset as a change', () => {
+    const unset = environment({ defaultCompatibility: { mode: null, surface: null } });
+
+    expect(changesBetween(unset, { ...same, mode: '', surface: '' })).toEqual({});
+  });
+
+  it('never sends an empty string for a compatibility member, which would be a 400 about a value nobody picked', () => {
+    const changes = changesBetween(current, { ...same, mode: '' });
+
+    expect('compatibilityMode' in changes).toBe(false);
+  });
+
+  it('sends false when pre-release is turned off, which is a change and not an omission', () => {
+    const on = environment({ allowPreReleaseVersions: true });
+
+    expect(changesBetween(on, { ...same, preRelease: false })).toEqual({
+      allowPreReleaseVersions: false,
+    });
+  });
+});
+
+describe('EnvironmentSettingsPage', () => {
+  it('shows the current settings as text for anyone', () => {
+    const { host } = renderEnvironment({}, ['subject:read']);
+
+    expect(host.textContent).toContain('OPEN');
+    expect(host.textContent).toContain('BACKWARD · WIRE_JSON');
+    expect(host.textContent).toContain('Not allowed');
+    expect(host.textContent).toContain('Shared development');
+  });
+
+  it('says "Not set" for an unset default, not a made-up one', () => {
+    const { host } = renderEnvironment({
+      environment: environment({ defaultCompatibility: { mode: null, surface: null } }),
+    });
+
+    expect(host.textContent).toContain('Not set');
+  });
+
+  it('offers the form to someone with env:write', () => {
+    expect(renderEnvironment().host.querySelector('#env-description')).not.toBeNull();
+  });
+
+  it.each([
+    ['a reader', ['subject:read']],
+    ['a broker admin', ['broker:write']],
+  ] as const)('omits the form for %s, rather than disabling it (ADR-018)', (_who, scopes) => {
+    expect(
+      renderEnvironment({}, scopes as readonly Scope[]).host.querySelector('#env-description'),
+    ).toBeNull();
+  });
+
+  it('starts with the form equal to the environment, so there is nothing to save', () => {
+    const { host } = renderEnvironment();
+
+    expect(button(host, 'Save changes')!.disabled).toBe(true);
+    expect(host.textContent).toContain('Nothing has changed');
+  });
+
+  it('enables saving once something differs, and sends only that', () => {
+    const { fixture, host, update } = renderEnvironment();
+
+    fill(host, 'env-description', 'Staging for the payments team');
+    fixture.detectChanges();
+
+    expect(button(host, 'Save changes')!.disabled).toBe(false);
+
+    host.querySelector('form')!.dispatchEvent(new Event('submit'));
+
+    expect(update).toHaveBeenCalledWith({ description: 'Staging for the payments team' });
+  });
+
+  it('sends the pre-release toggle, which decision #8 left owing a checkbox', () => {
+    const { fixture, host, update } = renderEnvironment();
+
+    fill(host, 'env-prerelease', true);
+    fixture.detectChanges();
+    host.querySelector('form')!.dispatchEvent(new Event('submit'));
+
+    expect(update).toHaveBeenCalledWith({ allowPreReleaseVersions: true });
+  });
+
+  it('explains what the chosen registration policy means', () => {
+    const { fixture, host } = renderEnvironment();
+
+    fill(host, 'env-policy', 'CI_ONLY');
+    fixture.detectChanges();
+
+    expect(host.textContent).toContain('A person cannot, however senior');
+  });
+
+  it('says a changed default takes effect at once for every subject that inherits it', () => {
+    expect(renderEnvironment().host.textContent).toContain('every subject here that has not set');
+  });
+
+  it('shows the registry’s refusal under the form', () => {
+    const { host } = renderEnvironment({
+      actionErrors: {
+        settings: new ConcordatError({ status: 400, code: 'x', detail: 'Policy refused.' }),
+      },
+    });
+
+    expect(host.textContent).toContain('Could not save the settings');
+    expect(host.textContent).toContain('Policy refused.');
+  });
+
+  it('says when settings were saved', () => {
+    expect(renderEnvironment({ lastSaved: 'settings' }).host.textContent).toContain(
+      'Settings saved',
+    );
+  });
+
+  it('renders a failed load with a retry', () => {
+    const { host } = renderEnvironment({
+      environment: null,
+      error: new ConcordatError({ status: 404, code: 'x', detail: 'No such environment.' }),
+    });
+
+    expect(host.textContent).toContain('Could not load this environment');
+  });
+});
+
+describe('BrokersPage', () => {
+  it('lists each broker with its status, endpoint and whether a credential is stored', () => {
+    const { host } = renderBrokers();
+
+    expect(host.textContent).toContain('primary');
+    expect(host.textContent).toContain('REACHABLE');
+    expect(host.textContent).toContain('amqps://rabbit.example.com:5671');
+    expect(host.textContent).toContain('credentials stored');
+  });
+
+  it('shows an unreachable broker with its own error, as a finding and not a failure', () => {
+    const { host } = renderBrokers({
+      environment: environment({
+        brokers: [broker({ status: 'UNREACHABLE', lastError: 'connection refused' })],
+      }),
+    });
+
+    expect(host.textContent).toContain('UNREACHABLE');
+    expect(host.textContent).toContain('connection refused');
+    expect(host.textContent).not.toContain('Could not check');
+  });
+
+  it('says a broker that was never checked was never checked', () => {
+    const { host } = renderBrokers({
+      environment: environment({ brokers: [broker({ lastCheckedAt: null, status: 'UNKNOWN' })] }),
+    });
+
+    expect(host.textContent).toContain('Never checked');
+  });
+
+  it('says what no brokers means, without implying something is wrong', () => {
+    const { host } = renderBrokers({ environment: environment({ brokers: [] }) });
+
+    expect(host.textContent).toContain('No brokers registered');
+    expect(host.textContent).toContain('Nothing is wrong without one');
+  });
+
+  it('lets anyone check a connection', () => {
+    const { host, checkBroker } = renderBrokers({}, ['broker:read']);
+
+    button(host, 'Check connection')!.click();
+
+    expect(checkBroker).toHaveBeenCalledWith('b1');
+  });
+
+  describe('who may change brokers', () => {
+    it('offers every control to someone with broker:write', () => {
+      const { host } = renderBrokers();
+
+      expect(button(host, 'Replace credentials')).toBeDefined();
+      expect(button(host, 'Remove broker')).toBeDefined();
+      expect(host.querySelector('#broker-name')).not.toBeNull();
+    });
+
+    it('omits every one for a reader (ADR-018)', () => {
+      const { host } = renderBrokers({}, ['broker:read']);
+
+      expect(button(host, 'Replace credentials')).toBeUndefined();
+      expect(button(host, 'Remove broker')).toBeUndefined();
+      expect(button(host, 'Remove credentials')).toBeUndefined();
+      expect(host.querySelector('#broker-name')).toBeNull();
+    });
+  });
+
+  describe('adding a broker', () => {
+    it('sends the trimmed fields', () => {
+      const { fixture, host, addBroker } = renderBrokers();
+
+      fill(host, 'broker-name', ' secondary ');
+      fill(host, 'broker-uri', ' amqp://other:5672 ');
+      fixture.detectChanges();
+      host
+        .querySelector('form[aria-labelledby="add-broker-heading"]')!
+        .dispatchEvent(new Event('submit'));
+
+      expect(addBroker).toHaveBeenCalledWith({
+        displayName: 'secondary',
+        uri: 'amqp://other:5672',
+        virtualHost: '',
+      });
+    });
+
+    it('sends nothing for a blank name or endpoint', () => {
+      const { fixture, host, addBroker } = renderBrokers();
+
+      fill(host, 'broker-name', '   ');
+      fixture.detectChanges();
+      host
+        .querySelector('form[aria-labelledby="add-broker-heading"]')!
+        .dispatchEvent(new Event('submit'));
+
+      expect(addBroker).not.toHaveBeenCalled();
+    });
+
+    it('shows the registry’s refusal under the form, and keeps what was typed', () => {
+      const { fixture, host } = renderBrokers({
+        actionErrors: {
+          'add-broker': new ConcordatError({ status: 409, code: 'x', detail: 'Name taken.' }),
+        },
+      });
+
+      fill(host, 'broker-name', 'primary');
+      fixture.detectChanges();
+
+      expect(host.textContent).toContain('Could not add the broker');
+      expect(host.textContent).toContain('Name taken.');
+      expect((host.querySelector('#broker-name') as HTMLInputElement).value).toBe('primary');
+    });
+
+    it('empties the form once the broker is stored', () => {
+      const { fixture, host, lastSaved } = renderBrokers();
+
+      fill(host, 'broker-name', 'secondary');
+      fixture.detectChanges();
+      lastSaved.set('add-broker');
+      fixture.detectChanges();
+
+      expect((host.querySelector('#broker-name') as HTMLInputElement).value).toBe('');
+    });
+  });
+
+  describe('credentials', () => {
+    function open(
+      host: HTMLElement,
+      fixture: ComponentFixture<unknown>,
+      text = 'Replace credentials',
+    ) {
+      button(host, text)!.click();
+      fixture.detectChanges();
+    }
+
+    it('is closed until asked for', () => {
+      expect(renderBrokers().host.querySelector('#pass-b1')).toBeNull();
+    });
+
+    it('offers “Set” rather than “Replace” when none is stored', () => {
+      const { host } = renderBrokers({
+        environment: environment({ brokers: [broker({ hasCredentials: false })] }),
+      });
+
+      expect(button(host, 'Set credentials')).toBeDefined();
+      expect(button(host, 'Remove credentials')).toBeUndefined();
+    });
+
+    it('never shows a credential: the fields are always empty and say it is write-only', () => {
+      const { fixture, host } = renderBrokers();
+      open(host, fixture);
+
+      expect((host.querySelector('#user-b1') as HTMLInputElement).value).toBe('');
+      expect((host.querySelector('#pass-b1') as HTMLInputElement).value).toBe('');
+      expect(host.textContent).toContain('Write-only');
+    });
+
+    it('keeps the password out of a password manager’s reach', () => {
+      // Without `new-password` a manager offers to fill the broker's password with the one the
+      // browser has saved for the registry itself.
+      const { fixture, host } = renderBrokers();
+      open(host, fixture);
+
+      const password = host.querySelector('#pass-b1') as HTMLInputElement;
+
+      expect(password.type).toBe('password');
+      expect(password.getAttribute('autocomplete')).toBe('new-password');
+    });
+
+    it('sends the pair, and empties the password even before the registry answers', () => {
+      const { fixture, host, setCredential } = renderBrokers();
+      open(host, fixture);
+
+      fill(host, 'user-b1', ' guest ');
+      fill(host, 'pass-b1', 'hunter2');
+      fixture.detectChanges();
+      host
+        .querySelector('form[aria-label="Credentials for primary"]')!
+        .dispatchEvent(new Event('submit'));
+
+      expect(setCredential).toHaveBeenCalledWith({
+        brokerId: 'b1',
+        username: 'guest',
+        password: 'hunter2',
+      });
+      expect((host.querySelector('#pass-b1') as HTMLInputElement).value).toBe('');
+    });
+
+    it('sends nothing without a password', () => {
+      const { fixture, host, setCredential } = renderBrokers();
+      open(host, fixture);
+
+      fill(host, 'user-b1', 'guest');
+      fixture.detectChanges();
+      host
+        .querySelector('form[aria-label="Credentials for primary"]')!
+        .dispatchEvent(new Event('submit'));
+
+      expect(setCredential).not.toHaveBeenCalled();
+    });
+
+    it('closes and empties itself once the credential is stored', () => {
+      const { fixture, host, lastSaved } = renderBrokers();
+      open(host, fixture);
+
+      fill(host, 'user-b1', 'guest');
+      fixture.detectChanges();
+      lastSaved.set('credentials:b1');
+      fixture.detectChanges();
+
+      expect(host.querySelector('#user-b1')).toBeNull();
+    });
+
+    it('is not closed by another broker’s credential being stored', () => {
+      const { fixture, host, lastSaved } = renderBrokers();
+      open(host, fixture);
+
+      lastSaved.set('credentials:some-other-broker');
+      fixture.detectChanges();
+
+      expect(host.querySelector('#user-b1')).not.toBeNull();
+    });
+
+    it('shows a refusal beside the broker it belongs to', () => {
+      const { host } = renderBrokers({
+        actionErrors: {
+          'credentials:b1': new ConcordatError({ status: 400, code: 'x', detail: 'Bad pair.' }),
+        },
+      });
+
+      expect(host.textContent).toContain('Could not save the credentials');
+      expect(host.textContent).toContain('Bad pair.');
+    });
+  });
+
+  describe('removing', () => {
+    it('takes two clicks to remove a broker, and names what goes', () => {
+      const { fixture, host, removeBroker } = renderBrokers();
+
+      button(host, 'Remove broker')!.click();
+      fixture.detectChanges();
+
+      expect(removeBroker).not.toHaveBeenCalled();
+      expect(host.textContent).toContain('Bindings that name it stop applying');
+
+      button(host, 'Confirm')!.click();
+
+      expect(removeBroker).toHaveBeenCalledWith('b1');
+    });
+
+    it('takes two clicks to remove credentials, and says the next check will fail', () => {
+      const { fixture, host, removeCredential } = renderBrokers();
+
+      button(host, 'Remove credentials')!.click();
+      fixture.detectChanges();
+
+      expect(host.textContent).toContain('The next check will fail');
+
+      button(host, 'Confirm')!.click();
+
+      expect(removeCredential).toHaveBeenCalledWith('b1');
+    });
+
+    it('sends nothing when cancelled', () => {
+      const { fixture, host, removeBroker } = renderBrokers();
+
+      button(host, 'Remove broker')!.click();
+      fixture.detectChanges();
+      button(host, 'Cancel')!.click();
+      fixture.detectChanges();
+
+      expect(removeBroker).not.toHaveBeenCalled();
+      expect(button(host, 'Remove broker')).toBeDefined();
+    });
+  });
+});
+
+describe('SettingsNav', () => {
+  function render(scopes: readonly Scope[]): HTMLElement {
+    TestBed.configureTestingModule({ providers: [provideRouter([])] });
+    TestBed.inject(SessionStore).signIn({ credential: 'c', actor: 'alice', scopes });
+    const fixture = TestBed.createComponent(SettingsNav);
+    fixture.detectChanges();
+
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  const labels = (host: HTMLElement) =>
+    [...host.querySelectorAll('a')].map((a) => a.textContent?.trim());
+
+  it('shows every tab to an org admin', () => {
+    expect(labels(render(['org:admin']))).toEqual([
+      'Environment',
+      'Brokers',
+      'Members',
+      'API keys',
+      'Notifications',
+    ]);
+  });
+
+  it('omits members and API keys for everyone else, since the server refuses them even to read', () => {
+    expect(labels(render(['subject:read']))).toEqual(['Environment', 'Brokers', 'Notifications']);
+  });
+
+  it('labels the navigation, so it is not confused with the main one', () => {
+    expect(render(['org:admin']).querySelector('nav')?.getAttribute('aria-label')).toBe('Settings');
+  });
+});

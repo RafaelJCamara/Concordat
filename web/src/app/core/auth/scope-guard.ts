@@ -1,6 +1,11 @@
 import { inject } from '@angular/core';
 import { Router, type CanActivateFn } from '@angular/router';
-import { grants, SCHEMA_WRITE_SCOPES, type Scope } from '../../domain/identity/scope';
+import {
+  grants,
+  ORG_ADMIN_SCOPES,
+  SCHEMA_WRITE_SCOPES,
+  type Scope,
+} from '../../domain/identity/scope';
 import { SessionStore } from './session-store';
 
 /**
@@ -78,3 +83,14 @@ export const signedInGuard: CanActivateFn = (_route, state) => {
  * points at cannot drift apart.
  */
 export const schemaWriteGuard: CanActivateFn = scopeGuard(...SCHEMA_WRITE_SCOPES);
+
+/**
+ * The guard for the members and API-key screens.
+ *
+ * Unlike the schema write guard this gates *reading*: the whole endpoint group requires
+ * `org:admin`, so there is no read-only version of these screens to show anyone else, and a
+ * screen that rendered would fail every request it made. Named here for the same reason
+ * `schemaWriteGuard` is — the route table may not import from `domain/`, and the tab that
+ * points at the route reads the same constant, so the two cannot drift.
+ */
+export const orgAdminGuard: CanActivateFn = scopeGuard(...ORG_ADMIN_SCOPES);

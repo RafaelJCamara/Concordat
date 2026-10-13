@@ -1,3 +1,6 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+
 /**
  * Talking to the registry directly, so a browser test can arrange what it needs.
  *
@@ -23,6 +26,31 @@ export const READER = {
   email: 'e2e-reader@concordat.test',
   password: process.env.CONCORDAT_E2E_PASSWORD ?? 'correct horse battery staple',
 } as const;
+
+/** Where global setup leaves the owner's API credential, so specs need not sign in to arrange data. */
+export const OWNER_CREDENTIAL_FILE = 'e2e/.auth/owner-credential.txt';
+
+/** Saves the credential global setup obtained, for {@link ownerCredential}. */
+export function rememberOwnerCredential(credential: string): void {
+  mkdirSync(dirname(OWNER_CREDENTIAL_FILE), { recursive: true });
+  writeFileSync(OWNER_CREDENTIAL_FILE, credential, 'utf8');
+}
+
+/**
+ * The owner's API credential, for a spec that has to arrange data through the API.
+ *
+ * <b>Read from the file global setup wrote rather than obtained by signing in again.</b> Sign-in
+ * is rate-limited to 20 attempts per five minutes per address, and every call to `ensureOwner`
+ * is one: a suite that signed in whenever it wanted a credential spent its whole budget on
+ * arranging fixtures and then failed an unrelated sign-in near the end, which is exactly what
+ * happened when this suite passed ninety tests. Falls back to signing in only if the file is
+ * absent, which means the spec is being run without global setup.
+ */
+export async function ownerCredential(): Promise<string> {
+  return existsSync(OWNER_CREDENTIAL_FILE)
+    ? readFileSync(OWNER_CREDENTIAL_FILE, 'utf8').trim()
+    : ensureOwner();
+}
 
 /** Whether a registry URL points at this machine. */
 function isLoopback(url: string): boolean {
@@ -236,6 +264,10 @@ export async function ensureHeldVersion(
   ownerCredential: string,
   environment: string,
   subject: string,
+  schemas: { base: string; proposal: string } = {
+    base: BASE_SCHEMA,
+    proposal: REQUIRED_FIELD_SCHEMA,
+  },
 ): Promise<void> {
   const authorization = { authorization: `Bearer ${ownerCredential}` };
 
@@ -265,21 +297,62 @@ export async function ensureHeldVersion(
   }
 
   if (versions.length === 0) {
-    await register(
-      ownerCredential,
-      environment,
-      subject,
-      '{"type":"object","properties":{"id":{"type":"string"}}}',
-    );
+    await register(ownerCredential, environment, subject, schemas.base);
   }
 
-  await register(
-    ownerCredential,
-    environment,
-    subject,
-    '{"type":"object","properties":{"id":{"type":"string"},"total":{"type":"number"}},' +
-      '"required":["total"]}',
-  );
+  await register(ownerCredential, environment, subject, schemas.proposal);
+}
+
+const BASE_SCHEMA = '{"type":"object","properties":{"id":{"type":"string"}}}';
+
+/** BACKWARD-breaking (a new reader rejects old data) and FORWARD-safe (an old reader ignores it). */
+const REQUIRED_FIELD_SCHEMA =
+  '{"type":"object","properties":{"id":{"type":"string"},"total":{"type":"number"}},' +
+  '"required":["total"]}';
+
+/**
+ * Breaking in *both* directions: `id` changes type, so an old reader cannot read what the new
+ * schema writes. The one change an impact analysis can genuinely call BREAKS — a newly required
+ * field, the clearest divergence to read, does not break a reader pinned to the old version.
+ */
+export const TYPE_CHANGE_SCHEMAS = {
+  base: BASE_SCHEMA,
+  proposal: '{"type":"object","properties":{"id":{"type":"integer"}}}',
+} as const;
+
+/**
+ * Declares services that consume a subject, so impact analysis has something to judge.
+ *
+ * <b>An impact screen with no consumers only ever renders its empty state.</b> The answers
+ * worth seeing are different in kind: a consumer pinned to a version, which the engine can
+ * genuinely judge, and one that follows `latest`, which it cannot. Registering a service is an
+ * upsert keyed on (environment, name), so this is idempotent without reading first.
+ */
+export async function ensureConsumers(
+  ownerCredential: string,
+  environment: string,
+  subject: string,
+  consumers: readonly (readonly [name: string, selector: string])[],
+): Promise<void> {
+  const declare = async (name: string, selector: string): Promise<void> => {
+    const response = await call(`/v1/environments/${environment}/services`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${ownerCredential}` },
+      body: JSON.stringify({
+        name,
+        consumes: [{ subject, selector }],
+        reportedBy: 'e2e',
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Declaring service '${name}' failed with ${response.status}.`);
+    }
+  };
+
+  for (const [name, selector] of consumers) {
+    await declare(name, selector);
+  }
 }
 
 async function register(

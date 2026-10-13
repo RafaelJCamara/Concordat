@@ -228,8 +228,9 @@ released labels only. Both are reasonable, which is why this is a setting rather
 each label to increase on the last. A grammar that can express something the ordering cannot see
 is a trap, not a feature.
 
-> **The UI toggle is owed.** The setting is on `POST`/`PATCH /v1/environments` and on the
-> environment response; the checkbox lands with M4.3's settings pages, which do not exist yet.
+> ~~**The UI toggle is owed.**~~ **Delivered 2026-10-13** with the environment settings screen
+> (`/settings/environment`): the checkbox sits beside its reason, and the registry's own answer
+> is what the form re-reads after a save, so what it shows is what is stored.
 
 ### 10. ~~Generic message types are unsupported~~ — spelled, normatively
 
@@ -504,8 +505,8 @@ it is for.
 **The browser E2E half is now done too, 2026-08-15.** Playwright is in, `web/e2e/` holds 11
 tests, and the reload case above is one of them — the only way to prove a *browser* keeps the
 cookie across a real navigation and that the app asks for it before the first render. That count
-is the day's snapshot and nothing else: the suite stands at **43 tests across four specs** as of
-2026-09-24, which is the figure [STATUS.md](STATUS.md) carries.
+is the day's snapshot and nothing else: the suite stands at **144 tests across ten specs** as of
+2026-10-13, which is the figure [STATUS.md](STATUS.md) carries.
 
 It earned its place in the first ten seconds: the subject list was **broken** against a real
 registry, because `VersionStatus.Dismissed` shipped with M7 and `wire-tokens.ts` never learned

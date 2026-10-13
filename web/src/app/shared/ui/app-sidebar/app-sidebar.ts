@@ -93,7 +93,7 @@ export interface NavItem {
           routerLinkActive="bg-primary/10 !text-primary"
           #active="routerLinkActive"
           [routerLinkActiveOptions]="{ exact: item.route === '/' }"
-          [attr.aria-current]="active.isActive ? 'page' : null"
+          ariaCurrentWhenActive="page"
           [attr.title]="collapsed() ? item.label : null"
           class="text-sidebar-foreground hover:bg-sidebar-accent focus-visible:ring-ring group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-200 focus-visible:ring-2 focus-visible:outline-none"
           [class.justify-center]="collapsed()"

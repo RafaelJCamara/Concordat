@@ -1,6 +1,7 @@
 # What is missing
 
-**As of 2026-08-15**, except [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
+**As of 2026-08-15**, except [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
+[Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added the next day and not re-verified against the rest of this file. Test counts
 throughout were re-run and corrected 2026-08-30. A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
@@ -13,6 +14,51 @@ ten milestone files as unchecked boxes.
 
 Everything under "verified locally" below was run on this machine today, against the real
 container image and a real PostgreSQL. Everything else is claimed on the strength of tests.
+
+---
+
+## The web app's pages, 2026-10-13
+
+The seven M4.3 screens that were missing shipped in one pass — the version diff, impact analysis,
+approvals, contracts, the audit log, the settings split (environment, brokers, members, API
+keys) and notification forms — taking the browser suite from 43 to 144 tests and the Angular
+suite from 358 to 858. Each was driven in a real browser against the real registry, and **the
+real stack corrected the first draft four times**: twice an engine that disagreed with a fixture
+written to agree with its author, once a latent defect only nested routes could expose, and once
+a budget the suite had quietly outgrown.
+
+- **Impact is judged FORWARD, so a newly required field does not break a reader pinned to the
+  old version** — it ignores the extra property. The first impact test expected it to, and the
+  engine said otherwise. The suite now holds both a compatible reader and a type change that
+  genuinely breaks one.
+- **Separating two overlapping contract bindings needs a distinct precedence on *both*.** One
+  with a value and one without is still a conflict, and bindings cannot be edited afterwards —
+  recorded as a hole below.
+- **The sidebar was dropping `aria-current`** the moment you moved between two child routes of
+  one active row. Angular's `RouterLinkActive` strips the attribute on every navigation unless
+  told to manage it with `ariaCurrentWhenActive`, and the hand-bound attribute the sidebar used
+  never re-rendered. Nothing exercised it until a screen had tabs; fixed in the sidebar itself.
+- **The suite outgrew the auth limiter.** Sign-in is capped at 20 attempts per five minutes, and
+  the suite crossed it at ninety-odd tests — an unrelated sign-in near the end failed, and it
+  would have failed CI too. Specs that are not about signing in no longer sign in; a reader's
+  browser state and the owner's API credential are captured once in global setup, and a run now
+  makes thirteen. See `web/e2e/README.md`.
+
+Two decisions worth knowing were made along the way, both for the same reason as ADR-018's
+"absent, not disabled": **members and API keys are `org:admin` to read as well as write**, so
+they have a route guard and an absent tab rather than a read-only version that would fail every
+request; and **deciding an approval needs `subject:admin`, narrower than the write scopes**,
+because the author of a breaking change approving it is the arrangement the gate exists to
+prevent. A secret the registry returns once — an API key, a webhook signing key — is shown in
+one shared panel that stays until dismissed.
+
+What the browser run does not cover: a **reachable** broker (that needs a RabbitMQ the suite does
+not start; an unreachable one is real), the registration-policy and compatibility-default
+changes on the shared `dev` environment (they would break every other spec, so they are
+unit-tested for what is sent and not sent), and a non-empty `parked` count on the outbox banner.
+The e2e specs for approvals, contracts, members and API keys each leave something behind — a
+subject, a contract, a member, a revoked key — because none can be undone from the UI; the
+README says so.
 
 ---
 
@@ -181,13 +227,13 @@ only when a cookie was presented and rejected.
 | M1 registry core | 65 / 68 |
 | M2 .NET client | 32 / 41 |
 | M3 CLI | **19 / 19** |
-| M4 web app | 20 / 30, plus the part-built Dashboard |
+| M4 web app | 27 / 31, plus the part-built Dashboard |
 | M5 formats | 14 / 15 |
 | M6 SDKs | 5 / 24 |
 | M7 governance | **30 / 31** |
 | M8 identity | 13 / 15 |
 | M9 cloud | 11 / 16 |
-| **Total** | **231 / 284** |
+| **Total** | **238 / 285** |
 
 **Do not read that as a progress bar.** Auditing the 53 remaining boxes found 9 that are not
 work at all:
@@ -208,10 +254,10 @@ from the plan 2026-09-24**, which is why this list is 9 rather than the 12 it co
 carrying an item as "not work at all" is a way of saying it should not have been a box, and the
 honest fix is to stop counting it rather than to annotate it forever.
 
-Real remaining work is therefore **17 items**, and 10 of those are M4. The rest of the arithmetic:
+Real remaining work is therefore **11 items**, and 4 of those are M4. The rest of the arithmetic:
 **22 are deferred by an ADR** (M6's four SDKs, OIDC, SAML, Helm) and **5 are blocked on an account
 or a purchase** you have to make — see *Blocked on you* below. Sorted that way the picture is much
-narrower than 53: one milestone of real engineering, and a pile of decisions.
+narrower than that: a handful of schema-editor enhancements, and a pile of decisions.
 
 M3 is the first milestone to reach 19/19, closed by `Concordat.Contracts.Testing` (decision 13).
 M7 reached 30/31 on 2026-08-15 — not by new work, but by an audit finding its last open box had
@@ -223,14 +269,14 @@ described shipped code since decision 25 landed the day before.
 
 ### M4 — the web application
 
-The honest count is **10** — nine unchecked boxes plus the part-built Dashboard. Every API behind
-these exists, so this is Angular work rather than design work.
+The honest count is **4** — three unchecked boxes plus the part-built Dashboard. **No page is
+missing.** On 2026-10-13 the seven that were — the version diff, impact analysis, approvals,
+contracts, the audit log, the settings split and notification forms — shipped, each driven in a
+browser against the real registry, and what is left is the schema editor's own enhancements.
 
-**Genuinely missing:** ContractsPage ·
-CompatibilityDiffPage · ImpactAnalysisPage · ApprovalsPage · AuditLogPage · the settings split
-(environment, brokers, API keys, members) · notification forms that persist · Monaco for schema
-editing · `ajv` for client-side validation · the "preserve" list of prototype behaviours
-(immutable-id confirmation, semver auto-increment, clone-previous-version, empty states).
+**Genuinely missing:** Monaco for schema editing · `ajv` for client-side validation · the
+"preserve" list of prototype behaviours (immutable-id confirmation, semver auto-increment,
+clone-previous-version, empty states). None is a screen; all three belong to `NewVersionPage`.
 
 ~~SubjectDetail / VersionDetail / NewVersion pages~~ headed that list until this audit.
 **They shipped 2026-08-15 with M4.3** — `subject-detail-page.ts`, `version-detail-page.ts` and
@@ -264,7 +310,7 @@ conflict".
 
 **Done 2026-08-15:** the design-system port — the prototype's tokens, a light theme, self-hosted
 fonts ([ADR-026](adr/026-self-hosted-web-fonts.md)), the sidebar shell, the icon set and the
-cards — and the Playwright suite that now pins it. The E2E suite stands at **43 tests across four
+cards — and the Playwright suite that now pins it. The E2E suite stands at **144 tests across ten
 specs**, up from the 11 it launched with; `design-system.spec.ts` asserts the palette, both
 themes, the typography and the shell as **computed styles rather than pixel screenshots**, which
 are exact and identical on Windows and on CI's Linux. It exists because the placeholder palette
@@ -294,10 +340,13 @@ The Monaco item is worth keeping but its stated reason has expired: it is framed
 prototype's `dangerouslySetInnerHTML` XSS hole, and that code was never ported either. Monaco is
 wanted on its own merits.
 
-**What exists today:** six screens — sign-in, the dashboard slice on `/`, the subject list,
-subject detail, version detail and the register-a-version form — and the routing, guards and
-interceptors under them. The registry's own read path is walkable end to end; the list above is
-governance, approvals, settings and the editing affordances.
+**What exists today:** seventeen screens — sign-in, the dashboard slice on `/`, the subject list,
+subject detail, version detail, the register-a-version form, the version diff, impact analysis,
+approvals, the contract list and a contract, the audit log, and the five settings tabs
+(environment, brokers, members, API keys, notifications) — and the routing, guards and
+interceptors under them. Every flow in the exit criterion — create a subject, register a
+version, view a diff and an impact report, approve a pending breaking change — is now possible
+entirely in the UI.
 
 ### M6 — Tier 2 SDKs
 
@@ -323,12 +372,13 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~Nine routes answered anonymously on a claimed instance~~ | **Closed 2026-09-24**, thirteen months of exposure after [ADR-027](adr/027-read-requires-authentication.md) said they did not: three governance `GET`s, five read-shaped `POST`s, and `POST …/environments/{env}/bootstrap`, which returns every subject and schema in an environment. `EveryRouteUnderV1DeclaresAScope` now covers reads, not only mutations. |
 | ~~Signup named its reason for refusing~~ | **Narrowed 2026-09-24.** The neutral `detail` was the only neutral part; the code, title and type URI all said `user_already_exists`. Now `signup_refused`. Not closed: synchronous provisioning still distinguishes refusal from creation — [M9.2](plan/M9-cloud.md) says what closing it would take. |
 | **Approval reviewers do not exist** | Anyone with `subject:admin` can approve anything. A reviewer *set* was deferred to M8 and M8 did not build it. |
+| **A contract's bindings cannot be edited or removed** | There is an `add` endpoint for each kind and nothing else, so a binding added without a precedence can never be separated from a later overlapping one — the registry's own refusal says to "give the two bindings different precedence values", and the first has none to change. Found by the web app's first real overlap test (2026-10-13); the form now says to set precedence up front, which is a workaround, not a fix. |
 | **Hard delete does not exist** | Soft delete is all there is. The full rule — no registered consumers, force flag, audit entry — is an outstanding commitment. |
 | **Subject prefix search is not implemented** | Value converters do not translate `StartsWith`; it needs a `ComplexProperty` mapping or a shadow column. |
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | ~~A page reload signs you out~~ | **Closed 2026-08-14** by decision 26 — an httpOnly `SameSite=Strict` cookie and a `/auth/resume` route that is the only thing accepting it. The credential still never touches `localStorage`. |
 | ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Still on, and now audible** (decision 27). The API logs a warning naming both ways to close it and repeats hourly until claimed; the web app shows a banner. Verified against a real container. |
-| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 43 tests today across four specs, up from the 11 it launched with. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
+| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 144 tests today across ten specs, up from the 11 it launched with. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
 | ~~`Tenant` is not an aggregate~~ | **Closed by M9.1**, recorded here 2026-09-24 — `Tenant.Create` carries the name and slug invariants, signup writes a row per organisation, bootstrap writes the self-hosted one, and `CloudTenancyTests` drives two organisations through the real host. Self-hosted still holds exactly one row, `TenantId.SelfHosted`: the profiles differ in how many rows there are, not in whether the table means anything. |
 | ~~The derived-environment-id decision is unmade~~ | **Closed 2026-08-14.** Adopted, by creating rows that carry the derived id. No migration, and no orphaned subjects. |
 
@@ -352,7 +402,7 @@ Nothing here can be done from inside the repository.
 
 ## What the tests actually cover
 
-Six kinds, not one. Worth knowing which, because "1,526 tests" says nothing about what would
+Six kinds, not one. Worth knowing which, because "1,532 tests" says nothing about what would
 survive being wrong.
 
 | Kind | Where | Tests | What it proves |
@@ -363,9 +413,9 @@ survive being wrong.
 | Conformance corpus | `Conformance` | 99, over 98 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 64 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
-| Browser end-to-end | `web/e2e` | 43 | A real Chromium against the real stack, design system included |
+| Browser end-to-end | `web/e2e` | 144 | A real Chromium against the real stack, design system included |
 
-Plus 358 Angular unit tests.
+Plus 858 Angular unit tests.
 
 **No mocking framework, deliberately.** No Moq, NSubstitute, FluentAssertions or AutoFixture —
 `Directory.Packages.props` carries xunit, Testcontainers and `TimeProvider.Testing`. Every double

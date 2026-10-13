@@ -16,6 +16,7 @@ import {
   COMPATIBILITY_MODES,
   COMPATIBILITY_SURFACES,
 } from '../../../domain/registry/compatibility';
+import type { VersionDiff } from '../../../domain/registry/diff';
 import type {
   PortabilityFinding,
   RegistrationOutcome,
@@ -31,7 +32,7 @@ import {
   type SubjectLifecycle,
   type VersionStatus,
 } from '../../../domain/registry/wire-tokens';
-import { wireTimestamp, wireToken } from './wire-token';
+import { wireTimestamp, wireToken } from '../../../core/http/wire-token';
 
 /** `PolicyResponse`. Both members are null together when the subject inherits. */
 export interface PolicyDto {
@@ -81,6 +82,17 @@ export interface PortabilityDto {
   /** Always `WARNING` on a successful registration; an error refuses it outright. */
   readonly severity: string;
   readonly message: string;
+}
+
+/** `DiffResponse`. */
+export interface DiffDto {
+  readonly from: number;
+  readonly to: number;
+  readonly fromSchemaId: string;
+  readonly toSchemaId: string;
+  readonly identical: boolean;
+  readonly policy: PolicyDto;
+  readonly divergences: readonly DivergenceDto[];
 }
 
 /** `RegisterVersionRequest`. */
@@ -155,6 +167,18 @@ export function toDivergence(dto: DivergenceDto): Divergence {
     surface: toSurface('surface', dto.surface),
     message: dto.message,
     conflictsWithVersion: dto.conflictsWithVersion,
+  };
+}
+
+export function toVersionDiff(dto: DiffDto): VersionDiff {
+  return {
+    from: dto.from,
+    to: dto.to,
+    fromSchemaId: dto.fromSchemaId,
+    toSchemaId: dto.toSchemaId,
+    identical: dto.identical,
+    policy: toPolicy(dto.policy),
+    divergences: dto.divergences.map(toDivergence),
   };
 }
 

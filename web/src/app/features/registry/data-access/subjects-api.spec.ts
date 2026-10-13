@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type ConcordatConfig, provideConcordatConfig } from '../../../core/config/app-config';
+import type { VersionDiff } from '../../../domain/registry/diff';
 import type { RegistrationOutcome } from '../../../domain/registry/registration';
 import type { Subject } from '../../../domain/registry/subject';
 import { SubjectsApi } from './subjects-api';
@@ -89,6 +90,95 @@ describe('SubjectsApi', () => {
       api.getSubject('dev', 'orders.created').subscribe();
 
       backend.expectOne('/v1/environments/dev/subjects/orders.created');
+    });
+  });
+
+  describe('diffVersions', () => {
+    const diff = {
+      from: 1,
+      to: 2,
+      fromSchemaId: 'aaa',
+      toSchemaId: 'bbb',
+      identical: false,
+      policy: { mode: 'BACKWARD', surface: 'WIRE_JSON' },
+      divergences: [
+        {
+          path: '/properties/discount',
+          kind: 'required_field_added',
+          direction: 'BACKWARD',
+          surface: 'WIRE_JSON',
+          message: 'A required field was added.',
+          conflictsWithVersion: 1,
+        },
+      ],
+    };
+
+    it('addresses the pair the way the API does, baseline first', () => {
+      // `from` is the baseline. Swapping the two would report the inverse change — a removal
+      // where there was an addition — under a URL that looks exactly the same.
+      const { api, backend } = setUp();
+      api.diffVersions('dev', 'orders.created', 1, 2).subscribe();
+
+      backend.expectOne('/v1/environments/dev/subjects/orders.created/versions/1/diff/2');
+    });
+
+    it('percent-encodes the subject name', () => {
+      const { api, backend } = setUp();
+      api.diffVersions('dev', 'orders/created', 1, 2).subscribe();
+
+      backend.expectOne('/v1/environments/dev/subjects/orders%2Fcreated/versions/1/diff/2');
+    });
+
+    it('returns a domain diff, with the divergences mapped', () => {
+      let result: VersionDiff | null = null;
+      const { api, backend } = setUp();
+      api.diffVersions('dev', 'orders.created', 1, 2).subscribe((value) => (result = value));
+
+      backend
+        .expectOne('/v1/environments/dev/subjects/orders.created/versions/1/diff/2')
+        .flush(diff);
+
+      expect(result!.identical).toBe(false);
+      expect(result!.policy).toEqual({ mode: 'BACKWARD', surface: 'WIRE_JSON' });
+      expect(result!.divergences[0]?.path).toBe('/properties/discount');
+    });
+  });
+
+  describe('decideVersion', () => {
+    it.each(['approve', 'reject'] as const)(
+      'posts to the %s route for that ordinal',
+      (decision) => {
+        const { api, backend } = setUp();
+        api.decideVersion('dev', 'orders.created', 2, decision, 'alice').subscribe();
+
+        const request = backend.expectOne(
+          `/v1/environments/dev/subjects/orders.created/versions/2/${decision}`,
+        );
+
+        expect(request.request.method).toBe('POST');
+        expect(request.request.body).toEqual({ decidedBy: 'alice' });
+      },
+    );
+
+    it('percent-encodes the subject name', () => {
+      const { api, backend } = setUp();
+      api.decideVersion('dev', 'orders/created', 2, 'approve', 'alice').subscribe();
+
+      backend.expectOne('/v1/environments/dev/subjects/orders%2Fcreated/versions/2/approve');
+    });
+
+    it('returns the subject as it stands afterwards, as a domain type', () => {
+      let subject: Subject | null = null;
+      const { api, backend } = setUp();
+      api
+        .decideVersion('dev', 'orders.created', 2, 'approve', 'alice')
+        .subscribe((value) => (subject = value));
+
+      backend
+        .expectOne('/v1/environments/dev/subjects/orders.created/versions/2/approve')
+        .flush(dto);
+
+      expect(subject!.versions[0]?.registeredAt).toBeInstanceOf(Date);
     });
   });
 

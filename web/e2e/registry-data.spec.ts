@@ -223,3 +223,174 @@ test.describe('registering a version', () => {
     await expect(page.getByRole('button', { name: 'Register' })).toBeDisabled();
   });
 });
+
+/**
+ * Comparing two versions, against the engine's real answer.
+ *
+ * <b>Run against the held proposal for the same reason the approval-gate tests are.</b> The
+ * divergence comes from the compatibility engine reading a genuinely breaking schema, and the
+ * `AWAITING_APPROVAL` label from the subject — two separate requests the screen has to join.
+ * A unit test with a fixture for each agrees with the frontend by construction; this is the
+ * only place the two are produced by the registry.
+ */
+test.describe('comparing two versions', () => {
+  test('shows the divergence the engine found, and labels the held end', async ({ page }) => {
+    await page.goto(`/subjects/${HELD_SUBJECT}/versions/1/diff/2`);
+
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('v1');
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('v2');
+    await expect(page.getByText('required_field_added')).toBeVisible();
+    await expect(page.getByText('AWAITING_APPROVAL')).toBeVisible();
+  });
+
+  test('is reached from the later version, baseline first', async ({ page }) => {
+    await page.goto(`/subjects/${HELD_SUBJECT}/versions/2`);
+    await page.getByRole('link', { name: 'Compare with v1' }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/subjects/${HELD_SUBJECT}/versions/1/diff/2$`));
+    await expect(page.getByText('required_field_added')).toBeVisible();
+  });
+
+  test('offers no comparison on the first version', async ({ page }) => {
+    await page.goto(`/subjects/${HELD_SUBJECT}/versions/1`);
+
+    await expect(page.getByRole('heading', { name: 'v1' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /compare with/i })).toHaveCount(0);
+  });
+
+  test('swaps direction rather than inventing a second screen', async ({ page }) => {
+    await page.goto(`/subjects/${HELD_SUBJECT}/versions/1/diff/2`);
+    await page.getByRole('link', { name: 'Swap direction' }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/versions/2/diff/1$`));
+    await expect(page.getByText('Baseline')).toBeVisible();
+  });
+
+  test('says so plainly when a version does not exist', async ({ page }) => {
+    await page.goto(`/subjects/${HELD_SUBJECT}/versions/1/diff/99`);
+
+    await expect(page.getByRole('heading', { name: /could not compare/i })).toBeVisible();
+  });
+
+  test('says so plainly for a malformed address, without a request', async ({ page }) => {
+    await page.goto(`/subjects/${HELD_SUBJECT}/versions/latest/diff/2`);
+
+    await expect(page.getByRole('heading', { name: /could not compare/i })).toBeVisible();
+  });
+
+  test('reports no console errors', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') {
+        errors.push(message.text());
+      }
+    });
+    page.on('pageerror', (error) => errors.push(error.message));
+
+    await page.goto(`/subjects/${HELD_SUBJECT}/versions/1/diff/2`);
+    await expect(page.getByText('required_field_added')).toBeVisible();
+
+    expect(errors).toEqual([]);
+  });
+});
+
+/**
+ * Impact analysis, against consumers the registry was actually told about.
+ *
+ * <b>The verdicts are the engine's, and the first draft of this block was wrong about one.</b>
+ * It expected a consumer pinned to v1 to BREAK under a proposal that adds a required field.
+ * It does not: impact is judged FORWARD — can the old reader read what the new schema writes —
+ * and an old reader simply ignores an extra property. The engine was right and the fixture was
+ * not, which is the argument for asserting against a real registry rather than a hand-built
+ * answer that agrees with whoever wrote it.
+ *
+ * So two subjects. `PaymentTaken` adds a required field: its v1 reader is COMPATIBLE and its
+ * `latest` follower cannot be judged. `LedgerPosted` changes a property's type, which does
+ * break an old reader, with a reason to read.
+ */
+const BREAKING_SUBJECT = 'acme.e2e.LedgerPosted';
+
+test.describe('impact analysis', () => {
+  test('names the consumer the engine says breaks, and why', async ({ page }) => {
+    await page.goto(`/subjects/${BREAKING_SUBJECT}/versions/2/impact`);
+
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('v2');
+    const reader = page.getByRole('listitem').filter({ hasText: 'e2e-ledger-reader' });
+
+    await expect(reader).toContainText('BREAKS');
+    await expect(reader).toContainText('declares 1');
+    await expect(page.getByText('1 breaking')).toBeVisible();
+    await expect(page.getByText('1 of 1 registered consumer breaks.')).toBeVisible();
+  });
+
+  test('judges FORWARD: a newly required field does not break a reader pinned to v1', async ({
+    page,
+  }) => {
+    await page.goto(`/subjects/${HELD_SUBJECT}/versions/2/impact`);
+
+    const billing = page.getByRole('listitem').filter({ hasText: 'e2e-billing' });
+
+    await expect(billing).toContainText('COMPATIBLE');
+    await expect(billing).not.toContainText('BREAKS');
+  });
+
+  test('does not call a consumer that follows latest compatible', async ({ page }) => {
+    await page.goto(`/subjects/${HELD_SUBJECT}/versions/2/impact`);
+
+    const dashboard = page.getByRole('listitem').filter({ hasText: 'e2e-dashboard' });
+
+    await expect(dashboard).toContainText('FOLLOWS LATEST');
+    await expect(dashboard).not.toContainText('COMPATIBLE');
+  });
+
+  test('counts only what it could judge', async ({ page }) => {
+    await page.goto(`/subjects/${HELD_SUBJECT}/versions/2/impact`);
+
+    await expect(page.getByText('0 of 2 registered consumers break.')).toBeVisible();
+    await expect(page.getByText(/1 could not be judged/)).toBeVisible();
+  });
+
+  test('is reached from the version screen', async ({ page }) => {
+    await page.goto(`/subjects/${HELD_SUBJECT}/versions/2`);
+    await page.getByRole('link', { name: 'Who is affected' }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/subjects/${HELD_SUBJECT}/versions/2/impact$`));
+    await expect(page.getByText('e2e-billing')).toBeVisible();
+  });
+
+  test('resolves `latest` and names the version it meant', async ({ page }) => {
+    // `latest` is the gated pointer, which is v1 here; the heading says so rather than echoing
+    // the word in the address.
+    await page.goto(`/subjects/${HELD_SUBJECT}/versions/latest/impact`);
+
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('v1');
+  });
+
+  test('says an empty list is not a finding of safety', async ({ page }) => {
+    await page.goto('/subjects/acme.e2e.OrderCreated/versions/1/impact');
+
+    await expect(page.getByText('No registered consumers')).toBeVisible();
+    await expect(page.getByText(/not a finding that nobody is affected/)).toBeVisible();
+  });
+
+  test('says so plainly when the version does not exist', async ({ page }) => {
+    await page.goto(`/subjects/${HELD_SUBJECT}/versions/99/impact`);
+
+    await expect(page.getByRole('heading', { name: /could not analyse/i })).toBeVisible();
+  });
+
+  test('reports no console errors', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') {
+        errors.push(message.text());
+      }
+    });
+    page.on('pageerror', (error) => errors.push(error.message));
+
+    await page.goto(`/subjects/${HELD_SUBJECT}/versions/2/impact`);
+    await expect(page.getByText('e2e-billing')).toBeVisible();
+
+    expect(errors).toEqual([]);
+  });
+});

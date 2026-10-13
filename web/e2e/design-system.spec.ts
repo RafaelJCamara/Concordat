@@ -183,6 +183,7 @@ test.describe('the shell', () => {
     await expect(nav).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Dashboard' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Subjects' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Approvals' })).toBeVisible();
 
     // The layout decision, stated as a test: everything a top bar would have carried lives in
     // the sidebar instead, so the first thing in the main column is the page's own <h1>.
@@ -301,7 +302,19 @@ test.describe('the icon set', () => {
 });
 
 test.describe('every screen', () => {
-  for (const path of ['/', '/subjects', '/sign-in']) {
+  for (const path of [
+    '/',
+    '/subjects',
+    '/contracts',
+    '/approvals',
+    '/audit',
+    '/settings/environment',
+    '/settings/brokers',
+    '/settings/members',
+    '/settings/api-keys',
+    '/settings/notifications',
+    '/sign-in',
+  ]) {
     test(`renders ${path} without a console error`, async ({ page }) => {
       // A page that renders while logging a failed request is a page that is quietly degraded.
       // Cheap to assert, and it generalises: every screen M4.3 adds gets this for free by

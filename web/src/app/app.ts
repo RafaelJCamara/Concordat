@@ -24,8 +24,8 @@ import { ThemeToggle } from './shared/ui/theme-toggle/theme-toggle';
 /**
  * The navigation, in the order the sidebar draws it.
  *
- * Two rows, because there are two screens. Contracts, Approvals and Audit are M4.3 and get a
- * row each on the day they get a route — see `NavItem` for why they are not here already.
+ * One row per screen that exists — see `NavItem` for why an unbuilt one is not drawn as a
+ * placeholder.
  *
  * The list lives in the composition root rather than inside `AppSidebar`: a shared
  * presentational component that knows the app's route table is not shared, it is this app's
@@ -34,6 +34,10 @@ import { ThemeToggle } from './shared/ui/theme-toggle/theme-toggle';
 const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Dashboard', icon: 'layout-dashboard', route: '/' },
   { label: 'Subjects', icon: 'file-json', route: '/subjects' },
+  { label: 'Contracts', icon: 'link-2', route: '/contracts' },
+  { label: 'Approvals', icon: 'file-check', route: '/approvals' },
+  { label: 'Audit log', icon: 'clock', route: '/audit' },
+  { label: 'Settings', icon: 'settings', route: '/settings' },
 ];
 
 /**

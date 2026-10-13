@@ -93,13 +93,41 @@ const STATUS_TONES: Record<SchemaVersion['status'], StatusTone> = {
         }
 
         <!--
-          The "compare with the previous version" offer lands with CompatibilityDiffPage and
-          its route, for the reason given on SubjectDetailPage: a link to a route that does
-          not exist yet hits the wildcard and redirects to the dashboard. The store's
-          previous() is already computed and waiting for it — and it is deliberately null on
-          v1, because a permanently disabled compare control on the first version of every
-          subject is furniture that never does anything.
+          Absent on v1 rather than disabled: the store's previous() is null there, and a
+          permanently inert compare control on the first version of every subject is
+          furniture that never does anything.
         -->
+        <div class="flex flex-wrap gap-2">
+          @if (store.previous(); as previous) {
+            <a
+              hlmBtn
+              variant="outline"
+              size="sm"
+              [routerLink]="[
+                '/subjects',
+                name(),
+                'versions',
+                previous.ordinal,
+                'diff',
+                version.ordinal,
+              ]"
+            >
+              Compare with v{{ previous.ordinal }}
+            </a>
+          }
+          <!--
+            Always offered, unlike the comparison: every version has a consumer question, even
+            the first one, and "nobody has declared" is itself an answer the screen gives.
+          -->
+          <a
+            hlmBtn
+            variant="outline"
+            size="sm"
+            [routerLink]="['/subjects', name(), 'versions', version.ordinal, 'impact']"
+          >
+            Who is affected
+          </a>
+        </div>
 
         @if (store.loadingDocument()) {
           <div hlmSkeleton class="h-96 w-full rounded-xl" aria-busy="true"></div>

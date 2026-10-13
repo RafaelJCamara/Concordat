@@ -168,7 +168,7 @@ belongs to CI and the CLI under ADR-005, and the sample is deliberately a plain 
 
 ## Running the tests
 
-### The .NET suite — 1,520 tests
+### The .NET suite — 1,532 tests
 
 ```bash
 dotnet test Concordat.slnx
@@ -182,7 +182,7 @@ takes several minutes. The other eight are pure unit tests and finish in seconds
 dotnet test tests/Concordat.Domain.Tests        # 517 tests, no Docker, ~1s
 ```
 
-### The web suite — 358 tests
+### The web suite — 858 tests
 
 ```bash
 cd web
@@ -192,7 +192,7 @@ npm run format:check    # prettier
 npm run codes:check     # fails if the error-code union has drifted from the .NET catalogue
 ```
 
-### The browser end-to-end suite — 43 tests
+### The browser end-to-end suite — 144 tests
 
 Two processes Playwright deliberately does not start for you, then the tests — a config that
 quietly started its own copy of either half would produce a suite that passes against the
