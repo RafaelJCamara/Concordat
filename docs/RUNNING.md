@@ -251,7 +251,7 @@ cd web && CONCORDAT_WEB_URL=http://localhost:5063 npm run e2e
 
 ## Running the tests
 
-### The .NET suite — 2,134 tests
+### The .NET suite — 2,155 tests
 
 ```bash
 dotnet test Concordat.slnx
@@ -262,10 +262,10 @@ containers through Testcontainers rather than mocking them, so a cold run pulls 
 takes several minutes. The other eight are pure unit tests and finish in seconds:
 
 ```bash
-dotnet test tests/Concordat.Domain.Tests        # 607 tests, no Docker, ~1s
+dotnet test tests/Concordat.Domain.Tests        # 611 tests, no Docker, ~1s
 ```
 
-### The web suite — 1,692 tests
+### The web suite — 1,693 tests
 
 ```bash
 cd web

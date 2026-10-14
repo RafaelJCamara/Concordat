@@ -17,8 +17,8 @@
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the schema-validity refusal, ADR-039): 2,134 .NET,
-1,692 Angular, 269 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the pending-proposal dedupe and the pattern warning, ADR-040 and ADR-041): 2,155 .NET,
+1,693 Angular, 269 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
 aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
@@ -235,8 +235,8 @@ inner-`$id` skip, data read as schema, the `~` escape guard, the leading-zero in
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the schema-validity refusal, ADR-039): 2,134 .NET,
-1,692 Angular, 269 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the pending-proposal dedupe and the pattern warning, ADR-040 and ADR-041): 2,155 .NET,
+1,693 Angular, 269 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
 aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
@@ -1433,20 +1433,20 @@ Nothing here can be done from inside the repository.
 
 ## What the tests actually cover
 
-Six kinds, not one. Worth knowing which, because "2,134 tests" says nothing about what would
+Six kinds, not one. Worth knowing which, because "2,155 tests" says nothing about what would
 survive being wrong.
 
 | Kind | Where | Tests | What it proves |
 |---|---|---|---|
-| Domain unit | `Domain.Tests`, three `Formats.*` | ~1,164 | Invariants in isolation. No I/O |
+| Domain unit | `Domain.Tests`, three `Formats.*` | ~1,179 | Invariants in isolation. No I/O |
 | Application handler | `Application.Tests` | 270 | Handler refusals and **ordering**, with hand-written fakes |
-| HTTP integration | `Api.IntegrationTests` | 406 | Real HTTP against real PostgreSQL, via Testcontainers |
+| HTTP integration | `Api.IntegrationTests` | 411 | Real HTTP against real PostgreSQL, via Testcontainers |
 | Conformance corpus | `Conformance` | 104, over 103 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 64 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
 | Browser end-to-end | `web/e2e` | 269 | A real Chromium against the real stack, design system included — and against the production image |
 
-Plus 1,692 Angular unit tests. *(Counts above re-measured 2026-10-14; the unit rows are approximate because
+Plus 1,693 Angular unit tests. *(Counts above re-measured 2026-10-14; the unit rows are approximate because
 the assemblies that do not fit a row — the client, the CLI and the contract testing — are not in them.)*
 
 **No mocking framework, deliberately.** No Moq, NSubstitute, FluentAssertions or AutoFixture —
