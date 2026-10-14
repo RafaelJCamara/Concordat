@@ -1,6 +1,7 @@
 # What is missing
 
-**As of 2026-08-15**, except [a pattern that is not a regular expression, 2026-10-14](#a-pattern-that-is-not-a-regular-expression-is-named-as-the-schemas-fault-and-warned-about-2026-10-14),
+**As of 2026-08-15**, except [ADR-039's two test gaps, 2026-10-14](#adr-039s-two-test-gaps-closed-2026-10-14),
+[a pattern that is not a regular expression, 2026-10-14](#a-pattern-that-is-not-a-regular-expression-is-named-as-the-schemas-fault-and-warned-about-2026-10-14),
 [a change already awaiting approval is not proposed again, 2026-10-14](#a-change-that-is-already-awaiting-approval-is-not-proposed-again-2026-10-14),
 [a document that is not a valid schema is refused, 2026-10-14](#a-document-that-is-not-a-valid-schema-is-refused-unless-the-registry-already-holds-it-2026-10-14),
 [the compatibility explanations, 2026-10-14](#compatibility-explanations-visible-text-and-a-disclosure-not-a-tooltip-2026-10-14),
@@ -30,6 +31,31 @@ Everything under "verified locally" below was run on this machine today, against
 container image and a real PostgreSQL. Everything else is claimed on the strength of tests.
 
 ---
+
+## ADR-039's two test gaps, closed, 2026-10-14
+
+ADR-039's "not verified" list named two things the suite only simulated or could not see. Both were checked; **neither found a defect**,
+and the build is unchanged.
+
+- **"Reachable, not stored", over HTTP, with two tenants.** The unit tests covered it with a hidden schema and the HTTP suite had no
+  second tenant. `SchemaValidityTenancyTests` (Cloud profile, two organisations): organisation A holds a document the rule would refuse
+  (registered by a host whose validity checker finds nothing, as the build before ADR-039 did); A registering it again into a second
+  subject on the host that has the rule is `201`; organisation B registering the **same document** is `400 schema_invalid`. A control
+  pins that a document nobody holds is refused to both, so the difference measured is the exemption and not the tenants.
+  **Mutation-checked:** the gate was made to excuse any stored document (`FindManyAsync`, which is global, in place of
+  `IsReachableByCurrentTenantAsync`): the tenancy test went red and **all 19 single-tenant tests in `SchemaValidityApiTests` stayed green**,
+  which is the gap this closes: with one tenant, "stored" and "reachable" are the same set.
+- **A document held by the real previous build.** Built `9b91c70` (the commit before ADR-039) in a scratch worktree against a private
+  PostgreSQL 17 (:55401), migrated with its own migrator, ran it as Production (the log says so) and registered
+  `{"type":"bogus","title":"..."}`: `201`. Then stopped it and ran the current build (`ca046a9`, no migration between them) on the same
+  database. Against that data: the same document again into the subject that holds it, `200 created:false` (idempotent); into a second
+  subject of the same tenant, `201`; `GET /v1/schemas/{id}`, `200` with the stored text unchanged; the dry-run check of it, `200`
+  `compatible:true`; **promotion** of the held version to a new environment, `201`; and a document the database had never seen,
+  `400 schema_invalid`. This is the one thing the HTTP tests simulate rather than run.
+
+**Not covered:** one registry was upgraded in place, on one database, from one commit pair; the tenancy test runs in the Cloud profile
+only (self-hosted has one tenant, so the question does not arise there); the scratch worktree directory under the session's scratchpad
+could not be deleted (path length) and is outside the repository.
 
 ## A pattern that is not a regular expression is named as the schema's fault and warned about, 2026-10-14
 
@@ -231,7 +257,7 @@ test red), the "more" count and the trailing full stop, on the HTTP tests too fo
 on the web side the editor's reference advice, in both the unit test and the browser test. **Not verified:** a registry that held a
 schema stored by an *older build* (the HTTP tests build "registered before the rule" with a second host whose checker finds nothing,
 which is what the older build did, but no old binary was run); the production image and the CLI against this change; cross-tenant
-behaviour over HTTP (the unit tests cover it with a hidden schema; the HTTP suite has no second tenant for this); a `pattern` that is not
+behaviour over HTTP (the unit tests cover it with a hidden schema; the HTTP suite has no second tenant for this; **since done**, see [ADR-039's two test gaps](#adr-039s-two-test-gaps-closed-2026-10-14), which also ran the previous build); a `pattern` that is not
 a regular expression (a gap, not a check); CI.
 
 ---
