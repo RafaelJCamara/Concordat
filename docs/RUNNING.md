@@ -321,6 +321,19 @@ OpenAPI drift gate, the .NET suite), `web app`, `browser end-to-end`, `protocol 
 dotnet format Concordat.slnx --verify-no-changes
 ```
 
+A second workflow, `.github/workflows/dependency-audit.yml`, runs nightly (and on demand) and is not part of
+CI: it restores the solution with nothing cached and reports an advisory as a GitHub issue. NuGet audit reads
+its vulnerability data live and an audit finding is a build error here, so an advisory can break the next
+fresh restore with no change to the repository, and CI only restores when someone pushes. It detects; it does
+not fix. To run the same check by hand, with nothing sent to GitHub (add `--from-log FILE` to parse a saved
+restore log instead of restoring, and `node scripts/dependency-audit.mjs --self-check` to prove the parser still
+reads what NuGet prints):
+
+```bash
+node scripts/dependency-audit.mjs --dry-run
+node --test scripts/dependency-audit.test.mjs
+```
+
 ## Troubleshooting
 
 **`401 (Unauthorized)` from the sample, or from any read or write.** The instance is claimed. See

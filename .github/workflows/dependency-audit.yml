@@ -1,0 +1,79 @@
+name: Dependency audit
+
+# NuGet audit runs at restore and reads the vulnerability data live, and Directory.Build.props
+# turns every warning into an error. So an advisory published against ANY package, including a
+# transitive one nobody chose, fails the next restore with no change to the repository: that is
+# what broke a docker build of unchanged sources on 2026-10-13 (see 82656ca).
+#
+# CI only restores on a push or a pull request, so in a quiet week the first person to learn of
+# an advisory is whoever next opens the repository, who then has to work out that their change
+# is not what broke the build. This workflow restores every day instead, with nothing cached,
+# and says so in an issue before that happens.
+#
+# It detects. It does not fix and it does not close the issue: the fix is a decision (pin the
+# package forward, or take a newer parent), and the repository's rule is to pin, not suppress.
+on:
+  schedule:
+    # An off-the-hour minute: scheduled runs on the hour queue behind everyone else's.
+    - cron: '41 5 * * *'
+  workflow_dispatch:
+
+# issues: write is the only addition to CI's read-only token, and it is why this is its own
+# workflow: CI (which runs code from pull requests) must never hold it.
+permissions:
+  contents: read
+  issues: write
+
+# Two runs at once (a manual dispatch landing on the nightly one) would both find no open issue
+# and both open one. Queued, not cancelled: the second then finds the first's issue and comments.
+concurrency:
+  group: dependency-audit
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  audit:
+    name: restore with live audit data
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          global-json-file: global.json
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.22.3'
+
+      # First, because a green "restore clean" is only worth something if the parser can still
+      # see an advisory. This restores a project that references a package version with
+      # permanent published advisories and fails the run unless the script finds them. Without
+      # it, NuGet rewording its diagnostic would turn every following night into a silent pass.
+      - name: The parser still sees a known advisory
+        run: node scripts/dependency-audit.mjs --self-check
+
+      # Deliberately NO package cache, unlike CI. The restore must start from nothing: no
+      # ~/.nuget/packages, no obj/, no cached vulnerability data. (A populated package folder
+      # would not skip the audit by itself; the point is that nothing here can.) `--force`
+      # inside the script covers the one case a fresh runner cannot: a no-op restore, which
+      # replays stored warnings instead of consulting the data.
+      #
+      # The script restores, and on an advisory opens one issue per distinct set of findings,
+      # or comments on the open one if that set is already reported. It exits 1 on an
+      # advisory so the run itself is red, and 2 when the restore failed for any other reason
+      # (including NU1900, "the audit data could not be fetched"), in which case it opens
+      # nothing: a network blip is not a vulnerability.
+      - name: Restore and report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: node scripts/dependency-audit.mjs

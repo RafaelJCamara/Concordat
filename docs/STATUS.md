@@ -24,6 +24,54 @@ container image and a real PostgreSQL. Everything else is claimed on the strengt
 
 ---
 
+## A nightly dependency audit, 2026-10-14
+
+`82656ca` fixed one advisory by hand and said the next would recur. The question was whether CI could have caught it, and the
+answer is that **CI's restore is already live; its cadence is the hole.** Measured with a one-project probe that references
+`System.Security.Cryptography.Pkcs` 10.0.0, a throwaway `NUGET_PACKAGES` and `NUGET_HTTP_CACHE_PATH`, and
+`HTTPS_PROXY` pointed at a dead port to tell "re-audited" from "replayed":
+
+| Restore | Result |
+|---|---|
+| No `obj/`, populated global-packages (what CI does after a cache hit) | audits: NU1902 and NU1903 |
+| Immediately again (`All projects are up-to-date for restore`) | **replays** the stored NU1902 and NU1903 from `project.assets.json`, with the network dead and an empty HTTP cache: it did not consult the data |
+| `--force`, `--no-cache`, or `obj/` deleted, network dead, HTTP cache empty | tries to fetch the data: **NU1900** (could not load it) |
+
+The vulnerability data (`vuln_index`, `vuln_data_base`, `vuln_data_update`) lives in the HTTP cache beside the package list, not in
+the global-packages folder. `ci.yml` caches `~/.nuget/packages` and nothing else, and a fresh checkout has no `obj/`, so a CI
+restore is never a no-op and always reads live data; the cache only saves the downloads. What a no-op restore does is hide a new
+advisory from a **developer's** machine until `obj/` is cleared or a package changes. Nothing in CI is stale. It simply only
+runs when someone pushes.
+
+`.github/workflows/dependency-audit.yml` (nightly, `workflow_dispatch` too; `contents: read`, `issues: write`; the same
+pinned actions as `ci.yml`; no cache) runs `scripts/dependency-audit.mjs`, which does `dotnet restore Concordat.slnx --force` and
+parses NU1901 to NU1904. On a finding it ensures the `dependency-audit` label exists (`gh label create --force`), looks for an
+**open** issue with exactly the same title, and comments on it, or else opens one. The title (`Dependency audit: NU1902, NU1903 in
+System.Security.Cryptography.Pkcs, …`) is the idempotency key: it names codes and packages and not versions or advisory ids, so a
+second advisory against a package already reported is a comment and a different package is a new issue. The run also exits 1, so
+it is red in Actions. NU1900 (audit data unreachable) and any other restore failure exit 2 and open **no** issue: a network blip is
+not a vulnerability. `--dry-run` prints instead of calling `gh`; `--from-log FILE` parses a saved restore; `--self-check` restores a
+project that references a version with permanent advisories (Pkcs 10.0.0) and fails unless the parser finds them, which is the guard
+against NuGet rewording its diagnostic and every later night passing silently (the workflow runs it first).
+
+It is Node (`.mjs`, like `generate-protocol-docs.mjs`): one implementation for `ubuntu-latest` and the Windows development
+machine, where bash and PowerShell would be two. 21 `node:test` cases (`scripts/dependency-audit.test.mjs`, run by CI's `protocol docs
+gate` job) pin the parser, the title, the log excerpt, the `gh` sequence and the exit codes against output captured from a real
+restore, which turned out to differ from the single-project shape in one way the first version missed: a solution restore appends
+` [<path>\Concordat.slnx]` to every diagnostic.
+
+**Verified:** `node --test scripts/dependency-audit.test.mjs` 21 of 21; 14 mutants (parser regex, de-duplication, versions in the
+title, never commenting, label without `--force`, NU1900 recognition, noise filter, fence, title length, a dry run that calls `gh`,
+warnings ignored, project list uncapped, comment wording, exit 0 masking a finding) each killed by a test; the script against a real
+`dotnet restore` of the probe (exit 1, the two advisories, the issue it would open), against this repository **before 82656ca's pins
+(exit 1, seven findings across Pkcs and Xml, as the commit said)** and **with them applied to a scratch copy (exit 0)**;
+`--self-check` green, and red (exit 3) with the regex broken; `actionlint` clean on both workflows. **Not verified:** the workflow
+on GitHub (`gh workflow run dependency-audit.yml` then `gh run watch`, once pushed); a real `gh issue create` (the sequence ran against a
+fake `gh`, and the flags were checked against `gh --help`, with a read-only `gh issue list --label` confirmed to return `[]` for a label that does not exist yet); `dotnet restore` on
+Linux (the parser is tested on Linux-shaped lines, but the real thing has only run on Windows).
+
+---
+
 ## A contract's bindings can be changed and removed, 2026-10-14
 
 The hole recorded on 2026-10-13 is closed ([ADR-035](adr/035-contract-bindings-have-an-identity.md)). A binding had no
@@ -877,7 +925,7 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~Signup named its reason for refusing~~ | **Narrowed 2026-09-24.** The neutral `detail` was the only neutral part; the code, title and type URI all said `user_already_exists`. Now `signup_refused`. Not closed: synchronous provisioning still distinguishes refusal from creation — [M9.2](plan/M9-cloud.md) says what closing it would take. |
 | **Approval reviewers do not exist** | Anyone with `subject:admin` can approve anything. A reviewer *set* was deferred to M8 and M8 did not build it. |
 | ~~A contract's bindings cannot be edited or removed~~ | **Closed 2026-10-14** ([ADR-035](adr/035-contract-bindings-have-an-identity.md)): every binding has an id, and `PUT`/`DELETE` on `…/publishes/{id}` and `…/consumes/{id}` change its subjects and precedence or remove it, with the overlap rule run again for an edit. A binding added without a precedence can now be given one, and the overlapping binding that was refused is then accepted. What it was: there was an `add` endpoint for each kind and nothing else, so a binding added without a precedence could never be separated from a later overlapping one, and the registry's own refusal says to "give the two bindings different precedence values". Found by the web app's first real overlap test (2026-10-13). |
-| **Dependency advisories are live, and an audit finding is an error** | Found 2026-10-14. NuGet audit runs at restore and `TreatWarningsAsErrors` makes a finding fatal, so an advisory published against any transitive package breaks the next fresh restore (any push, any image build) with no change to the repository, as five against `System.Security.Cryptography.Pkcs`/`.Xml` did a day after the same sources had built. They are pinned forward (`538e8d9`), which is how SSH.NET was handled, and it will recur. The alternatives are a scheduled job that restores and reports before a push does, or a lock file (`RestorePackagesWithLockFile` breaks solution restore on SDK 10.0.301); neither is done. |
+| ~~Dependency advisories are live, and an audit finding is an error~~ | **Closed 2026-10-14 for detection, not for repair.** Found the same day: NuGet audit runs at restore and `TreatWarningsAsErrors` makes a finding fatal, so an advisory published against any package, transitive ones included, breaks the next fresh restore with no change to the repository, as five against `System.Security.Cryptography.Pkcs`/`.Xml` did (pinned forward, `82656ca`). [`dependency-audit.yml`](../.github/workflows/dependency-audit.yml) now restores the solution every day at 05:41 UTC, with nothing cached, and opens a GitHub issue (or comments on the open one) naming the NU19xx codes and the packages. **It detects; it does not fix.** A human still has to pin the package forward, and an advisory published at 05:42 still waits up to a day for the report, so a push can still be the first thing to find it. **Not verified: the workflow itself has never run on GitHub** (nothing is pushed); the script that does the work was run here against a real restore, the issue sequence only against a fake `gh`. Scheduled workflows are switched off by GitHub after 60 days without repository activity. A lock file is still not an option (`RestorePackagesWithLockFile` breaks solution restore on SDK 10.0.301). |
 | **The audit read throws on an action its build does not know** | `AuditEntryConfiguration` throws on a stored action it was not taught, so rolling back past a change that adds an action breaks the audit page for as long as such a row exists (ADR-033, ADR-035). The notification pump and the subscription read were made tolerant on 2026-10-14; this one was not. The web app already shows an unknown action as received. Separable. |
 | ~~No screen creates a subject~~ | **Closed 2026-10-13** by `/subjects/new-subject` ([ADR-030](adr/030-create-subject-screen.md)): M4's exit criterion had been recorded as met when its first step was not, and the list's "New subject" was a button with no handler. What is left of it is the next row. |
 | ~~No screen edits a subject afterwards~~ | **Closed 2026-10-13** by the panels on a subject's page ([ADR-032](adr/032-subject-settings.md)): Change owner (`subject:write` or `subject:admin`) and Change policy (`subject:admin`), each two clicks, each saying only what the registry was measured to do. Name, format and content model remain permanent (probed: `PATCH` ignores them and answers 200). **Deprecating and retiring are left out on purpose**: neither can be undone, and deprecating notifies every subscriber. The CLI still edits neither. |

@@ -319,6 +319,15 @@ jobs:
       - name: The published catalogue matches ConcordatCodes.cs
         run: node scripts/generate-protocol-docs.mjs --check
 
+      # Lives in this job only because it is the repository's "a script under scripts/ is
+      # correct" job, and it already has Node. The nightly dependency-audit workflow reads
+      # NuGet's diagnostics with a regex, and a parser that quietly stopped matching would report
+      # "restore clean" on the night an advisory lands. These tests pin the parser, the title
+      # (the idempotency key) and the gh sequence against output captured from a real restore;
+      # that NuGet still prints that shape is the nightly workflow's own --self-check.
+      - name: The dependency-audit script parses what NuGet prints
+        run: node --test scripts/dependency-audit.test.mjs
+
   contract-drift:
     name: contract drift gate
     runs-on: ubuntu-latest
