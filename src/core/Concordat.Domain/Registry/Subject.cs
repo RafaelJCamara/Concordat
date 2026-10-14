@@ -7,9 +7,9 @@ namespace Concordat.Domain.Registry;
 /// </summary>
 /// <param name="Version">The version, whether newly created or already present.</param>
 /// <param name="Created">
-/// <see langword="false"/> when the schema was already at the tip and no ordinal was
-/// allocated. Registration is idempotent at the tip so a retried publish does not inflate the
-/// version history.
+/// <see langword="false"/> when the schema was already at the tip, or already waiting for
+/// approval as a version the policy would still hold, and no ordinal was allocated.
+/// Registration is idempotent at both so a retried publish does not inflate the version history.
 /// </param>
 /// <param name="Dismissed">
 /// The ordinals of proposals abandoned by this registration, if any (M7.4). Empty in the
@@ -280,6 +280,34 @@ public sealed class Subject
 
             return Result<RegistrationOutcome>.Success(
                 new RegistrationOutcome(tip, Created: false, Dismissed: abandoned));
+        }
+
+        // Idempotent at a pending proposal too (ADR-040). A CI job that retries a breaking
+        // registration while nobody has decided it is asking for the proposal it already made,
+        // and without this every retry allocated an ordinal, wrote a VERSION_SUBMITTED entry and
+        // staged a notification, so the queue ADR-017 warned could become a graveyard filled
+        // with copies of one change.
+        //
+        // Only while the verdict is still "held": if the policy was relaxed since, the same
+        // content is no longer a proposal, it is accepted, and answering it with the stale held
+        // version would leave the author's schema unregistered. A Rejected or Dismissed copy is
+        // not matched either: those are decisions about that version, and a resubmission is a
+        // new ask.
+        //
+        // Before the semver check, not after: the increasing-label rule counts pending labels,
+        // so a retry that carries the label its pending version already holds would be refused
+        // as "not increasing" by the very version it repeats. The label is not compared, as at
+        // the tip: the first attempt's label stands.
+        if (isBreaking)
+        {
+            var proposed = _versions.Find(
+                v => v.Status is VersionStatus.AwaitingApproval && v.SchemaId == schema.Id);
+
+            if (proposed is not null)
+            {
+                return Result<RegistrationOutcome>.Success(
+                    new RegistrationOutcome(proposed, Created: false, Dismissed: []));
+            }
         }
 
         var semverCheck = VerifySemanticVersion(semanticVersion, isBreaking);

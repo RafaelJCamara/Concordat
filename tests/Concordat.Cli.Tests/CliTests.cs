@@ -223,6 +223,36 @@ public class CliTests(ApiFactory api) : IDisposable
     }
 
     [Fact]
+    public async Task PushingABreakingChangeAgainStillReportsItAsAwaitingApproval()
+    {
+        // The retry of a CI job. The registry allocates nothing the second time (ADR-040), and
+        // "unchanged" would be a false all-clear: the change is still not live, and the note
+        // that says so is the only place a pipeline log mentions it.
+        var subject = $"cli.Retry{Guid.NewGuid():N}";
+        var environment = $"cli-retry-{Guid.NewGuid():N}";
+
+        using var first = new Capture();
+        await PushCommand.RunAsync(
+            Api(environment), first.Output(), NewDirectory((subject, Original)),
+            "team", "test", dryRun: false, default);
+
+        using var proposed = new Capture();
+        await PushCommand.RunAsync(
+            Api(environment), proposed.Output(), NewDirectory((subject, Breaking)),
+            "team", "test", dryRun: false, default);
+
+        using var retry = new Capture();
+        var code = await PushCommand.RunAsync(
+            Api(environment), retry.Output(), NewDirectory((subject, Breaking)),
+            "team", "test", dryRun: false, default);
+
+        Assert.Equal(ExitCodes.Success, code);
+        Assert.Contains("v2  awaiting-approval", retry.Stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("unchanged", retry.Stdout, StringComparison.Ordinal);
+        Assert.Contains("awaiting approval", retry.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task DryRunChangesNothing()
     {
         var subject = $"cli.Dry{Guid.NewGuid():N}";

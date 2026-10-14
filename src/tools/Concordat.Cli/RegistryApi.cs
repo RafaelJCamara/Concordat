@@ -49,7 +49,7 @@ public sealed record CompatibilityResult(
 /// <param name="Ordinal">The allocated ordinal.</param>
 /// <param name="SchemaId">The content-addressed id.</param>
 /// <param name="Status">Active, or awaiting approval.</param>
-/// <param name="Created">False when the schema was already at the tip.</param>
+/// <param name="Created">False when the schema was already at the tip or already awaiting approval.</param>
 /// <param name="Divergences">Findings, including tolerated ones.</param>
 public sealed record RegisterResult(
     string Subject,

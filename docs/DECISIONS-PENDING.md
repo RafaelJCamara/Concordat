@@ -789,7 +789,7 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | `Result<T>` lives in Domain, not Application | M1.1, DESIGN §8 | Low |
 | `Subject.CompatibilityPolicy` nullable = inherit | M1.1 | **Cannot be retrofitted** |
 | `SubjectId` and `EnvironmentId` added ahead of M7 | M1.1 | Low now, high after M1.5 |
-| Registration idempotent at the tip | M1.1 | Low |
+| Registration idempotent at the tip, and at a change already awaiting approval while the policy still holds it ([ADR-040](adr/040-a-change-already-awaiting-approval-is-not-proposed-again.md)) | M1.1, 2026-10-14 | Low, but user-visible: a retry of a held change is `200`, not `201` |
 | `Deprecated` accepts versions, `Retired` does not | M1.1 | Low |
 | Approval never regresses `LatestPointer` | M1.1 | Low |
 | Number literals preserved verbatim, not RFC 8785 | [M1.2](plan/M1-registry-core.md) | **Changes every id** |

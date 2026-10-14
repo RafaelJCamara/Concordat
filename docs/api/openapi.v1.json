@@ -5930,7 +5930,7 @@
           },
           "created": {
             "type": "boolean",
-            "description": "`false` when the schema was already at the tip and no ordinal was allocated."
+            "description": "`false` when the schema was already at the tip, or already waiting for approval,\nand no ordinal was allocated. `status` says which."
           },
           "divergences": {
             "type": "array",

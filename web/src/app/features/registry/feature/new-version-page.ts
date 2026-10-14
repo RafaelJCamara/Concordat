@@ -103,7 +103,7 @@ import { VersionStarter } from '../ui/version-starter';
         -->
         <div class="border-border bg-card space-y-4 rounded-xl border p-6">
           <div class="flex flex-wrap items-center gap-3">
-            @if (!outcome.created) {
+            @if (!outcome.created && !store.held()) {
               <cd-status-badge tone="info">Unchanged</cd-status-badge>
             } @else if (store.held()) {
               <cd-status-badge tone="warning" [pulse]="true">Awaiting approval</cd-status-badge>
@@ -114,10 +114,14 @@ import { VersionStarter } from '../ui/version-starter';
           </div>
 
           <p class="text-muted-foreground text-sm">
-            @if (!outcome.created) {
+            @if (!outcome.created && !store.held()) {
               This document is already the current version, so no ordinal was allocated. The
               registry deduplicates by content, and re-registering the tip is deliberately
               idempotent.
+            } @else if (!outcome.created) {
+              This change is already waiting for approval as v{{ outcome.ordinal }}, so no new
+              ordinal was allocated and nobody is notified a second time. The
+              <code class="font-mono">latest</code> pointer has not moved.
             } @else if (store.held()) {
               The change is breaking, so it registered as v{{ outcome.ordinal }} and the
               <code class="font-mono">latest</code> pointer has not moved. Consumers keep resolving

@@ -300,8 +300,9 @@ public static class SubjectEndpoints
             [.. value.Report.AllDivergences.Select(BreakingChangeResponse.From)],
             [.. value.Portability.Select(PortabilityResponse.From)]);
 
-        // 200 rather than 201 when nothing was created: re-registering the tip is idempotent
-        // and allocated no ordinal, so claiming creation would be a lie a retrying client acts on.
+        // 200 rather than 201 when nothing was created: re-registering the tip, or a change still
+        // waiting for approval (ADR-040), is idempotent and allocated no ordinal, so claiming
+        // creation would be a lie a retrying client acts on. The status says which of the two.
         return value.Created
             ? TypedResults.Created(
                 $"/v1/environments/{env}/subjects/{subject}/versions/{value.Ordinal}", body)

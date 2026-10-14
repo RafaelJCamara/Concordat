@@ -145,6 +145,80 @@ public class ApprovalGateTests
     }
 
     [Fact]
+    public void ResubmittingAPendingSchema_IsIdempotentAndAllocatesNoOrdinal()
+    {
+        // A CI job that reruns a breaking registration: nobody has decided, so nothing is new.
+        var subject = Build.Subject().WithVersion(1);
+        var first = subject.RegisterVersion(
+            Build.Schema(2), Build.Breaks(), null, null, Build.Actor(), Build.At);
+
+        var again = subject.RegisterVersion(
+            Build.Schema(2), Build.Breaks(), null, null, Build.Actor(), Build.At);
+
+        Assert.True(again.IsSuccess);
+        Assert.False(again.Value.Created);
+        Assert.Same(first.Value.Version, again.Value.Version);
+        Assert.Equal(2, subject.Versions.Count);
+        Assert.Equal(1, subject.Latest!.Ordinal);
+    }
+
+    [Fact]
+    public void ResubmittingAPendingSchemaWithItsOwnLabel_IsIdempotentRatherThanNotIncreasing()
+    {
+        // The increasing-label rule counts pending labels, so the retry carrying the label the
+        // pending version already holds would be refused as "not increasing" if it were checked
+        // first. A retry sends what the first attempt sent.
+        var subject = Build.Subject().WithVersion(1, "1.0.0");
+        var major = SemanticVersion.Create("2.0.0").Value;
+        subject.RegisterVersion(Build.Schema(2), Build.Breaks(), major, null, Build.Actor(), Build.At);
+
+        var again = subject.RegisterVersion(
+            Build.Schema(2), Build.Breaks(), major, null, Build.Actor(), Build.At);
+
+        Assert.True(again.IsSuccess, again.Error?.Message);
+        Assert.False(again.Value.Created);
+        Assert.Equal(2, subject.Versions.Count);
+    }
+
+    [Fact]
+    public void ResubmittingARejectedSchema_ProposesItAgain()
+    {
+        // Rejection is final for that version, not for the content: the author may have
+        // changed what the reviewer objected to elsewhere, and the new proposal is a new ask.
+        var subject = Build.Subject().WithVersion(1);
+        subject.RegisterVersion(Build.Schema(2), Build.Breaks(), null, null, Build.Actor(), Build.At);
+        subject.Reject(2, Build.Actor("bob"), Build.At);
+
+        var again = subject.RegisterVersion(
+            Build.Schema(2), Build.Breaks(), null, null, Build.Actor(), Build.At);
+
+        Assert.True(again.IsSuccess);
+        Assert.True(again.Value.Created);
+        Assert.Equal(3, again.Value.Version.Ordinal);
+        Assert.Equal(VersionStatus.AwaitingApproval, again.Value.Version.Status);
+    }
+
+    [Fact]
+    public void ResubmittingAPendingSchemaThePolicyNowAccepts_RegistersItAndLeavesTheHeldOneHeld()
+    {
+        // The policy was relaxed after the proposal was held (a held version stays held, and
+        // the browser suite pins that). The same content registered now is no longer a
+        // proposal: it is accepted, and it must not be answered with the stale held version.
+        var subject = Build.Subject().WithVersion(1);
+        subject.RegisterVersion(Build.Schema(2), Build.Breaks(), null, null, Build.Actor(), Build.At);
+
+        var again = subject.RegisterVersion(
+            Build.Schema(2), Build.Ok(), null, null, Build.Actor(), Build.At);
+
+        Assert.True(again.IsSuccess);
+        Assert.True(again.Value.Created);
+        Assert.Equal(VersionStatus.Active, again.Value.Version.Status);
+        Assert.Equal(3, again.Value.Version.Ordinal);
+        Assert.Equal(VersionStatus.AwaitingApproval, subject.Versions[1].Status);
+        Assert.Equal(3, subject.Latest!.Ordinal);
+    }
+
+    [Fact]
     public void Approve_MakesVersionActiveAndMovesLatest()
     {
         var subject = Build.Subject().WithVersion(1);

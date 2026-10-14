@@ -36,7 +36,8 @@ public sealed record RegisterVersionCommand(
 /// <param name="SchemaId">The content-addressed schema id.</param>
 /// <param name="Status">Whether the version is active or awaiting approval.</param>
 /// <param name="Created">
-/// <see langword="false"/> when the schema was already at the tip and no ordinal was allocated.
+/// <see langword="false"/> when the schema was already at the tip, or already waiting for approval,
+/// and no ordinal was allocated.
 /// </param>
 /// <param name="Report">The engine's findings, including ones the policy tolerated.</param>
 /// <param name="Portability">

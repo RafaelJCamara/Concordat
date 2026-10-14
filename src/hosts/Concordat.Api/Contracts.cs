@@ -291,7 +291,8 @@ public sealed record BootstrapSubjectResponse(
 /// <param name="SchemaId">The content-addressed id.</param>
 /// <param name="Status">Whether it is active or awaiting approval.</param>
 /// <param name="Created">
-/// <see langword="false"/> when the schema was already at the tip and no ordinal was allocated.
+/// <see langword="false"/> when the schema was already at the tip, or already waiting for approval,
+/// and no ordinal was allocated. <c>status</c> says which.
 /// </param>
 /// <param name="Divergences">Findings, including ones the policy tolerated.</param>
 /// <param name="Portability">

@@ -107,10 +107,13 @@ public static class PushCommand
                 contract.Subject.Value, contract.Body, semver: null, by, cancellationToken)
                 .ConfigureAwait(false);
 
-            var status = !result.Created
-                ? "unchanged"
-                : result.Status.Equals(VersionStatuses.AwaitingApproval, StringComparison.OrdinalIgnoreCase)
-                    ? "awaiting-approval"
+            // Held is read from the status, not from Created: a retried push of a change still
+            // waiting for approval allocates nothing (ADR-040) and is still waiting, and calling
+            // it "unchanged" would drop it from the awaiting count and its note.
+            var status = result.Status.Equals(VersionStatuses.AwaitingApproval, StringComparison.OrdinalIgnoreCase)
+                ? "awaiting-approval"
+                : !result.Created
+                    ? "unchanged"
                     : "registered";
 
             outcomes.Add(new PushOutcome(contract.Subject.Value, status, result.Ordinal, result.SchemaId));

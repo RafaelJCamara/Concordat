@@ -739,6 +739,20 @@ describe('NewVersionPage', () => {
       expect(host.textContent).not.toContain('Registered as');
     });
 
+    it('says a repeated breaking change is already waiting, not that it is unchanged', () => {
+      // 200 and `created: false` as for the tip, but the document is not the current version:
+      // it is a proposal nobody has decided. "Already the current version" would tell the
+      // author their consumers have it, and they do not.
+      const { host } = render({
+        outcome: outcome({ created: false, ordinal: 2, status: 'AWAITING_APPROVAL' }),
+      });
+
+      expect(host.textContent).toContain('Awaiting approval');
+      expect(host.textContent).toContain('already waiting for approval as v2');
+      expect(host.textContent).not.toContain('Unchanged');
+      expect(host.textContent).not.toContain('already the current version');
+    });
+
     it('replaces the form rather than sitting above it', () => {
       // An editable form under a "registered" banner invites a second submit that either
       // allocates another ordinal or silently no-ops, and neither is what the button offers.

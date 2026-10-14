@@ -1,6 +1,7 @@
 # What is missing
 
-**As of 2026-08-15**, except [a document that is not a valid schema is refused, 2026-10-14](#a-document-that-is-not-a-valid-schema-is-refused-unless-the-registry-already-holds-it-2026-10-14),
+**As of 2026-08-15**, except [a change already awaiting approval is not proposed again, 2026-10-14](#a-change-that-is-already-awaiting-approval-is-not-proposed-again-2026-10-14),
+[a document that is not a valid schema is refused, 2026-10-14](#a-document-that-is-not-a-valid-schema-is-refused-unless-the-registry-already-holds-it-2026-10-14),
 [the compatibility explanations, 2026-10-14](#compatibility-explanations-visible-text-and-a-disclosure-not-a-tooltip-2026-10-14),
 [a tolerant audit read, 2026-10-14](#the-audit-read-returns-an-action-its-build-does-not-know-as-stored-2026-10-14),
 [subject prefix search, 2026-10-14](#subjects-are-searched-by-the-start-of-their-name-2026-10-14),
@@ -28,6 +29,41 @@ Everything under "verified locally" below was run on this machine today, against
 container image and a real PostgreSQL. Everything else is claimed on the strength of tests.
 
 ---
+
+## A change that is already awaiting approval is not proposed again, 2026-10-14
+
+Found on a real stack while checking ADR-039 and not caused by it: registering identical content again while the previous copy was
+`AWAITING_APPROVAL` answered **201 `created: true` with a new ordinal each time** (2, then 3, one `schemaId`). Idempotency held only at
+the approved tip. It is fixed ([ADR-040](adr/040-a-change-already-awaiting-approval-is-not-proposed-again.md)): the repeat is now `200`,
+`created: false`, `status: AWAITING_APPROVAL`, the ordinal it was given the first time, with no new audit entry and no new notification.
+
+**What the code and the record said it should do** (read before deciding): nothing says several pending copies are an audit trail.
+`Subject.RegisterVersion` named only the tip; ADR-017 lists a pile of unapproved versions as a cost; `CompatibilityHistory` already
+calls out "a retrying CI job" and fixed the half of it that moved `latest`; `RegisterVersionHandler.Audit` says an idempotent retry
+"writes nothing". The existing test (`ResubmittingAPendingBreakingSchemaMustNotBypassTheGate`) checked the status and the pointer and
+nothing about ordinals, which is why it stayed green.
+
+**What it does not do:** it does **not** merge duplicates a build before this one already wrote (they stay, undismissed); it does
+**not** match a `REJECTED` or `DISMISSED` copy (a resubmission after a decision is a new ask); and it does **not** match when the
+policy has since been relaxed (the same content then registers `ACTIVE` at a new ordinal, as before, and the held copy stays held).
+The label and changelog of a retry are ignored, as at the tip.
+
+**Two clients read `created`, and the first draft of the fix would have broken both.** `concordat push` mapped `created: false` to
+"unchanged", so a retried held change would have vanished from its `awaiting` count and the note that nothing is live; it reads the
+status first now. The new-version page said "already the current version", which tells an author their consumers have a change they
+do not; it now says the change is already waiting as v*n*. The GitHub Action and the .NET clients do not read `created`.
+
+### What was verified, and what was not
+
+**Red first, on behaviour:** the HTTP tests (`ApprovalGateTests`, real PostgreSQL) failed as `Expected: OK, Actual: Created` and "the
+collection contained 3 matching items" (three `VERSION_SUBMITTED` rows) before the fix, and the two domain tests that fail without it
+failed as `created` true. The CLI and page tests were written after the change and are mutation-checked instead. **Mutation-checked,
+each caught by the tests named for it:** the dedupe removed (2 domain, 2 HTTP, 1 CLI); the `isBreaking` guard removed (the relaxed-policy
+test); the CLI's old `created`-first mapping put back (the CLI test); the page's old template put back (the page test). The
+rejected-copy and own-label domain tests pin behaviour that already existed or that ordering decides, and go green on both sides of
+the dedupe, so they are regression pins and not red-first evidence. **Not verified:** a version duplicated before this build is
+unchanged by it (by design, not tested); the notification count was read in the handler and not counted over the wire (the audit count
+was); the browser suite was not extended (its 269 are unchanged and were run before this change, against the rebuilt stack).
 
 ## A document that is not a valid schema is refused, unless the registry already holds it, 2026-10-14
 

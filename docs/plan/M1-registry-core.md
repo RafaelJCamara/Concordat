@@ -34,7 +34,8 @@ engine is independently reviewable without the API on top.
   M1.5 wires `ITenantContext` early — adding a required FK to a populated table later is worse.
 - **Registration is idempotent at the tip.** Re-registering the current schema returns the
   existing version and allocates no ordinal; re-registering an *older* schema is a revert and
-  does. A retried publish must not inflate the history.
+  does. A retried publish must not inflate the history. (2026-10-14, [ADR-040](../adr/040-a-change-already-awaiting-approval-is-not-proposed-again.md):
+  the same holds for a change already awaiting approval, which this decision originally left out.)
 - **A `Deprecated` subject still accepts versions; a `Retired` one does not.** Deprecated is
   advisory — existing producers still need to patch their contract. Retired is the soft delete
   and must be a wall or it means nothing.
