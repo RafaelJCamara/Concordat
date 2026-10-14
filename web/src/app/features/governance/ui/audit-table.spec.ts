@@ -90,4 +90,40 @@ describe('AuditTable', () => {
 
     expect(host.querySelector('cd-status-badge')!.outerHTML).toContain('bg-muted');
   });
+
+  // ADR-036. The registry now answers a row whose action it was never taught (a rollback past a
+  // change that added one) as the token it holds, so "as received" has to survive any token, not
+  // only the tidy upper-snake ones. The tone table is a plain object, and a lookup in a plain
+  // object finds what every object inherits: `TONES['constructor']` is `Object`, which is not a
+  // tone, and the badge rendered with no colour classes at all.
+  it.each(['constructor', 'toString', 'hasOwnProperty', '__proto__', 'valueOf'])(
+    'tones the received token %s neutral and shows it as it came',
+    (action) => {
+      const host = render([entry({ action })]);
+
+      const badge = host.querySelector('cd-status-badge')!;
+      expect(badge.textContent).toContain(action);
+      expect(badge.outerHTML).toContain('bg-muted');
+      expect(badge.outerHTML).not.toContain('undefined');
+    },
+  );
+
+  it('says on an action it does not know that it is shown as the registry sent it', () => {
+    // Neutral is the only honest tone for a kind of event nobody here has read the meaning of, and
+    // the one thing the badge can add is that it is not an ordinary one. Without it a destructive
+    // action from a newer registry reads as the neutral background of a registry being used.
+    const host = render([entry({ action: 'A_FUTURE_ACTION' })]);
+
+    const badge = host.querySelector('cd-status-badge')!;
+    expect(badge.getAttribute('title')).toBe(
+      'This version of the app does not know this action. It is shown as the registry sent it.',
+    );
+    expect(badge.textContent).toContain('A_FUTURE_ACTION');
+  });
+
+  it('adds nothing to an action it knows', () => {
+    const host = render([entry({ action: 'CONTRACT_BINDING_REMOVED' })]);
+
+    expect(host.querySelector('cd-status-badge')!.hasAttribute('title')).toBe(false);
+  });
 });

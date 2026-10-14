@@ -187,13 +187,19 @@ internal sealed class RecordingAuditLog : IAuditLog
     public IReadOnlyList<AuditEntry> Entries => _entries;
 
     /// <summary>The actions appended, for terse assertions.</summary>
-    public IReadOnlyList<AuditAction> Actions => [.. _entries.Select(e => e.Action)];
+    public IReadOnlyList<AuditAction> Actions => [.. _entries.Select(e => e.Action!.Value)];
+
+    /// <summary>Every filter a handler asked the trail to apply, so a test can say none was.</summary>
+    public List<AuditFilter> Queries { get; } = [];
 
     public void Append(AuditEntry entry) => _entries.Add(entry);
 
     public Task<IReadOnlyList<AuditEntry>> QueryAsync(
-        AuditFilter filter, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<AuditEntry>>(_entries);
+        AuditFilter filter, CancellationToken cancellationToken)
+    {
+        Queries.Add(filter);
+        return Task.FromResult<IReadOnlyList<AuditEntry>>(_entries);
+    }
 }
 
 /// <summary>Collects staged notifications, so a test can assert what would be sent (M7.5).</summary>

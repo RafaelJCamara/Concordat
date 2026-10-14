@@ -83,13 +83,17 @@ internal sealed class AuditEntryConfiguration : IEntityTypeConfiguration<AuditEn
                     id => id.Value,
                     value => new EnvironmentId(value)));
 
-        builder.Property(e => e.Action)
+        // The column is read as the text it is, with no converter. A converter that parsed the token
+        // into AuditAction had to throw for one it did not know ("the audit trail contains
+        // action ..."), which made one row written by a newer build fail the whole read for as long
+        // as it existed, and the trail is the one table that cannot have the row removed
+        // (ADR-036). What this build knows the token as is a view, AuditEntry.Action.
+        builder.Property(e => e.ActionToken)
             .HasColumnName("action")
-            .HasConversion(
-                action => AuditTokens.For(action),
-                token => Parse(token))
             .HasMaxLength(64)
             .IsRequired();
+
+        builder.Ignore(e => e.Action);
 
         builder.Property(e => e.Actor)
             .HasColumnName("actor")
@@ -123,18 +127,6 @@ internal sealed class AuditEntryConfiguration : IEntityTypeConfiguration<AuditEn
         builder.HasIndex(TenantIdProperty, nameof(AuditEntry.Target), nameof(AuditEntry.At))
             .IsDescending(false, false, true)
             .HasDatabaseName("ix_audit_tenant_target_at");
-    }
-
-    // Stored tokens are trusted, but a token that no longer maps is a schema the code has moved
-    // past. Throwing names the row instead of silently reading it as the first enum member.
-    private static AuditAction Parse(string token)
-    {
-        var parsed = AuditTokens.Parse(token, out var action);
-
-        return parsed.IsSuccess && action is { } known
-            ? known
-            : throw new InvalidOperationException(
-                $"The audit trail contains action '{token}', which this build does not know.");
     }
 }
 

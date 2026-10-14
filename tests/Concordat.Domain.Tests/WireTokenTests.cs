@@ -267,6 +267,24 @@ public class WireTokenTests
     }
 
     [Fact]
+    public void ResolvingAStoredAuditTokenNeverThrowsAndNamesOnlyWhatThisBuildKnows()
+    {
+        // The read side of the catalogue (ADR-036): classification of a stored token, as opposed
+        // to Parse, which judges a caller's filter. There is no fake enum member for "unknown",
+        // so Enum.GetValues above is still exactly the vocabulary, and this is where an
+        // unknown token is accounted for.
+        foreach (var action in Enum.GetValues<AuditAction>())
+        {
+            Assert.Equal(action, AuditTokens.TryResolve(AuditTokens.For(action)));
+        }
+
+        Assert.Null(AuditTokens.TryResolve("A_FUTURE_ACTION"));
+        Assert.Null(AuditTokens.TryResolve(string.Empty));
+        Assert.Null(AuditTokens.TryResolve(null));
+        Assert.Null(AuditTokens.TryResolve("constructor"));
+    }
+
+    [Fact]
     public void AnUnknownAuditActionIsRefusedButAnAbsentOneIsNot()
     {
         // No filter means "everything", which is the common case for an audit query; a typo

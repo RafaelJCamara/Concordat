@@ -123,10 +123,13 @@ public sealed class AuditEntry
     /// <summary>The longest permitted detail, in characters.</summary>
     public const int MaxDetailLength = 2048;
 
+    // EF binds these parameters to the mapped properties by name, so `actionToken` is the stored
+    // column and nothing else: there is deliberately no parameter an unknown action could be
+    // turned into something else through.
     private AuditEntry(
         Guid id,
         EnvironmentId? environmentId,
-        AuditAction action,
+        string actionToken,
         ActorId actor,
         string target,
         string? detail,
@@ -134,7 +137,7 @@ public sealed class AuditEntry
     {
         Id = id;
         EnvironmentId = environmentId;
-        Action = action;
+        ActionToken = actionToken;
         Actor = actor;
         Target = target;
         Detail = detail;
@@ -147,8 +150,37 @@ public sealed class AuditEntry
     /// <summary>Which environment, or null for a change that is not scoped to one.</summary>
     public EnvironmentId? EnvironmentId { get; }
 
-    /// <summary>What happened.</summary>
-    public AuditAction Action { get; }
+    /// <summary>
+    /// What happened, as the token that is stored: the wire spelling of <see cref="Action"/> when
+    /// this build knows it, and otherwise exactly what the row holds (ADR-036).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This, not <see cref="Action"/>, is the entry's identity as a record.</b> The trail is
+    /// append-only and outlives the build that wrote a row: a rollback, or an older instance
+    /// beside a newer one, reads actions it was never taught. An enum cannot hold one, and a
+    /// member added to stand for "something else" would be a lie that every <c>switch</c> over
+    /// <see cref="AuditAction"/> and the token catalogue would then have to special-case. So the
+    /// stored text is what is kept, and the enum is a view of it.
+    /// </para>
+    /// <para>
+    /// It is the column itself, with no conversion in between, so nothing can rewrite it into
+    /// something else: the property has no setter, the repository has no update, and even a
+    /// tracked read followed by a save would send nothing (nothing changed) or the very text read.
+    /// </para>
+    /// </remarks>
+    public string ActionToken { get; }
+
+    /// <summary>
+    /// What happened, or null when this build was not taught the action (ADR-036).
+    /// </summary>
+    /// <remarks>
+    /// Null is a statement about the <em>build</em>, not the row: the row is as valid as it was
+    /// when the newer build wrote it. Callers that need to say what happened use
+    /// <see cref="ActionToken"/>; callers that switch on a kind of change have nothing to switch
+    /// on for a kind they do not know, and say so by handling null.
+    /// </remarks>
+    public AuditAction? Action => AuditTokens.TryResolve(ActionToken);
 
     /// <summary>Who did it.</summary>
     public ActorId Actor { get; private set; } = null!;
@@ -188,7 +220,7 @@ public sealed class AuditEntry
         return new AuditEntry(
             Guid.CreateVersion7(),
             environmentId,
-            action,
+            AuditTokens.For(action),
             actor,
             Clamp(target ?? string.Empty, MaxTargetLength),
             detail is null ? null : Clamp(detail, MaxDetailLength),
@@ -201,22 +233,30 @@ public sealed class AuditEntry
     /// <summary>Rehydrates an entry from storage.</summary>
     /// <param name="id">The identity.</param>
     /// <param name="environmentId">Which environment.</param>
-    /// <param name="action">What happened.</param>
+    /// <param name="actionToken">The stored action, whatever it is.</param>
     /// <param name="actor">Who did it.</param>
     /// <param name="target">What it happened to.</param>
     /// <param name="detail">The context.</param>
     /// <param name="at">When.</param>
     /// <returns>The entry.</returns>
-    /// <remarks>Persistence only; it performs no validation because storage is trusted.</remarks>
+    /// <remarks>
+    /// Persistence only; it performs no validation because storage is trusted. <b>It takes the
+    /// token and not an <see cref="AuditAction"/></b> because the row may hold an action this
+    /// build was never taught (ADR-036), and there is no member to hand it.
+    /// </remarks>
     public static AuditEntry FromStorage(
         Guid id,
         EnvironmentId? environmentId,
-        AuditAction action,
+        string actionToken,
         ActorId actor,
         string target,
         string? detail,
-        DateTimeOffset at) =>
-        new(id, environmentId, action, actor, target, detail, at);
+        DateTimeOffset at)
+    {
+        ArgumentNullException.ThrowIfNull(actionToken);
+
+        return new(id, environmentId, actionToken, actor, target, detail, at);
+    }
 }
 
 /// <summary>The wire spellings of <see cref="AuditAction"/>.</summary>
@@ -269,6 +309,17 @@ public static class AuditTokens
         Tokens.TryGetValue(action, out var token)
             ? token
             : throw new ArgumentOutOfRangeException(nameof(action), action, "Unknown audit action.");
+
+    /// <summary>Resolves a stored token to the action this build knows it as, if it does.</summary>
+    /// <param name="token">The token as stored.</param>
+    /// <returns>The action, or null when this build was not taught it.</returns>
+    /// <remarks>
+    /// The one place a stored token is classified, and it never throws: the trail is read by
+    /// builds older than the one that wrote it (ADR-036). Case-insensitive like
+    /// <see cref="Parse"/>, so a row spelt by hand resolves as the filter would.
+    /// </remarks>
+    public static AuditAction? TryResolve(string? token) =>
+        token is not null && Actions.TryGetValue(token.Trim(), out var action) ? action : null;
 
     /// <summary>Parses a wire token.</summary>
     /// <param name="token">The token.</param>

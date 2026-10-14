@@ -1,6 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json.Nodes;
 using Concordat.Application.Registry;
+using Concordat.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Concordat.Api.IntegrationTests;
 
@@ -570,6 +574,143 @@ public class GovernanceApiTests(ApiFactory factory)
         Assert.Equal(
             "audit_filter_invalid",
             (await ApiFactory.ReadProblemAsync(response)).ConcordatCode);
+    }
+
+    // ---------------------------------------- a row this build was never taught (ADR-036)
+
+    private async Task ExecuteAsync(string sql)
+    {
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ConcordatDbContext>();
+
+        await context.Database.ExecuteSqlRawAsync(sql);
+    }
+
+    private async Task<string> ScalarTextAsync(string sql)
+    {
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ConcordatDbContext>();
+
+        return (await context.Database.SqlQueryRaw<string>(sql).ToListAsync()).Single();
+    }
+
+    /// <summary>
+    /// Writes what a newer build would have: a row in this environment whose action is a token
+    /// this build has no member for, copying the tenant from the environment's own creation row.
+    /// </summary>
+    private Task InsertFutureActionAsync(string environment) =>
+        ExecuteAsync(
+            "INSERT INTO audit_entry (audit_id, environment_id, action, actor, target, detail, at, tenant_id) " +
+            "SELECT gen_random_uuid(), environment_id, 'A_FUTURE_ACTION', actor, target, " +
+            "'written by a newer build', now(), tenant_id " +
+            $"FROM audit_entry WHERE action = 'ENVIRONMENT_CREATED' AND target = '{environment}'");
+
+    private Task DeleteFutureActionAsync(string environment) =>
+        ExecuteAsync(
+            $"DELETE FROM audit_entry WHERE action = 'A_FUTURE_ACTION' AND target = '{environment}'");
+
+    [Fact]
+    public async Task ARowWhoseActionThisBuildWasNeverTaughtIsReadAsReceivedAndTheRestUnchanged()
+    {
+        // Rolling the registry back past a change that adds an action (ADR-033's, ADR-035's)
+        // left a row the converter threw on, so the whole read answered 500 for as long as the row
+        // existed, measured against the real registry before this test was written. The row is
+        // valid and the build is behind: it comes back as stored, and nothing else about the answer
+        // moves.
+        var (client, environment) = await NewEnvironmentAsync();
+        await NewSubjectAsync(client, environment);
+
+        var before = await client.GetFromJsonAsync<JsonArray>(
+            $"/v1/audit?env={environment}");
+
+        try
+        {
+            await InsertFutureActionAsync(environment);
+            var stored = await ScalarTextAsync(
+                "SELECT action || '|' || actor || '|' || target || '|' || detail || '|' || at::text " +
+                $"AS \"Value\" FROM audit_entry WHERE action = 'A_FUTURE_ACTION' AND target = '{environment}'");
+
+            var response = await client.GetAsync($"/v1/audit?env={environment}");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var after = (await response.Content.ReadFromJsonAsync<JsonArray>())!;
+            var future = Assert.Single(after, e => e!["action"]!.GetValue<string>() == "A_FUTURE_ACTION")!;
+
+            Assert.Equal(environment, future["target"]!.GetValue<string>());
+            Assert.Equal("written by a newer build", future["detail"]!.GetValue<string>());
+
+            // Every action this build knows is exactly what it was without the row: the same
+            // objects, in the same order, to the property.
+            var known = new JsonArray(
+                [.. after.Where(e => e!["action"]!.GetValue<string>() != "A_FUTURE_ACTION")
+                    .Select(e => e!.DeepClone())]);
+            Assert.True(
+                JsonNode.DeepEquals(before, known),
+                "the known entries changed on the wire");
+
+            // Newest first still holds: the row was written last.
+            Assert.Equal("A_FUTURE_ACTION", after[0]!["action"]!.GetValue<string>());
+
+            // The unfiltered read, which every environment's rows share, answers too.
+            Assert.Equal(
+                HttpStatusCode.OK, (await client.GetAsync("/v1/audit")).StatusCode);
+
+            // Reading wrote nothing: the row is the row that was inserted, byte for byte. Nothing
+            // in the application has a way to update this table, and this is where that is measured.
+            Assert.Equal(
+                stored,
+                await ScalarTextAsync(
+                    "SELECT action || '|' || actor || '|' || target || '|' || detail || '|' || at::text " +
+                    $"AS \"Value\" FROM audit_entry WHERE action = 'A_FUTURE_ACTION' AND target = '{environment}'"));
+        }
+        finally
+        {
+            await DeleteFutureActionAsync(environment);
+        }
+    }
+
+    [Fact]
+    public async Task AFilterForAKnownActionNeverReturnsARowThisBuildCannotName()
+    {
+        var (client, environment) = await NewEnvironmentAsync();
+
+        try
+        {
+            await InsertFutureActionAsync(environment);
+
+            var entries = await client.GetFromJsonAsync<IReadOnlyList<AuditResponse>>(
+                $"/v1/audit?env={environment}&action=ENVIRONMENT_CREATED", ApiFactory.Json);
+
+            Assert.Equal("ENVIRONMENT_CREATED", Assert.Single(entries!).Action);
+        }
+        finally
+        {
+            await DeleteFutureActionAsync(environment);
+        }
+    }
+
+    [Fact]
+    public async Task AFilterNamingTheTokenOfARowThisBuildCannotNameIsStillRefused()
+    {
+        // The rows are reached by the unfiltered read. A filter that accepted text it cannot
+        // check would answer a typo with an empty list (ADR-036).
+        var (client, environment) = await NewEnvironmentAsync();
+
+        try
+        {
+            await InsertFutureActionAsync(environment);
+
+            var response = await client.GetAsync($"/v1/audit?env={environment}&action=A_FUTURE_ACTION");
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Equal(
+                "audit_filter_invalid",
+                (await ApiFactory.ReadProblemAsync(response)).ConcordatCode);
+        }
+        finally
+        {
+            await DeleteFutureActionAsync(environment);
+        }
     }
 
     [Fact]

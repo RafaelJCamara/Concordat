@@ -106,7 +106,10 @@ public static class GovernanceEndpoints
                 "Records what happened, in the same transaction as the change itself. A " +
                 "refused request never reaches a commit, so it leaves no entry. Any read scope " +
                 "admits a caller, because the trail spans every resource type and a reader " +
-                "should be able to browse all of it, same as everything else.")
+                "should be able to browse all of it, same as everything else. A row whose " +
+                "action this build was never taught (one written by a newer build) is returned " +
+                "with the action exactly as stored, and a filter naming an action this build " +
+                "does not know is refused (ADR-036).")
             .Produces<IReadOnlyList<AuditResponse>>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
@@ -461,7 +464,7 @@ public sealed record AuditResponse(
 
         return new AuditResponse(
             entry.At,
-            AuditTokens.For(entry.Action),
+            entry.Action is { } known ? AuditTokens.For(known) : entry.ActionToken,
             entry.Actor.Value,
             entry.Target,
             entry.Detail);

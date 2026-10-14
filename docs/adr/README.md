@@ -50,3 +50,4 @@ it; write a new one and mark the old **Superseded by**.
 | [033](033-inherit-means-the-environments-default.md) | A subject with no policy of its own is judged by its environment's default, and changing a policy is audited | Accepted |
 | [034](034-a-policy-change-notifies-subscribers.md) | A subject's policy change notifies subscribers, and a subscription with no event filter is one | Accepted |
 | [035](035-contract-bindings-have-an-identity.md) | A contract's bindings have an identity, and can be changed and removed | Accepted |
+| [036](036-the-audit-read-tolerates-an-action-its-build-does-not-know.md) | The audit read returns an action its build does not know, as stored | Accepted |

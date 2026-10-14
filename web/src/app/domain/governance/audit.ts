@@ -44,6 +44,18 @@ export const AUDIT_ACTIONS = [
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
 /**
+ * Whether this build of the app knows an action the registry sent.
+ *
+ * <b>It never gates rendering.</b> A row is shown as received either way (ADR-036: a registry
+ * rolled back past a change that added an action now answers the row as it holds it, and a
+ * registry newer than this app sends kinds this app has never seen). It only lets the table say
+ * that it is showing something it cannot read the meaning of.
+ */
+export function isKnownAuditAction(action: string): action is AuditAction {
+  return (AUDIT_ACTIONS as readonly string[]).includes(action);
+}
+
+/**
  * One line of the trail: who did what to which thing, and when.
  *
  * <b>It records what happened, not what was attempted.</b> A refused request never reaches a

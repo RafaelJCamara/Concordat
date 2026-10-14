@@ -147,6 +147,12 @@ shadows the DOM event, which the lint rule forbids). The add form no longer says
   build does not know, which is [ADR-033](033-inherit-means-the-environments-default.md)'s cost, again, and the
   fix that made the notification pump tolerant of an unknown token does not reach the audit table. A rollback to a
   build from before this change also meets `binding_id` as a key it does not map; run the `Down` migration first.
+
+  > **Amended 2026-10-14, later the same day.** The audit half is closed for builds that contain
+  > [ADR-036](036-the-audit-read-tolerates-an-action-its-build-does-not-know.md): the audit read now returns an
+  > action its build does not know, as stored, so a `CONTRACT_BINDING_CHANGED` or `…_REMOVED` row no longer breaks
+  > the audit page. A rollback to a build from before ADR-036 still does, and **the `binding_id` half is untouched**:
+  > run the `Down` migration first.
 - **Negative: last write wins.** There is no optimistic concurrency on a contract (adding has none either): two
   people changing the same binding at once will both be answered `200` and the later write stands. The overlap
   check is run against what each saw, so two *different* edits made at the same moment could together produce an

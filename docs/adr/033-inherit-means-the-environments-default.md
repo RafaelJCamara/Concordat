@@ -214,6 +214,13 @@ notified *(until 2026-10-14: now it says who is, ADR-034)*. The policy journey a
   member) and is the cost of any new action, written down because a rollback is when it is paid. *2026-10-14:
   ADR-034 adds a worse one for the same reason, in the notification vocabulary: an undelivered
   `SUBJECT_POLICY_CHANGED` outbox row stops the pump for everyone, and read before rolling back.*
+
+> **Amended 2026-10-14, later the same day.** The audit half of that cost is closed for builds that contain
+> [ADR-036](036-the-audit-read-tolerates-an-action-its-build-does-not-know.md): `AuditEntryConfiguration` no longer
+> converts the stored action (it is read as the text it is), so `GET /v1/audit` answers a `SUBJECT_POLICY_CHANGED`
+> row, or any action a newer build wrote, as the token it holds instead of failing for everyone. **Rolling back to a
+> build from before that change still carries the cost above**, and the entry above is left as written for that
+> reason.
 - **Negative:** the dry run and the diff each cost one more read (the environment row).
 - **Not covered:** an environment with no row, in the browser or over HTTP (only legacy data produces one; it is
   tested at the application layer, once per call site); a policy-change notification *(built 2026-10-14, ADR-034)*; the owner entry's detail; the

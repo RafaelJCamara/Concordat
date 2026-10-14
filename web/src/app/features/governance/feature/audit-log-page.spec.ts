@@ -87,6 +87,21 @@ describe('AuditLogPage', () => {
     });
   });
 
+  it('shows a row whose action this app does not know beside the ones it does, as received', () => {
+    // ADR-036: a registry rolled back past a change that added an action now answers the row
+    // instead of failing the read, and this page is where somebody finds out what it holds.
+    const { host } = render({
+      entries: [{ ...entry(), action: 'A_FUTURE_ACTION', detail: 'from a newer build' }, entry()],
+    });
+
+    const rows = [...host.querySelectorAll('tbody tr')].map((row) => row.textContent);
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain('A_FUTURE_ACTION');
+    expect(rows[0]).toContain('from a newer build');
+    expect(rows[1]).toContain('VERSION_APPROVED');
+  });
+
   it('names the environment it is reading', () => {
     expect(render().host.querySelector('header')?.textContent).toContain('dev');
   });

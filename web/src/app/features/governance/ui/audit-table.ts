@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { HlmTableImports } from '@spartan-ng/helm/table';
-import type { AuditEntry } from '../../../domain/governance/audit';
+import { type AuditEntry, isKnownAuditAction } from '../../../domain/governance/audit';
 import { RelativeTimePipe } from '../../../shared/pipes/relative-time-pipe';
 import { StatusBadge, type StatusTone } from '../../../shared/ui/status-badge/status-badge';
 
@@ -60,7 +60,11 @@ const TONES: Readonly<Record<string, StatusTone>> = {
                 {{ entry.at | cdRelativeTime }}
               </td>
               <td hlmTd>
-                <cd-status-badge [tone]="toneOf(entry.action)">{{ entry.action }}</cd-status-badge>
+                <cd-status-badge
+                  [tone]="toneOf(entry.action)"
+                  [attr.title]="hintOf(entry.action)"
+                  >{{ entry.action }}</cd-status-badge
+                >
               </td>
               <td hlmTd class="font-mono text-xs">{{ entry.actor }}</td>
               <td hlmTd class="font-mono font-medium break-all">{{ entry.target }}</td>
@@ -78,6 +82,23 @@ export class AuditTable {
   readonly entries = input.required<readonly AuditEntry[]>();
 
   protected toneOf(action: string): StatusTone {
-    return TONES[action] ?? 'neutral';
+    // Own properties only. The action is whatever the registry holds (ADR-036), and a plain
+    // object answers `constructor` and `toString` with what every object inherits, which is not
+    // a tone and rendered a badge with no colour at all.
+    return Object.hasOwn(TONES, action) ? TONES[action]! : 'neutral';
+  }
+
+  /**
+   * What the badge says when this app cannot read the action: that it is not an ordinary one, and
+   * that the text is the registry's. Nothing for an action it knows.
+   *
+   * Tone stays neutral on purpose, because a severity guessed for a kind of event nobody here has
+   * read the meaning of would be a mislabel; what a newer registry's destructive action must not
+   * do is pass for the neutral background of a registry being used.
+   */
+  protected hintOf(action: string): string | null {
+    return isKnownAuditAction(action)
+      ? null
+      : 'This version of the app does not know this action. It is shown as the registry sent it.';
   }
 }

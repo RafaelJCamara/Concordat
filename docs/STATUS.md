@@ -1,6 +1,7 @@
 # What is missing
 
 **As of 2026-08-15**, except [the compatibility explanations, 2026-10-14](#compatibility-explanations-visible-text-and-a-disclosure-not-a-tooltip-2026-10-14),
+[a tolerant audit read, 2026-10-14](#the-audit-read-returns-an-action-its-build-does-not-know-as-stored-2026-10-14),
 [contract bindings that can be changed and removed, 2026-10-14](#a-contracts-bindings-can-be-changed-and-removed-2026-10-14),
 [the policy-change notification, 2026-10-14](#a-policy-change-notifies-subscribers-and-every-subscription-with-no-event-filter-is-one-2026-10-14),
 [inheriting and the audited policy change, 2026-10-13](#a-subject-with-no-policy-of-its-own-follows-its-environments-default-and-a-policy-change-is-audited-2026-10-13),
@@ -115,6 +116,60 @@ Content model cell beside it: the cell is half the screen and the token is 16px 
 
 ---
 
+## The audit read returns an action its build does not know, as stored, 2026-10-14
+
+The hole recorded by ADR-033 and again by ADR-035 is closed ([ADR-036](adr/036-the-audit-read-tolerates-an-action-its-build-does-not-know.md)).
+`AuditEntryConfiguration` converted the stored action into an `AuditAction` with a converter that threw for a token the build had
+no member for, so **one row written by a newer build failed `GET /v1/audit` for everyone, for as long as it existed**, and the
+trail is the one table whose rows cannot be removed through the application. **Measured first, with the previous build against
+the real database** (the registry on `:5101`, one row inserted by SQL with `action = 'A_FUTURE_ACTION'`): `GET /v1/audit` answered
+**500**, `?env=` for the row's environment the same, `?action=SUBJECT_CREATED` answered `[]` (the row is excluded by SQL before it
+is read), `?action=A_FUTURE_ACTION` answered 400. After: **200**, with the row among the others.
+
+**What it does, and the four decisions the ADR defends.** `AuditEntry.ActionToken` is the column as text, with no converter and no
+setter; `AuditEntry.Action` is now `AuditAction?`, null for a token the build does not know, so there is no fake enum member and
+`WireTokenTests`' enumeration of the enum still means what it says. The wire spells a known action from the catalogue (byte-identical)
+and an unknown one as stored. **A filter naming an unknown action is still `400 audit_filter_invalid`** (a typo must not read as
+"nothing happened", and accepting a stored unknown token would be an unindexed scan on a request any read scope may make). **Nothing
+can write the row back**: no setter, `Record` takes only an `AuditAction`, the repository has `Append` and `QueryAsync`, and the
+integration test asserts the row is byte for byte what was inserted after it was read. **The audit page shows it as received,
+neutral, with a `title`** ("This version of the app does not know this action…") and none on a known one. No migration: the column
+is unchanged. The model snapshot's property name changed in one line (`Action` to `ActionToken`); `dotnet ef migrations
+has-pending-model-changes` answers *No changes* before and after.
+
+**What the spec found that reading the code did not:** the table's tone lookup is a plain object, so an action whose token is an
+`Object.prototype` member (`constructor`, `toString`, `__proto__`) rendered a badge with **no colour classes at all** (red first: five
+cases). It is now an own-property lookup. No registry action is spelt that way; "as received" must not depend on that.
+
+**Visual check, on a private registry** (`:5101`, dev server `:4311`; rows inserted by SQL and removed after, 0 left): the audit page
+with `A_FUTURE_ACTION` and `constructor` rows at 1280 and 390 px, light and dark, fresh load, one second settled, no console errors,
+no horizontal page overflow. **The unknown row looks exactly like `SERVICE_REGISTERED`** (neutral pill); only its hover text differs.
+That is the decision (a guessed severity would be a mislabel), and also the thing most likely to be reversed: a `warning` tone or a
+dashed outline would make it seen, at the price of crying wolf on every ordinary new action.
+
+**No browser spec was added.** A row the registry will not write cannot be made by the browser suite, and one inserted by SQL into the
+shared database would be a permanent row in a table that is append-only, which is the opposite of what this change is for. The
+integration test (real PostgreSQL, deleted in a `finally`), the table and page specs, and the private-stack check above hold it.
+The existing `audit.spec.ts` (8 tests) was run against the private stack and passes.
+
+**Found, not fixed (separable):** the other two stored-token converters throw the same way, `DeploymentEvent.Action` (nothing reads
+`deployment_event` today: `IDeploymentLog.ReadAsync` has no caller) and `EnforcementViolation.Side`. **It protects a rollback to a
+build that contains it, not one to an earlier build.**
+
+### What was verified, and what was not
+
+Run on this machine, on Windows. **Verified:** `Concordat.Domain.Tests` (568), `Concordat.Application.Tests` (236) and
+`Concordat.Api.IntegrationTests` (317, Docker running) in full; `dotnet format --verify-no-changes`; the web unit suite (1,512), lint,
+prettier, `codes:check`, `monaco:check` and `ng build`; `docs/api/openapi.v1.json` regenerated by the build (one sentence on the
+endpoint's description). **Red first:** the integration test answered 500; the web spec failed on the five prototype tokens and the
+hint. **Mutation-checked:** the throwing converter put back (the real-PostgreSQL test red), the projection echoing the stored text (the
+known-action-in-another-case test red), the projection reading the enum unconditionally (four red), `TryResolve` throwing (eight red
+across the domain and handler tests), a setter on `ActionToken` (the no-way-to-rewrite test red), the tone lookup back to a plain
+index (five red) and the hint inverted (two red), each restored and confirmed green. **Not run:** the whole .NET suite, the whole
+browser suite, the production web image, CI; the other converters above.
+
+---
+
 ## A contract's bindings can be changed and removed, 2026-10-14
 
 The hole recorded on 2026-10-13 is closed ([ADR-035](adr/035-contract-bindings-have-an-identity.md)). A binding had no
@@ -168,7 +223,7 @@ survived and the integer identity came back. The ids bindings now have did not e
 - **The audit read still throws on an action its build does not know.** Rolling back past this change breaks the audit page for
   as long as a `CONTRACT_BINDING_CHANGED`/`…_REMOVED` row exists, and the fix that made the notification pump tolerant of an
   unknown token does not reach it. A tolerant read (show the token as received, as the web app already does) would close this
-  one and the `SUBJECT_POLICY_CHANGED` one ADR-033 recorded.
+  one and the `SUBJECT_POLICY_CHANGED` one ADR-033 recorded. *Closed the same day by ADR-036, below.*
 - **There is no route that deletes a contract**, so a run of the browser suite leaves its contracts behind. This spec makes
   three per run (see the e2e README), and the first two runs of it, which were red while it was being written, left a few more.
 - **A dependency advisory broke a fresh restore** — see the next section and the holes table.
@@ -969,7 +1024,7 @@ These matter more than the two lists above, because the surface exists and looks
 | **Approval reviewers do not exist** | Anyone with `subject:admin` can approve anything. A reviewer *set* was deferred to M8 and M8 did not build it. |
 | ~~A contract's bindings cannot be edited or removed~~ | **Closed 2026-10-14** ([ADR-035](adr/035-contract-bindings-have-an-identity.md)): every binding has an id, and `PUT`/`DELETE` on `…/publishes/{id}` and `…/consumes/{id}` change its subjects and precedence or remove it, with the overlap rule run again for an edit. A binding added without a precedence can now be given one, and the overlapping binding that was refused is then accepted. What it was: there was an `add` endpoint for each kind and nothing else, so a binding added without a precedence could never be separated from a later overlapping one, and the registry's own refusal says to "give the two bindings different precedence values". Found by the web app's first real overlap test (2026-10-13). |
 | ~~Dependency advisories are live, and an audit finding is an error~~ | **Closed 2026-10-14 for detection, not for repair.** Found the same day: NuGet audit runs at restore and `TreatWarningsAsErrors` makes a finding fatal, so an advisory published against any package, transitive ones included, breaks the next fresh restore with no change to the repository, as five against `System.Security.Cryptography.Pkcs`/`.Xml` did (pinned forward, `82656ca`). [`dependency-audit.yml`](../.github/workflows/dependency-audit.yml) now restores the solution every day at 05:41 UTC, with nothing cached, and opens a GitHub issue (or comments on the open one) naming the NU19xx codes and the packages. **It detects; it does not fix.** A human still has to pin the package forward, and an advisory published at 05:42 still waits up to a day for the report, so a push can still be the first thing to find it. **Not verified: the workflow itself has never run on GitHub** (nothing is pushed); the script that does the work was run here against a real restore, the issue sequence only against a fake `gh`. Scheduled workflows are switched off by GitHub after 60 days without repository activity. A lock file is still not an option (`RestorePackagesWithLockFile` breaks solution restore on SDK 10.0.301). |
-| **The audit read throws on an action its build does not know** | `AuditEntryConfiguration` throws on a stored action it was not taught, so rolling back past a change that adds an action breaks the audit page for as long as such a row exists (ADR-033, ADR-035). The notification pump and the subscription read were made tolerant on 2026-10-14; this one was not. The web app already shows an unknown action as received. Separable. |
+| ~~The audit read throws on an action its build does not know~~ | **Closed 2026-10-14** by [ADR-036](adr/036-the-audit-read-tolerates-an-action-its-build-does-not-know.md): `AuditEntry` holds the stored token, `Action` is a nullable view of it, and `GET /v1/audit` returns a row it cannot name as stored (measured: 500 before, 200 after, on the real registry with `A_FUTURE_ACTION` inserted by SQL). Pinned by `ARowWhoseActionThisBuildWasNeverTaughtIsReadAsReceivedAndTheRestUnchanged` (real PostgreSQL). **It protects a rollback to a build that contains it**; rolling back to `612f7c8` or earlier keeps the old behaviour (ADR-033 and ADR-035 carry dated amendments). Filtering by an unknown action is still refused, by decision. |
 | ~~No screen creates a subject~~ | **Closed 2026-10-13** by `/subjects/new-subject` ([ADR-030](adr/030-create-subject-screen.md)): M4's exit criterion had been recorded as met when its first step was not, and the list's "New subject" was a button with no handler. What is left of it is the next row. |
 | ~~No screen edits a subject afterwards~~ | **Closed 2026-10-13** by the panels on a subject's page ([ADR-032](adr/032-subject-settings.md)): Change owner (`subject:write` or `subject:admin`) and Change policy (`subject:admin`), each two clicks, each saying only what the registry was measured to do. Name, format and content model remain permanent (probed: `PATCH` ignores them and answers 200). **Deprecating and retiring are left out on purpose**: neither can be undone, and deprecating notifies every subscriber. The CLI still edits neither. |
 | ~~A subject with no policy of its own is judged by `BACKWARD · WIRE_JSON`, not by its environment's default~~ | **Closed 2026-10-13** by [ADR-033](adr/033-inherit-means-the-environments-default.md): registration, the dry-run `check` and the diff read the environment's default, through `EnvironmentPolicies.EffectiveFor`, as impact analysis and promotion always did. **A behaviour change** for every environment whose default is not the built-in (see the section at the top for what to check). Pinned by `InheritedPolicyApiTests`, the three handler test classes, and `e2e/subject-settings.spec.ts` and `e2e/environment-default.spec.ts`. |

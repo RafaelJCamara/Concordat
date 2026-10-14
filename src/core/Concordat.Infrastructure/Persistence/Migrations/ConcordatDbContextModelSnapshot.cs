@@ -120,7 +120,7 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("audit_id");
 
-                    b.Property<string>("Action")
+                    b.Property<string>("ActionToken")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")

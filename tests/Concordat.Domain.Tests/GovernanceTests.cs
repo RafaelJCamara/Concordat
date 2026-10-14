@@ -162,6 +162,79 @@ public class AuditEntryTests
     }
 
     [Fact]
+    public void ARecordedEntryStoresTheTokenOfItsActionAndResolvesBackToIt()
+    {
+        // The token is the entry's identity as a record and the enum is a view of it (ADR-036),
+        // so every member a build can record must survive being written as text and read back.
+        foreach (var action in Enum.GetValues<AuditAction>())
+        {
+            var entry = AuditEntry.Record(null, action, Actor, "x", Now);
+
+            Assert.Equal(AuditTokens.For(action), entry.ActionToken);
+            Assert.Equal(action, entry.Action);
+        }
+    }
+
+    [Fact]
+    public void AnEntryWhoseActionThisBuildWasNeverTaughtIsStillAnEntry()
+    {
+        // What a build older than the one that wrote the row reads (a rollback, or an old
+        // instance beside a new one). It used to throw; the row is valid, the build is behind.
+        var id = Guid.CreateVersion7();
+        var environment = EnvironmentId.New();
+
+        var entry = AuditEntry.FromStorage(
+            id, environment, "A_FUTURE_ACTION", Actor, "acme.Orders", "from a newer build", Now);
+
+        Assert.Equal("A_FUTURE_ACTION", entry.ActionToken);
+        Assert.Null(entry.Action);
+        Assert.Equal(id, entry.Id);
+        Assert.Equal(environment, entry.EnvironmentId);
+        Assert.Equal(Actor, entry.Actor);
+        Assert.Equal("acme.Orders", entry.Target);
+        Assert.Equal("from a newer build", entry.Detail);
+        Assert.Equal(Now, entry.At);
+    }
+
+    [Theory]
+    [InlineData("A_FUTURE_ACTION")]
+    [InlineData("a_future_action")]
+    [InlineData(" SPACED ")]
+    [InlineData("constructor")]
+    [InlineData("SUBJECT_DELETED")]
+    public void AnUnknownTokenIsKeptExactlyAsStored(string token)
+    {
+        // "As received" is the whole requirement: no trimming, no case change, no normalising
+        // towards a member that looks close.
+        var entry = AuditEntry.FromStorage(Guid.CreateVersion7(), null, token, Actor, "x", null, Now);
+
+        Assert.Equal(token, entry.ActionToken);
+        Assert.Null(entry.Action);
+    }
+
+    [Fact]
+    public void AKnownTokenSpeltByHandStillResolvesAndIsKeptAsStored()
+    {
+        // Resolution is as forgiving as the filter is, but the stored text is not rewritten: the
+        // wire form of a known action is chosen from the enum, not from this property.
+        var entry = AuditEntry.FromStorage(
+            Guid.CreateVersion7(), null, "subject_created", Actor, "x", null, Now);
+
+        Assert.Equal(AuditAction.SubjectCreated, entry.Action);
+        Assert.Equal("subject_created", entry.ActionToken);
+    }
+
+    [Fact]
+    public void AnEntryHasNoWayToBeGivenADifferentActionAfterItIsBuilt()
+    {
+        // The trail is append-only and the unknown row must stay the row it was written as. The
+        // property has no setter of any visibility, so a tracked read cannot rewrite it either.
+        var property = typeof(AuditEntry).GetProperty(nameof(AuditEntry.ActionToken))!;
+
+        Assert.Null(property.SetMethod);
+    }
+
+    [Fact]
     public void AnEntryNeedNotBelongToAnEnvironment()
     {
         var entry = AuditEntry.Record(null, AuditAction.EnvironmentCreated, Actor, "prod", Now);

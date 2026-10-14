@@ -54,7 +54,8 @@ internal sealed class AuditLog(ConcordatDbContext context) : IAuditLog
 
         if (filter.Action is { } action)
         {
-            query = query.Where(e => e.Action == action);
+            var token = AuditTokens.For(action);
+            query = query.Where(e => e.ActionToken == token);
         }
 
         if (filter.Target is { } target)
