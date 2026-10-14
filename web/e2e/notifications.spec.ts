@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { READER_STORAGE_STATE } from './global-setup';
+import { deleteSubscriptionsAt, ownerCredential } from './registry';
 
 /**
  * Notification subscriptions, against a registry that validates the endpoint.
@@ -11,6 +12,12 @@ import { READER_STORAGE_STATE } from './global-setup';
  * wherever it points. The webhook points at a closed local port for the same reason: nothing
  * leaves the machine. Run serially and cleaned up in the last tests, so what the registry holds
  * afterwards is what it held before.
+ *
+ * <b>And again in an `afterAll`, because the block is serial and a red test skips the tests that
+ * delete.</b> The first run of the new-event test against a registry that refused it left an
+ * unfiltered email subscription and a webhook live in `dev`, and the registry delivered to them for
+ * the rest of the run. The `afterAll` removes whatever this block made by endpoint, which is a
+ * no-op when the delete tests ran.
  */
 const RUN = Date.now();
 const EMAIL = `e2e-notify-${RUN}@concordat.test`;
@@ -18,6 +25,10 @@ const HOOK = 'https://127.0.0.1:1/e2e-hook';
 const HOOK_POLICY = 'https://127.0.0.1:1/e2e-policy-change-hook';
 
 test.describe.serial('notifications', () => {
+  test.afterAll(async () => {
+    await deleteSubscriptionsAt(await ownerCredential(), 'dev', [EMAIL, HOOK, HOOK_POLICY]);
+  });
+
   test('is a settings tab, marked as the current page', async ({ page }) => {
     await page.goto('/settings/notifications');
 

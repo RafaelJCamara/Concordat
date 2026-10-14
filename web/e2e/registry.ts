@@ -810,3 +810,42 @@ export async function checkSchema(
 
   return (await response.json()) as CheckVerdict;
 }
+
+/**
+ * Deletes the notification subscriptions in an environment that point at any of the given
+ * endpoints, and returns how many it deleted.
+ *
+ * <b>For a spec to clean up after itself even when it failed.</b> A live subscription is delivered
+ * to by the registry's background pump, so one left behind is sent traffic for the rest of the run
+ * and after it, and `notifications.spec.ts` is serial: a red test skips the tests that delete.
+ * Matches by endpoint and never by position, so it cannot take a subscription somebody else made.
+ */
+export async function deleteSubscriptionsAt(
+  credential: string,
+  environment: string,
+  endpoints: readonly string[],
+): Promise<number> {
+  const headers = { authorization: `Bearer ${credential}` };
+  const listed = await call(`/v1/environments/${environment}/notifications`, { headers });
+
+  if (!listed.ok) {
+    throw new Error(`Listing the subscriptions in '${environment}' answered ${listed.status}.`);
+  }
+
+  const mine = ((await listed.json()) as { id: string; endpoint: string }[]).filter((s) =>
+    endpoints.includes(s.endpoint),
+  );
+
+  for (const subscription of mine) {
+    const deleted = await call(`/v1/environments/${environment}/notifications/${subscription.id}`, {
+      method: 'DELETE',
+      headers,
+    });
+
+    if (!deleted.ok && deleted.status !== 404) {
+      throw new Error(`Deleting subscription '${subscription.id}' answered ${deleted.status}.`);
+    }
+  }
+
+  return mine.length;
+}

@@ -156,14 +156,17 @@ append-only. So the two specs about it follow the rule creating one does, and ad
   `SUBJECT_POLICY_CHANGED` row attributed to the same account and reading `policy <old> -> <new>`. They
   are what stop a sentence on the screen from going stale when the registry starts recording more.
 
-**Notification subscriptions are the one thing a spec makes and then deletes, and a red run can skip the delete.**
+**Notification subscriptions are the one thing a spec makes and then deletes, and an `afterAll` deletes them even when a test fails.**
 `notifications.spec.ts` creates an email subscription with no event filter, a webhook to a closed local port and (since
 [ADR-034](../../docs/adr/034-a-policy-change-notifies-subscribers.md)) a second webhook listing only
 `SUBJECT_POLICY_CHANGED`, and deletes all three in its last tests. They are not permanent fixtures because a live
 subscription is delivered to by the registry's background pump, and the specs after it change policies and register
-versions: an unfiltered one is told of every one of them, a policy change included. The block is serial, so **a test that
-fails before the deletes leaves them live in `dev`**; list `GET /v1/environments/dev/notifications` and delete what is
-there (the owner credential is in `e2e/.auth/owner-credential.txt`) before the next run. The new-event test is
+versions: an unfiltered one is told of every one of them, a policy change included. The block is serial, so a test that
+fails before the deletes skips them, which used to leave all three live in `dev`; an `afterAll` now deletes whatever the
+block made, by endpoint (`deleteSubscriptionsAt` in `registry.ts`), so a red run leaves nothing. It is a no-op when the
+delete tests ran. It cannot run if the process is killed, so after a killed run list
+`GET /v1/environments/dev/notifications` and delete what is there (the owner credential is in
+`e2e/.auth/owner-credential.txt`). The new-event test is
 deliberately about the _screen and the registry agreeing on the token_ (the registry answers `400` for a token it does
 not know) and not about a message being staged: a browser reading `GET /v1/notifications/outbox` races the pump, which
 drains it every fifteen seconds, so that claim is the .NET suite's (`APolicyChangeStagesExactlyOneNotification`,
