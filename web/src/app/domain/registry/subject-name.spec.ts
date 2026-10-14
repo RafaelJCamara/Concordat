@@ -3,6 +3,7 @@ import { isRegistryWhitespace, trimRegistryText } from './registry-text';
 import {
   SUBJECT_NAME_MAX_LENGTH,
   checkSubjectName,
+  checkSubjectNamePrefix,
   slugSubjectName,
   type SubjectNameCheck,
 } from './subject-name';
@@ -283,6 +284,97 @@ describe('slugSubjectName', () => {
 function messageOf(check: SubjectNameCheck): string {
   return check.ok ? '' : check.message;
 }
+
+describe('checkSubjectNamePrefix', () => {
+  // The registry's `SubjectNamePrefix` is the same rule: a prefix is possible when it is a valid
+  // name, or a valid name and one more dot. This file is the fast half; it only ever words an
+  // empty result, so a row going wrong here changes a sentence and not a search (ADR-038).
+
+  it.each([
+    'a',
+    'acme',
+    'acme.',
+    'acme.orders',
+    'acme.orders.',
+    'acme.orders.OrderCreated',
+    'Acme_1.x_',
+    '_',
+    'a_',
+  ])('lets %j through, as the registry will', (text) => {
+    expect(checkSubjectNamePrefix(text)).toEqual({ possible: true, prefix: text });
+  });
+
+  it('treats nothing as possible, because nothing is no filter', () => {
+    expect(checkSubjectNamePrefix('')).toEqual({ possible: true, prefix: '' });
+    expect(checkSubjectNamePrefix('   ')).toEqual({ possible: true, prefix: '' });
+  });
+
+  it('trims as the registry does and keeps the case', () => {
+    expect(checkSubjectNamePrefix('  Acme.Orders. ')).toEqual({
+      possible: true,
+      prefix: 'Acme.Orders.',
+    });
+    // U+0085 is white space to the registry and not to JavaScript's own trim.
+    expect(checkSubjectNamePrefix(`${at(0x85)}acme${at(0x85)}`)).toEqual({
+      possible: true,
+      prefix: 'acme',
+    });
+  });
+
+  it.each([
+    ['acme-orders', "'-' (U+002D)"],
+    ['acme orders', 'A space'],
+    ['acme%', "'%' (U+0025)"],
+    ['acme\\', "'\\' (U+005C)"],
+    ['acme*', "'*' (U+002A)"],
+    ['acme,orders', "',' (U+002C)"],
+    ['café', "'é' (U+00E9)"],
+  ])('names the character that rules %j out', (text, described) => {
+    const check = checkSubjectNamePrefix(text);
+
+    expect(check.possible).toBe(false);
+    expect(check).toMatchObject({ message: expect.stringContaining(described) });
+  });
+
+  it('describes a character that cannot be printed by its code point', () => {
+    const check = checkSubjectNamePrefix(`acme${at(0)}`);
+
+    expect(check).toMatchObject({ possible: false, message: expect.stringContaining('U+0000') });
+  });
+
+  it('does not echo a lone surrogate into the sentence', () => {
+    const check = checkSubjectNamePrefix(`acme${at(0xd800)}`);
+
+    expect(check.possible).toBe(false);
+    expect(isWellFormed((check as { message: string }).message)).toBe(true);
+  });
+
+  it('says what is wrong with the dots when every character is allowed', () => {
+    expect(checkSubjectNamePrefix('.acme')).toMatchObject({
+      possible: false,
+      message: 'A subject name cannot start with a dot.',
+    });
+    expect(checkSubjectNamePrefix('acme..')).toMatchObject({
+      possible: false,
+      message: 'A subject name cannot have two dots in a row.',
+    });
+    expect(checkSubjectNamePrefix('acme..orders')).toMatchObject({ possible: false });
+    expect(checkSubjectNamePrefix('.')).toMatchObject({ possible: false });
+  });
+
+  it('bounds a prefix by the longest name, and leaves a trailing dot room for one more character', () => {
+    expect(checkSubjectNamePrefix('a'.repeat(SUBJECT_NAME_MAX_LENGTH)).possible).toBe(true);
+    expect(checkSubjectNamePrefix('a'.repeat(SUBJECT_NAME_MAX_LENGTH + 1)).possible).toBe(false);
+    // A trailing dot promises one more character after it, so the last prefix that can still be
+    // completed is 511 characters, which is where the registry draws the line too.
+    expect(checkSubjectNamePrefix(`${'a'.repeat(SUBJECT_NAME_MAX_LENGTH - 2)}.`).possible).toBe(
+      true,
+    );
+    expect(checkSubjectNamePrefix(`${'a'.repeat(SUBJECT_NAME_MAX_LENGTH - 1)}.`).possible).toBe(
+      false,
+    );
+  });
+});
 
 /** `String.prototype.isWellFormed`, spelled out for the library target. */
 function isWellFormed(text: string): boolean {

@@ -195,6 +195,13 @@ public sealed class ConcordatDbContext : DbContext, IDataProtectionKeyContext
             s => EF.Property<Guid>(s, NotificationSubscriptionConfiguration.TenantIdProperty) ==
                  CurrentTenant.Value);
 
+        // starts_with, for the prefix filter: see ConcordatDbFunctions.StartsWith for why a
+        // value-converted column needs a mapped function rather than string.StartsWith.
+        modelBuilder.HasDbFunction(
+                typeof(ConcordatDbFunctions).GetMethod(
+                    nameof(ConcordatDbFunctions.StartsWith), [typeof(string), typeof(string)])!)
+            .HasName("starts_with").IsBuiltIn();
+
         base.OnModelCreating(modelBuilder);
     }
 

@@ -13,6 +13,10 @@ import { HlmSkeleton } from '@spartan-ng/helm/skeleton';
 import { IfScope } from '../../../core/auth/if-scope';
 import { ActiveEnvironmentStore } from '../../../core/config/active-environment-store';
 import { SCHEMA_WRITE_SCOPES } from '../../../domain/identity/scope';
+import {
+  SUBJECT_NAME_MAX_LENGTH,
+  checkSubjectNamePrefix,
+} from '../../../domain/registry/subject-name';
 import { Icon } from '../../../shared/ui/icon/icon';
 import { SubjectListStore } from '../application/subject-list-store';
 import { SubjectTable } from '../ui/subject-table';
@@ -31,6 +35,14 @@ import { SubjectTable } from '../ui/subject-table';
  * which until 2026-10-13 did not exist, so this control sat here for a writer to press and did
  * nothing at all. The empty list carries the same action, because "nothing is wrong, there is
  * simply nothing here" is a sentence that wants its next step beside it.
+ *
+ * **The search box is the registry's prefix filter** (ADR-038), not a filter over what is on
+ * screen. It used to match anywhere in a name or its owner, ignoring case, over the list already
+ * in memory, and said it would have to move to the server the day the list was paged; the
+ * registry now answers it, ordinal and case-sensitive like the names themselves. Two
+ * consequences are deliberate: what it finds is what the registry finds (so it cannot go wrong
+ * when the list grows), and it no longer matches on the owner or in the middle of a name — both
+ * are things this screen said it did and no longer says.
  */
 @Component({
   selector: 'cd-subject-list-page',
@@ -64,6 +76,49 @@ import { SubjectTable } from '../ui/subject-table';
         </a>
       </header>
 
+      <!--
+        Outside the branches below, and that is the point. The box is typed into: a search
+        replaces the rows, and a box that lived in the same branch as the rows (or as the empty
+        state a search that found nothing produces) would be unmounted by its own answer and take
+        the cursor with it. It is absent only where there is nothing to search: before the first
+        answer, and in an environment that has no subjects at all.
+      -->
+      @if (showSearch()) {
+        <div class="max-w-md">
+          <div class="relative">
+            <span
+              class="text-muted-foreground pointer-events-none absolute inset-y-0 left-3 flex items-center"
+            >
+              <cd-icon name="search" size="1rem" />
+            </span>
+            <input
+              type="search"
+              [value]="query()"
+              (input)="onInput($event)"
+              placeholder="Name starts with…"
+              aria-label="Search subjects by the start of their name"
+              autocomplete="off"
+              spellcheck="false"
+              [attr.maxlength]="maxLength"
+              class="border-input bg-background focus-visible:ring-ring h-9 w-full rounded-md border ps-10 pe-3 font-mono text-sm focus-visible:ring-1 focus-visible:outline-none"
+            />
+          </div>
+          <!--
+            Said where it is read, because the box looks like a search and behaves like a prefix:
+            somebody who types the middle of a name and gets nothing needs to know why before
+            they suspect the registry has lost it.
+          -->
+          <p class="text-muted-foreground mt-1.5 text-xs" aria-live="polite">
+            @if (store.shown() === '') {
+              Matches the start of a name, and the case you type.
+            } @else if (!store.noMatches() && !store.error()) {
+              {{ count() }} starting with
+              <span class="text-foreground font-mono break-all">{{ store.shown() }}</span>
+            }
+          </p>
+        </div>
+      }
+
       @if (store.error(); as error) {
         <div hlmAlert variant="destructive">
           <h2 hlmAlertTitle>Could not load subjects</h2>
@@ -72,7 +127,7 @@ import { SubjectTable } from '../ui/subject-table';
             Try again
           </button>
         </div>
-      } @else if (store.loading()) {
+      } @else if (store.loading() && !store.searching()) {
         <div class="space-y-2" aria-busy="true" aria-live="polite">
           @for (row of skeletonRows; track row) {
             <div hlmSkeleton class="h-10 w-full"></div>
@@ -96,38 +151,38 @@ import { SubjectTable } from '../ui/subject-table';
             Create the first subject
           </a>
         </div>
+      } @else if (store.noMatches()) {
+        <!-- A status, so the empty answer is announced: the caption under the box is silent here. -->
+        <div role="status" class="border-border bg-card rounded-xl border p-10 text-center">
+          <p class="font-medium">
+            No subject names start with
+            <span class="font-mono break-all">“{{ store.shown() }}”</span>
+          </p>
+          <p class="text-muted-foreground mt-1 text-sm">
+            @if (impossibleReason(); as reason) {
+              {{ reason }}
+            } @else {
+              Names are case-sensitive, so <span class="font-mono">Order</span> does not find
+              <span class="font-mono">order</span>, and the search matches the start of a name — not
+              the owner, and not the middle.
+            }
+          </p>
+          <button hlmBtn variant="outline" size="sm" class="mt-4" (click)="clear()">
+            Clear search
+          </button>
+        </div>
       } @else {
         <!--
-          Filtering is client-side over the list already in memory, which is right while the
-          whole list is one request and wrong the moment it is paginated. Whoever adds
-          paging has to move this to the server, or the box will quietly search one page.
+          Kept on screen while the next answer is awaited, and dimmed: replacing it with a
+          skeleton at every pause in typing would flash the table, and the rows that are there are
+          the best answer available until the right ones arrive.
         -->
-        <div class="relative max-w-md">
-          <span
-            class="text-muted-foreground pointer-events-none absolute inset-y-0 left-3 flex items-center"
-          >
-            <cd-icon name="search" size="1rem" />
-          </span>
-          <input
-            type="search"
-            [value]="query()"
-            (input)="query.set(inputValue($event))"
-            placeholder="Search subjects…"
-            aria-label="Search subjects"
-            class="border-input bg-background focus-visible:ring-ring h-9 w-full rounded-md border ps-10 pe-3 text-sm focus-visible:ring-1 focus-visible:outline-none"
-          />
+        <div
+          [attr.aria-busy]="store.searching()"
+          [class]="store.searching() ? 'opacity-60 transition-opacity' : 'transition-opacity'"
+        >
+          <cd-subject-table [subjects]="store.subjects()" />
         </div>
-
-        @if (matches().length === 0) {
-          <div class="border-border bg-card rounded-xl border p-10 text-center">
-            <p class="font-medium">No subjects match “{{ query() }}”</p>
-            <p class="text-muted-foreground mt-1 text-sm">
-              Filtering matches on the subject name and its owner.
-            </p>
-          </div>
-        } @else {
-          <cd-subject-table [subjects]="matches()" />
-        }
       }
     </section>
   `,
@@ -142,28 +197,38 @@ export class SubjectListPage {
   /** The scopes that permit creating a subject, from the one list (ADR-018). */
   protected readonly schemaWriteScopes = SCHEMA_WRITE_SCOPES;
 
+  /**
+   * No name is longer, so no prefix is: a box that took more would send a request line the
+   * server may refuse outright (414 past about 8 KB) for an answer that is always an empty list.
+   */
+  protected readonly maxLength = SUBJECT_NAME_MAX_LENGTH;
+
+  /** What the box holds, exactly as typed. The store trims it; the box is not reformatted. */
   protected readonly query = signal('');
 
   /**
-   * Subjects matching the search box, on name or owner.
-   *
-   * Case-insensitive and substring rather than prefix, because subject names are dotted
-   * paths — someone looking for `acme.orders.OrderCreated` types "ordercreated" far more
-   * often than they type the namespace it lives under.
+   * Whether there is anything to search. The box is there once an answer has come and the
+   * environment has subjects — or has been searched, so that a search which found nothing (and
+   * an environment that, as far as one prefix can tell, is empty) never takes the box away from
+   * the person who needs it to type something else.
    */
-  protected readonly matches = computed(() => {
-    const query = this.query().trim().toLowerCase();
+  protected readonly showSearch = computed(() => this.store.loaded() && !this.store.isEmpty());
 
-    if (query === '') {
-      return this.store.subjects();
-    }
+  /** "3 subjects", for the line under the box. */
+  protected readonly count = computed(() => {
+    const n = this.store.subjects().length;
 
-    return this.store
-      .subjects()
-      .filter(
-        (subject) =>
-          subject.name.toLowerCase().includes(query) || subject.owner.toLowerCase().includes(query),
-      );
+    return n === 1 ? '1 subject' : `${n} subjects`;
+  });
+
+  /**
+   * Why the prefix that matched nothing could never have matched, or null when it could have
+   * (and simply did not). Only ever words an empty answer: the search was sent regardless.
+   */
+  protected readonly impossibleReason = computed(() => {
+    const check = checkSubjectNamePrefix(this.store.shown());
+
+    return check.possible ? null : check.message;
   });
 
   constructor() {
@@ -176,7 +241,15 @@ export class SubjectListPage {
     });
   }
 
-  protected inputValue(event: Event): string {
-    return (event.target as HTMLInputElement).value;
+  protected onInput(event: Event): void {
+    const text = (event.target as HTMLInputElement).value;
+
+    this.query.set(text);
+    this.store.search(text);
+  }
+
+  protected clear(): void {
+    this.query.set('');
+    this.store.search('');
   }
 }

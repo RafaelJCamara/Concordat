@@ -24,6 +24,18 @@ public interface ISubjectRepository
     Task<IReadOnlyList<Subject>> ListAsync(
         EnvironmentId environmentId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Lists the subjects in an environment whose name begins with a prefix, ordered by name.
+    /// </summary>
+    /// <param name="environmentId">The environment.</param>
+    /// <param name="prefix">The prefix. Compared <b>ordinally and case-sensitively</b>: names are
+    /// case-sensitive, so <c>Order</c> does not find <c>ordercreated</c>. It is a literal, never a
+    /// pattern, and the type cannot hold a character that would be one (ADR-038).</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The matching subjects.</returns>
+    Task<IReadOnlyList<Subject>> ListByPrefixAsync(
+        EnvironmentId environmentId, SubjectNamePrefix prefix, CancellationToken cancellationToken);
+
     /// <summary>Stages a new subject for insert.</summary>
     /// <param name="subject">The subject.</param>
     void Add(Subject subject);

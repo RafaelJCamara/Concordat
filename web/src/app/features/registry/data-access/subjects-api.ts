@@ -40,10 +40,24 @@ export class SubjectsApi {
   private readonly http = inject(HttpClient);
   private readonly config = inject(CONCORDAT_CONFIG);
 
-  /** Every subject in an environment, retired ones included. */
-  listSubjects(environment: string): Observable<readonly Subject[]> {
+  /**
+   * The subjects in an environment, retired ones included.
+   *
+   * With a `prefix`, only those whose name begins with it, and **the registry does the
+   * filtering** (ADR-038): ordinal and case-sensitive, because names are, and a literal, so `_`
+   * matches only an underscore. A caller that filtered this list itself would be wrong the moment
+   * it is paged, and would be answering a different question than the registry (the box used to
+   * match anywhere in a name, ignoring case).
+   *
+   * The prefix is sent as given. The registry trims it and answers an empty list for text no name
+   * could start with, so nothing is validated here; an empty or absent prefix sends no parameter
+   * at all, which is the request this method has always made.
+   */
+  listSubjects(environment: string, prefix?: string): Observable<readonly Subject[]> {
+    const params = prefix ? { prefix } : undefined;
+
     return this.http
-      .get<readonly SubjectDto[]>(`${this.root(environment)}/subjects`)
+      .get<readonly SubjectDto[]>(`${this.root(environment)}/subjects`, { params })
       .pipe(map((dtos) => dtos.map(toSubject)));
   }
 

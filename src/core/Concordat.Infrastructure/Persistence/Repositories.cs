@@ -26,6 +26,24 @@ internal sealed class SubjectRepository(ConcordatDbContext context) : ISubjectRe
             .ConfigureAwait(false);
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<Subject>> ListByPrefixAsync(
+        EnvironmentId environmentId, SubjectNamePrefix prefix, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(prefix);
+
+        // The tenant filter is the context's global query filter, so it is ANDed in whatever
+        // this predicate is. Ordered by the same expression as the unfiltered list so a client
+        // that switches between the two sees the same order.
+        return await context.Subjects
+            .Where(s => s.EnvironmentId == environmentId
+                && ConcordatDbFunctions.StartsWith(
+                    EF.Property<string>(s, nameof(Subject.Name)), prefix.Value))
+            .OrderBy(s => s.Name)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public void Add(Subject subject) => context.Subjects.Add(subject);
 }
 

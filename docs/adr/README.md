@@ -51,3 +51,4 @@ it; write a new one and mark the old **Superseded by**.
 | [034](034-a-policy-change-notifies-subscribers.md) | A subject's policy change notifies subscribers, and a subscription with no event filter is one | Accepted |
 | [035](035-contract-bindings-have-an-identity.md) | A contract's bindings have an identity, and can be changed and removed | Accepted |
 | [036](036-the-audit-read-tolerates-an-action-its-build-does-not-know.md) | The audit read returns an action its build does not know, as stored | Accepted |
+| [038](038-subject-prefix-search.md) | Subjects are searched by the start of their name, and the registry does the searching | Accepted |

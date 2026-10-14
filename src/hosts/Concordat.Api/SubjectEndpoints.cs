@@ -32,6 +32,15 @@ public static class SubjectEndpoints
 
         group.MapGet("/", ListSubjects)
             .WithSummary("List subjects in an environment")
+            .WithDescription(
+                "With `prefix`, only the subjects whose name begins with it: ordinal and " +
+                "case-sensitive, because subject names are (`OrderCreated` and `ordercreated` are " +
+                "different subjects), and a literal rather than a pattern, so `_` matches only an " +
+                "underscore. Surrounding whitespace is trimmed, as it is in a subject name. A prefix " +
+                "with nothing after it, or none, lists every subject. A prefix no subject name " +
+                "could begin with (a hyphen, two dots in a row, a wildcard, text that is not " +
+                "well-formed) is not an error: it lists nothing. A prefix does not have to end at a " +
+                "dot, so `acme.ord` finds `acme.orders.OrderCreated`.")
             .Produces<IReadOnlyList<SubjectResponse>>()
             .RequireScope(Scope.SubjectRead);
 
@@ -186,12 +195,14 @@ public static class SubjectEndpoints
 
     private static async Task<IResult> ListSubjects(
         string env,
+        string? prefix,
         IDispatcher dispatcher,
         IEnvironmentResolver environments,
         CancellationToken cancellationToken)
     {
         var result = await dispatcher.QueryAsync(
-            new ListSubjectsQuery(environments.Resolve(env)), cancellationToken).ConfigureAwait(false);
+            new ListSubjectsQuery(environments.Resolve(env), prefix), cancellationToken)
+            .ConfigureAwait(false);
 
         return result.IsFailure
             ? ProblemDetailsMapping.From(result.Error!)

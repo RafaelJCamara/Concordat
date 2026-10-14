@@ -27,6 +27,10 @@ public class ReadHandlerTests
         new ListSubjectsHandler(_subjects).HandleAsync(
             new ListSubjectsQuery(environment ?? _environment), CancellationToken.None);
 
+    private Task<Result<IReadOnlyList<Subject>>> ListByPrefixAsync(string? prefix) =>
+        new ListSubjectsHandler(_subjects).HandleAsync(
+            new ListSubjectsQuery(_environment, prefix), CancellationToken.None);
+
     private Task<Result<Schema>> GetSchemaAsync(string id) =>
         new GetSchemaHandler(_schemas).HandleAsync(
             new GetSchemaQuery(id), CancellationToken.None);
@@ -100,6 +104,103 @@ public class ReadHandlerTests
         var result = await ListAsync();
 
         Assert.Equal("acme.a.One", Assert.Single(result.Value).Name.Value);
+    }
+
+    // ------------------------------------------- list subjects by prefix (ADR-038)
+
+    private void SeedPrefixSubjects() => _subjects
+        .Seed(Build.Subject(_environment, "acme.orders.OrderCreated"))
+        .Seed(Build.Subject(_environment, "acme.orders.OrderShipped"))
+        .Seed(Build.Subject(_environment, "acme.billing.InvoiceRaised"))
+        .Seed(Build.Subject(_environment, "acme.ordersnot.Other"))
+        .Seed(Build.Subject(_environment, "Acme.orders.Capital"))
+        .Seed(Build.Subject(EnvironmentId.New(), "acme.orders.ElsewhereOnly"));
+
+    [Fact]
+    public async Task APrefix_ListsOnlyTheNamesThatBeginWithIt_InThisEnvironment()
+    {
+        SeedPrefixSubjects();
+
+        var result = await ListByPrefixAsync("acme.orders.");
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Equal(
+            ["acme.orders.OrderCreated", "acme.orders.OrderShipped"],
+            result.Value.Select(s => s.Name.Value));
+    }
+
+    [Fact]
+    public async Task ThePrefixIsCaseSensitive()
+    {
+        SeedPrefixSubjects();
+
+        // Subject names are case-sensitive: Acme.orders.Capital and acme.orders.* are different
+        // subjects, so neither prefix may find the other's.
+        Assert.Equal(
+            ["Acme.orders.Capital"],
+            (await ListByPrefixAsync("Acme.")).Value.Select(s => s.Name.Value));
+        Assert.Empty((await ListByPrefixAsync("ACME.")).Value);
+    }
+
+    [Fact]
+    public async Task ThePrefixIsNotASegmentBoundary()
+    {
+        SeedPrefixSubjects();
+
+        // "acme.orders" is a prefix of "acme.ordersnot.Other" too. A search box finds names as they
+        // are typed, mid-segment; it is not a namespace browser. The dot is what the caller adds
+        // to say they mean the namespace.
+        var names = (await ListByPrefixAsync("acme.orders")).Value.Select(s => s.Name.Value).ToList();
+
+        Assert.Contains("acme.ordersnot.Other", names);
+        Assert.Equal(3, names.Count);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task NoPrefix_IsTheUnfilteredList_ThroughTheOriginalRead(string? prefix)
+    {
+        SeedPrefixSubjects();
+
+        var result = await ListByPrefixAsync(prefix);
+
+        Assert.Equal(5, result.Value.Count);
+        Assert.Equal(1, _subjects.Listings);
+        Assert.Empty(_subjects.PrefixesAsked);
+    }
+
+    [Theory]
+    [InlineData("acme.orders.%")]
+    [InlineData("%")]
+    [InlineData("acme-orders")]
+    [InlineData("acme..")]
+    [InlineData(".")]
+    public async Task APrefixNoNameCouldStartWith_IsAnEmptyListNotAnErrorAndNeverReachesTheStore(string prefix)
+    {
+        SeedPrefixSubjects();
+
+        // A filter is not a lookup: the true answer to "which subjects begin with this" is none,
+        // and a search box is typed into one character at a time, so refusing "acme-" would turn a
+        // keystroke into an error banner. And it must not be sent on: the store is only ever asked
+        // about text that is safe in a query.
+        var result = await ListByPrefixAsync(prefix);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Empty(result.Value);
+        Assert.Empty(_subjects.PrefixesAsked);
+        Assert.Equal(0, _subjects.Listings);
+    }
+
+    [Fact]
+    public async Task TheStoreIsAskedForTheTrimmedPrefix()
+    {
+        SeedPrefixSubjects();
+
+        await ListByPrefixAsync("  acme.billing.  ");
+
+        Assert.Equal(["acme.billing."], _subjects.PrefixesAsked);
     }
 
     // -------------------------------------------------------------- get schema

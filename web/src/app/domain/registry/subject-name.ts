@@ -82,16 +82,10 @@ const GRAMMAR =
  * a sentence is invisible. The offender is named by its code point as well.
  */
 function explainInvalidName(name: string): string {
-  for (let i = 0; i < name.length;) {
-    const point = name.codePointAt(i) as number;
-    const length = point > 0xffff ? 2 : 1;
-    const char = name.slice(i, i + length);
+  const offender = describeFirstDisallowedCharacter(name);
 
-    if (!/^[A-Za-z0-9_.]$/.test(char)) {
-      return `${describeCharacter(point, char)} is not allowed in a subject name. ${GRAMMAR}`;
-    }
-
-    i += length;
+  if (offender !== null) {
+    return `${offender} is not allowed in a subject name. ${GRAMMAR}`;
   }
 
   // Every character is allowed, so the fault is in how the dots sit.
@@ -104,6 +98,23 @@ function explainInvalidName(name: string): string {
   }
 
   return `A subject name cannot have two dots in a row. ${GRAMMAR}`;
+}
+
+/** The first character outside letters, digits, underscores and dots, described; or null. */
+function describeFirstDisallowedCharacter(text: string): string | null {
+  for (let i = 0; i < text.length;) {
+    const point = text.codePointAt(i) as number;
+    const length = point > 0xffff ? 2 : 1;
+    const char = text.slice(i, i + length);
+
+    if (!/^[A-Za-z0-9_.]$/.test(char)) {
+      return describeCharacter(point, char);
+    }
+
+    i += length;
+  }
+
+  return null;
 }
 
 function describeCharacter(point: number, char: string): string {
@@ -194,4 +205,69 @@ export function slugSubjectName(text: string): string {
     .map((segment) => segment.replace(BREAK_AT_EDGE, '').replaceAll(BREAK, '_'))
     .filter((segment) => segment !== '')
     .join('.');
+}
+
+/**
+ * A prefix is a valid name, or a valid name and one more dot: exactly the strings that are the
+ * start of some name. `SubjectNamePrefix` on the registry is the same rule.
+ */
+const PREFIX_PATTERN = /^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\.?$/;
+
+/** What the registry would make of a search prefix. */
+export type SubjectNamePrefixCheck =
+  | {
+      /** Some subject name could start with it. */
+      readonly possible: true;
+      /** The prefix as the registry will use it: trimmed, and its case untouched. */
+      readonly prefix: string;
+    }
+  | {
+      /** No subject name can start with it, so the registry will list nothing. */
+      readonly possible: false;
+      readonly message: string;
+    };
+
+/**
+ * Whether any subject name could begin with this text, and why not when none could (ADR-038).
+ *
+ * <b>It explains an empty result and never causes one</b>: the search is sent whatever this says,
+ * and the registry is the only thing that decides what a prefix finds. This only turns "nothing
+ * matched" into "nothing can match, and here is the character", which is the difference between
+ * a person suspecting the registry lost a subject and a person fixing a hyphen. That is also why
+ * it can never be too strict (ADR-028): a wrong verdict here changes a sentence, not a result.
+ *
+ * Case is kept, because names are case-sensitive and so is the search.
+ */
+export function checkSubjectNamePrefix(text: string): SubjectNamePrefixCheck {
+  const prefix = trimRegistryText(text);
+
+  // One character short when it ends in a dot: a dot promises another segment character, and the
+  // name that holds both is still at most SUBJECT_NAME_MAX_LENGTH long. The registry's rule.
+  const longest = prefix.endsWith('.') ? SUBJECT_NAME_MAX_LENGTH - 1 : SUBJECT_NAME_MAX_LENGTH;
+
+  if (prefix.length > longest) {
+    return impossible(
+      `No subject name that long exists: names are at most ${SUBJECT_NAME_MAX_LENGTH} characters, and this prefix is ${prefix.length}.`,
+    );
+  }
+
+  if (prefix === '' || PREFIX_PATTERN.test(prefix)) {
+    return { possible: true, prefix };
+  }
+
+  const offender = describeFirstDisallowedCharacter(prefix);
+
+  if (offender !== null) {
+    return impossible(`${offender} is not allowed in a subject name, so none can start with it.`);
+  }
+
+  if (prefix.startsWith('.')) {
+    return impossible('A subject name cannot start with a dot.');
+  }
+
+  return impossible('A subject name cannot have two dots in a row.');
+}
+
+function impossible(message: string): SubjectNamePrefixCheck {
+  return { possible: false, message };
 }

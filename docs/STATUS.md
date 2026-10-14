@@ -2,6 +2,7 @@
 
 **As of 2026-08-15**, except [the compatibility explanations, 2026-10-14](#compatibility-explanations-visible-text-and-a-disclosure-not-a-tooltip-2026-10-14),
 [a tolerant audit read, 2026-10-14](#the-audit-read-returns-an-action-its-build-does-not-know-as-stored-2026-10-14),
+[subject prefix search, 2026-10-14](#subjects-are-searched-by-the-start-of-their-name-2026-10-14),
 [contract bindings that can be changed and removed, 2026-10-14](#a-contracts-bindings-can-be-changed-and-removed-2026-10-14),
 [the policy-change notification, 2026-10-14](#a-policy-change-notifies-subscribers-and-every-subscription-with-no-event-filter-is-one-2026-10-14),
 [inheriting and the audited policy change, 2026-10-13](#a-subject-with-no-policy-of-its-own-follows-its-environments-default-and-a-policy-change-is-audited-2026-10-13),
@@ -167,6 +168,63 @@ known-action-in-another-case test red), the projection reading the enum uncondit
 across the domain and handler tests), a setter on `ActionToken` (the no-way-to-rewrite test red), the tone lookup back to a plain
 index (five red) and the hint inverted (two red), each restored and confirmed green. **Not run:** the whole .NET suite, the whole
 browser suite, the production web image, CI; the other converters above.
+
+---
+
+## Subjects are searched by the start of their name, 2026-10-14
+
+The hole recorded since M1.6 is closed ([ADR-038](adr/038-subject-prefix-search.md)). `GET …/subjects?prefix=` lists the
+subjects whose name begins with the prefix, and the web app's search box is that filter. What was wanted was already in the
+product and faked: the box filtered the list in memory, by substring and case-insensitively, on the name *or the owner*. The
+CLI has no prefix anywhere (`export` wants the whole list), so the box was the only caller.
+
+**The choices, each reversible, and the two that are the maintainer's.**
+
+- **Ordinal and case-sensitive**, because names are (`OrderCreated` and `ordercreated` are two subjects). A prefix is
+  **a literal**: it is a valid name, or a valid name and one more dot (`SubjectNamePrefix`), trimmed as a name is. Anything else
+  (`%`, a backslash, a hyphen, `..`, a comma, a NUL, a lone surrogate, invalid UTF-8, more than 512 characters) cannot start a name,
+  so it is **`200` and an empty list, not `400`**, and the database is never asked. *Maintainer's call:* `400 subject_name_invalid`
+  is the other consistent answer; it was rejected because a box typed into a character at a time would show an error banner for
+  `acme-`.
+- **`starts_with(name, prefix)`, not `LIKE`.** `_` is both a legal name character and a LIKE wildcard, so an escape forgotten
+  anywhere would make `a_` find `ab`; `starts_with` takes a literal and has nothing to escape. Reached through a mapped function
+  (`ConcordatDbFunctions.StartsWith`) with the column as `EF.Property<string>(s, nameof(Subject.Name))`, which is what the hole row's
+  `ComplexProperty` / shadow-column proposals were for, without touching the model or the schema. `StartsWith` itself throws
+  through the converter (`InvalidCastException`; measured).
+- **No index, no migration.** `EXPLAIN` on the real `subject` table with 65,000 rows (5,000 in the environment): the unfiltered list
+  4.7 ms, `starts_with` 1.2 ms (22 rows) and 1.9 ms (1,000 rows) on the existing `(tenant, environment, name)` index, which
+  bounds the work to one environment's subjects; with a candidate `varchar_pattern_ops` index 0.075 ms and 1.1 ms. At 100,000
+  subjects in one environment the planner chose a sequential scan, 19 ms against 0.05 ms with the index. The DDL for that day is in
+  the ADR. A plain btree does not serve `LIKE` here either: the database's collation is `en_US.utf8`, which the planner treats as
+  non-C even on the alpine image.
+- **The box matches the start of a name, and no longer the middle or the owner.** *Maintainer's call, and a loss of function:*
+  the old box found `ordercreated` inside `acme.orders.OrderCreated` and `billing-team` in the owner column. Both are real wants
+  and neither can be paged; they are separate features (an owner parameter; a substring match has no index). The box says what it
+  matches under itself and in its empty state.
+
+**The screen.** Debounced 250 ms; one pipeline for a load and a search, `switchMap` so a stale request is cancelled (the HTTP call
+is unsubscribed, not just ignored) and a reload does not wait out a keystroke; the rows stay on screen, dimmed and `aria-busy`,
+while an answer is awaited; **an empty answer to a prefix is its own state** (`noMatches`, with a Clear button and, when no name
+could ever match, the character that rules it out) and is not "No subjects yet", which offers to create the first subject and hid the
+box; the box lives outside the branches so its own answer never unmounts it (a test holds that it is the same element and keeps
+focus). `maxlength` 512, because Kestrel answers `414` past about 8 KB of request line before the route is reached.
+
+### What was verified, and what was not
+
+Run on this machine, on Windows, with `--filter`ed .NET projects only (the full suites run once, at integration). **Verified:**
+the new .NET tests (the domain value object, the handler, the repository against real PostgreSQL, and the HTTP tests hosted as
+`Development`, the environment a binding failure once hid in), the Domain and Application projects whole, `dotnet format
+--verify-no-changes`, the whole web unit suite, lint, prettier, `codes:check`, `monaco:check` and `ng build`, the new browser spec
+(12 tests) with the registry-data, new-subject and design-system specs beside it (79 passing, against a private registry and
+database and `ng serve`), and the box's states at 1280 and 390 px in light and dark, with no horizontal overflow. The real registry corrected one
+test: a 20,000-character prefix is `200` in the in-process server and `414` from Kestrel. **Red first:** the domain, handler,
+repository and HTTP tests against stubs that ignore or accept everything (behaviour failures, not compile errors), and the store
+spec against a stub store. **Written implementation-first, mutation-checked instead:** `checkSubjectNamePrefix` and the
+`listSubjects` parameter. **Mutation-checked:** the grammar (NUL tests red), case-insensitivity, a wildcard `_`, no environment
+filter and no tenant filter, `IsNullOrWhiteSpace`, the prefix lower-cased in the store, the debounce, `switchMap`, the box inside
+a replaced branch and the prefix pattern. **Not mutation-checked individually:** the browser spec's case and underscore tests
+(the same behaviour is mutated at .NET level), and its 390 px and console tests. **Not run:** the production image, the CLI (it
+has no prefix flag), two registries of different builds, CI.
 
 ---
 
@@ -1042,7 +1100,7 @@ These matter more than the two lists above, because the surface exists and looks
 | **A subscription's events cannot be edited** | There is `POST`, `PUT …/enabled` and `DELETE`, and nothing else, so keeping an existing "all events" subscription out of a newly added event (as `SUBJECT_POLICY_CHANGED`, ADR-034) means muting it or deleting it and creating it again, which issues **a new webhook signing secret** the receiver must be given. Found 2026-10-14. |
 | ~~A failing `notifications.spec.ts` leaves its subscriptions behind~~ | **Closed 2026-10-14**: a `test.afterAll` deletes the block's subscriptions by endpoint (`deleteSubscriptionsAt`, `web/e2e/registry.ts`). Verified by failing a test mid-block on purpose: `dev` held no subscription afterwards, and with the `afterAll` removed the same failure left the unfiltered email and both webhooks live. It cannot run if the process is killed. What it was: | The block is serial and its deletes are its last tests, so a red test skips them: the email subscription (no event filter) and the webhook stay live in `dev`, and the registry delivers to them for the rest of the run, and after it. Found 2026-10-14 when the new spec was run red on purpose (they were deleted by hand). A `test.afterAll` that deletes by endpoint would close it; not done here. |
 | **Hard delete does not exist** | Soft delete is all there is. The full rule — no registered consumers, force flag, audit entry — is an outstanding commitment. |
-| **Subject prefix search is not implemented** | Value converters do not translate `StartsWith`; it needs a `ComplexProperty` mapping or a shadow column. |
+| ~~Subject prefix search is not implemented~~ | **Closed 2026-10-14** ([ADR-038](adr/038-subject-prefix-search.md)): `GET …/subjects?prefix=`, ordinal and case-sensitive, a literal and not a pattern, through a mapped `starts_with` and with neither the `ComplexProperty` mapping nor the shadow column the note proposed (so no migration). No index, on measurement (65,000 rows: 1.2 ms against 4.7 ms for the whole list; the DDL for the day an environment holds tens of thousands is in the ADR). The web box is the filter. **It no longer matches the owner or the middle of a name, which it did** (the maintainer's call). Still open: the list is unpaginated, and the CLI has no `--prefix`. |
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | ~~A page reload signs you out~~ | **Closed 2026-08-14** by decision 26 — an httpOnly `SameSite=Strict` cookie and a `/auth/resume` route that is the only thing accepting it. The credential still never touches `localStorage`. |
 | ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Still on, and now audible** (decision 27). The API logs a warning naming both ways to close it and repeats hourly until claimed; the web app shows a banner. Verified against a real container. |

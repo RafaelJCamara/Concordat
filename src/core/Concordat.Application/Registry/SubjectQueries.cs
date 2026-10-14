@@ -160,9 +160,16 @@ public sealed class GetSubjectHandler(ISubjectRepository subjects)
     }
 }
 
-/// <summary>Lists the subjects in an environment.</summary>
+/// <summary>
+/// Lists the subjects in an environment, optionally only those whose name begins with a prefix.
+/// </summary>
 /// <param name="EnvironmentId">The environment.</param>
-public sealed record ListSubjectsQuery(EnvironmentId EnvironmentId)
+/// <param name="Prefix">
+/// The raw text the caller typed, or <see langword="null"/> or blank for every subject. It is
+/// judged by <see cref="SubjectNamePrefix"/>: ordinal, case-sensitive, and a prefix no name could
+/// begin with lists nothing (ADR-038).
+/// </param>
+public sealed record ListSubjectsQuery(EnvironmentId EnvironmentId, string? Prefix = null)
     : IQuery<IReadOnlyList<Subject>>;
 
 /// <summary>Handles <see cref="ListSubjectsQuery"/>.</summary>
@@ -175,8 +182,27 @@ public sealed class ListSubjectsHandler(ISubjectRepository subjects)
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var found = await subjects.ListAsync(query.EnvironmentId, cancellationToken)
-            .ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(query.Prefix))
+        {
+            var all = await subjects.ListAsync(query.EnvironmentId, cancellationToken)
+                .ConfigureAwait(false);
+
+            return Result<IReadOnlyList<Subject>>.Success(all);
+        }
+
+        var prefix = SubjectNamePrefix.Create(query.Prefix);
+
+        if (prefix.IsFailure)
+        {
+            // Not an error, and not asked of the store. A filter is not a lookup: the true answer
+            // to "which subjects begin with this" is none, and a search box is typed into one
+            // character at a time, so refusing "acme-" would turn a keystroke into an error. The
+            // store is never asked because the text is exactly what must not reach a query.
+            return Result<IReadOnlyList<Subject>>.Success([]);
+        }
+
+        var found = await subjects.ListByPrefixAsync(
+            query.EnvironmentId, prefix.Value, cancellationToken).ConfigureAwait(false);
 
         return Result<IReadOnlyList<Subject>>.Success(found);
     }

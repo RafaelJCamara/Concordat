@@ -1,12 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { Subject as ResponseStream, throwError } from 'rxjs';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActiveEnvironmentStore } from '../../../core/config/active-environment-store';
 import { provideConcordatConfig } from '../../../core/config/app-config';
 import { ConcordatError } from '../../../core/http/problem-details';
 import type { Subject } from '../../../domain/registry/subject';
 import { SubjectsApi } from '../data-access/subjects-api';
-import { SubjectListStore } from './subject-list-store';
+import { SEARCH_DEBOUNCE_MS, SubjectListStore } from './subject-list-store';
 
 // This is the reference store shape for M4.3, so the properties pinned here are the ones
 // every feature store copied from it will inherit — including the two that are easy to get
@@ -30,16 +30,20 @@ function subject(name: string): Subject {
 function fakeApi() {
   const streams: ResponseStream<readonly Subject[]>[] = [];
   const asked: string[] = [];
+  const prefixes: string[] = [];
 
   return {
     asked,
+    /** The prefix each request carried, '' for none, in the order asked. */
+    prefixes,
     streams,
     /** The most recent in-flight response, so a test can complete it on its own terms. */
     latest() {
       return streams[streams.length - 1]!;
     },
-    listSubjects(environment: string) {
+    listSubjects(environment: string, prefix?: string) {
       asked.push(environment);
+      prefixes.push(prefix ?? '');
       const stream = new ResponseStream<readonly Subject[]>();
       streams.push(stream);
       return stream.asObservable();
@@ -234,5 +238,309 @@ describe('SubjectListStore', () => {
     slow.next([subject('dev.only')]);
 
     expect(store.subjects().map((s) => s.name)).toEqual(['prod.only']);
+  });
+
+  // The registry filters (ADR-038); this store only decides when to ask, which request is still
+  // wanted, and what the screen should say about the answer.
+  describe('search', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    /** A list that has loaded, so a search starts from a screen with rows on it. */
+    function loadedWith(...names: string[]) {
+      store.load();
+      api.latest().next(names.map(subject));
+    }
+
+    const pause = () => vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS);
+
+    it('does not ask at once: typing is not asking', () => {
+      loadedWith('acme.orders.A', 'acme.billing.B');
+
+      store.search('a');
+      store.search('ac');
+      store.search('acm');
+
+      expect(api.asked).toHaveLength(1);
+      vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS - 1);
+      expect(api.asked).toHaveLength(1);
+    });
+
+    it('asks once, for what was typed last, when the typing pauses', () => {
+      loadedWith('acme.orders.A', 'acme.billing.B');
+
+      store.search('a');
+      store.search('ac');
+      store.search('acme.o');
+      pause();
+
+      expect(api.prefixes).toEqual(['', 'acme.o']);
+      expect(api.asked).toEqual(['dev', 'dev']);
+    });
+
+    it('asks for the active environment', () => {
+      environments.select('prod');
+      loadedWith('prod.only');
+
+      store.search('prod.');
+      pause();
+
+      expect(api.asked).toEqual(['prod', 'prod']);
+    });
+
+    it('trims the prefix as the registry will, and does not ask again for the same one', () => {
+      loadedWith('acme.orders.A');
+
+      store.search('acme.');
+      pause();
+      store.search('  acme. ');
+      store.search('acme.');
+      pause();
+
+      expect(api.prefixes).toEqual(['', 'acme.']);
+    });
+
+    it('keeps the case it was given: names are case-sensitive', () => {
+      loadedWith('acme.orders.A');
+
+      store.search('Acme.');
+      pause();
+
+      expect(api.prefixes[1]).toBe('Acme.');
+    });
+
+    it('sends what it was given even when no name could match, and lets the registry say so', () => {
+      // The registry is the only judge. A client that skipped the request for "acme-" would be a
+      // second implementation of the answer, and the first thing to drift from the first.
+      loadedWith('acme.orders.A');
+
+      store.search('acme-');
+      pause();
+
+      expect(api.prefixes).toEqual(['', 'acme-']);
+    });
+
+    it('asks for everything again when the box is cleared', () => {
+      loadedWith('acme.orders.A', 'zeta.B');
+      store.search('acme.');
+      pause();
+      api.latest().next([subject('acme.orders.A')]);
+
+      store.search('');
+      pause();
+
+      expect(api.prefixes).toEqual(['', 'acme.', '']);
+    });
+
+    it('keeps the rows on screen, and says it is searching, while the answer is awaited', () => {
+      // Replacing the list with a skeleton on every pause in typing would flash the table; the
+      // rows that are there are the best answer available until the right ones arrive.
+      loadedWith('acme.orders.A', 'zeta.B');
+
+      store.search('acme.');
+      pause();
+
+      expect(store.loading()).toBe(true);
+      expect(store.searching()).toBe(true);
+      expect(store.loaded()).toBe(true);
+      expect(store.subjects().map((s) => s.name)).toEqual(['acme.orders.A', 'zeta.B']);
+    });
+
+    it('is not searching during a plain load, which has no rows to keep', () => {
+      store.load();
+
+      expect(store.loading()).toBe(true);
+      expect(store.searching()).toBe(false);
+    });
+
+    it('publishes the answer, and remembers which prefix it answers', () => {
+      loadedWith('acme.orders.A', 'zeta.B');
+      store.search('acme.');
+      pause();
+
+      api.latest().next([subject('acme.orders.A')]);
+
+      expect(store.subjects().map((s) => s.name)).toEqual(['acme.orders.A']);
+      expect(store.shown()).toBe('acme.');
+      expect(store.loading()).toBe(false);
+      expect(store.searching()).toBe(false);
+    });
+
+    it('still shows the old prefix as the answered one while a newer one is only typed', () => {
+      // What "No subject names start with ..." is allowed to say: it names the prefix the rows
+      // answer, and not the half-typed one that nobody has asked about yet.
+      loadedWith('acme.orders.A');
+      store.search('acme.');
+      pause();
+      api.latest().next([subject('acme.orders.A')]);
+
+      store.search('acme.b');
+
+      expect(store.prefix()).toBe('acme.b');
+      expect(store.shown()).toBe('acme.');
+    });
+
+    it('cancels the request a newer one supersedes, and ignores its late answer', () => {
+      loadedWith('acme.orders.A', 'zeta.B');
+      store.search('a');
+      pause();
+      const stale = api.latest();
+
+      store.search('ac');
+      pause();
+      const wanted = api.latest();
+
+      // The HTTP request itself is abandoned, not merely ignored: a slow search must not hold a
+      // connection open for an answer nobody will read.
+      expect(stale.observed).toBe(false);
+      expect(wanted.observed).toBe(true);
+
+      wanted.next([subject('acme.orders.A')]);
+      stale.next([subject('zeta.B')]);
+
+      expect(store.subjects().map((s) => s.name)).toEqual(['acme.orders.A']);
+      expect(store.shown()).toBe('ac');
+    });
+
+    it('keeps the earlier request alive until the pause ends and the new one is actually asked', () => {
+      loadedWith('acme.orders.A');
+      store.search('a');
+      pause();
+      const first = api.latest();
+
+      store.search('ac');
+
+      // Still waiting out the pause: the earlier question is still the live one.
+      expect(first.observed).toBe(true);
+
+      pause();
+      expect(first.observed).toBe(false);
+    });
+
+    it('treats a reload as the stronger request: it asks now, with the prefix typed so far', () => {
+      // An environment switch or a retry must not wait out a pause, and must not drop what was
+      // typed; and the pause still running must not ask a second time afterwards.
+      loadedWith('acme.orders.A');
+      store.search('acme.');
+
+      store.load();
+
+      expect(api.prefixes).toEqual(['', 'acme.']);
+      expect(store.searching()).toBe(false);
+
+      pause();
+      expect(api.prefixes).toEqual(['', 'acme.']);
+    });
+
+    it('asks a reload in a new environment for the same prefix', () => {
+      loadedWith('dev.orders.A');
+      store.search('dev.');
+      pause();
+      api.latest().next([subject('dev.orders.A')]);
+
+      environments.select('prod');
+      store.load();
+
+      expect(api.asked).toEqual(['dev', 'dev', 'prod']);
+      expect(api.prefixes).toEqual(['', 'dev.', 'dev.']);
+    });
+
+    describe('isEmpty and noMatches', () => {
+      it('an empty answer to no prefix is an empty environment', () => {
+        loadedWith();
+
+        expect(store.isEmpty()).toBe(true);
+        expect(store.noMatches()).toBe(false);
+      });
+
+      it('an empty answer to a prefix is a prefix that matched nothing, and not an empty environment', () => {
+        // The distinction the screen turns on. "No subjects yet" offers to create the first one and
+        // hides the search box; showing it for a prefix that merely found nothing would take the
+        // box away from the person who needs it to type something else.
+        loadedWith('acme.orders.A');
+        store.search('nothing.');
+        pause();
+        api.latest().next([]);
+
+        expect(store.isEmpty()).toBe(false);
+        expect(store.noMatches()).toBe(true);
+        expect(store.shown()).toBe('nothing.');
+      });
+
+      it('is neither while the first answer to a prefix is awaited', () => {
+        loadedWith('acme.orders.A');
+        store.search('nothing.');
+        pause();
+
+        expect(store.isEmpty()).toBe(false);
+        expect(store.noMatches()).toBe(false);
+      });
+
+      it('stays what the screen shows while the next answer is awaited, so the panel does not flash', () => {
+        loadedWith('acme.orders.A');
+        store.search('nothing.');
+        pause();
+        api.latest().next([]);
+
+        store.search('nothing.at');
+        pause();
+
+        expect(store.loading()).toBe(true);
+        expect(store.noMatches()).toBe(true);
+        expect(store.isEmpty()).toBe(false);
+      });
+
+      it('is neither when the answer is rows', () => {
+        loadedWith('acme.orders.A');
+        store.search('acme.');
+        pause();
+        api.latest().next([subject('acme.orders.A')]);
+
+        expect(store.isEmpty()).toBe(false);
+        expect(store.noMatches()).toBe(false);
+      });
+
+      it('is not a prefix that matched nothing when the search failed', () => {
+        loadedWith('acme.orders.A');
+        store.search('acme.');
+        pause();
+        api.latest().error(new Error('offline'));
+
+        expect(store.noMatches()).toBe(false);
+        expect(store.error()).toBeInstanceOf(ConcordatError);
+      });
+    });
+
+    describe('when a search fails', () => {
+      it('becomes state, clears the rows, and a later search works', () => {
+        loadedWith('acme.orders.A');
+        store.search('acme.');
+        pause();
+        api.latest().error(new Error('offline'));
+
+        expect(store.error()).toBeInstanceOf(ConcordatError);
+        expect(store.subjects()).toEqual([]);
+        expect(store.loading()).toBe(false);
+        expect(store.searching()).toBe(false);
+
+        store.search('zeta.');
+        pause();
+        api.latest().next([subject('zeta.B')]);
+
+        expect(store.error()).toBeNull();
+        expect(store.subjects().map((s) => s.name)).toEqual(['zeta.B']);
+      });
+
+      it('is retried for the same prefix, not for everything', () => {
+        loadedWith('acme.orders.A');
+        store.search('acme.');
+        pause();
+        api.latest().error(new Error('offline'));
+
+        store.load();
+
+        expect(api.prefixes).toEqual(['', 'acme.', 'acme.']);
+      });
+    });
   });
 });

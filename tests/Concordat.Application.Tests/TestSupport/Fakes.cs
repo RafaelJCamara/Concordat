@@ -38,12 +38,34 @@ internal sealed class FakeSubjects : ISubjectRepository
             _subjects.Find(s => s.EnvironmentId == environmentId && s.Name == name));
     }
 
+    /// <summary>How many times a handler listed an environment without a prefix.</summary>
+    public int Listings { get; private set; }
+
     public Task<IReadOnlyList<Subject>> ListAsync(
-        EnvironmentId environmentId, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<Subject>>(
+        EnvironmentId environmentId, CancellationToken cancellationToken)
+    {
+        Listings++;
+
+        return Task.FromResult<IReadOnlyList<Subject>>(
             [.. _subjects
                 .Where(s => s.EnvironmentId == environmentId)
                 .OrderBy(s => s.Name.Value, StringComparer.Ordinal)]);
+    }
+
+    /// <summary>The prefixes the handler asked for, in order.</summary>
+    public List<string> PrefixesAsked { get; } = [];
+
+    public Task<IReadOnlyList<Subject>> ListByPrefixAsync(
+        EnvironmentId environmentId, SubjectNamePrefix prefix, CancellationToken cancellationToken)
+    {
+        PrefixesAsked.Add(prefix.Value);
+
+        return Task.FromResult<IReadOnlyList<Subject>>(
+            [.. _subjects
+                .Where(s => s.EnvironmentId == environmentId
+                    && s.Name.Value.StartsWith(prefix.Value, StringComparison.Ordinal))
+                .OrderBy(s => s.Name.Value, StringComparer.Ordinal)]);
+    }
 
     public void Add(Subject subject)
     {

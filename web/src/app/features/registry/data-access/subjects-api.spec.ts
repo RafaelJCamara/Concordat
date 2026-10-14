@@ -61,6 +61,63 @@ describe('SubjectsApi', () => {
       context.backend.expectOne('/v1/environments/dev/subjects');
     });
 
+    describe('with a prefix (ADR-038)', () => {
+      const withQuery = (url: string) => (request: { urlWithParams: string }) =>
+        request.urlWithParams === url;
+
+      it('asks the registry to filter, with the prefix as a query parameter', () => {
+        context.api.listSubjects('dev', 'acme.orders.').subscribe();
+
+        context.backend.expectOne(withQuery('/v1/environments/dev/subjects?prefix=acme.orders.'));
+      });
+
+      it('sends no parameter for no prefix, so the unfiltered request is the one it always was', () => {
+        context.api.listSubjects('dev', '').subscribe();
+        context.api.listSubjects('dev', undefined).subscribe();
+
+        const calls = context.backend.match('/v1/environments/dev/subjects');
+        expect(calls).toHaveLength(2);
+      });
+
+      it('keeps the case, because names are case-sensitive', () => {
+        context.api.listSubjects('dev', 'Acme.OrderCreated').subscribe();
+
+        context.backend.expectOne(
+          withQuery('/v1/environments/dev/subjects?prefix=Acme.OrderCreated'),
+        );
+      });
+
+      it('sends an underscore as an underscore: it is a name character, not a wildcard', () => {
+        context.api.listSubjects('dev', 'acme.a_').subscribe();
+
+        context.backend.expectOne(withQuery('/v1/environments/dev/subjects?prefix=acme.a_'));
+      });
+
+      it('percent-encodes what would otherwise end the value or be read as something else', () => {
+        // The registry answers an empty list to all of these. What matters here is that they
+        // arrive as one parameter's value and cannot add a parameter or end the URL: a `&`
+        // unencoded would become a second parameter, and a `#` would drop the rest. (Angular
+        // leaves a `=` inside a value alone, which is legal and read as part of the value.)
+        context.api.listSubjects('dev', 'a%b&c=d#e f').subscribe();
+
+        context.backend.expectOne(
+          withQuery('/v1/environments/dev/subjects?prefix=a%25b%26c=d%23e%20f'),
+        );
+      });
+
+      it('returns the same domain types as the unfiltered list', () => {
+        let subjects: readonly Subject[] = [];
+        context.api.listSubjects('dev', 'orders.').subscribe((value) => (subjects = value));
+
+        context.backend
+          .expectOne(withQuery('/v1/environments/dev/subjects?prefix=orders.'))
+          .flush([dto]);
+
+        expect(subjects[0]?.name).toBe('orders.created');
+        expect(subjects[0]?.versions[0]?.registeredAt).toBeInstanceOf(Date);
+      });
+    });
+
     it('returns domain types, with timestamps already parsed', () => {
       // A caller handed a raw DTO will eventually reach into a wire field, and the string
       // `registeredAt` would then be sorted and compared as text.

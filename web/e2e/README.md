@@ -193,6 +193,15 @@ reports. A guide is closed with no token in the DOM because other specs find a p
 which matches hidden text; a new control near a policy must not repeat a token in the DOM while closed, and must not
 carry an `aria-label` containing "mode" or "surface", because `getByLabel('Mode')` matches by substring.
 
+**The subject search box is tested on subjects of its own, five per run, and they are permanent.**
+`subject-search.spec.ts` ([ADR-038](../../docs/adr/038-subject-prefix-search.md)) makes **five subjects per run** in `dev`, all
+under one prefix named for the run (`acme.e2e.prefix.<timestamp>.`: `orders.OrderCreated`, `orders.ordercreated`,
+`billing.InvoiceRaised`, `wild.a_b` and `wild.axb`), each with one version, and searches that prefix, so what it finds is this run's
+subjects whatever earlier runs left behind and the case and underscore assertions have names that differ only in case and in `_`.
+It reads nothing another spec makes and no other spec reads these. Like every spec here that creates something, a run that goes
+red part-way leaves what it made. It signs in nowhere (the default browser is the owner); it holds two registry answers back with
+`page.route` to look at the in-between states, which are the only requests it touches.
+
 **Match the account control, not the account's email.** A subject the browser creates is owned by
 the signed-in account, so its email now appears in a table cell on the list as well as in the
 sidebar, and `getByText(email)` stopped being unique the first time `new-subject.spec.ts` ran. The
