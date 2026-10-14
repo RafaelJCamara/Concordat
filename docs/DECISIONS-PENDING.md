@@ -130,7 +130,7 @@ the way that were **yours to decide**, which I did not. **Both are decided and f
     It records the old and new policy as the authenticated caller, in the same transaction; a no-op and a refusal
     write nothing. **No notification**: no `NotificationEvent` is a policy change and a new one is a decision about who
     is told, so *Nobody is notified* stays true. **Then decided, once asked:** the owner-change entry
-    now reads `owner <previous> -> <new>` instead of "owner changed" (a separate commit; a no-op `PATCH` keeps the old text).
+    now reads `owner <previous> -> <new>` instead of "owner changed" (a separate commit; a no-op `PATCH` kept the old text until 2026-10-14, when it began writing nothing).
 
 ### 33. `ci` is a marker scope, and no role grants it
 

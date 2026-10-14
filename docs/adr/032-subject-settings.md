@@ -189,7 +189,8 @@ here.
 - **Found and not fixed**, all in [STATUS.md](../STATUS.md) and none of them this screen's: registration (measured),
   the dry-run check and the diff (both by reading the code) use the built-in default for an inheriting subject (impact analysis and
   promotion use the environment's); a policy change is not audited; a no-op `PATCH` (`{}`, or a blank
-  owner) still writes an audit entry reading "owner changed"; and retiring a subject records the
+  owner) still writes an audit entry reading "owner changed" (*closed 2026-10-14: it writes nothing, and retiring now
+  records the caller; see ADR-033*); and retiring a subject records the
   *subject's owner* as the actor, the same defect this ADR fixed for updating one.
 
 ## References

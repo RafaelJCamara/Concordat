@@ -7,7 +7,7 @@
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14: 1,677 .NET,
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14: 1,689 .NET,
 1,425 Angular, 223 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
@@ -83,7 +83,8 @@ the repeated policy and the repeated inherit wrote none; half a policy was `400`
 
 **The owner-change entry now records both owners** (a separate commit, once asked): `owner <previous> -> <new>`, the new
 one as stored after the registry's trim, and `owner a -> b; deprecated` when one request does both. A `PATCH` that changes
-nothing keeps the old "owner changed" (the hole in the table below, pinned so it is not altered by accident). Anything
+nothing kept the old "owner changed" (a hole, pinned so it was not altered by accident; **closed 2026-10-14**, it now writes
+nothing). Anything
 that parsed the old fixed string will see a different one.
 
 **A cost to know:** the audit table is read by action *token*, and the registry throws on a stored token its build does not
@@ -161,7 +162,7 @@ ADR. Its first draft passed every row, and five mutations each turn it red for t
 `subject:write`, and a blank owner that sends. Run against the registry *before* the fix it fails on the
 whitespace 500, and the audit test fails on `actor: team-after`.
 
-**Found on the way, and not fixed** (all in the holes table): retiring a subject records *the subject's owner* as
+**Found on the way, and not fixed then (the first two were closed 2026-10-14, see the holes table):** retiring a subject records *the subject's owner* as
 the actor, the same defect as the one fixed here; a `PATCH` that changes nothing (`{}`, a blank owner) still
 writes an entry reading "owner changed"; and the brief's "probe everything the client will check" included the
 registry's own scope split, which only an API key can show (no role holds `subject:write` without `subject:admin`),
@@ -708,8 +709,8 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~The web app has a "not set" environment default that the registry never produces~~ | **Closed 2026-10-13**, with the row above, by removing it rather than keeping it: `Environment.defaultCompatibility` is now a whole pair (`EnvironmentDefaultPolicy`), the settings form has no "Not set" option, and a `null` member on the wire is refused by name like any token the build does not know. Nothing else read the null members. The wire DTO still mirrors `PolicyResponse`, which is nullable because a *subject's* policy is. |
 | ~~The browser job in CI has been red since `803822c`, for a reason that is not the code under test~~ | **Closed 2026-10-14**: the registry now answers an unreadable body `400` in every environment (`RouteHandlerOptions.ThrowOnBadRequest = false` in `Program.cs`; `UnreadableBodyTests` hosts as Development, which `WebApplicationFactory` does by default, and went red with twelve `500`s before the line and green after; the whole browser suite, 223, passed against the registry run with `dotnet run` as Development, which is CI's arrangement). What it was: CI starts the registry with `dotnet run`, which takes `launchSettings.json` and so runs as **Development**; every local run uses the container image, **Production**. In Development ASP.NET Core throws a minimal API's body-binding errors into `UseExceptionHandler`, so a body the registry answers `400` in Production (a lone surrogate, a number where a string goes) comes back `500`. Five parity tests fail on that and nothing else (`schema-parity` json, `subject-name-parity` name, three in `subject-settings-parity`); the other 218 pass. `803822c` had two of them, `f446091` and `e1f8623` five, because each added parity probes; `afe19bc` and everything before was green. Read from the CI registry log (`Hosting environment: Development`, `BadHttpRequestException … Cannot read incomplete UTF-16 JSON text`). Fixed in the registry rather than by running CI's as Production, so a developer's `dotnet run` answers what a deployment does. The other six jobs (`build & test`, `web app`, `contract drift gate`, `protocol docs gate`, `Web container`, `CLI container`) were green on all three. |
 | ~~A policy change is not in the audit log~~ | **Closed 2026-10-13** by [ADR-033](adr/033-inherit-means-the-environments-default.md): `PUT …/compatibility-policy` is a command and writes `SUBJECT_POLICY_CHANGED` in the same transaction, as the caller, reading `policy <old> -> <new>`; a no-op and a refused change write nothing; nobody is notified. Pinned by `APolicyChangeIsRecordedAsTheCallerWithTheOldAndNewPolicy` (the inverse of `APolicyChangeLeavesNoAuditEntry`) and the policy journey in `e2e/subject-settings.spec.ts`. Rolling the registry back past it breaks the audit page while a row exists. |
-| **A `PATCH` that changes nothing still writes "owner changed"** | `{}`, a `null` owner and `{"owner":""}` answer 200, change nothing, and write a `SUBJECT_UPDATED` entry reading "owner changed" (setting the owner it already has now writes `owner a -> a`, since the entry names both owners). The web form never sends one. |
-| **Retiring a subject records the subject's owner as the actor** | `RetireSubjectHandler` still builds the audit entry from `subject.Value.Owner`, which is the defect `UpdateSubjectHandler` had until 2026-10-13 (it attributed an owner change to the *new* owner, and answered 500 for a whitespace-only one, both fixed). Retiring is not on any screen. |
+| ~~A `PATCH` that changes nothing still writes "owner changed"~~ | **Closed 2026-10-14.** `{}`, a `null` owner and a blank one still answer 200 with the subject as it was, and now write no entry, save nothing and stage nothing: the rule a policy change and an idempotent registration already follow. **Deliberately not widened to an explicit owner the subject already has**, which is a request and still reads `owner a -> a` (pinned, so widening it is a decision); a blank owner beside `deprecate` still deprecates and says only "deprecated". Red first at both levels (`APatchThatChangesNothing_WritesNothingAndSavesNothing`, `APatchThatChangesNothingAnswers200AndWritesNoEntry`, and the parity spec's count of `SUBJECT_UPDATED` rows around the bodies it sends, which gained two before the fix). The old test that pinned "owner changed" so it would not change by accident was replaced. |
+| ~~Retiring a subject records the subject's owner as the actor~~ | **Closed 2026-10-14.** `RetireSubjectHandler` takes `ICallerContext` and records the authenticated caller, as `UpdateSubjectHandler` and `SetCompatibilityPolicyHandler` do; the command still carries no actor. Before: retiring someone else's subject was attributed to them (measured in the browser parity spec: the actor was the owner `after-deprecation`, not the account that retired it). A refused retirement (the second one) writes nothing, pinned at both levels. Retiring is still not on any screen. |
 | **The registry accepts a schema that is not valid JSON Schema** | `{"type":"bogus"}` registers. Canonicalisation and the portability check never read the document against the 2020-12 metaschema, so it is stored, given an id and offered to consumers — and fails every message validated against it. The web editor reports it as advice (`ajv`); the registry does not. Whether registration should refuse it is a product decision, not a bug fix: refusing changes what existing users can register. |
 | ~~A lone-surrogate escape in a schema answers 500~~ | **Closed 2026-10-13** ([ADR-031](adr/031-unpaired-surrogates-are-refused.md)): `schema_malformed`, from registration, the dry run and the lookup, in values and keys and in Avro, pinned by five conformance fixtures. It had been recorded as a bare 500 from the writer; it was a generic Problem Details body from the *reader*, and wider than the one string. |
 | ~~An undefined enum number is stored, and then breaks every list that reads it~~ | **Closed 2026-10-13**, at six sites. `compatibilityMode: "99"` parsed (`Enum.TryParse` accepts any integer), was committed, answered 500 while projecting its own response, and every `GET …/subjects` in that environment answered 500 for every caller after it; environment defaults, the registration policy and contract enforcement parsed the same way. `WireEnums.TryParseDefined` refuses it, and a comma list that silently meant a third member. Not part of the brief; found by the probes the brief asked for. A number that *is* a member is still read as it always was. |
@@ -742,14 +743,14 @@ Nothing here can be done from inside the repository.
 
 ## What the tests actually cover
 
-Six kinds, not one. Worth knowing which, because "1,677 tests" says nothing about what would
+Six kinds, not one. Worth knowing which, because "1,689 tests" says nothing about what would
 survive being wrong.
 
 | Kind | Where | Tests | What it proves |
 |---|---|---|---|
 | Domain unit | `Domain.Tests`, three `Formats.*` | ~910 | Invariants in isolation. No I/O |
-| Application handler | `Application.Tests` | 192 | Handler refusals and **ordering**, with hand-written fakes |
-| HTTP integration | `Api.IntegrationTests` | 281 | Real HTTP against real PostgreSQL, via Testcontainers |
+| Application handler | `Application.Tests` | 199 | Handler refusals and **ordering**, with hand-written fakes |
+| HTTP integration | `Api.IntegrationTests` | 286 | Real HTTP against real PostgreSQL, via Testcontainers |
 | Conformance corpus | `Conformance` | 104, over 103 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 64 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |

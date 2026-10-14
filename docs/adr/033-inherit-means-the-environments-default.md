@@ -215,7 +215,11 @@ notified. The policy journey asserts the row (its action, the signed-in account 
   subject's owner as the actor. *Note, 2026-10-13, later the same day: the first two are closed.* The form now sends
   both compatibility members when either select changed (probed against the real registry first: one member `400`,
   both or none `200`), and the "not set" default is removed from the web model and the screen rather than kept.
-  `environment-default.spec.ts` was inverted and now changes the default one select at a time. The last two stand.
+  `environment-default.spec.ts` was inverted and now changes the default one select at a time. *The last two were
+  closed on 2026-10-14:* a `PATCH` that changes nothing (`{}`, a null or blank owner) writes no entry, still answering
+  200 (an explicit owner the subject already has is a request and still reads `owner a -> a`), and retiring a subject
+  records the authenticated caller as the actor instead of the subject's owner. The paragraph above that says a no-op
+  `PATCH` "keeps the old 'owner changed'" describes the code as of the day it was written.
 
 ## References
 

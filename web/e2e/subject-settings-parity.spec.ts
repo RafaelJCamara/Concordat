@@ -17,6 +17,7 @@ import {
   ownerCredential,
   patchSubjectRaw,
   putPolicyRaw,
+  readAudit,
   readSubject,
   retireSubject,
   revokeKey,
@@ -198,6 +199,11 @@ test.describe('the owner and the policy against the registry', () => {
     const credential = await ownerCredential();
     const before = (await readSubject(credential, ENVIRONMENT, MAIN)).owner;
     const disagreements: string[] = [];
+    const written = async () =>
+      (await readAudit(credential, ENVIRONMENT, MAIN)).filter(
+        (row) => row.action === 'SUBJECT_UPDATED',
+      ).length;
+    const entriesBefore = await written();
 
     const bodies: [label: string, body: unknown, expected: number][] = [
       ['an empty object', {}, 200],
@@ -220,6 +226,9 @@ test.describe('the owner and the policy against the registry', () => {
 
     expect(disagreements, disagreements.join('\n')).toEqual([]);
     expect((await readSubject(credential, ENVIRONMENT, MAIN)).owner).toBe(before);
+    // The two that answered 200 (`{}` and a null owner) changed nothing, and the trail is not told
+    // otherwise: they used to write a row reading "owner changed". A refused body never did.
+    expect(await written()).toBe(entriesBefore);
   });
 
   test('a lone surrogate in an owner is refused as an unreadable request, and the form lets it through', async () => {
@@ -488,6 +497,17 @@ test.describe('the owner and the policy against the registry', () => {
     expect((await readSubject(credential, ENVIRONMENT, LIFE)).lifecycle).toBe('DEPRECATED');
 
     await retireSubject(credential, ENVIRONMENT, LIFE);
+
+    // Retiring is recorded as whoever did it, as the deprecation before it was, and not as the
+    // owner of the subject it ended (which it named until the owner was no longer the actor).
+    const trail = await readAudit(credential, ENVIRONMENT, LIFE);
+    const retirement = trail.filter((row) => row.action === 'SUBJECT_RETIRED');
+    const deprecation = trail.find((row) => row.detail === 'deprecated');
+
+    expect(retirement).toHaveLength(1);
+    expect(deprecation).toBeDefined();
+    expect(retirement[0]!.actor).toBe(deprecation!.actor);
+    expect(retirement[0]!.actor).not.toBe('after-deprecation');
 
     const retiredOwner = await patchSubjectRaw(credential, ENVIRONMENT, LIFE, {
       owner: 'too-late',

@@ -195,6 +195,18 @@ public sealed class UpdateSubjectHandler(
             }
         }
 
+        // A request that did neither (an empty body, a null or blank owner) changed nothing, so
+        // there is nothing to record, save or notify: it is answered as the success it always was,
+        // with the subject as it stands. It used to write a row reading "owner changed" for a
+        // change nobody made, which tells whoever reads the trail for an ownership change that one
+        // happened. The rule a policy change and an idempotent registration already follow. An
+        // *explicit* owner is a request even when it is the one already held, and is recorded as
+        // the request it was (`owner a -> a`).
+        if (ownerChange is null && !command.Deprecate)
+        {
+            return subject;
+        }
+
         // The authenticated caller, as every handler that changes something records. This row
         // used to name the *new owner* as its actor ("unknown" when none was given), so an owner
         // change was attributed to whoever was being made responsible; and a PATCH whose owner
@@ -227,16 +239,15 @@ public sealed class UpdateSubjectHandler(
         return subject;
     }
 
-    // What the request did, in one line. A PATCH that did neither (an empty body, a blank owner)
-    // still writes a row, which is a recorded hole, and keeps its old wording rather than
-    // inventing an owner change it did not make.
+    // What the request did, in one line. Only reached when it did something: a request that
+    // changed neither the owner nor the lifecycle returned before any row was built, so the
+    // remaining case (no owner change) is the deprecation.
     private static string Describe(string? ownerChange, bool deprecate) =>
         (ownerChange, deprecate) switch
         {
-            (null, true) => "deprecated",
             ({ } change, true) => $"{change}; deprecated",
             ({ } change, false) => change,
-            _ => "owner changed",
+            _ => "deprecated",
         };
 
     internal static async Task<Result<Subject>> Find(
@@ -360,12 +371,24 @@ public sealed record RetireSubjectCommand(EnvironmentId EnvironmentId, string Su
 
 /// <summary>Handles <see cref="RetireSubjectCommand"/>.</summary>
 /// <remarks>
+/// <para>
 /// <b>There is no hard delete.</b> Schemas are never removed (ADR-015), and a subject moves to
 /// <see cref="SubjectLifecycle.Retired"/> instead of disappearing. Hard delete needs the
 /// registered-consumer check and the audit entry DESIGN §4 requires, both of which are M7.
+/// </para>
+/// <para>
+/// <b>Attributed to the authenticated caller, never to the subject's owner.</b> The entry named
+/// the owner as the actor, so retiring someone else's contract, the one change that cannot be
+/// undone, was recorded as their doing. The command carries no actor on purpose, for the reason
+/// <see cref="UpdateSubjectHandler"/> spells out.
+/// </para>
 /// </remarks>
 public sealed class RetireSubjectHandler(
-    ISubjectRepository subjects, IAuditLog audit, IUnitOfWork unitOfWork, TimeProvider clock)
+    ISubjectRepository subjects,
+    ICallerContext caller,
+    IAuditLog audit,
+    IUnitOfWork unitOfWork,
+    TimeProvider clock)
     : ICommandHandler<RetireSubjectCommand, Subject>
 {
     /// <inheritdoc />
@@ -392,7 +415,7 @@ public sealed class RetireSubjectHandler(
         audit.Append(AuditEntry.Record(
             command.EnvironmentId,
             AuditAction.SubjectRetired,
-            subject.Value.Owner,
+            caller.Current.Actor,
             subject.Value.Name.Value,
             clock.GetUtcNow()));
 

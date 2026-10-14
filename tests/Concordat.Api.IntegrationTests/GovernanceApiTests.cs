@@ -656,6 +656,74 @@ public class GovernanceApiTests(ApiFactory factory)
         Assert.Equal("alice", (await ApiFactory.ReadAsync<SubjectResponse>(patched)).Owner);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task APatchThatChangesNothingAnswers200AndWritesNoEntry(string? owner)
+    {
+        // `{}`, a null owner and a blank one used to write a SUBJECT_UPDATED row reading "owner
+        // changed" for a change nobody made. The answer is unchanged (200, the subject as it was);
+        // the trail is simply not told. The web form never sends one, which is why it went
+        // unnoticed until the parity specs measured it.
+        var (client, environment) = await NewEnvironmentAsync();
+        var subject = await NewSubjectAsync(client, environment);
+
+        var patched = await client.PatchAsJsonAsync(
+            $"/v1/environments/{environment}/subjects/{subject}",
+            new UpdateSubjectRequest(Owner: owner),
+            ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.OK, patched.StatusCode);
+        Assert.Equal("alice", (await ApiFactory.ReadAsync<SubjectResponse>(patched)).Owner);
+
+        var entries = await client.GetFromJsonAsync<IReadOnlyList<AuditResponse>>(
+            $"/v1/audit?env={environment}", ApiFactory.Json);
+
+        Assert.DoesNotContain(entries!, e => e.Action == "SUBJECT_UPDATED");
+    }
+
+    [Fact]
+    public async Task ARetirementIsRecordedAsTheCallerNotTheOwnerOfTheSubject()
+    {
+        // Retiring is the one change that cannot be undone, and its row named the subject's owner
+        // as the actor: whoever retired a contract, the trail said its owner had. Attributed to the
+        // authenticated caller like every other recorded change.
+        var (client, environment) = await NewEnvironmentAsync();
+        var subject = await NewSubjectAsync(client, environment);
+
+        var retired = await client.DeleteAsync($"/v1/environments/{environment}/subjects/{subject}");
+
+        Assert.Equal(HttpStatusCode.OK, retired.StatusCode);
+
+        var entries = await client.GetFromJsonAsync<IReadOnlyList<AuditResponse>>(
+            $"/v1/audit?env={environment}", ApiFactory.Json);
+
+        var entry = Assert.Single(entries!, e => e.Action == "SUBJECT_RETIRED");
+        var registered = Assert.Single(entries!, e => e.Action == "VERSION_REGISTERED");
+
+        Assert.Equal(registered.Actor, entry.Actor);
+        Assert.NotEqual("alice", entry.Actor);
+        Assert.Equal(subject, entry.Target);
+    }
+
+    [Fact]
+    public async Task ARetirementThatIsRefusedLeavesNoEntry()
+    {
+        // The second retirement is a 409 and never reaches a commit, so the trail holds one row.
+        var (client, environment) = await NewEnvironmentAsync();
+        var subject = await NewSubjectAsync(client, environment);
+        var route = $"/v1/environments/{environment}/subjects/{subject}";
+
+        Assert.Equal(HttpStatusCode.OK, (await client.DeleteAsync(route)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.DeleteAsync(route)).StatusCode);
+
+        var entries = await client.GetFromJsonAsync<IReadOnlyList<AuditResponse>>(
+            $"/v1/audit?env={environment}", ApiFactory.Json);
+
+        Assert.Single(entries!, e => e.Action == "SUBJECT_RETIRED");
+    }
+
     [Fact]
     public async Task APolicyChangeIsRecordedAsTheCallerWithTheOldAndNewPolicy()
     {

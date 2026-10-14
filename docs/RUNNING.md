@@ -251,7 +251,7 @@ cd web && CONCORDAT_WEB_URL=http://localhost:5063 npm run e2e
 
 ## Running the tests
 
-### The .NET suite — 1,677 tests
+### The .NET suite — 1,689 tests
 
 ```bash
 dotnet test Concordat.slnx

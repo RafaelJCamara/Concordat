@@ -48,7 +48,7 @@ public class SubjectCommandHandlerTests
             CancellationToken.None);
 
     private Task<Result<Subject>> RetireAsync(string name = Name) =>
-        new RetireSubjectHandler(_subjects, _audit, _unitOfWork, _clock).HandleAsync(
+        new RetireSubjectHandler(_subjects, _caller, _audit, _unitOfWork, _clock).HandleAsync(
             new RetireSubjectCommand(_environment, name), CancellationToken.None);
 
     // ------------------------------------------------------------------ create
@@ -293,16 +293,53 @@ public class SubjectCommandHandlerTests
         Assert.Equal("deprecated", Assert.Single(_audit.Entries).Detail);
     }
 
-    [Fact]
-    public async Task APatchThatChangesNothing_KeepsItsOldWording()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("\t \n")]
+    public async Task APatchThatChangesNothing_WritesNothingAndSavesNothing(string? owner)
     {
-        // A recorded hole (STATUS.md), pinned so it is not changed by accident while the owner
-        // row is being made precise: nothing was changed, so no owner is named.
+        // It used to write a row reading "owner changed" for `{}`, a null owner and a blank one,
+        // none of which changed anything: the trail was told something happened that did not, and
+        // an auditor reading it for who changed an owner would find a change nobody made. The same
+        // rule a policy change and an idempotent registration already follow. The request is still
+        // a success (200), and nothing is staged or saved.
+        var subject = Build.Subject(_environment);
+        _subjects.Seed(subject);
+
+        var result = await UpdateAsync(owner: owner);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Equal("alice", subject.Owner.Value);
+        Assert.Empty(_audit.Entries);
+        Assert.Empty(_outbox.Staged);
+        Assert.Equal(0, _unitOfWork.Saves);
+    }
+
+    [Fact]
+    public async Task AnOwnerChangeAlongsideABlankOwner_IsStillOneEntryForTheDeprecation()
+    {
+        // The line that must not move: a request that does something is still recorded. Blank
+        // owner plus deprecate deprecates, and says so, without inventing an owner change.
         _subjects.Seed(Build.Subject(_environment));
 
-        await UpdateAsync(owner: "   ");
+        await UpdateAsync(owner: "  ", deprecate: true);
 
-        Assert.Equal("owner changed", Assert.Single(_audit.Entries).Detail);
+        Assert.Equal("deprecated", Assert.Single(_audit.Entries).Detail);
+    }
+
+    [Fact]
+    public async Task SettingTheOwnerASubjectAlreadyHas_StillReadsAsTheRequestThatWasMade()
+    {
+        // Not part of the no-op rule above, on purpose: an explicit owner is a request, the entry
+        // says what was asked (`owner a -> a`, ADR-033), and the form already blocks it. Pinned so
+        // that widening "changes nothing" to cover it is a decision and not an accident.
+        _subjects.Seed(Build.Subject(_environment));
+
+        await UpdateAsync(owner: "alice");
+
+        Assert.Equal("owner alice -> alice", Assert.Single(_audit.Entries).Detail);
     }
 
     [Theory]
@@ -563,6 +600,40 @@ public class SubjectCommandHandlerTests
 
         Assert.Equal(ConcordatCodes.LifecycleTransitionInvalid, second.Error!.Code);
         Assert.Equal(1, _unitOfWork.Saves);
+    }
+
+    [Fact]
+    public async Task ARetirement_IsRecordedAsTheCaller_NotAsTheOwnerOfTheSubjectItEnds()
+    {
+        // The defect UpdateSubjectHandler had until ADR-033: the row's actor was the subject's
+        // *owner*, so retiring someone else's contract was attributed to them. An audit trail that
+        // names the wrong person for the one change that cannot be undone is worse than none.
+        _caller.Current = _caller.Current with { Actor = ActorId.Create("carol").Value };
+        _subjects.Seed(Build.Subject(_environment));
+
+        var result = await RetireAsync();
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+
+        var entry = Assert.Single(_audit.Entries);
+        Assert.Equal(AuditAction.SubjectRetired, entry.Action);
+        Assert.Equal("carol", entry.Actor.Value);
+        Assert.NotEqual(result.Value.Owner.Value, entry.Actor.Value);
+        Assert.Equal(Name, entry.Target);
+        Assert.Equal(1, _unitOfWork.Saves);
+    }
+
+    [Fact]
+    public async Task ARefusedRetirement_RecordsNothing()
+    {
+        // Records what happened, not what was attempted: the second retirement is refused and
+        // never reaches a commit, so the trail holds exactly one row.
+        _subjects.Seed(Build.Subject(_environment));
+
+        Assert.True((await RetireAsync()).IsSuccess);
+        Assert.False((await RetireAsync()).IsSuccess);
+
+        Assert.Single(_audit.Entries);
     }
 
     [Fact]
