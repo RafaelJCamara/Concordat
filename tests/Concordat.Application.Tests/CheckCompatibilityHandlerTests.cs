@@ -360,4 +360,48 @@ public class CheckCompatibilityHandlerTests
 
         Assert.Equal(Build.JsonSchema(V1).Id.Value, result.Value.SchemaId);
     }
+    // --------------------------------------- a document that is not a schema (ADR-039)
+
+    private const string NotASchema = """{"type":"bogus"}""";
+
+    [Fact]
+    public async Task ADocumentThatIsNotASchema_IsRefusedTheWayRegistrationWouldRefuseIt()
+    {
+        // The dry run exists to say what registration will say. A CI job that checked green and
+        // then failed at the publish step for a reason the check never looked at is the trap the
+        // check was built to avoid.
+        _subjects.Seed(Build.Subject(_environment));
+
+        var result = await CheckAsync(NotASchema);
+
+        Assert.Equal(ConcordatCodes.SchemaInvalid, result.Error!.Code);
+        Assert.Contains("#/type", result.Error.Message, StringComparison.Ordinal);
+        Assert.Equal(0, _schemas.Staged);
+    }
+
+    [Fact]
+    public async Task ADocumentTheRegistryAlreadyHolds_IsCheckedLikeAnyOther()
+    {
+        // Registering it would succeed, so checking it must: the same exemption, from the same
+        // gate.
+        var subject = Build.Subject(_environment);
+        subject.Register(_schemas, NotASchema);
+        _subjects.Seed(subject);
+
+        var result = await CheckAsync(NotASchema);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+    }
+
+    [Fact]
+    public async Task ADocumentOnlyAnotherTenantHolds_IsRefusedAsIfNobodyDid()
+    {
+        var held = Build.JsonSchema(NotASchema);
+        _schemas.Seed(held).Hide(held.Id);
+        _subjects.Seed(Build.Subject(_environment));
+
+        var result = await CheckAsync(NotASchema);
+
+        Assert.Equal(ConcordatCodes.SchemaInvalid, result.Error!.Code);
+    }
 }

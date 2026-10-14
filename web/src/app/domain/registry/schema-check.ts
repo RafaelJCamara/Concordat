@@ -44,9 +44,11 @@ export type PayloadCheck =
  *
  * <b>Advice, never a verdict.</b> Everything here comes from `ajv`, which is a different
  * engine from the registry's: it can disagree about `format`, about an unusual keyword, about
- * a corner of the metaschema. The registry registers `{"type":"bogus"}` without complaint, so
- * a client that treated the metaschema as a gate would be stricter than the thing it fronts.
- * These findings are therefore `advice` and nothing in the page may block on them.
+ * a corner of the metaschema. The registry refuses a new `{"type":"bogus"}`
+ * (`schema_invalid`, ADR-039), and `ajv` says the same, but a client that treated the
+ * metaschema as a gate would be wrong in the strict direction the first time the two read a
+ * corner differently. These findings are therefore `advice` and nothing in the page may block
+ * on them.
  */
 export interface SchemaCheckResult {
   /** The text that was checked, so the page can tell when the result has gone stale. */

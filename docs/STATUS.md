@@ -1,5 +1,117 @@
 # What is missing
 
+**As of 2026-08-15**, except [a document that is not a valid schema is refused, 2026-10-14](#a-document-that-is-not-a-valid-schema-is-refused-unless-the-registry-already-holds-it-2026-10-14),
+[the compatibility explanations, 2026-10-14](#compatibility-explanations-visible-text-and-a-disclosure-not-a-tooltip-2026-10-14),
+[a tolerant audit read, 2026-10-14](#the-audit-read-returns-an-action-its-build-does-not-know-as-stored-2026-10-14),
+[subject prefix search, 2026-10-14](#subjects-are-searched-by-the-start-of-their-name-2026-10-14),
+[the dashboard answered by the registry, 2026-10-14](#the-dashboard-is-answered-by-the-registry-2026-10-14),
+[contract bindings that can be changed and removed, 2026-10-14](#a-contracts-bindings-can-be-changed-and-removed-2026-10-14),
+[the policy-change notification, 2026-10-14](#a-policy-change-notifies-subscribers-and-every-subscription-with-no-event-filter-is-one-2026-10-14),
+[inheriting and the audited policy change, 2026-10-13](#a-subject-with-no-policy-of-its-own-follows-its-environments-default-and-a-policy-change-is-audited-2026-10-13),
+[the subject settings, 2026-10-13](#a-subjects-owner-and-policy-are-editable-and-the-registry-did-three-things-nobody-had-written-down-2026-10-13),
+[the create-subject screen, 2026-10-13](#the-create-subject-screen-and-a-500-that-was-not-what-it-looked-like-2026-10-13),
+[the schema editor and the web container, 2026-10-13](#the-schema-editor-and-the-web-container-2026-10-13),
+[the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
+[Security hardening, 2026-08-16](#security-hardening-2026-08-16)
+below, added later and not re-verified against the rest of this file. Test counts
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the tolerant audit read, the dashboard summary, prefix search, the compatibility explanations and the nightly audit): 1,911 .NET,
+1,689 Angular, 268 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
+the prose that had gone stale against shipped code — four places where this file claimed
+something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
+aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
+[PLAN.md](PLAN.md), which records what was built, and
+[DECISIONS-PENDING.md](DECISIONS-PENDING.md), which records what has not been decided. This
+file records what is **not there**, so the gaps are in one place rather than distributed across
+ten milestone files as unchecked boxes.
+
+Everything under "verified locally" below was run on this machine today, against the real
+container image and a real PostgreSQL. Everything else is claimed on the strength of tests.
+
+---
+
+## A document that is not a valid schema is refused, unless the registry already holds it, 2026-10-14
+
+The hole recorded since the schema editor shipped is closed ([ADR-039](adr/039-a-schema-that-is-not-a-schema-is-refused.md)).
+`{"type":"bogus"}` used to register; a new registration or dry-run `check` of a document that is well-formed JSON and not a valid
+2020-12 schema is now **`400 schema_invalid`**, with the first defect's JSON Pointer and the rule it broke in the text and a count of
+the rest. The row called this a product decision and not a bug fix because it changes what existing users can register, so it was
+probed first and is recorded as reversible (below).
+
+**What the probe found, which the row had wrong.** The row said such a schema "fails every message validated against it".
+Measured, that is true only of some, and the rest is worse:
+
+| Document | NJsonSchema (the .NET validator) | `ajv` 2020-12 |
+|---|---|---|
+| `{"type":"bogus"}` | compiles; **accepts every message** | `validateSchema` fails |
+| `{"minimum":"5"}` | compiles, **reads `"5"` as 5** | fails |
+| `{"items":[{"type":"string"}]}` | compiles as a draft-07 tuple | fails |
+| `{"properties":{"a":{"required":true}}}` | throws when compiled | fails |
+| `{"$ref":"#/$defs/nope"}` | throws when compiled | compile throws |
+
+So one stored schema quarantines every message on one SDK and silently validates nothing on the .NET one. And Avro and Protobuf
+already refuse a document that is not theirs (measured through the API: Avro `{"type":"bogus"}` is `400 schema_malformed`, "Unknown
+Avro type 'bogus'", and a `.proto` that does not parse is `400 schema_malformed`); JSON Schema was the exception only because it
+has no parser to fail.
+
+**What it refuses, and what it still does not.**
+
+- **Refuses (two kinds):** a document that fails the **assertions** of the 2020-12 meta-schema (`metaschema_violation`: a `type`
+  that names no type, a `minimum` that is a string, `required: true`, tuple-form `items`, a `properties` member that is not a
+  schema, an `$anchor` that is not a name, a `$id` with a fragment, a root that is not an object or a boolean), and a `$ref` of the
+  form `#/…` into the same document that points at nothing (`reference_unresolved`).
+- **Still does not:** it does **not assert `format`**, so a `pattern` that is not a regular expression registers (ECMA-262, RE2 and
+  .NET disagree about what one is) and throws when a message is validated; it accepts unknown keywords and vocabularies; it does not
+  judge a reference to another document, a `concordat://` address or an anchor, and never fetches one; it goes silent about
+  `#/…` references once any resource inside the document declares its own `$id`; and it does not judge a pointer with an escape
+  RFC 6901 does not define. Another dialect is still `schema_dialect_unsupported`, decided first.
+- **A document the registry already holds keeps registering:** the same document again (the idempotent no-op), into another subject of
+  the same tenant, and by promotion; "holds" means *reachable by the caller's tenant*, so what another tenant registered cannot be
+  learned from whether a registration is refused. Nothing stored is rewritten, hidden or read differently, and no read runs the check.
+- **The behaviour change to look at first:** a draft-07 or draft-04 document **with no `$schema`** using tuple `items`, boolean
+  `exclusiveMinimum`, `required: true` or a `#fragment` `$id` was accepted and is refused now. With a `$schema` it was and is
+  `schema_dialect_unsupported`.
+
+**How, and the way back.** `MetaschemaValidator` interprets the specification's own eight meta-schema files (embedded, SHA-256
+pinned, 16 enforcing keywords, and it throws when built on any other), so there is **no new package**: the one candidate probed,
+`LateApexEarlySpeed.Json.Schema`, works but brings eleven packages (a `Microsoft.Extensions.*` 3.1.0 tree) into the project the CLI
+also references, ships an HTTP document loader, and asserts `format`. The evaluator *reports* defects; `SchemaValidityGate` decides, for
+registration and the dry run alike, and promotion and impact analysis do not call it. **To reverse it:** delete the two
+`SchemaValidityGate.RefuseAsync` calls (no migration; everything registered under the rule is valid and stays valid). To demote it to
+a warning instead, turn each defect into a `Warning` portability finding.
+
+The web editor's `ajv` findings stay **advice**, as ADR-028 requires, and now cover both kinds of defect (a `$ref` into the document
+that `ajv` cannot compile is `ajv_reference`). `schema-validate.spec.ts` holds the advice and the registry to agreeing, in both
+directions, on eleven documents.
+
+### What the real stack corrected
+
+- **A message ended `…cannot follow..`.** The unresolved-reference defect is a sentence and the gate appended a full stop to it. The
+  unit tests had asserted the content and not the punctuation; the registry's own response showed it. Fixed, with a test that is red
+  without the fix.
+- **The first run of the HTTP tests failed four tests, and the rule was right.** All the tests in a collection share one database and
+  schemas are content addressed, so the second test to register `{"type":"bogus"}` found the first had stored it and was excused as a
+  document the registry already holds. Every document in them is now unique per test; it is also the clearest demonstration there is of
+  the exemption.
+- **Three of the first mutation checks survived**, and each was a test that proved nothing: `#/allOf/01` only differs from `#/allOf/1`
+  when the array has two elements; `#anchor` cannot tell the guard from its absence (`#anchor/extra` can); and a 50,000-name `required`
+  list did not separate a hashed `uniqueItems` from a pairwise one (60,000 names and a 1.5 s bound do: 0.15 to 0.6 s against 1.9 to
+  5.6 s, measured).
+
+### What was verified, and what was not
+
+Run on this machine, on Windows, against PostgreSQL 17 in Docker. **Verified:** `dotnet test Concordat.slnx` (13 assemblies, **2,132**
+tests, 0 failures; baseline 1,911, so +221, all new, and **no existing test, fixture or conformance document was refused by the rule**);
+`dotnet format --verify-no-changes`; the web unit suite (**1,692**; baseline 1,689), prettier, lint, `codes:check`, `monaco:check`,
+`ng build` and the protocol-docs gate; the corpus behind the format-level tests (104 documents, valid and not) run through `ajv`'s own
+2020-12 meta-schema, an engine that shares no code with this one: **0 verdict disagreements and no path disagreement**; the registry
+at :5101 over a private database, hosted as Development and again as Production (the log says which), answering the cases above and
+the sizes below; the full browser suite, **269 passed**, against it (private registry, `ng serve` on :4311). **Timed**, Release build, warm, the checker alone: 7.6 ms for a 6 KiB schema, 46 ms for 172
+KiB, 65 ms for 344 KiB (76 ms with a defect), 17 ms for 458 KiB holding a 60,000-name `required`; the same 344 KiB schema through the
+whole dry-run request: 370 ms valid, 328 ms refused. **Red first:** the format-level, handler and evaluator tests against a checker and
+a gate that did nothing (behaviour failures, not compile errors); the HTTP tests were written beside the implementation and are
+mutation-checked instead. **Mutation-checked, each caught by the tests named for it:** the metaschema pass, the reference pass, the
+inner-`$id` skip, data read as schema, the `~` escape guard, the leading-zero index, the `#` guard, the `# What is missing
+
 **As of 2026-08-15**, except [the compatibility explanations, 2026-10-14](#compatibility-explanations-visible-text-and-a-disclosure-not-a-tooltip-2026-10-14),
 [a tolerant audit read, 2026-10-14](#the-audit-read-returns-an-action-its-build-does-not-know-as-stored-2026-10-14),
 [subject prefix search, 2026-10-14](#subjects-are-searched-by-the-start-of-their-name-2026-10-14),
@@ -25,6 +137,18 @@ ten milestone files as unchecked boxes.
 
 Everything under "verified locally" below was run on this machine today, against the real
 container image and a real PostgreSQL. Everything else is claimed on the strength of tests.
+
+---
+
+-to-`\z` anchor, hashed
+`uniqueItems`, the integer reading of a number, `$defs` verification, the anyOf explanation, the exemption (removed; global rather than
+tenant; the shortcut for a valid document), each of the two gate calls, the evaluator refusing for itself (which turns the promotion
+test red), the "more" count and the trailing full stop, on the HTTP tests too for the exemption, the dry-run call and the evaluator; and
+on the web side the editor's reference advice, in both the unit test and the browser test. **Not verified:** a registry that held a
+schema stored by an *older build* (the HTTP tests build "registered before the rule" with a second host whose checker finds nothing,
+which is what the older build did, but no old binary was run); the production image and the CLI against this change; cross-tenant
+behaviour over HTTP (the unit tests cover it with a hidden schema; the HTTP suite has no second tenant for this); a `pattern` that is not
+a regular expression (a gap, not a check); CI.
 
 ---
 
@@ -1163,7 +1287,8 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~A policy change is not in the audit log~~ | **Closed 2026-10-13** by [ADR-033](adr/033-inherit-means-the-environments-default.md): `PUT …/compatibility-policy` is a command and writes `SUBJECT_POLICY_CHANGED` in the same transaction, as the caller, reading `policy <old> -> <new>`; a no-op and a refused change write nothing; nobody is notified. Pinned by `APolicyChangeIsRecordedAsTheCallerWithTheOldAndNewPolicy` (the inverse of `APolicyChangeLeavesNoAuditEntry`) and the policy journey in `e2e/subject-settings.spec.ts`. Rolling the registry back past it breaks the audit page while a row exists. |
 | ~~A `PATCH` that changes nothing still writes "owner changed"~~ | **Closed 2026-10-14.** `{}`, a `null` owner and a blank one still answer 200 with the subject as it was, and now write no entry, save nothing and stage nothing: the rule a policy change and an idempotent registration already follow. **Deliberately not widened to an explicit owner the subject already has**, which is a request and still reads `owner a -> a` (pinned, so widening it is a decision); a blank owner beside `deprecate` still deprecates and says only "deprecated". Red first at both levels (`APatchThatChangesNothing_WritesNothingAndSavesNothing`, `APatchThatChangesNothingAnswers200AndWritesNoEntry`, and the parity spec's count of `SUBJECT_UPDATED` rows around the bodies it sends, which gained two before the fix). The old test that pinned "owner changed" so it would not change by accident was replaced. |
 | ~~Retiring a subject records the subject's owner as the actor~~ | **Closed 2026-10-14.** `RetireSubjectHandler` takes `ICallerContext` and records the authenticated caller, as `UpdateSubjectHandler` and `SetCompatibilityPolicyHandler` do; the command still carries no actor. Before: retiring someone else's subject was attributed to them (measured in the browser parity spec: the actor was the owner `after-deprecation`, not the account that retired it). A refused retirement (the second one) writes nothing, pinned at both levels. Retiring is still not on any screen. |
-| **The registry accepts a schema that is not valid JSON Schema** | `{"type":"bogus"}` registers. Canonicalisation and the portability check never read the document against the 2020-12 metaschema, so it is stored, given an id and offered to consumers — and fails every message validated against it. The web editor reports it as advice (`ajv`); the registry does not. Whether registration should refuse it is a product decision, not a bug fix: refusing changes what existing users can register. |
+| ~~The registry accepts a schema that is not valid JSON Schema~~ | **Closed 2026-10-14** ([ADR-039](adr/039-a-schema-that-is-not-a-schema-is-refused.md)): a new registration or dry-run `check` of a document that fails the 2020-12 meta-schema's assertions, or has a `#/…` `$ref` into itself that points at nothing, is `400 schema_invalid` with the first defect's JSON Pointer; a document the caller's tenant already holds keeps registering, being read, and being promoted. **What it still does not refuse:** a `pattern` that is not a regular expression (`format` is an annotation; see the next row), an unknown keyword, and a reference to anything outside the document. Measured while closing it: the row's "fails every message" was true of some and the rest was worse, since on .NET `{"type":"bogus"}` compiles and validates nothing. |
+| **A `pattern` that is not a regular expression registers** | `{"type":"string","pattern":"("}` is accepted ([ADR-039](adr/039-a-schema-that-is-not-a-schema-is-refused.md) reads `format` as an annotation, as the 2020-12 meta-schema does) and throws when a message is validated: NJsonSchema compiles the expression lazily and reports the failure as `malformed_json`, which is the wrong word for it. ECMA-262, RE2 and .NET disagree about what a regular expression is, so refusing needs a decision about whose syntax, and the portability checker already warns about the RE2 subset. The editor's `ajv` does not flag it either. |
 | ~~A lone-surrogate escape in a schema answers 500~~ | **Closed 2026-10-13** ([ADR-031](adr/031-unpaired-surrogates-are-refused.md)): `schema_malformed`, from registration, the dry run and the lookup, in values and keys and in Avro, pinned by five conformance fixtures. It had been recorded as a bare 500 from the writer; it was a generic Problem Details body from the *reader*, and wider than the one string. |
 | ~~An undefined enum number is stored, and then breaks every list that reads it~~ | **Closed 2026-10-13**, at six sites. `compatibilityMode: "99"` parsed (`Enum.TryParse` accepts any integer), was committed, answered 500 while projecting its own response, and every `GET …/subjects` in that environment answered 500 for every caller after it; environment defaults, the registration policy and contract enforcement parsed the same way. `WireEnums.TryParseDefined` refuses it, and a comma list that silently meant a third member. Not part of the brief; found by the probes the brief asked for. A number that *is* a member is still read as it always was. |
 | ~~One outbox row the build cannot read stops notifications for every tenant~~ | **Closed 2026-10-14**, for builds that contain the fix. Found while measuring the rollback cost of `SUBJECT_POLICY_CHANGED` ([ADR-034](adr/034-a-policy-change-notifies-subscribers.md)) and not specific to it: the stored event is a token parsed on read, and a build older than the one that wrote it threw while the pump materialised its batch, so one undelivered row failed every pass for every tenant and nothing marked it delivered (a message in an unrelated environment stayed pending behind it, measured). **Two changes.** `ClaimDueAcrossTenantsAsync` filters on the tokens the build knows (`event IN (...)`, in SQL, before the `Take`), so a row it cannot read is not claimed: it stays pending, is still counted by the depth endpoint, and is delivered by whichever build can read it. And `NotificationDispatcher` catches a failed read of an environment's subscriptions (a subscription naming an unknown event) and fails *that environment's* messages (recorded, backed off, eventually parked, never discarded) instead of aborting the pass; the failed read is remembered for the pass, so it costs one query. Not done, on purpose: reading an unknown token "as far as possible" (dropping it from a subscription's list would leave it empty, and empty means every event). **What it does not do:** it protects a rollback *to a build that has it*. Rolling back to `e511c11` or `01bce23` has the old behaviour and still needs ADR-034's cleanup first. `GET …/notifications` still answers 500 for an environment holding such a subscription. Measured on the real registry with `A_FUTURE_EVENT` injected by SQL into one outbox row and one subscription: the bystander environment's message was delivered, the unreadable outbox row stayed pending with 0 attempts, and the subscription's message was failed with the reason recorded, in the same pass. Pinned by two integration tests (real PostgreSQL) and three dispatcher tests, each mutation-checked. |

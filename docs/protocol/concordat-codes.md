@@ -78,6 +78,7 @@ token and an operator can alert across a fleet.
 | `schema_malformed` | A schema body was not well-formed in its declared format. |
 | `schema_references_unsupported` | The schema depends on a definition outside itself, which v1 does not support for this format (ADR-023). |
 | `schema_dialect_unsupported` | The schema declares a JSON Schema dialect Concordat does not implement (M6.1). |
+| `schema_invalid` | The document is well-formed JSON and is not a valid schema (ADR-039): a keyword's value the 2020-12 metaschema does not allow, or a `$ref` into the document that points at nothing. |
 | `semver_invalid` | A semantic version label was not `MAJOR.MINOR.PATCH`. |
 | `semver_prerelease_unsupported` | The environment does not accept pre-release labels. Configurable per environment (`allowPreReleaseVersions`), off by default — the label itself is valid. |
 | `semver_build_metadata_unsupported` | A label carried build metadata. Refused everywhere: SemVer ignores it for precedence, so two labels carrying different metadata compare equal while being different strings, and the registry requires each label to increase. |
@@ -111,7 +112,7 @@ token and an operator can alert across a fleet.
 | `middleware_faulted` | Concordat's own middleware threw while handling a delivery, which is reported as an unenforced outcome rather than allowed to reach the application. |
 | `concurrent_write_conflict` | Two requests raced on the same row: a unique constraint or an optimistic-concurrency check caught it at the database rather than in application logic. |
 
-**87 codes.**
+**88 codes.**
 
 ## Rules for implementers
 

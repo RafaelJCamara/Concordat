@@ -17,12 +17,45 @@ describe('checkSchema — the schema', () => {
   });
 
   it('flags a keyword that is not valid under the metaschema, naming where and what is allowed', () => {
-    // The registry registers this without complaint — which is exactly why it is advice.
+    // The registry refuses a new schema for this (schema_invalid, ADR-039). It is advice all the
+    // same: ajv is a different engine, and advice that could veto would one day be wrong in the
+    // strict direction.
     const result = check('{"type":"bogus"}');
 
     expect(result.advice).toHaveLength(1);
     expect(result.advice[0]).toMatchObject({ code: 'ajv_metaschema', pointer: '/type' });
     expect(result.advice[0]!.message).toContain('"object"');
+  });
+
+  it('flags a $ref into the document that points at nothing, which no validator can compile', () => {
+    const result = check('{"$ref":"#/$defs/Adress","$defs":{"Address":{"type":"string"}}}');
+
+    expect(result.advice).toHaveLength(1);
+    expect(result.advice[0]).toMatchObject({ code: 'ajv_reference', pointer: '' });
+    expect(result.advice[0]!.message).toContain('#/$defs/Adress');
+  });
+
+  it('does not flag a reference it cannot judge, or one that leads somewhere', () => {
+    // A concordat:// address is the registry's to resolve, a remote one is nobody's here and an
+    // anchor is not what the registry judges. Saying "missing" about any of them would be a
+    // confident claim about something this has no way to know.
+    for (const schema of [
+      '{"$ref":"concordat://dev/acme.Customer/3"}',
+      '{"$ref":"https://example.com/other.json"}',
+      '{"$ref":"#node"}',
+      '{"$defs":{"a":{"type":"string"}},"$ref":"#/$defs/a"}',
+      '{"$defs":{"a/b":{}},"$ref":"#/$defs/a~1b"}',
+    ]) {
+      expect(check(schema).advice, schema).toEqual([]);
+    }
+  });
+
+  it('says what is wrong with the schema before it says anything about a reference', () => {
+    // A document that is not a schema has no references worth speaking of, and the metaschema
+    // finding is the one to fix first.
+    const result = check('{"type":"bogus","$ref":"#/$defs/nope"}');
+
+    expect(result.advice.map((a) => a.code)).toEqual(['ajv_metaschema']);
   });
 
   it('says one thing per location, not the metaschema’s three', () => {

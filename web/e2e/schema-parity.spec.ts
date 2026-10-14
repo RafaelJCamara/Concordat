@@ -143,8 +143,39 @@ const JSON_CASES: readonly Case[] = [
     label: 'a keyword that is not valid under the metaschema',
     text: '{"type":"bogus"}',
     mirrored: false,
-    why: 'the registry does not validate against the metaschema, so neither may a blocking check',
+    why:
+      'the registry refuses it as schema_invalid (ADR-039) and the editor says so as advice, which ' +
+      'never blocks: ajv is a different engine, and the two are held to agreeing in ' +
+      'schema-validate.spec.ts',
   },
+  {
+    label: 'a draft-04 spelling of a keyword',
+    text: '{"required":true}',
+    mirrored: false,
+    why: 'refused as schema_invalid, which the editor leaves to the registry and advises on',
+  },
+  {
+    label: "draft-07's tuple form of items, with no dialect declared",
+    text: '{"items":[{"type":"string"}]}',
+    mirrored: false,
+    why: 'read as 2020-12, where it is not a schema: refused as schema_invalid, advised on by the editor',
+  },
+  {
+    label: 'a reference into the document that points at nothing',
+    text: '{"$ref":"#/$defs/Adress","$defs":{"Address":{"type":"string"}}}',
+    mirrored: false,
+    why: 'refused as schema_invalid, which the editor leaves to the registry and advises on',
+  },
+  ok('a reference into the document that does resolve', '{"$defs":{"a":{}},"$ref":"#/$defs/a"}'),
+  ok(
+    'a reference to another document, which is never fetched',
+    '{"$ref":"https://example.com/other.json"}',
+  ),
+  ok(
+    'schema-shaped data under a keyword that holds data',
+    '{"default":{"type":"bogus"},"examples":[{"minimum":"5"}]}',
+  ),
+  ok('an unknown keyword', '{"x-owner":"payments"}'),
   {
     label: 'a regular expression that does not compile',
     text: '{"type":"string","pattern":"(["}',

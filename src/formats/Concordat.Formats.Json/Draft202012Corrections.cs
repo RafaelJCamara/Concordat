@@ -25,20 +25,20 @@ namespace Concordat.Formats.Json;
 internal static class Draft202012Corrections
 {
     /// <summary>Keywords whose value is itself a schema.</summary>
-    private static readonly HashSet<string> SchemaValued = new(StringComparer.Ordinal)
+    internal static readonly HashSet<string> SchemaValued = new(StringComparer.Ordinal)
     {
         "additionalProperties", "propertyNames", "contains", "not", "if", "then", "else",
         "items", "unevaluatedItems", "unevaluatedProperties", "contentSchema",
     };
 
     /// <summary>Keywords whose value is a map of name to schema.</summary>
-    private static readonly HashSet<string> SchemaMapValued = new(StringComparer.Ordinal)
+    internal static readonly HashSet<string> SchemaMapValued = new(StringComparer.Ordinal)
     {
         "properties", "patternProperties", "$defs", "definitions", "dependentSchemas",
     };
 
     /// <summary>Keywords whose value is an array of schemas.</summary>
-    private static readonly HashSet<string> SchemaArrayValued = new(StringComparer.Ordinal)
+    internal static readonly HashSet<string> SchemaArrayValued = new(StringComparer.Ordinal)
     {
         "allOf", "anyOf", "oneOf", "prefixItems",
     };

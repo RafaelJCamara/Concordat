@@ -579,9 +579,10 @@ describe('NewVersionPage', () => {
       expect(host.textContent).toContain('line 1, column 9');
     });
 
-    it('never blocks a registration, because the registry would take it', () => {
-      // The registry registers {"type":"bogus"} without complaint. A block here would be
-      // stricter than the thing it fronts.
+    it('never blocks a registration, because it is a different engine’s reading', () => {
+      // The registry refuses a new {"type":"bogus"} (schema_invalid, ADR-039), and this still does
+      // not block: ajv is not the registry's engine, so a block that was wrong would be wrong in
+      // the strict direction. The registry's own answer is what the submit then shows.
       const { fixture, host, checks } = render();
       const schema = '{"type":"bogus"}';
       type(fixture, 'schema', schema);

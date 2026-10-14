@@ -124,8 +124,11 @@ applied: the right bump depends on a verdict only the registry has.
   imported.
 - **Negative:** `ajv` is CommonJS and the build warns about it on every run, so `angular.json`
   allows it, which also silences a warning about any later CommonJS dependency named `ajv`.
-- **Neutral, and worth knowing:** the registry accepts a schema that is not valid under the 2020-12
-  metaschema, which is why `ajv`'s findings are advice. It also answered **500** to a lone-surrogate
+- **Neutral, and worth knowing:** the registry accepted a schema that is not valid under the 2020-12
+  metaschema when this was written, which is why `ajv`'s findings are advice. **It refuses a new one since
+  2026-10-14** ([ADR-039](039-a-schema-that-is-not-a-schema-is-refused.md), `schema_invalid`); the findings stay
+  advice, for the reason in Decision 2 (a different engine is wrong in the strict
+  direction at the edges), and `schema-validate.spec.ts` holds the two to agreeing on the ordinary cases. It also answered **500** to a lone-surrogate
   escape such as `"\ud800"` in a string; that was a registry defect, which
   [ADR-031](031-unpaired-surrogates-are-refused.md) closed on 2026-10-13 by refusing it with
   `schema_malformed`, and the editor now says the same, with the same code, held against the registry

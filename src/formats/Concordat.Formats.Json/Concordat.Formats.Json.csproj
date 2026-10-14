@@ -10,6 +10,18 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      The draft 2020-12 meta-schema and its seven vocabularies, as the specification
+      publishes them, with line endings normalised to LF (ADR-039). Embedded so that checking a schema never needs the
+      network: the document under test is data, and these eight files are the only schemas the
+      checker ever reads. Their content is pinned by a test, so changing one is a visible decision
+      rather than an edit.
+    -->
+    <EmbeddedResource Include="Metaschema\draft-2020-12\*.json"
+                      LogicalName="metaschema/draft-2020-12/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="NJsonSchema" />
   </ItemGroup>
 

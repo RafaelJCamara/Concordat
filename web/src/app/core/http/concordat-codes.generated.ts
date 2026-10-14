@@ -64,6 +64,7 @@ export const DOMAIN_CONCORDAT_CODES = [
   'schema_malformed',
   'schema_references_unsupported',
   'schema_dialect_unsupported',
+  'schema_invalid',
   'semver_invalid',
   'semver_prerelease_unsupported',
   'semver_build_metadata_unsupported',

@@ -81,7 +81,9 @@ property's type, which does) — and registered consumers of each, so the diff, 
 screens have real engine answers to render. Both are idempotent: they look before they write.
 
 **Fixtures the editor specs use, none of which they change.** `acme.e2e.parity.json`,
-`acme.e2e.parity.avro` and `acme.e2e.parity.proto` are created once, empty, so the registry's dry-run
+`acme.e2e.parity.avro` and `acme.e2e.parity.proto` are created once, empty (`schema-validate.spec.ts`'s
+test that holds the editor's advice to the registry's `schema_invalid` is dry runs only and leaves nothing
+behind: a refused document is never stored), so the registry's dry-run
 endpoint has a subject of each format to ask about; nothing is ever registered against them.
 `schema-editor.spec.ts` registers into a subject of its own, named by the run
 (`acme.e2e.editor.<timestamp>`), because a version cannot be undone.

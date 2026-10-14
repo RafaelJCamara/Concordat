@@ -299,6 +299,21 @@ public static class ConcordatCodes
     /// </remarks>
     public const string SchemaDialectUnsupported = "schema_dialect_unsupported";
 
+    /// <summary>
+    /// The document is well-formed JSON and is not a valid schema (ADR-039): a keyword's value
+    /// the 2020-12 metaschema does not allow, or a <c>$ref</c> into the document that points at
+    /// nothing.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="SchemaMalformed"/>, which is about the text (not JSON, a
+    /// duplicate key), and from <see cref="SchemaDialectUnsupported"/>, which is about a dialect
+    /// the registry does not implement. A document that earns this one says exactly what it
+    /// means and what it means is wrong: <c>{"type":"bogus"}</c> names a type no validator has.
+    /// Only a document the registry does not already hold is refused with it; one it does hold
+    /// keeps registering, because an idempotent retry must not start failing.
+    /// </remarks>
+    public const string SchemaInvalid = "schema_invalid";
+
     /// <summary>A semantic version label was not <c>MAJOR.MINOR.PATCH</c>.</summary>
     public const string SemverInvalid = "semver_invalid";
 

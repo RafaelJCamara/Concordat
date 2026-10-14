@@ -50,6 +50,13 @@ public class FormatRegistryTests
         public IReadOnlyList<PortabilityFinding> Check(string canonicalBody) => [];
     }
 
+    private sealed class Validity(SchemaFormat format) : ISchemaValidityChecker
+    {
+        public SchemaFormat Format => format;
+
+        public IReadOnlyList<SchemaDefect> Check(string canonicalBody) => [];
+    }
+
     private sealed class Bundler(SchemaFormat format) : ISchemaBundler
     {
         public SchemaFormat Format => format;
@@ -64,7 +71,8 @@ public class FormatRegistryTests
             [new Canonicalizer(SchemaFormat.Json), new Canonicalizer(SchemaFormat.Avro)],
             [new Checker(SchemaFormat.Json), new Checker(SchemaFormat.Avro)],
             [new Extractor(SchemaFormat.Json), new Extractor(SchemaFormat.Avro)],
-            [new Portability(SchemaFormat.Json)]);
+            [new Portability(SchemaFormat.Json)],
+            [new Validity(SchemaFormat.Json)]);
 
     [Fact]
     public void EachServiceIsResolvedByFormatRatherThanByRegistrationOrder()
@@ -109,6 +117,20 @@ public class FormatRegistryTests
 
         Assert.NotNull(registry.PortabilityChecker(SchemaFormat.Json));
         Assert.Null(registry.PortabilityChecker(SchemaFormat.Avro));
+    }
+
+    [Fact]
+    public void AFormatWithNoValidityChecker_AnswersNullInsteadOfThrowing()
+    {
+        // Avro and Protobuf are not given one, and that is the design rather than a gap: their
+        // canonicalisers parse the format, so a document that is not a schema of theirs is
+        // refused as malformed before validity is asked. Throwing here would turn that into a
+        // 500 for every Avro registration.
+        var registry = Registry();
+
+        Assert.Equal(SchemaFormat.Json, registry.ValidityChecker(SchemaFormat.Json)?.Format);
+        Assert.Null(registry.ValidityChecker(SchemaFormat.Avro));
+        Assert.Null(registry.ValidityChecker(SchemaFormat.Protobuf));
     }
 
     [Fact]

@@ -293,6 +293,17 @@ public sealed class CheckCompatibilityHandler(
             return Result<CompatibilityCheckResult>.Failure(evaluated.Error!);
         }
 
+        // The same gate registration uses, for the same reason as the same history and the same
+        // policy above: a dry run that said yes to a document the registration then refused would
+        // go green in CI for a reason the real thing does not share.
+        var invalid = await SchemaValidityGate
+            .RefuseAsync(evaluated.Value, schemas, cancellationToken).ConfigureAwait(false);
+
+        if (invalid is not null)
+        {
+            return Result<CompatibilityCheckResult>.Failure(invalid);
+        }
+
         return Result<CompatibilityCheckResult>.Success(new CompatibilityCheckResult(
             evaluated.Value.Report.IsCompatible,
             evaluated.Value.Schema.Id.Value,

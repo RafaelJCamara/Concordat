@@ -176,6 +176,17 @@ public sealed class RegisterVersionHandler(
             return Result<RegisterVersionResult>.Failure(evaluated.Error!);
         }
 
+        // After the evaluator and before anything is stored: a document that is not a schema must
+        // not be given an id. See SchemaValidityGate for the one exception, a document the
+        // registry already holds, which an idempotent retry has to keep reaching.
+        var invalid = await SchemaValidityGate
+            .RefuseAsync(evaluated.Value, schemas, cancellationToken).ConfigureAwait(false);
+
+        if (invalid is not null)
+        {
+            return Result<RegisterVersionResult>.Failure(invalid);
+        }
+
         // Before the schema is stored, because storing it is what would make a dangling or
         // cyclic edge somebody else's problem to discover. DESIGN §4 requires both checks at
         // registration and M1.6's prose has claimed them since it was written; until now the

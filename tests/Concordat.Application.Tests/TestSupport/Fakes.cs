@@ -131,9 +131,15 @@ internal sealed class FakeSchemas : ISchemaRepository
         return Task.FromResult<IReadOnlyDictionary<SchemaId, Schema>>(result);
     }
 
+    /// <summary>How many times a handler asked whether the caller can already reach a schema.</summary>
+    public int Reachabilities { get; private set; }
+
     public Task<bool> IsReachableByCurrentTenantAsync(
-        SchemaId id, CancellationToken cancellationToken) =>
-        Task.FromResult(_stored.ContainsKey(id.Value) && !_hidden.Contains(id.Value));
+        SchemaId id, CancellationToken cancellationToken)
+    {
+        Reachabilities++;
+        return Task.FromResult(_stored.ContainsKey(id.Value) && !_hidden.Contains(id.Value));
+    }
 
     public Task<Schema> AddIfMissingAsync(Schema schema, CancellationToken cancellationToken)
     {
@@ -346,6 +352,7 @@ internal sealed class JsonFormats : ISchemaFormatRegistry
     private static readonly JsonSchemaCompatibilityChecker JsonChecker = new();
     private static readonly JsonSchemaReferenceExtractor JsonExtractor = new();
     private static readonly JsonSchemaPortabilityChecker JsonPortability = new();
+    private static readonly JsonSchemaValidityChecker JsonValidity = new();
 
     public ISchemaCanonicalizer Canonicalizer(SchemaFormat format) =>
         Only(format, JsonCanonicalizer);
@@ -357,6 +364,9 @@ internal sealed class JsonFormats : ISchemaFormatRegistry
 
     public ISchemaPortabilityChecker? PortabilityChecker(SchemaFormat format) =>
         format is SchemaFormat.Json ? JsonPortability : null;
+
+    public ISchemaValidityChecker? ValidityChecker(SchemaFormat format) =>
+        format is SchemaFormat.Json ? JsonValidity : null;
 
     private static T Only<T>(SchemaFormat format, T json) =>
         format is SchemaFormat.Json

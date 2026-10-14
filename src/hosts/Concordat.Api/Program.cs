@@ -100,6 +100,11 @@ builder.Services.AddSingleton<ISchemaBundler, JsonSchemaBundler>();
 // same text (M6.1, ADR-021).
 builder.Services.AddSingleton<ISchemaPortabilityChecker, JsonSchemaPortabilityChecker>();
 
+// Also JSON Schema alone, for the opposite reason: Avro's and Protobuf's canonicalisers parse
+// their formats, so a document that is not a schema never reaches this point, while JSON
+// Schema's only reads JSON (ADR-039).
+builder.Services.AddSingleton<ISchemaValidityChecker, JsonSchemaValidityChecker>();
+
 // Avro and Protobuf are complete surfaces as of M5. Their reference extractors refuse
 // cross-subject references rather than resolving them (ADR-023): neither format has anywhere
 // to pin a version, so following a reference would bind to whatever the target currently holds.

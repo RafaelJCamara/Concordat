@@ -1,5 +1,6 @@
 using Concordat.Application.Registry;
 using Concordat.Domain.Registry;
+using Concordat.Domain.Results;
 using Concordat.Formats.Abstractions;
 using Concordat.Formats.Json;
 
@@ -51,6 +52,9 @@ public class EvaluatorTests
 
         public ISchemaPortabilityChecker? PortabilityChecker(SchemaFormat format) =>
             new JsonSchemaPortabilityChecker();
+
+        public ISchemaValidityChecker? ValidityChecker(SchemaFormat format) =>
+            new JsonSchemaValidityChecker();
     }
 
     private static IReadOnlyList<PriorSchema> OnePrior() =>
@@ -155,5 +159,55 @@ public class EvaluatorTests
             ContentModel.Open);
 
         Assert.True(result.IsFailure);
+    }
+    [Fact]
+    public void Evaluate_ReportsADocumentThatIsNotASchemaWithoutRefusingIt()
+    {
+        // Whether a defect refuses depends on whether the registry already holds the document,
+        // which only the handlers can ask. The evaluator is also what promotion and impact
+        // analysis call, and neither may start refusing a document the registry already holds.
+        var evaluator = new CompatibilityEvaluator(new Registry(new RecordingChecker(breaking: false)));
+
+        var result = evaluator.Evaluate(
+            SchemaFormat.Json,
+            """{"type":"bogus"}""",
+            [],
+            CompatibilityPolicy.Default,
+            ContentModel.Open);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Equal("#/type", Assert.Single(result.Value.Defects).Path);
+    }
+
+    [Fact]
+    public void Evaluate_ReportsNoDefectsForAValidSchema()
+    {
+        var evaluator = new CompatibilityEvaluator(new Registry(new RecordingChecker(breaking: false)));
+
+        var result = evaluator.Evaluate(
+            SchemaFormat.Json,
+            """{"type":"object"}""",
+            [],
+            CompatibilityPolicy.Default,
+            ContentModel.Open);
+
+        Assert.Empty(result.Value.Defects);
+    }
+
+    [Fact]
+    public void Evaluate_NamesTheDialectBeforeItReportsWhatIsInvalidUnderAnother()
+    {
+        // Tuple-form items is a draft-07 document, not a broken 2020-12 one. The author needs to
+        // hear which.
+        var evaluator = new CompatibilityEvaluator(new Registry(new RecordingChecker(breaking: false)));
+
+        var result = evaluator.Evaluate(
+            SchemaFormat.Json,
+            """{"$schema":"http://json-schema.org/draft-07/schema#","items":[{}]}""",
+            [],
+            CompatibilityPolicy.Default,
+            ContentModel.Open);
+
+        Assert.Equal(ConcordatCodes.SchemaDialectUnsupported, result.Error!.Code);
     }
 }

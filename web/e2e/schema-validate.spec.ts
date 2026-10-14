@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { dryRun, ownerCredential } from './registry';
-import { caretLine, setSchema, waitForSubject } from './schema-editor';
+import { caretLine, findingCodes, setSchema, waitForSubject } from './schema-editor';
 
 /**
  * Validate and the sample message: the client-side check (`ajv`), in a real browser.
@@ -12,9 +12,11 @@ import { caretLine, setSchema, waitForSubject } from './schema-editor';
  * evaluate strings again and the first test below would say so. That is the whole reason this
  * suite does not stub the worker.
  *
- * Everything else is about what the check is allowed to be: advice. The registry registers a
- * schema ajv has opinions about, so none of it may block, and the test that proves it asks the
- * registry rather than assuming.
+ * Everything else is about what the check is allowed to be: advice. ajv is a different engine from
+ * the registry's, so none of what it says may block, and the tests that prove it ask the registry
+ * rather than assuming. The registry refuses a new schema that is not valid JSON Schema
+ * (`schema_invalid`, ADR-039), and the last test in the first group holds the two to saying so
+ * about the same documents.
  */
 const ENVIRONMENT = 'dev';
 const SUBJECT = 'acme.e2e.OrderCreated';
@@ -71,8 +73,12 @@ test.describe('Validate', () => {
   }) => {
     const schema = '{"type":"bogus"}';
 
-    // The reason this is advice: the registry takes it.
-    expect((await dryRun(await ownerCredential(), ENVIRONMENT, SUBJECT, schema)).status).toBe(200);
+    // The registry refuses it, and the page does not: ajv's reading is its own, so the page says
+    // what it found and leaves the decision to the one that has to live with it.
+    expect(await dryRun(await ownerCredential(), ENVIRONMENT, SUBJECT, schema)).toEqual({
+      status: 400,
+      code: 'schema_invalid',
+    });
 
     await open(page);
     await setSchema(page, schema);
@@ -129,6 +135,64 @@ test.describe('Validate', () => {
 
     await expect(page.locator('[data-severity="advice"]')).toHaveCount(0);
     await expect(page.getByText(/changed since the last check/)).toBeVisible();
+  });
+
+  test('says what the registry says about which documents are not schemas, and never blocks on it', async ({
+    page,
+  }) => {
+    // The registry refuses a new schema that is not valid JSON Schema, and ajv is the page's own
+    // reading of the same thing. They are different engines, so the page never blocks on it; what
+    // it owes the author is not to contradict the registry on the ordinary cases. Held against
+    // the registry's answer, in both directions, on documents where the two should agree.
+    const credential = await ownerCredential();
+    const cases: readonly { text: string; refused: boolean }[] = [
+      { text: '{"type":"bogus"}', refused: true },
+      { text: '{"minimum":"5"}', refused: true },
+      { text: '{"required":true}', refused: true },
+      { text: '{"items":[{"type":"string"}]}', refused: true },
+      { text: '{"properties":{"a":{"type":"strng"}}}', refused: true },
+      { text: '{"$ref":"#/$defs/Adress","$defs":{"Address":{"type":"string"}}}', refused: true },
+      { text: '{"type":"object","properties":{"id":{"type":"string"}}}', refused: false },
+      { text: '{"x-owner":"payments","default":{"type":"bogus"}}', refused: false },
+      { text: '{"$defs":{"a":{}},"$ref":"#/$defs/a"}', refused: false },
+      { text: '{"$ref":"concordat://dev/acme.Nope/1"}', refused: false },
+      { text: '{"$ref":"https://example.com/other.json"}', refused: false },
+    ];
+
+    await open(page);
+
+    const disagreements: string[] = [];
+
+    for (const { text, refused } of cases) {
+      const registry = await dryRun(credential, ENVIRONMENT, SUBJECT, text);
+
+      if (refused !== (registry.code === 'schema_invalid')) {
+        disagreements.push(
+          `${text}: this case says the registry ${refused ? 'refuses' : 'accepts'} it; it answered ` +
+            `${registry.status} ${registry.code}.`,
+        );
+      }
+
+      await setSchema(page, text);
+      await validate(page).click();
+      await expect(
+        page.getByText(/Nothing to flag/).or(page.locator('[data-severity="advice"]').first()),
+      ).toBeVisible();
+
+      const advised = (await findingCodes(page, 'advice')).length > 0;
+
+      if (advised !== refused) {
+        disagreements.push(
+          `${text}: the registry ${refused ? 'refuses' : 'accepts'} it and the page ` +
+            `${advised ? 'advises against' : 'has nothing to say about'} it.`,
+        );
+      }
+
+      // Advice is never a veto, including when the registry is about to refuse the same thing.
+      await expect(register(page)).toBeEnabled();
+    }
+
+    expect(disagreements, disagreements.join('\n')).toEqual([]);
   });
 });
 

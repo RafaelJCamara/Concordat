@@ -24,8 +24,13 @@ public sealed class SchemaFormatRegistry(
     IEnumerable<ISchemaCanonicalizer> canonicalizers,
     IEnumerable<ICompatibilityChecker> checkers,
     IEnumerable<ISchemaReferenceExtractor> extractors,
-    IEnumerable<ISchemaPortabilityChecker> portability) : ISchemaFormatRegistry
+    IEnumerable<ISchemaPortabilityChecker> portability,
+    IEnumerable<ISchemaValidityChecker> validity) : ISchemaFormatRegistry
 {
+    /// <inheritdoc />
+    public ISchemaValidityChecker? ValidityChecker(SchemaFormat format) =>
+        validity.FirstOrDefault(v => v.Format == format);
+
     /// <inheritdoc />
     public ISchemaPortabilityChecker? PortabilityChecker(SchemaFormat format) =>
         portability.FirstOrDefault(p => p.Format == format);

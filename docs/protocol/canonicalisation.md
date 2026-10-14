@@ -227,6 +227,16 @@ almost every schema anyone writes is noise.
 Rejection happens *after* canonicalisation, on the canonical text. The dialect check is not part of
 the canonical form.
 
+### 3.8 Validity
+
+A document that is well-formed JSON and not a valid draft 2020-12 schema (`{"type":"bogus"}`, a
+`$ref` into the document that points at nothing) is refused by the registry with `schema_invalid`
+([ADR-039](../adr/039-a-schema-that-is-not-a-schema-is-refused.md)), unless the registry already
+holds that exact document. **That is the registry's decision and not part of the canonical form:** a
+document has the same canonical text and the same id whether or not it is valid, an SDK that
+computes ids offline needs no validity check to agree with the registry, and the check does not run
+when a stored schema is read.
+
 ---
 
 ## 4. Avro

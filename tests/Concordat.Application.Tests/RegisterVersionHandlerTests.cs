@@ -704,6 +704,148 @@ public class RegisterVersionHandlerTests
         Assert.Equal(PortabilitySeverity.Warning, finding.Severity);
     }
 
+    // --------------------------------------- a document that is not a schema (ADR-039)
+
+    private const string NotASchema = """{"type":"bogus"}""";
+
+    [Fact]
+    public async Task ADocumentThatIsNotASchema_IsRefusedAndNothingIsWritten()
+    {
+        var subject = Build.Subject(_environment);
+        _subjects.Seed(subject);
+
+        var result = await RegisterAsync(NotASchema);
+
+        Assert.Equal(ConcordatCodes.SchemaInvalid, result.Error!.Code);
+
+        // The point of refusing: it was not given an id, not stored, not offered, not announced.
+        Assert.Equal(0, _schemas.Staged);
+        Assert.Equal(0, _unitOfWork.Saves);
+        Assert.Empty(subject.Versions);
+        Assert.Empty(_audit.Entries);
+        Assert.Empty(_outbox.Staged);
+    }
+
+    [Fact]
+    public async Task TheRefusal_NamesWhereTheFirstDefectIsAndWhatIsWrongWithIt()
+    {
+        _subjects.Seed(Build.Subject(_environment));
+
+        var result = await RegisterAsync(NotASchema);
+
+        Assert.Contains("#/type", result.Error!.Message, StringComparison.Ordinal);
+        Assert.Contains("bogus", result.Error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("more", result.Error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheRefusal_CountsTheDefectsItDoesNotListOutRatherThanListingAllOfThem()
+    {
+        _subjects.Seed(Build.Subject(_environment));
+
+        var result = await RegisterAsync(
+            """{"type":"bogus","minimum":"x","properties":{"a":{"required":true}}}""");
+
+        // Ordered by path, so the first is #/minimum and the rest are counted: a response that
+        // listed every defect of a 500 KiB document would be the document back, unbounded.
+        Assert.Contains("#/minimum", result.Error!.Message, StringComparison.Ordinal);
+        Assert.Contains("2 more", result.Error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AReferenceThatPointsAtNothing_IsRefusedTheSameWay()
+    {
+        _subjects.Seed(Build.Subject(_environment));
+
+        var result = await RegisterAsync("""{"$ref":"#/$defs/Adress","$defs":{"Address":{}}}""");
+
+        Assert.Equal(ConcordatCodes.SchemaInvalid, result.Error!.Code);
+        Assert.Contains("#/$defs/Adress", result.Error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("..", result.Error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ADocumentTheSubjectAlreadyHolds_KeepsRegisteringAsANoOp()
+    {
+        // Registered before the rule, which is how a held schema that the rule would refuse can
+        // exist. A CI job that reruns its pipeline registers it again, and that must not start
+        // failing: the registry accepted this document and nothing about it has changed.
+        var subject = Build.Subject(_environment);
+        subject.Register(_schemas, NotASchema);
+        _subjects.Seed(subject);
+
+        var result = await RegisterAsync(NotASchema);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.False(result.Value.Created);
+        Assert.Single(subject.Versions);
+    }
+
+    [Fact]
+    public async Task ADocumentAnotherSubjectOfTheTenantHolds_RegistersIntoThisOne()
+    {
+        // Reachable is the test, not "this subject has it": promoting a version copies a held
+        // document into a subject that has never seen it, and the same rule has to let a second
+        // subject that wants the same already-accepted content register it.
+        _subjects.Seed(Build.Subject(_environment));
+        _schemas.Seed(Build.JsonSchema(NotASchema));
+
+        var result = await RegisterAsync(NotASchema);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+    }
+
+    [Fact]
+    public async Task ADocumentOnlyAnotherTenantHolds_IsRefusedAsIfNobodyDid()
+    {
+        // Otherwise registering is an oracle: submit a document, and being accepted rather than
+        // refused says some other tenant has already put exactly that one in. The same reason
+        // lookup answers "known" only for what the caller can reach.
+        var held = Build.JsonSchema(NotASchema);
+        _schemas.Seed(held).Hide(held.Id);
+        _subjects.Seed(Build.Subject(_environment));
+
+        var result = await RegisterAsync(NotASchema);
+
+        Assert.Equal(ConcordatCodes.SchemaInvalid, result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task AValidDocument_NeverAsksWhetherTheRegistryHoldsIt()
+    {
+        // The extra read is for the rare document with a defect. Every ordinary registration
+        // would otherwise pay a query it has no use for.
+        _subjects.Seed(Build.Subject(_environment));
+
+        var result = await RegisterAsync(V1);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Equal(0, _schemas.Reachabilities);
+    }
+
+    [Fact]
+    public async Task ADocumentFromAnotherDialect_IsTheDialectsRefusalNotTheMetaschemas()
+    {
+        // Tuple-form items is invalid under 2020-12 and perfectly good draft-07, and "this is
+        // draft-07" is the answer that tells its author what to do.
+        _subjects.Seed(Build.Subject(_environment));
+
+        var result = await RegisterAsync(
+            """{"$schema":"http://json-schema.org/draft-07/schema#","items":[{"type":"string"}]}""");
+
+        Assert.Equal(ConcordatCodes.SchemaDialectUnsupported, result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task ADocumentThatIsNotJson_IsStillMalformedNotInvalid()
+    {
+        _subjects.Seed(Build.Subject(_environment));
+
+        var result = await RegisterAsync("""{"type":""");
+
+        Assert.Equal(ConcordatCodes.SchemaMalformed, result.Error!.Code);
+    }
+
     private static StubEvaluator Compatible(Schema schema, CompatibilityPolicy? policy = null)
     {
         var under = policy ?? CompatibilityPolicy.Default;
@@ -712,6 +854,7 @@ public class RegisterVersionHandlerTests
             schema,
             new CompatibilityReport(true, [], [], SemverBump.None),
             CompatibilityVerdict.Compatible(under),
+            [],
             []));
     }
 }

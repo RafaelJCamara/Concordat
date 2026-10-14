@@ -32,7 +32,8 @@ const MAX_PAYLOAD_ERRORS = 25;
  * would otherwise either throw or quietly apply 2020-12 rules to a draft-07 document. Beyond
  * that `ajv` is run permissively (`strict: false`, formats off), because its strict mode flags
  * things the registry accepts, and what it still finds is reported as advice the page never
- * blocks on.
+ * blocks on. The registry refuses a new schema that is not valid JSON Schema (`schema_invalid`,
+ * ADR-039) and reads it with `format` as an annotation, which formats-off here matches.
  *
  * No Angular and no DOM here: this file is imported by the worker and by plain Node tests.
  *
@@ -94,19 +95,56 @@ export function checkSchema(request: SchemaCheckRequest): SchemaCheckResult {
   return { checked, skipped: null, advice, payload };
 }
 
-/** Whether the schema is valid under the 2020-12 metaschema, and what is not if it is not. */
+/**
+ * Whether the schema is valid under the 2020-12 metaschema, and what is not if it is not; and
+ * whether a `$ref` into the document leads anywhere.
+ *
+ * <b>These are the two things the registry refuses a new schema for</b> (`schema_invalid`,
+ * ADR-039), said here as advice. The registry's reading is its own and this is `ajv`'s, so the
+ * two can differ at the edges and this never blocks; but the common case, a typo in a `type` or
+ * in `#/$defs/Adress`, is flagged on both sides, which the parity spec holds them to.
+ */
 function adviseOnSchema(ajv: Ajv2020, schema: unknown): readonly AdvisoryFinding[] {
   const valid = ajv.validateSchema(schema as object | boolean);
 
-  if (valid === true || ajv.errors == null) {
-    return [];
+  if (valid !== true && ajv.errors != null) {
+    return summarise(ajv.errors).map((error) => ({
+      code: 'ajv_metaschema',
+      pointer: error.instancePath,
+      message: describe(error),
+    }));
   }
 
-  return summarise(ajv.errors).map((error) => ({
-    code: 'ajv_metaschema',
-    pointer: error.instancePath,
-    message: describe(error),
-  }));
+  return adviseOnLocalReference(ajv, schema);
+}
+
+/**
+ * A `$ref` of the form `#/...` that points at nothing in this document, which no validator can
+ * compile.
+ *
+ * Only a pointer into the document: a `concordat://` reference is the registry's to resolve, a
+ * remote one is nobody's here, and a plain-name anchor (`#node`) is not what the registry judges.
+ * Said only when the metaschema found nothing wrong, because a document that is not a schema has
+ * no references to speak of.
+ */
+function adviseOnLocalReference(ajv: Ajv2020, schema: unknown): readonly AdvisoryFinding[] {
+  try {
+    ajv.compile(schema as object | boolean);
+  } catch (error) {
+    const missing = (error as { missingRef?: unknown } | null)?.missingRef;
+
+    if (typeof missing === 'string' && missing.startsWith('#/')) {
+      return [
+        {
+          code: 'ajv_reference',
+          pointer: '',
+          message: `The schema refers to '${missing}', which is not in it.`,
+        },
+      ];
+    }
+  }
+
+  return [];
 }
 
 /**

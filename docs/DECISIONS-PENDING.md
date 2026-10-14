@@ -139,6 +139,33 @@ the way that were **yours to decide**, which I did not. **Both are decided and f
     back). **Then decided, once asked:** the owner-change entry
     now reads `owner <previous> -> <new>` instead of "owner changed" (a separate commit; a no-op `PATCH` kept the old text until 2026-10-14, when it began writing nothing).
 
+### 40. A document that is not a valid schema is refused with `schema_invalid`, unless the registry already holds it
+
+**Implemented** ([ADR-039](adr/039-a-schema-that-is-not-a-schema-is-refused.md), STATUS). The holes row called this "a product
+decision, not a bug fix: refusing changes what existing users can register". It is made, and recorded as reversible, because
+Avro and Protobuf already refuse a document that is not one of theirs and JSON Schema was the exception only because nobody wrote
+the step. Six calls, each yours to confirm:
+
+- **Refuse, do not warn.** Measured, an invalid schema does not "fail every message": on .NET `{"type":"bogus"}` compiles and
+  **validates nothing**, and on the other SDKs it does not compile. A warning leaves exactly that schema registered and offered.
+  *If you would rather warn*, the evaluator turns each defect into a `Warning` finding and the two `SchemaValidityGate` calls go.
+- **"Valid" is the 2020-12 meta-schema's assertions, plus a `$ref` into the same document that points at nothing.** Unknown
+  keywords and vocabularies are accepted. **`format` is an annotation, so a `pattern` that is not a regular expression still
+  registers** (ECMA-262, RE2 and .NET disagree about what one is). That is the largest thing still open.
+- **The behaviour change to look at first:** a draft-07 or draft-04 document **with no `$schema`** that uses tuple `items`,
+  boolean `exclusiveMinimum`, `required: true` or a `#fragment` `$id` is read as 2020-12 (as it already was) and is refused now.
+  With a `$schema` it is `schema_dialect_unsupported`, as before.
+- **A document the registry already holds keeps registering:** the same document again (still the idempotent `200`), into another
+  subject of the same tenant, and by promotion. "Holds" is *reachable by the caller's tenant*, not "stored", so what another
+  tenant registered cannot be learned from whether a registration is refused. Nothing stored is read differently.
+- **`400` and not `422`**, with the first defect's JSON Pointer in the text and a count of the rest; no structured `errors`
+  member. Matching `schema_malformed` keeps one family for a client to branch on.
+- **No setting.** Reversing it is deleting two calls and needs no migration; a flag that is on by default is two products to test.
+
+> **If you overturn it**, the registry accepts what it accepted before and nothing persisted depends on the rule. The editor's
+> findings were advice before and are advice now ([ADR-028](adr/028-schema-editor.md)); a browser test holds them to agreeing
+> with the registry on the ordinary cases, and would need its expectations flipped.
+
 ### 33. `ci` is a marker scope, and no role grants it
 
 **Implemented.** `RegistrationPolicy.CiOnly` has to tell a build pipeline apart from a running

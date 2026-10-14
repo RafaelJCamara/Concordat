@@ -34,6 +34,15 @@ public interface ISchemaFormatRegistry
     /// Schema is the one with five independent validators interpreting the same text.
     /// </returns>
     ISchemaPortabilityChecker? PortabilityChecker(SchemaFormat format);
+
+    /// <summary>Gets the validity checker for a format, if it has one.</summary>
+    /// <param name="format">The format.</param>
+    /// <returns>
+    /// The checker, or <see langword="null"/> when the format has none. Avro and Protobuf have
+    /// none because their canonicalisers parse them, and a document that is not a schema never
+    /// gets that far; JSON Schema is the format whose canonicaliser only reads JSON.
+    /// </returns>
+    ISchemaValidityChecker? ValidityChecker(SchemaFormat format);
 }
 
 /// <summary>A canonicalised proposal, ready to register or to check.</summary>
@@ -44,11 +53,18 @@ public interface ISchemaFormatRegistry
 /// Where this schema relies on behaviour that differs between SDKs (M6.1). Warnings only —
 /// an error-severity finding refuses the proposal before one of these is built.
 /// </param>
+/// <param name="Defects">
+/// Where the document is not a valid schema (ADR-039). <b>Reported, not enforced here:</b>
+/// whether a defect refuses the proposal depends on whether the registry already holds the
+/// document, which the evaluator cannot see. <see cref="SchemaValidityGate"/> is the one place
+/// that decides, and registration and the dry-run check both go through it.
+/// </param>
 public sealed record EvaluatedProposal(
     Schema Schema,
     CompatibilityReport Report,
     CompatibilityVerdict Verdict,
-    IReadOnlyList<PortabilityFinding> Portability);
+    IReadOnlyList<PortabilityFinding> Portability,
+    IReadOnlyList<SchemaDefect> Defects);
 
 /// <summary>
 /// Canonicalises a proposed schema, derives its identity and references, and asks the engine
@@ -117,6 +133,12 @@ public sealed class CompatibilityEvaluator(ISchemaFormatRegistry formats) : ICom
                 ConcordatCodes.SchemaDialectUnsupported, dialect.Message);
         }
 
+        // After the dialect check, not before: a draft-07 document is routinely invalid under
+        // 2020-12 (tuple-form items, boolean exclusiveMinimum), and "this is draft-07" is the
+        // answer that tells its author what to do. Reporting it as a defect first would name a
+        // symptom of the cause the dialect refusal already names.
+        var defects = formats.ValidityChecker(format)?.Check(canonical.Value) ?? [];
+
         // Edges come from the document, never from the caller (M1.4).
         var references = formats.ReferenceExtractor(format).Extract(canonical.Value);
         if (references.IsFailure)
@@ -140,6 +162,6 @@ public sealed class CompatibilityEvaluator(ISchemaFormatRegistry formats) : ICom
             : CompatibilityVerdict.Breaking(policy);
 
         return Result<EvaluatedProposal>.Success(
-            new EvaluatedProposal(schema.Value, report, verdict, portability));
+            new EvaluatedProposal(schema.Value, report, verdict, portability, defects));
     }
 }
