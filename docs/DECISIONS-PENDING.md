@@ -627,7 +627,7 @@ it is for.
 **The browser E2E half is now done too, 2026-08-15.** Playwright is in, `web/e2e/` holds 11
 tests, and the reload case above is one of them — the only way to prove a *browser* keeps the
 cookie across a real navigation and that the app asks for it before the first render. That count
-is the day's snapshot and nothing else: the suite stands at **234 tests across twenty specs** as of
+is the day's snapshot and nothing else: the suite stands at **268 tests across twenty-two specs** as of
 2026-10-14, which is the figure [STATUS.md](STATUS.md) carries.
 
 It earned its place in the first ten seconds: the subject list was **broken** against a real

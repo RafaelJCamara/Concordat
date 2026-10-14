@@ -13,8 +13,8 @@
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the policy-change notification, the unreadable-row fix and the binding editor): 1,762 .NET,
-1,504 Angular, 234 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the tolerant audit read, the dashboard summary, prefix search, the compatibility explanations and the nightly audit): 1,911 .NET,
+1,689 Angular, 268 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
 aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
@@ -991,13 +991,13 @@ only when a cookie was presented and rejected.
 | M1 registry core | 65 / 68 |
 | M2 .NET client | 32 / 41 |
 | M3 CLI | **19 / 19** |
-| M4 web app | **29 / 30**, counted from [the plan](plan/M4-web-app.md) on 2026-10-13 with its struck-through items left out; the Dashboard moved to done on 2026-10-14 ([ADR-037](adr/037-the-dashboard-is-answered-by-the-registry.md)), so the one still open is the compatibility tooltips |
+| M4 web app | **30 / 30**, counted from [the plan](plan/M4-web-app.md) on 2026-10-13 with its struck-through items left out; the Dashboard moved to done on 2026-10-14 ([ADR-037](adr/037-the-dashboard-is-answered-by-the-registry.md)), so the one still open is the compatibility tooltips |
 | M5 formats | 14 / 15 |
 | M6 SDKs | 5 / 24 |
 | M7 governance | **30 / 31** |
 | M8 identity | 13 / 15 |
 | M9 cloud | 11 / 16 |
-| **Total** | **240 / 284** |
+| **Total** | **241 / 284** |
 
 *M4's row was re-counted on 2026-10-13, since it had not been since the pages shipped; the others are as of 2026-08-30.*
 
@@ -1020,8 +1020,8 @@ from the plan 2026-09-24**, which is why this list is 9 rather than the 12 it co
 carrying an item as "not work at all" is a way of saying it should not have been a box, and the
 honest fix is to stop counting it rather than to annotate it forever.
 
-Real remaining work was **11 items** when this was written, 4 of them M4; M4 is **1** now (the
-compatibility tooltips; the Dashboard closed 2026-10-14), so **8**. The rest of the arithmetic:
+Real remaining work was **11 items** when this was written, 4 of them M4; M4 is **0** now (the
+Dashboard and the compatibility tooltips both closed 2026-10-14), so **7**. The rest of the arithmetic:
 **22 are deferred by an ADR** (M6's four SDKs, OIDC, SAML, Helm) and **5 are blocked on an account
 or a purchase** you have to make — see *Blocked on you* below. Sorted that way the picture is much
 narrower than that: a handful of schema-editor enhancements, and a pile of decisions.
@@ -1087,7 +1087,7 @@ conflict".
 
 **Done 2026-08-15:** the design-system port — the prototype's tokens, a light theme, self-hosted
 fonts ([ADR-026](adr/026-self-hosted-web-fonts.md)), the sidebar shell, the icon set and the
-cards — and the Playwright suite that now pins it. The E2E suite stands at **234 tests across twenty
+cards — and the Playwright suite that now pins it. The E2E suite stands at **268 tests across twenty-two
 specs** as of 2026-10-14, up from the 11 it launched with; `design-system.spec.ts` asserts the palette, both
 themes, the typography and the shell as **computed styles rather than pixel screenshots**, which
 are exact and identical on Windows and on CI's Linux. It exists because the placeholder palette
@@ -1174,7 +1174,7 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | ~~A page reload signs you out~~ | **Closed 2026-08-14** by decision 26 — an httpOnly `SameSite=Strict` cookie and a `/auth/resume` route that is the only thing accepting it. The credential still never touches `localStorage`. |
 | ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Still on, and now audible** (decision 27). The API logs a warning naming both ways to close it and repeats hourly until claimed; the web app shows a banner. Verified against a real container. |
-| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 234 tests today across twenty specs, up from the 11 it launched with, and run against the production image as well as the dev server. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
+| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 268 tests today across twenty-two specs, up from the 11 it launched with, and run against the production image as well as the dev server. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
 | ~~`Tenant` is not an aggregate~~ | **Closed by M9.1**, recorded here 2026-09-24 — `Tenant.Create` carries the name and slug invariants, signup writes a row per organisation, bootstrap writes the self-hosted one, and `CloudTenancyTests` drives two organisations through the real host. Self-hosted still holds exactly one row, `TenantId.SelfHosted`: the profiles differ in how many rows there are, not in whether the table means anything. |
 | ~~The derived-environment-id decision is unmade~~ | **Closed 2026-08-14.** Adopted, by creating rows that carry the derived id. No migration, and no orphaned subjects. |
 
@@ -1198,20 +1198,20 @@ Nothing here can be done from inside the repository.
 
 ## What the tests actually cover
 
-Six kinds, not one. Worth knowing which, because "1,762 tests" says nothing about what would
+Six kinds, not one. Worth knowing which, because "1,911 tests" says nothing about what would
 survive being wrong.
 
 | Kind | Where | Tests | What it proves |
 |---|---|---|---|
-| Domain unit | `Domain.Tests`, three `Formats.*` | ~927 | Invariants in isolation. No I/O |
-| Application handler | `Application.Tests` | 232 | Handler refusals and **ordering**, with hand-written fakes |
-| HTTP integration | `Api.IntegrationTests` | 309 | Real HTTP against real PostgreSQL, via Testcontainers |
+| Domain unit | `Domain.Tests`, three `Formats.*` | ~976 | Invariants in isolation. No I/O |
+| Application handler | `Application.Tests` | 253 | Handler refusals and **ordering**, with hand-written fakes |
+| HTTP integration | `Api.IntegrationTests` | 388 | Real HTTP against real PostgreSQL, via Testcontainers |
 | Conformance corpus | `Conformance` | 104, over 103 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 64 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
-| Browser end-to-end | `web/e2e` | 234 | A real Chromium against the real stack, design system included — and against the production image |
+| Browser end-to-end | `web/e2e` | 268 | A real Chromium against the real stack, design system included — and against the production image |
 
-Plus 1,504 Angular unit tests. *(Counts above re-measured 2026-10-14; the unit rows are approximate because
+Plus 1,689 Angular unit tests. *(Counts above re-measured 2026-10-14; the unit rows are approximate because
 the assemblies that do not fit a row — the client, the CLI and the contract testing — are not in them.)*
 
 **No mocking framework, deliberately.** No Moq, NSubstitute, FluentAssertions or AutoFixture —

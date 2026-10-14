@@ -295,7 +295,7 @@ rather than deleted, because "why is there no zod here?" is a question worth ans
 
 ## M4.5 Tests
 
-- [x] Playwright E2E against a real API — `web/e2e/`, 234 tests, **against the dev server and
+- [x] Playwright E2E against a real API — `web/e2e/`, 268 tests, **against the dev server and
       against the production image** (`CONCORDAT_WEB_URL=http://localhost:5063`). Found the subject list
       broken on its first run (see [STATUS.md](../STATUS.md)), and on 2026-08-15 found two
       more: a first-hit lazy-route compile that made a correct page look absent, and a
