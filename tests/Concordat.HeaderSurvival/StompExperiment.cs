@@ -82,13 +82,36 @@ public class StompExperiment(BrokerFixture broker)
             Assert.Equal("CONNECTED", connected.Command);
         }
 
-        public Task SubscribeAsync(string destination) =>
-            SendAsync("SUBSCRIBE", new Dictionary<string, string>(StringComparer.Ordinal)
+        /// <summary>Subscribes, and returns only once the broker says the subscription exists.</summary>
+        /// <remarks>
+        /// <b>A SUBSCRIBE has no reply unless a receipt is asked for, and this test publishes the
+        /// moment it returns.</b> The broker creates the subscription's queue and binds it to
+        /// <c>amq.topic</c> after it has read the frame, so a message published in between has no
+        /// binding to be routed to and is dropped, and the test then waits its full 30 seconds for
+        /// something that was never delivered. A fast machine almost never loses that race and a
+        /// busy CI runner does (it failed on two of five consecutive runs); measured
+        /// against a real broker without the wait, about one publish in 1,700 was lost, and with
+        /// it none in 6,000. The MQTT experiment is not exposed to this: its subscribe call
+        /// returns on the broker's SUBACK.
+        /// </remarks>
+        public async Task SubscribeAsync(string destination)
+        {
+            const string receipt = "concordat-probe-subscribed";
+
+            await SendAsync("SUBSCRIBE", new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["id"] = "concordat-probe",
                 ["destination"] = destination,
                 ["ack"] = "auto",
-            });
+                ["receipt"] = receipt,
+            }).ConfigureAwait(false);
+
+            var confirmed = await ReceiveAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+
+            Assert.True(confirmed is not null, "the broker did not confirm the subscription.");
+            Assert.Equal("RECEIPT", confirmed.Command);
+            Assert.Equal(receipt, confirmed.Headers["receipt-id"]);
+        }
 
         public async Task<StompFrame?> ReceiveAsync(TimeSpan timeout)
         {
