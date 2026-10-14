@@ -14,7 +14,7 @@
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the schema-validity refusal, ADR-039): 2,132 .NET,
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the schema-validity refusal, ADR-039): 2,134 .NET,
 1,692 Angular, 269 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
@@ -94,8 +94,15 @@ directions, on eleven documents.
   the exemption.
 - **Three of the first mutation checks survived**, and each was a test that proved nothing: `#/allOf/01` only differs from `#/allOf/1`
   when the array has two elements; `#anchor` cannot tell the guard from its absence (`#anchor/extra` can); and a 50,000-name `required`
-  list did not separate a hashed `uniqueItems` from a pairwise one (60,000 names and a 1.5 s bound do: 0.15 to 0.6 s against 1.9 to
-  5.6 s, measured).
+  list did not separate a hashed `uniqueItems` from a pairwise one. The fix I first made (60,000 names and a 1.5 s bound: 0.15 to
+  0.6 s against 1.9 to 5.6 s, measured locally) **failed on CI** for the correct implementation, which took over a second on the
+  runner, so it is a counting test now: the comparer is injected and the test asserts fewer than three calls per string (a pairwise
+  mutant through the same comparer fails it). A wall clock cannot tell two implementations apart on a machine you do not control.
+- **CI's "CLI container" job failed on the first push**, and it was mine: the CLI is published NativeAOT and three calls I added to
+  `Formats.Json` used reflection-based `JsonSerializer` (IL2026, IL3050), which the AOT analyser refuses even though the CLI never
+  calls the checker. It reproduces without Docker (`dotnet publish src/tools/Concordat.Cli -c Release -r win-x64 -p:PublishAot=true`:
+  six errors before, none after; the native link needs a Visual Studio toolchain this machine lacks) and is fixed with
+  `JsonEncodedText`. It was on this section's list of things not run.
 
 ### What was verified, and what was not
 
@@ -125,7 +132,7 @@ inner-`$id` skip, data read as schema, the `~` escape guard, the leading-zero in
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the schema-validity refusal, ADR-039): 2,132 .NET,
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the schema-validity refusal, ADR-039): 2,134 .NET,
 1,692 Angular, 269 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
@@ -1323,12 +1330,12 @@ Nothing here can be done from inside the repository.
 
 ## What the tests actually cover
 
-Six kinds, not one. Worth knowing which, because "2,132 tests" says nothing about what would
+Six kinds, not one. Worth knowing which, because "2,134 tests" says nothing about what would
 survive being wrong.
 
 | Kind | Where | Tests | What it proves |
 |---|---|---|---|
-| Domain unit | `Domain.Tests`, three `Formats.*` | ~1,162 | Invariants in isolation. No I/O |
+| Domain unit | `Domain.Tests`, three `Formats.*` | ~1,164 | Invariants in isolation. No I/O |
 | Application handler | `Application.Tests` | 270 | Handler refusals and **ordering**, with hand-written fakes |
 | HTTP integration | `Api.IntegrationTests` | 406 | Real HTTP against real PostgreSQL, via Testcontainers |
 | Conformance corpus | `Conformance` | 104, over 103 fixtures | The protocol as an executable spec |
