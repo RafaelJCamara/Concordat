@@ -14,8 +14,8 @@
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the tolerant audit read, the dashboard summary, prefix search, the compatibility explanations and the nightly audit): 1,911 .NET,
-1,689 Angular, 268 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the schema-validity refusal, ADR-039): 2,132 .NET,
+1,692 Angular, 269 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
 aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
@@ -125,8 +125,8 @@ inner-`$id` skip, data read as schema, the `~` escape guard, the leading-zero in
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the tolerant audit read, the dashboard summary, prefix search, the compatibility explanations and the nightly audit): 1,911 .NET,
-1,689 Angular, 268 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the schema-validity refusal, ADR-039): 2,132 .NET,
+1,692 Angular, 269 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
 aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
@@ -1211,7 +1211,7 @@ conflict".
 
 **Done 2026-08-15:** the design-system port — the prototype's tokens, a light theme, self-hosted
 fonts ([ADR-026](adr/026-self-hosted-web-fonts.md)), the sidebar shell, the icon set and the
-cards — and the Playwright suite that now pins it. The E2E suite stands at **268 tests across twenty-two
+cards — and the Playwright suite that now pins it. The E2E suite stands at **269 tests across twenty-two
 specs** as of 2026-10-14, up from the 11 it launched with; `design-system.spec.ts` asserts the palette, both
 themes, the typography and the shell as **computed styles rather than pixel screenshots**, which
 are exact and identical on Windows and on CI's Linux. It exists because the placeholder palette
@@ -1299,7 +1299,7 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | ~~A page reload signs you out~~ | **Closed 2026-08-14** by decision 26 — an httpOnly `SameSite=Strict` cookie and a `/auth/resume` route that is the only thing accepting it. The credential still never touches `localStorage`. |
 | ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Still on, and now audible** (decision 27). The API logs a warning naming both ways to close it and repeats hourly until claimed; the web app shows a banner. Verified against a real container. |
-| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 268 tests today across twenty-two specs, up from the 11 it launched with, and run against the production image as well as the dev server. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
+| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 269 tests today across twenty-two specs, up from the 11 it launched with, and run against the production image as well as the dev server. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
 | ~~`Tenant` is not an aggregate~~ | **Closed by M9.1**, recorded here 2026-09-24 — `Tenant.Create` carries the name and slug invariants, signup writes a row per organisation, bootstrap writes the self-hosted one, and `CloudTenancyTests` drives two organisations through the real host. Self-hosted still holds exactly one row, `TenantId.SelfHosted`: the profiles differ in how many rows there are, not in whether the table means anything. |
 | ~~The derived-environment-id decision is unmade~~ | **Closed 2026-08-14.** Adopted, by creating rows that carry the derived id. No migration, and no orphaned subjects. |
 
@@ -1323,20 +1323,20 @@ Nothing here can be done from inside the repository.
 
 ## What the tests actually cover
 
-Six kinds, not one. Worth knowing which, because "1,911 tests" says nothing about what would
+Six kinds, not one. Worth knowing which, because "2,132 tests" says nothing about what would
 survive being wrong.
 
 | Kind | Where | Tests | What it proves |
 |---|---|---|---|
-| Domain unit | `Domain.Tests`, three `Formats.*` | ~976 | Invariants in isolation. No I/O |
-| Application handler | `Application.Tests` | 253 | Handler refusals and **ordering**, with hand-written fakes |
-| HTTP integration | `Api.IntegrationTests` | 388 | Real HTTP against real PostgreSQL, via Testcontainers |
+| Domain unit | `Domain.Tests`, three `Formats.*` | ~1,162 | Invariants in isolation. No I/O |
+| Application handler | `Application.Tests` | 270 | Handler refusals and **ordering**, with hand-written fakes |
+| HTTP integration | `Api.IntegrationTests` | 406 | Real HTTP against real PostgreSQL, via Testcontainers |
 | Conformance corpus | `Conformance` | 104, over 103 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 64 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
-| Browser end-to-end | `web/e2e` | 268 | A real Chromium against the real stack, design system included — and against the production image |
+| Browser end-to-end | `web/e2e` | 269 | A real Chromium against the real stack, design system included — and against the production image |
 
-Plus 1,689 Angular unit tests. *(Counts above re-measured 2026-10-14; the unit rows are approximate because
+Plus 1,692 Angular unit tests. *(Counts above re-measured 2026-10-14; the unit rows are approximate because
 the assemblies that do not fit a row — the client, the CLI and the contract testing — are not in them.)*
 
 **No mocking framework, deliberately.** No Moq, NSubstitute, FluentAssertions or AutoFixture —

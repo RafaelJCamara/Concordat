@@ -251,7 +251,7 @@ cd web && CONCORDAT_WEB_URL=http://localhost:5063 npm run e2e
 
 ## Running the tests
 
-### The .NET suite — 1,911 tests
+### The .NET suite — 2,132 tests
 
 ```bash
 dotnet test Concordat.slnx
@@ -262,10 +262,10 @@ containers through Testcontainers rather than mocking them, so a cold run pulls 
 takes several minutes. The other eight are pure unit tests and finish in seconds:
 
 ```bash
-dotnet test tests/Concordat.Domain.Tests        # 558 tests, no Docker, ~1s
+dotnet test tests/Concordat.Domain.Tests        # 607 tests, no Docker, ~1s
 ```
 
-### The web suite — 1,689 tests
+### The web suite — 1,692 tests
 
 ```bash
 cd web
@@ -276,7 +276,7 @@ npm run codes:check     # fails if the error-code union has drifted from the .NE
 npm run monaco:check    # fails if the vendored editor stylesheet is not the installed Monaco's
 ```
 
-### The browser end-to-end suite — 268 tests
+### The browser end-to-end suite — 269 tests
 
 Two processes Playwright deliberately does not start for you, then the tests — a config that
 quietly started its own copy of either half would produce a suite that passes against the
