@@ -545,9 +545,16 @@ internal sealed class MetaschemaValidator
         noun is "array" or "integer" or "object" ? $"an {noun}" : noun is "null" ? "null" : $"a {noun}";
 
     /// <summary>The first string that occurs twice in an array, or null.</summary>
-    private static string? FirstRepeatedString(JsonElement array)
+    /// <param name="array">The array.</param>
+    /// <param name="comparer">
+    /// How two strings are equal. Ordinal in production; a test passes one that counts its calls,
+    /// because the only way to see from outside that this is linear and not quadratic is to count
+    /// the comparisons, and a wall clock is too noisy to tell on a loaded machine (a time bound
+    /// here passed locally and failed on CI).
+    /// </param>
+    internal static string? FirstRepeatedString(JsonElement array, IEqualityComparer<string>? comparer = null)
     {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(comparer ?? StringComparer.Ordinal);
 
         foreach (var item in array.EnumerateArray())
         {

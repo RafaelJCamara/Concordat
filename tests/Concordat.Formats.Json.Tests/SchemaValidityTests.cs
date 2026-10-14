@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using Concordat.Formats.Abstractions;
 using Concordat.Formats.Json;
 
@@ -289,19 +290,54 @@ public class SchemaValidityTests
     // ---------------------------------------------------------------------- bounds
 
     [Fact]
-    public void ARequiredListAsLongAsADocumentCanHold_IsCheckedWithoutComparingEveryPair()
+    public void ARequiredListAsLongAsADocumentCanHold_IsAcceptedWhole()
     {
-        // uniqueItems done pairwise is quadratic, and the longest list a 512 KiB document can hold
-        // is on the order of 60,000 short names. Measured on this test: hashed, 0.15 to 0.6 s with
-        // the metaschema warm-up; compared pairwise, 1.9 to 5.6 s. The bound sits between the two,
-        // and a wall clock is the only way to see a quadratic scan from outside.
+        // The longest list a 512 KiB document can hold is on the order of 60,000 short names. That
+        // it is checked in linear time is held by the next test, by counting, not by a clock.
         var names = string.Join(',', Enumerable.Range(0, 60_000).Select(i => $"\"{i}\""));
-        var clock = Stopwatch.StartNew();
 
-        var defects = Check($$"""{"required":[{{names}}]}""");
+        Assert.Empty(Check($$"""{"required":[{{names}}]}"""));
+    }
 
-        Assert.Empty(defects);
-        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(1.5), $"took {clock.Elapsed}");
+    [Fact]
+    public void UniqueItems_ComparesEachStringOnceAgainstAHashNotEveryPair()
+    {
+        // uniqueItems done pairwise is quadratic: for the 60,000 names above, 1.8 billion comparisons
+        // per registration. Counted rather than timed, so it says the same on any machine. Hashed,
+        // each string is hashed once and compared only against a colliding one.
+        var json = "[" + string.Join(',', Enumerable.Range(0, 60_000).Select(i => $"\"{i}\"")) + "]";
+        using var document = JsonDocument.Parse(json);
+        var comparer = new CountingComparer();
+
+        var repeated = MetaschemaValidator.FirstRepeatedString(document.RootElement, comparer);
+
+        Assert.Null(repeated);
+        Assert.True(comparer.Calls < 3 * 60_000, $"{comparer.Calls} comparisons for 60,000 strings");
+    }
+
+    [Fact]
+    public void UniqueItems_FindsTheFirstStringThatRepeats()
+    {
+        using var document = JsonDocument.Parse("""["a","b","c","b","a"]""");
+
+        Assert.Equal("b", MetaschemaValidator.FirstRepeatedString(document.RootElement));
+    }
+
+    private sealed class CountingComparer : IEqualityComparer<string>
+    {
+        public int Calls { get; private set; }
+
+        public bool Equals(string? x, string? y)
+        {
+            Calls++;
+            return string.Equals(x, y, StringComparison.Ordinal);
+        }
+
+        public int GetHashCode(string obj)
+        {
+            Calls++;
+            return StringComparer.Ordinal.GetHashCode(obj);
+        }
     }
 
     [Fact]
