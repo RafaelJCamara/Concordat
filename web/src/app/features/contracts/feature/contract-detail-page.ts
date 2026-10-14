@@ -27,7 +27,10 @@ import { Icon } from '../../../shared/ui/icon/icon';
 import { ContractDetailStore, type ContractAction } from '../application/contract-detail-store';
 import { BindingEditor, type BindingTarget } from '../ui/binding-editor';
 import { BindingList, type BindingRef } from '../ui/binding-list';
-import { ENFORCEMENT_MEANING, EnforcementBadge } from '../ui/enforcement-badge';
+import {
+  ENFORCEMENT_MEANING,
+  EnforcementBadge,
+} from '../../../shared/ui/enforcement-badge/enforcement-badge';
 
 const INPUT =
   'border-input bg-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm focus-visible:ring-1 focus-visible:outline-none';

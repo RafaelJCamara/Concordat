@@ -51,6 +51,21 @@ public sealed class PostgresFixture : IAsyncLifetime
         return new ConcordatDbContext(options, new FixedTenant(tenant ?? DefaultTenant));
     }
 
+    /// <summary>Creates a context bound to the given tenant, observed by interceptors.</summary>
+    /// <param name="tenant">The tenant to scope to.</param>
+    /// <param name="interceptors">What to observe the context with, for example a command counter.</param>
+    /// <returns>A new context. The caller disposes it.</returns>
+    public ConcordatDbContext NewObservedContext(
+        TenantId tenant, params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors)
+    {
+        var options = new DbContextOptionsBuilder<ConcordatDbContext>()
+            .UseNpgsql(_container.GetConnectionString())
+            .AddInterceptors(interceptors)
+            .Options;
+
+        return new ConcordatDbContext(options, new FixedTenant(tenant));
+    }
+
     private sealed class FixedTenant(TenantId tenant) : ITenantContext
     {
         public TenantId Current { get; } = tenant;

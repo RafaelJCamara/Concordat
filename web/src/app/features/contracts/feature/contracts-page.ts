@@ -10,7 +10,7 @@ import { ENFORCEMENT_MODES, type EnforcementMode } from '../../../domain/contrac
 import { CONTRACT_WRITE_SCOPES } from '../../../domain/identity/scope';
 import { RelativeTimePipe } from '../../../shared/pipes/relative-time-pipe';
 import { ContractListStore } from '../application/contract-list-store';
-import { EnforcementBadge } from '../ui/enforcement-badge';
+import { EnforcementBadge } from '../../../shared/ui/enforcement-badge/enforcement-badge';
 
 const INPUT =
   'border-input bg-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm focus-visible:ring-1 focus-visible:outline-none';

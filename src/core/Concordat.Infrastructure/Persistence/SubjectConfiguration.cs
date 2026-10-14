@@ -108,6 +108,16 @@ internal sealed class SubjectConfiguration : IEntityTypeConfiguration<Subject>
             .IsUnique()
             .HasDatabaseName("ux_subject_name_per_environment");
 
+        // The dashboard's "newest subjects" (ADR-037): the top few of an environment by creation
+        // time. Without this the database reads every subject the environment has and keeps six;
+        // with it, it reads six. Measured at 20,000 subjects in the environment (200,000 in the
+        // table): 14-62 ms before, 0.7 ms after. It is the cost of 11 MB per 200,000 subjects and a
+        // second index entry on every subject insert, which is rare next to a read of the dashboard.
+        builder.HasIndex(
+                TenantIdProperty, nameof(Subject.EnvironmentId), nameof(Subject.CreatedAt))
+            .IsDescending(false, false, true)
+            .HasDatabaseName("ix_subject_tenant_environment_created");
+
         builder.OwnsMany(s => s.Versions, version =>
         {
             version.ToTable("schema_version");
@@ -164,6 +174,22 @@ internal sealed class SubjectConfiguration : IEntityTypeConfiguration<Subject>
             // waiting for someone to write a DELETE.
             version.HasIndex(nameof(SchemaVersion.SchemaId))
                 .HasDatabaseName("ix_schema_version_schema_id");
+
+            // The dashboard's "breaking changes" (ADR-037): the newest versions held at the gate or
+            // rejected, which are a small fraction of all versions, so a partial index over only them
+            // is small (1.3 MB for 60,000 of 2,000,000 rows) and answers "newest first, stop at five"
+            // without reading the environment's versions. Measured at 20,000 subjects x 10 versions in
+            // the environment: 160-570 ms before, 5 ms after. A version row has no tenant or
+            // environment of its own, so the index runs across tenants and the join to the subject
+            // filters; PostgreSQL chooses it only when that is the cheaper way, and a small tenant was
+            // measured keeping its subject-first plan (a few milliseconds either way).
+            //
+            // The predicate repeats the stored text of two VersionStatus members. They are stored by
+            // name, so renaming either would already need a data migration; this index is in it.
+            version.HasIndex(nameof(SchemaVersion.RegisteredAt))
+                .IsDescending()
+                .HasFilter("status IN ('AwaitingApproval', 'Rejected')")
+                .HasDatabaseName("ix_schema_version_held");
 
             version.ToTable(t =>
                 t.HasCheckConstraint("ck_schema_version_ordinal_positive", "ordinal >= 1"));

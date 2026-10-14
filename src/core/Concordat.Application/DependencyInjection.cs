@@ -143,6 +143,9 @@ public static class DependencyInjection
             IQueryHandler<GetSchemaUsagesQuery, IReadOnlyList<SchemaUsage>>, GetSchemaUsagesHandler>();
         services.AddScoped<IQueryHandler<DiffVersionsQuery, DiffResult>, DiffVersionsHandler>();
         services.AddScoped<IQueryHandler<BootstrapQuery, BootstrapResult>, BootstrapHandler>();
+        services.AddScoped<
+            IQueryHandler<GetEnvironmentSummaryQuery, EnvironmentSummary>,
+            GetEnvironmentSummaryHandler>();
 
         // M7.4 governance.
         services.AddScoped<

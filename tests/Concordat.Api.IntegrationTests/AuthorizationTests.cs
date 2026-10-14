@@ -165,6 +165,7 @@ public class AuthorizationTests(AuthApiFactory factory)
             "/v1/environments/test",
             "/v1/audit",
             "/v1/environments/test/subjects",
+            "/v1/environments/test/summary",
             "/v1/environments/test/contracts",
             "/v1/environments/test/notifications",
             "/v1/notifications/outbox",

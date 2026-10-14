@@ -202,6 +202,18 @@ It reads nothing another spec makes and no other spec reads these. Like every sp
 red part-way leaves what it made. It signs in nowhere (the default browser is the owner); it holds two registry answers back with
 `page.route` to look at the in-between states, which are the only requests it touches.
 
+**The dashboard is asserted against an environment of its own, and never by an absolute count of `dev`.**
+`dashboard.spec.ts` ([ADR-037](../../docs/adr/037-the-dashboard-is-answered-by-the-registry.md)) arranges **`e2e-dashboard`**, created
+once by the spec and **never written to by any other spec**, and makes **two subjects, one contract (two publish bindings) and one reported
+violation per run** in it, named for the run (`acme.e2e.dashboard.held.<timestamp>`, `…bare…`, `e2e-dashboard-<timestamp>`). It reads the
+overview through the API before and after arranging and asserts the difference (two subjects, one held version, one more `ENFORCE`
+contract, and so on), then asserts the page shows what the registry reports for the same environment. That is why the environment
+is its own: "the newest subject" and "the newest breaking change" can only be asserted by name where nothing else writes. `dev` is
+only ever compared to the registry's own answer for `dev`, never to a number. The empty states use `e2e-empty` as
+`new-subject.spec.ts` does (answering `config.json`), and **nothing may create a subject, a contract or a violation in it**: the dashboard's three
+empty panels depend on that. The first test asserts the page asks for the summary once and for the subject list never, which is the
+claim that nothing is derived in the browser.
+
 **Match the account control, not the account's email.** A subject the browser creates is owned by
 the signed-in account, so its email now appears in a table cell on the list as well as in the
 sidebar, and `getByText(email)` stopped being unique the first time `new-subject.spec.ts` ran. The

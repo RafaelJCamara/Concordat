@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { latestVersion, pendingVersions, type Subject } from '../../../domain/registry/subject';
+import type { NewestSubject } from '../../../domain/registry/environment-summary';
 import { Icon } from '../../../shared/ui/icon/icon';
 import { StatusBadge } from '../../../shared/ui/status-badge/status-badge';
 import { SubjectName } from '../../../shared/ui/subject-name/subject-name';
@@ -7,6 +7,13 @@ import { RelativeTimePipe } from '../../../shared/pipes/relative-time-pipe';
 
 /**
  * One subject, as a card.
+ *
+ * <b>It is handed what the registry's overview carries (ADR-037), not a `Subject` with every
+ * version.</b> The dashboard stopped fetching the whole list to draw six of these, so the card
+ * works from a count of versions, a count held at the gate and the pointer's ordinal. It says when
+ * the subject was *created*, because that is what the overview orders by: a card that said
+ * "registered" about the latest version while the row sat where its creation put it would have two
+ * clocks in one tile.
  *
  * The prototype's `SchemaCard`: a tinted 10×10 glyph tile, the name and its version badge
  * on one line, then a footer of dim metadata. What the card *says* is different — the
@@ -68,12 +75,8 @@ import { RelativeTimePipe } from '../../../shared/pipes/relative-time-pipe';
                 thing to read at a glance and the wrong thing to paste into an incident
                 channel.
               -->
-              <span [title]="registeredAt()?.toISOString() ?? ''">
-                @if (registeredAt(); as at) {
-                  Registered {{ at | cdRelativeTime }}
-                } @else {
-                  Never registered
-                }
+              <span [title]="subject().createdAt.toISOString()">
+                Created {{ subject().createdAt | cdRelativeTime }}
               </span>
             </span>
 
@@ -101,25 +104,21 @@ import { RelativeTimePipe } from '../../../shared/pipes/relative-time-pipe';
   `,
 })
 export class SubjectCard {
-  readonly subject = input.required<Subject>();
-
-  private readonly latest = computed(() => latestVersion(this.subject()));
+  readonly subject = input.required<NewestSubject>();
 
   /**
    * An em dash, not "v0" or "none": a subject with no active version is the ordinary state
    * right after creation, and a zero reads like a count that went wrong.
    */
   protected readonly latestLabel = computed(() => {
-    const latest = this.latest();
-    return latest === null ? '—' : `v${latest.ordinal}`;
+    const latest = this.subject().latest;
+    return latest === null ? '—' : `v${latest}`;
   });
 
-  protected readonly registeredAt = computed(() => this.latest()?.registeredAt ?? null);
-
-  protected readonly pending = computed(() => pendingVersions(this.subject()).length);
+  protected readonly pending = computed(() => this.subject().awaitingApproval);
 
   protected readonly versionCount = computed(() => {
-    const count = this.subject().versions.length;
+    const count = this.subject().versions;
     return `${count} version${count === 1 ? '' : 's'}`;
   });
 }

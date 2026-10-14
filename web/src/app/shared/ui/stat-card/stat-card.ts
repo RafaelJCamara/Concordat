@@ -20,6 +20,9 @@ import { Icon, type IconName } from '../icon/icon';
   selector: 'cd-stat-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [NgTemplateOutlet, RouterLink, Icon],
+  // A block that fills its grid cell, so a card whose title wraps does not leave its neighbours
+  // shorter: a custom element is inline by default and ignores the row it sits in.
+  host: { class: 'block h-full' },
   template: `
     <ng-template #body>
       <div class="flex items-start justify-between gap-4">
@@ -50,13 +53,13 @@ import { Icon, type IconName } from '../icon/icon';
     @if (route(); as route) {
       <a
         [routerLink]="route"
-        class="border-border bg-card hover:border-primary/30 hover:shadow-primary/5 focus-visible:ring-ring group relative block overflow-hidden rounded-xl border p-5 transition-all duration-300 hover:shadow-lg focus-visible:ring-2 focus-visible:outline-none"
+        class="border-border bg-card hover:border-primary/30 hover:shadow-primary/5 focus-visible:ring-ring group relative block h-full overflow-hidden rounded-xl border p-5 transition-all duration-300 hover:shadow-lg focus-visible:ring-2 focus-visible:outline-none"
       >
         <ng-container [ngTemplateOutlet]="body" />
       </a>
     } @else {
       <div
-        class="border-border bg-card hover:border-primary/30 hover:shadow-primary/5 group relative block overflow-hidden rounded-xl border p-5 transition-all duration-300 hover:shadow-lg"
+        class="border-border bg-card hover:border-primary/30 hover:shadow-primary/5 group relative block h-full overflow-hidden rounded-xl border p-5 transition-all duration-300 hover:shadow-lg"
       >
         <ng-container [ngTemplateOutlet]="body" />
       </div>

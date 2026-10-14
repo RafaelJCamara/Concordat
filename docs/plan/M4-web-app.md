@@ -51,11 +51,14 @@ sign-in screen that lets someone pass it, which is recorded as
 > need to live in the chrome, where it would go stale in a second place. Add the row in the
 > same commit as the route.
 
-- [~] `Dashboard` — environment-scoped overview. **First slice shipped** on `/`: subject,
-      version and awaiting-approval counts, and the most recently registered subjects. Every
-      number is derived from the subject list rather than fetched, which is honest at this size
-      and has to move server-side the day that list is paginated. Recent breaking changes and
-      enforcement coverage wait on the endpoints behind them
+- [x] `Dashboard` — environment-scoped overview, on `/`. **Every number comes from
+      `GET /v1/environments/{env}/summary`** ([ADR-037](../adr/037-the-dashboard-is-answered-by-the-registry.md)),
+      and the browser derives none: it was first built from the subject list, which was honest at
+      that size and would have under-counted the day the list was paginated. Subject, version,
+      awaiting-approval and violation counts, the newest subjects, the versions held at the gate
+      or rejected, and how contracts are set per enforcement mode. **Enforcement coverage is
+      what contracts declare**, not what services do (the registry never sees traffic), and
+      zero violations is zero *reported*
 - [x] `SubjectListPage`, `SubjectDetailPage` (`/subjects/:name`) and `VersionDetailPage`
       (`/subjects/:name/versions/:ordinal`) — **real routes, not query params.** `:ordinal`
       takes the literal `latest` as well as a number, matching the API, so a pasted link keeps

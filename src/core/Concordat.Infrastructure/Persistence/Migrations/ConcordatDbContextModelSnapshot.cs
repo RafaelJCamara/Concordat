@@ -829,6 +829,10 @@ namespace Concordat.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TenantId", "EnvironmentId", "CreatedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_subject_tenant_environment_created");
+
                     b.HasIndex("TenantId", "EnvironmentId", "Name")
                         .IsUnique()
                         .HasDatabaseName("ux_subject_name_per_environment");
@@ -1198,6 +1202,11 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                                 .HasColumnName("status");
 
                             b1.HasKey("subject_id", "Ordinal");
+
+                            b1.HasIndex("RegisteredAt")
+                                .IsDescending()
+                                .HasDatabaseName("ix_schema_version_held")
+                                .HasFilter("status IN ('AwaitingApproval', 'Rejected')");
 
                             b1.HasIndex("SchemaId")
                                 .HasDatabaseName("ix_schema_version_schema_id");

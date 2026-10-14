@@ -3,6 +3,7 @@
 **As of 2026-08-15**, except [the compatibility explanations, 2026-10-14](#compatibility-explanations-visible-text-and-a-disclosure-not-a-tooltip-2026-10-14),
 [a tolerant audit read, 2026-10-14](#the-audit-read-returns-an-action-its-build-does-not-know-as-stored-2026-10-14),
 [subject prefix search, 2026-10-14](#subjects-are-searched-by-the-start-of-their-name-2026-10-14),
+[the dashboard answered by the registry, 2026-10-14](#the-dashboard-is-answered-by-the-registry-2026-10-14),
 [contract bindings that can be changed and removed, 2026-10-14](#a-contracts-bindings-can-be-changed-and-removed-2026-10-14),
 [the policy-change notification, 2026-10-14](#a-policy-change-notifies-subscribers-and-every-subscription-with-no-event-filter-is-one-2026-10-14),
 [inheriting and the audited policy change, 2026-10-13](#a-subject-with-no-policy-of-its-own-follows-its-environments-default-and-a-policy-change-is-audited-2026-10-13),
@@ -225,6 +226,69 @@ filter and no tenant filter, `IsNullOrWhiteSpace`, the prefix lower-cased in the
 a replaced branch and the prefix pattern. **Not mutation-checked individually:** the browser spec's case and underscore tests
 (the same behaviour is mutated at .NET level), and its 390 px and console tests. **Not run:** the production image, the CLI (it
 has no prefix flag), two registries of different builds, CI.
+
+---
+
+## The dashboard is answered by the registry, 2026-10-14
+
+The last part-built screen is built ([ADR-037](adr/037-the-dashboard-is-answered-by-the-registry.md)). The Dashboard on `/` derived every number
+in the browser from the subject list, which would have under-counted the day that list was paginated, and had no data for
+two of the three things DESIGN §9 lists for it. `GET /v1/environments/{env}/summary` now answers all of it with six aggregate
+statements and no per-subject loop, and the browser derives nothing: the old computation is deleted, not kept beside it.
+
+**What it shows.** Subject, version, awaiting-approval and violation counts; the six newest subjects; the five newest versions held
+at the gate or rejected; and, for each enforcement mode, how many contracts are set to it and how many publish and consume
+bindings they carry. Empty states for each panel and for an empty registry, at 1280 and 390 px, light and dark.
+
+**What it does not mean, and says so on the screen.** Enforcement coverage is **what contracts declare**: the registry never
+sees message traffic, so `ENFORCE` is an instruction clients receive and not proof that a service follows it. It is a **count**,
+not a share of anything (a binding names its subjects in one unindexed text column, so subject-level coverage cannot be computed
+honestly). **Zero violations is zero reported.** A violation row has no resolved state, so "open" is "recorded", and `recent` is
+last seen in 24 hours. "Breaking" is what the registry did (held, or rejected), so an approved breaking change is live and is not
+listed. "Recent subjects" is now by **creation** time (it was the registration time of what `latest` pointed at, which sorted a
+brand-new subject last), and the card says "Created".
+
+**What each number costs** is in the ADR, measured on 20,000 subjects and 200,000 versions in one environment, inside tables ten
+times that. Two indexes were added in one migration (`DashboardSummaryIndexes`): newest subjects went from 14-62 ms to 0.3 ms, and
+the breaking-changes list from 160-570 ms to 1 ms. **The route is still linear in the versions of the environment**, because
+counting them by status visits every one: about 100-125 ms at that size, nearly all of the route's 115-140 ms. A covering index
+only got it to 70 ms for 25 MB, so it was not added; the remedy when it hurts is a maintained counter, not built.
+
+### What the real stack corrected
+
+- **I had assumed the route could be hosted as Production in a test the way it is hosted as Development.** It cannot without a
+  connection string: Production refuses to start without one rather than guess. `TheOverviewIsIdenticalHostedAsProductionAndAsDevelopment`
+  hosts both over the same database and compares the bodies byte for byte; the placeholder string is never connected to.
+- **`TopologyScope.Default` is one shared instance, and EF saves it for the first binding and nulls it on the second** (a not-null
+  violation on `virtual_host`). Requests never meet it, since each adds one binding in its own context; it surfaced arranging a
+  contract with several bindings in a test. Noted, not changed.
+- **A version-7 GUID's first twelve characters are a timestamp**, so two schemas and two contracts made in one millisecond shared a
+  key. The reader tests use the random half.
+- **The decision on a rejected version is attributed to the caller, not the `decidedBy` the request body names** (an unclaimed instance
+  answers as `unclaimed-instance`): the first assertion said `bob`.
+- **The stat cards were ragged at 1280 px** (a title that wraps made one card taller, because a custom element is inline and ignored its
+  grid row). Found in the screenshot, not by a test; `StatCard` is now a block that fills its cell, and the title is "Violations".
+- The first scale seed put every version at `Active` (a volatile `random()` in a lateral join was evaluated once); the plans measured
+  with it were wrong and were redone on a seed whose statuses are a hash of the row.
+
+### What was verified, and what was not
+
+Run on this machine, on Windows, only. **Verified:** `dotnet format --verify-no-changes`; `Concordat.Application.Tests` (237) and
+`Concordat.Api.IntegrationTests` (333), each whole, against real PostgreSQL; the web unit suite (1,570), lint, prettier, `codes:check`,
+`monaco:check` and `ng build`; `docs/api/openapi.v1.json` regenerated by the build; the whole browser suite (246, twelve of them
+new) against the dev server and a private registry and database, after a registry restart; the migration up, down and up on a
+database holding 2,000,000 versions (row counts unchanged); the query plans, as the ADR says, on a seeded database. The dashboard was
+looked at, populated and empty, at 1280 and 390 px, light and dark. **Red first:** the reader tests (13 of 14) against a stub reader that
+returns zeros, failing on behaviour once their arrangements saved cleanly. The HTTP tests and the web specs were written after the code,
+not before, and were **mutation-checked instead**: seventeen mutants of the page, store, DTO, API, panels, card and domain, sixteen
+killed by named unit specs (three were first compile errors, a weak kill, and were redone as mutants that compile) and the page's old
+request for the subject list put back, which only the browser spec fails on. **Mutation-checked, .NET:** twenty-two mutants of the reader, handler and endpoint (a retired subject not counted, a
+dismissed or an active version listed, the order reversed, the limit ignored, the window edge strict, the tenant filter or the
+environment predicate dropped on each query, consume bindings dropped, modes collapsed, a per-subject loop added, the scope removed or
+too strict, a wire token or the window changed), each killed by a named test but one, which the build refuses (the analyzer bans
+`DateTimeOffset.UtcNow`, a handler reading the wrong clock). **Not run:** the production web image; `smoke-web-image.sh`; the CLI,
+SDKs and GitHub Action (none reads this route); CI; the route against a registry holding the scale data over HTTP (the plans were read
+from the database, not timed through the API); anything with a second browser session open on the dashboard.
 
 ---
 
@@ -927,13 +991,13 @@ only when a cookie was presented and rejected.
 | M1 registry core | 65 / 68 |
 | M2 .NET client | 32 / 41 |
 | M3 CLI | **19 / 19** |
-| M4 web app | **28 / 30**, counted from [the plan](plan/M4-web-app.md) on 2026-10-13 with its struck-through items left out; the Dashboard is the part-built one of the two still open |
+| M4 web app | **29 / 30**, counted from [the plan](plan/M4-web-app.md) on 2026-10-13 with its struck-through items left out; the Dashboard moved to done on 2026-10-14 ([ADR-037](adr/037-the-dashboard-is-answered-by-the-registry.md)), so the one still open is the compatibility tooltips |
 | M5 formats | 14 / 15 |
 | M6 SDKs | 5 / 24 |
 | M7 governance | **30 / 31** |
 | M8 identity | 13 / 15 |
 | M9 cloud | 11 / 16 |
-| **Total** | **239 / 284** |
+| **Total** | **240 / 284** |
 
 *M4's row was re-counted on 2026-10-13, since it had not been since the pages shipped; the others are as of 2026-08-30.*
 
@@ -956,8 +1020,8 @@ from the plan 2026-09-24**, which is why this list is 9 rather than the 12 it co
 carrying an item as "not work at all" is a way of saying it should not have been a box, and the
 honest fix is to stop counting it rather than to annotate it forever.
 
-Real remaining work was **11 items** when this was written, 4 of them M4; M4 is **2** now (the
-part-built Dashboard and the compatibility tooltips), so **9**. The rest of the arithmetic:
+Real remaining work was **11 items** when this was written, 4 of them M4; M4 is **1** now (the
+compatibility tooltips; the Dashboard closed 2026-10-14), so **8**. The rest of the arithmetic:
 **22 are deferred by an ADR** (M6's four SDKs, OIDC, SAML, Helm) and **5 are blocked on an account
 or a purchase** you have to make — see *Blocked on you* below. Sorted that way the picture is much
 narrower than that: a handful of schema-editor enhancements, and a pile of decisions.
@@ -972,7 +1036,7 @@ described shipped code since decision 25 landed the day before.
 
 ### M4 — the web application
 
-The honest count is **1** — the part-built Dashboard; the one box M4.4 had open (the compatibility
+The honest count is **0** — the Dashboard, which was part-built, closed on 2026-10-14 ([ADR-037](adr/037-the-dashboard-is-answered-by-the-registry.md)), and the one box M4.4 had open (the compatibility
 tooltips) is closed ([the first section](#compatibility-explanations-visible-text-and-a-disclosure-not-a-tooltip-2026-10-14)). **No page is missing**, and the schema editor's three boxes
 are done ([the section above](#the-schema-editor-and-the-web-container-2026-10-13)). On
 2026-10-13 the seven pages that were missing — the version diff, impact analysis, approvals,
@@ -994,11 +1058,15 @@ compatibility policy change through the API only — which is recorded in the ho
 that day. The 2026-08-30 pass re-ran the test counts and nothing else, so the list outlived the
 gap it described.
 
-**Part-built:** the **Dashboard**. A first slice ships on `/` — subject, version and
+~~**Part-built:** the **Dashboard**. A first slice ships on `/` — subject, version and
 awaiting-approval counts, and the most recently registered subjects. Every number is derived
 from the subject list rather than fetched, which is honest at this size and has to move
 server-side the day that list is paginated. Recent breaking changes and enforcement coverage
-wait on endpoints that do not exist yet, so it is marked `[~]` rather than done.
+wait on endpoints that do not exist yet, so it is marked `[~]` rather than done.~~
+**Closed 2026-10-14** ([ADR-037](adr/037-the-dashboard-is-answered-by-the-registry.md)): `GET /v1/environments/{env}/summary`
+answers every number, the browser derives none, and the two panels that were waiting on an endpoint
+(breaking changes, enforcement coverage) exist. What it is *not*: coverage is what contracts declare,
+not what happens, and a count of zero violations is zero reported. See [the section](#the-dashboard-is-answered-by-the-registry-2026-10-14).
 
 **Verified in a browser 2026-08-15**, against the compose `registry` profile on a wiped
 database: the subject list, subject detail, version detail and the register form, plus a
@@ -1049,7 +1117,7 @@ The Monaco item's stated reason had expired — it was framed as fixing the prot
 `dangerouslySetInnerHTML` XSS hole, and that code was never ported either — and it shipped on its
 own merits.
 
-**What exists today:** eighteen screens — sign-in, the dashboard slice on `/`, the subject list, the
+**What exists today:** eighteen screens — sign-in, the dashboard on `/`, the subject list, the
 create-a-subject form, subject detail, version detail, the register-a-version form, the version
 diff, impact analysis, approvals, the contract list and a contract, the audit log, and the five
 settings tabs (environment, brokers, members, API keys, notifications) — and the routing, guards and
@@ -1083,6 +1151,8 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~A contract's bindings cannot be edited or removed~~ | **Closed 2026-10-14** ([ADR-035](adr/035-contract-bindings-have-an-identity.md)): every binding has an id, and `PUT`/`DELETE` on `…/publishes/{id}` and `…/consumes/{id}` change its subjects and precedence or remove it, with the overlap rule run again for an edit. A binding added without a precedence can now be given one, and the overlapping binding that was refused is then accepted. What it was: there was an `add` endpoint for each kind and nothing else, so a binding added without a precedence could never be separated from a later overlapping one, and the registry's own refusal says to "give the two bindings different precedence values". Found by the web app's first real overlap test (2026-10-13). |
 | ~~Dependency advisories are live, and an audit finding is an error~~ | **Closed 2026-10-14 for detection, not for repair.** Found the same day: NuGet audit runs at restore and `TreatWarningsAsErrors` makes a finding fatal, so an advisory published against any package, transitive ones included, breaks the next fresh restore with no change to the repository, as five against `System.Security.Cryptography.Pkcs`/`.Xml` did (pinned forward, `82656ca`). [`dependency-audit.yml`](../.github/workflows/dependency-audit.yml) now restores the solution every day at 05:41 UTC, with nothing cached, and opens a GitHub issue (or comments on the open one) naming the NU19xx codes and the packages. **It detects; it does not fix.** A human still has to pin the package forward, and an advisory published at 05:42 still waits up to a day for the report, so a push can still be the first thing to find it. **Not verified: the workflow itself has never run on GitHub** (nothing is pushed); the script that does the work was run here against a real restore, the issue sequence only against a fake `gh`. Scheduled workflows are switched off by GitHub after 60 days without repository activity. A lock file is still not an option (`RestorePackagesWithLockFile` breaks solution restore on SDK 10.0.301). |
 | ~~The audit read throws on an action its build does not know~~ | **Closed 2026-10-14** by [ADR-036](adr/036-the-audit-read-tolerates-an-action-its-build-does-not-know.md): `AuditEntry` holds the stored token, `Action` is a nullable view of it, and `GET /v1/audit` returns a row it cannot name as stored (measured: 500 before, 200 after, on the real registry with `A_FUTURE_ACTION` inserted by SQL). Pinned by `ARowWhoseActionThisBuildWasNeverTaughtIsReadAsReceivedAndTheRestUnchanged` (real PostgreSQL). **It protects a rollback to a build that contains it**; rolling back to `612f7c8` or earlier keeps the old behaviour (ADR-033 and ADR-035 carry dated amendments). Filtering by an unknown action is still refused, by decision. |
+| **The Approvals page still derives its queue from the subject list** | Found 2026-10-14 while closing the Dashboard (ADR-037). `pending-approvals-store.ts` reads every subject and filters their versions in the browser, which is the defect the Dashboard had: it under-counts the day the list is paginated. The summary carries only the five newest held versions, so it cannot feed the queue; it needs an endpoint of its own. |
+| **The dashboard's version counts are linear in the environment's versions** | Found 2026-10-14 (ADR-037). About 100-125 ms at 200,000 versions in the environment, nearly all of the route. Replace with a counter maintained when a version's status changes, or a cached summary, when it is measured to hurt. |
 | ~~No screen creates a subject~~ | **Closed 2026-10-13** by `/subjects/new-subject` ([ADR-030](adr/030-create-subject-screen.md)): M4's exit criterion had been recorded as met when its first step was not, and the list's "New subject" was a button with no handler. What is left of it is the next row. |
 | ~~No screen edits a subject afterwards~~ | **Closed 2026-10-13** by the panels on a subject's page ([ADR-032](adr/032-subject-settings.md)): Change owner (`subject:write` or `subject:admin`) and Change policy (`subject:admin`), each two clicks, each saying only what the registry was measured to do. Name, format and content model remain permanent (probed: `PATCH` ignores them and answers 200). **Deprecating and retiring are left out on purpose**: neither can be undone, and deprecating notifies every subscriber. The CLI still edits neither. |
 | ~~A subject with no policy of its own is judged by `BACKWARD · WIRE_JSON`, not by its environment's default~~ | **Closed 2026-10-13** by [ADR-033](adr/033-inherit-means-the-environments-default.md): registration, the dry-run `check` and the diff read the environment's default, through `EnvironmentPolicies.EffectiveFor`, as impact analysis and promotion always did. **A behaviour change** for every environment whose default is not the built-in (see the section at the top for what to check). Pinned by `InheritedPolicyApiTests`, the three handler test classes, and `e2e/subject-settings.spec.ts` and `e2e/environment-default.spec.ts`. |

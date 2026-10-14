@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import type { EnforcementMode } from '../../../domain/contracts/contract';
-import { StatusBadge, type StatusTone } from '../../../shared/ui/status-badge/status-badge';
+import { StatusBadge, type StatusTone } from '../status-badge/status-badge';
 
 const TONES: Record<EnforcementMode, StatusTone> = {
   OFF: 'neutral',

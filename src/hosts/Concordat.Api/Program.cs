@@ -247,6 +247,7 @@ app.MapNotificationEndpoints();
 app.MapIdentityEndpoints();
 app.MapBillingEndpoints();
 app.MapSubjectEndpoints();
+app.MapSummaryEndpoints();
 app.MapSchemaEndpoints();
 app.MapBootstrapEndpoint();
 

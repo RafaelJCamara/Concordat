@@ -3,7 +3,7 @@ import { provideRouter } from '@angular/router';
 import { describe, expect, it } from 'vitest';
 import type { ConsumeBinding, PublishBinding } from '../../../domain/contracts/contract';
 import { BindingList, type BindingRef } from './binding-list';
-import { EnforcementBadge } from './enforcement-badge';
+import { EnforcementBadge } from '../../../shared/ui/enforcement-badge/enforcement-badge';
 
 // The presentational pieces of the contract screens: how a mode is drawn, and how a binding is
 // read. One file for both because each is small, and neither has behaviour beyond rendering.
