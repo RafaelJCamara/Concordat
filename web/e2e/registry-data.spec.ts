@@ -1,4 +1,16 @@
 import { expect, test } from '@playwright/test';
+import {
+  COMPATIBILITY_DIRECTION_MEANING,
+  COMPATIBILITY_DIRECTIONS,
+  COMPATIBILITY_FINDING_SURFACE_NOTE,
+  COMPATIBILITY_MODE_MEANING,
+  COMPATIBILITY_SURFACE_MEANING,
+  COMPATIBILITY_SURFACES,
+  type CompatibilityDirection,
+  type CompatibilityMode,
+  type CompatibilitySurface,
+} from '../src/app/domain/registry/compatibility';
+import { openByKeyboard } from './compatibility-help';
 import { OWNER } from './registry';
 import { setSchema, waitForSubject } from './schema-editor';
 import { signIn } from './sign-in';
@@ -246,6 +258,57 @@ test.describe('comparing two versions', () => {
     await expect(page.getByRole('heading', { level: 1 })).toContainText('v2');
     await expect(page.getByText('required_field_added')).toBeVisible();
     await expect(page.getByText('AWAITING_APPROVAL')).toBeVisible();
+  });
+
+  test('says what the tags on the engine’s finding mean, from the engine’s own tokens', async ({
+    page,
+  }) => {
+    // The finding's direction and surface are read off the page, not assumed: whatever the engine
+    // tagged this change with is what must be explained, and nothing it did not tag it with.
+    await page.goto(`/subjects/${HELD_SUBJECT}/versions/1/diff/2`);
+    await expect(page.getByText('required_field_added')).toBeVisible();
+
+    const tags = (
+      await page
+        .locator('li')
+        .getByText(/^\s*(BACKWARD|FORWARD) · (WIRE|WIRE_JSON|SOURCE)\s*$/)
+        .allTextContents()
+    ).map((text) => text.trim().split(' · ') as [CompatibilityDirection, CompatibilitySurface]);
+    expect(tags.length).toBeGreaterThan(0);
+
+    const guide = page.getByRole('button', { name: 'What do these tags mean?' });
+    await openByKeyboard(page, guide);
+    const panel = page.locator(`#${await guide.getAttribute('aria-controls')}`);
+
+    const directions = COMPATIBILITY_DIRECTIONS.filter((d) => tags.some(([t]) => t === d));
+    const surfaces = COMPATIBILITY_SURFACES.filter((s) => tags.some(([, t]) => t === s));
+    await expect(panel.locator('dt')).toHaveText([...directions, ...surfaces]);
+    await expect(panel.locator('dd')).toHaveText([
+      ...directions.map((d) => COMPATIBILITY_DIRECTION_MEANING[d]),
+      ...surfaces.map((s) => COMPATIBILITY_SURFACE_MEANING[s]),
+    ]);
+    await expect(panel).toContainText(COMPATIBILITY_FINDING_SURFACE_NOTE);
+  });
+
+  test('explains the policy in the header it was judged under', async ({ page }) => {
+    await page.goto(`/subjects/${HELD_SUBJECT}/versions/1/diff/2`);
+
+    const judged = page.locator('p', { hasText: 'Judged under' });
+    await expect(judged).toBeVisible();
+    const [mode, surface] = (await judged.locator('span').innerText()).split(' · ') as [
+      CompatibilityMode,
+      CompatibilitySurface,
+    ];
+
+    const guide = page.getByRole('button', { name: 'What does this policy mean?' });
+    await openByKeyboard(page, guide);
+    const panel = page.locator(`#${await guide.getAttribute('aria-controls')}`);
+
+    await expect(panel.locator('dt')).toHaveText([mode, surface]);
+    await expect(panel.locator('dd')).toHaveText([
+      COMPATIBILITY_MODE_MEANING[mode],
+      COMPATIBILITY_SURFACE_MEANING[surface],
+    ]);
   });
 
   test('is reached from the later version, baseline first', async ({ page }) => {

@@ -6,6 +6,10 @@ import { SessionStore } from '../../../core/auth/session-store';
 import { provideConcordatConfig } from '../../../core/config/app-config';
 import { ConcordatError } from '../../../core/http/problem-details';
 import type { Scope } from '../../../domain/identity/scope';
+import {
+  COMPATIBILITY_MODE_MEANING,
+  COMPATIBILITY_SURFACE_MEANING,
+} from '../../../domain/registry/compatibility';
 import type { SchemaVersion, Subject } from '../../../domain/registry/subject';
 import { SubjectDetailStore } from '../application/subject-detail-store';
 import { SubjectSettingsStore, type SettingsOutcome } from '../application/subject-settings-store';
@@ -237,6 +241,44 @@ describe('SubjectDetailPage', () => {
       // Two spans, so a text match on the mode alone still finds it.
       expect(cells).toContain('FULL');
       expect(cells).toContain('· SOURCE');
+    });
+  });
+
+  describe('explaining the policy it shows', () => {
+    // The prototype explained each mode and surface on hover. Hover is not reachable from a phone or
+    // a keyboard, so the explanation is a button that opens text in the page.
+    const guide = (host: HTMLElement) =>
+      host.querySelector<HTMLButtonElement>('cd-compatibility-guide button');
+
+    it('offers to explain a policy the subject set, in words from the registry’s own vocabulary', () => {
+      const { fixture, host } = render({
+        subject: subject({ compatibilityPolicy: { mode: 'FULL_TRANSITIVE', surface: 'SOURCE' } }),
+      });
+
+      guide(host)!.click();
+      fixture.detectChanges();
+
+      const panel = host.querySelector('cd-compatibility-guide')!;
+      expect(panel.textContent).toContain(COMPATIBILITY_MODE_MEANING.FULL_TRANSITIVE);
+      expect(panel.textContent).toContain(COMPATIBILITY_SURFACE_MEANING.SOURCE);
+      // Only what is on the screen, not all ten words.
+      expect(panel.textContent).not.toContain(COMPATIBILITY_MODE_MEANING.NONE);
+    });
+
+    it('does not repeat the policy’s tokens while closed, which would make each of them appear twice', () => {
+      const { host } = render({
+        subject: subject({ compatibilityPolicy: { mode: 'FULL_TRANSITIVE', surface: 'SOURCE' } }),
+      });
+
+      expect(host.textContent!.match(/FULL_TRANSITIVE/g)).toHaveLength(1);
+    });
+
+    it('has nothing to explain for an inheriting subject, whose policy this page does not know', () => {
+      const { host } = render({
+        subject: subject({ compatibilityPolicy: { mode: null, surface: null } }),
+      });
+
+      expect(guide(host)).toBeNull();
     });
   });
 

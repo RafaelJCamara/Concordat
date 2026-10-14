@@ -1,6 +1,7 @@
 # What is missing
 
-**As of 2026-08-15**, except [contract bindings that can be changed and removed, 2026-10-14](#a-contracts-bindings-can-be-changed-and-removed-2026-10-14),
+**As of 2026-08-15**, except [the compatibility explanations, 2026-10-14](#compatibility-explanations-visible-text-and-a-disclosure-not-a-tooltip-2026-10-14),
+[contract bindings that can be changed and removed, 2026-10-14](#a-contracts-bindings-can-be-changed-and-removed-2026-10-14),
 [the policy-change notification, 2026-10-14](#a-policy-change-notifies-subscribers-and-every-subscription-with-no-event-filter-is-one-2026-10-14),
 [inheriting and the audited policy change, 2026-10-13](#a-subject-with-no-policy-of-its-own-follows-its-environments-default-and-a-policy-change-is-audited-2026-10-13),
 [the subject settings, 2026-10-13](#a-subjects-owner-and-policy-are-editable-and-the-registry-did-three-things-nobody-had-written-down-2026-10-13),
@@ -69,6 +70,48 @@ warnings ignored, project list uncapped, comment wording, exit 0 masking a findi
 on GitHub (`gh workflow run dependency-audit.yml` then `gh run watch`, once pushed); a real `gh issue create` (the sequence ran against a
 fake `gh`, and the flags were checked against `gh --help`, with a read-only `gh issue list --label` confirmed to return `[]` for a label that does not exist yet); `dotnet restore` on
 Linux (the parser is tested on Linux-shaped lines, but the real thing has only run on Windows).
+
+---
+
+## Compatibility explanations: visible text and a disclosure, not a tooltip, 2026-10-14
+
+The last open box of M4.4 is closed. The prototype explained each compatibility mode and surface in a hover
+tooltip; the web app now explains all seven modes and all three surfaces, and the two directions a finding carries,
+**where the screen shows or chooses one**: the subject page's Compatibility cell, the subject policy editor, the
+create-subject form, the environment settings (the summary and the form), and the headers and finding lists of the
+diff, registration and approval screens. Impact analysis shows no mode or surface, so it has nothing to explain.
+
+**It is not a tooltip, and that is the decision.** A `title` is not reachable from a keyboard and not on a touch
+screen, and an overlay that opens on focus covers the next field at 390px. A select has a sentence under it, tied to
+it with `aria-describedby` (a description, not a name, so every `getByLabel('Mode')` in the e2e specs still finds
+exactly one select), and each screen has a native `<button aria-expanded>` that opens the terms in the flow of the
+page. Closed, it puts no token in the DOM, because the e2e specs find a policy by `getByText('FULL_TRANSITIVE',
+{ exact: true })`, which matches hidden text. The repo has no tooltip primitive in `shared/ui` (Spartan's brain
+package ships one; it is not wired in), so none was added.
+
+**One source of truth.** `COMPATIBILITY_MODE_MEANING`, `COMPATIBILITY_SURFACE_MEANING` and
+`COMPATIBILITY_DIRECTION_MEANING` in `domain/registry/compatibility.ts`, each sentence taken from ADR-016, the XML
+docs on `CompatibilityMode`/`CompatibilitySurface` and the JSON checker's tests (`NonTransitive_ComparesOnlyAgainst
+TheHighestOrdinal`, `Transitive_ComparesAgainstEveryPriorVersion`, `Full_ReportsBothDirections`,
+`ModeNone_SkipsCheckingEntirely`, `IntegerWidenedToNumber_PassesWireJsonAndFailsSource`, `ChangingFormat_IsSourceOnly`,
+`AWirePolicy_IsEffectivelyNoCheckingForJsonSchema`), which the comments cite. `compatibility.spec.ts` holds each record to
+exactly the token list, bounds the length, and pins the claims that were checked against the engine. **The sentence for
+`WIRE` says it blocks nothing for a JSON subject**, because that is true and because without it `WIRE` reads as a looser
+version of a check that does something.
+
+**What was verified.** Unit specs for the constants, the two shared components and each screen (red first, then
+mutation-checked). Browser specs against a private registry and dev server: `settings.spec.ts` runs light and dark at
+390px (each select described by its meaning and following the choice; opened with Enter and with Space; every term on
+the page with no sideways overflow; text contrast at least 4.5:1, measured by painting the ancestors' backgrounds on a
+canvas) and a tap on a touch context; `new-subject.spec.ts` and `registry-data.spec.ts` read the real engine's finding and
+the real subject page. Mutations seen red: a panel `min-w-[480px]` (overflow), the text faded to 40% (contrast, both
+themes), `aria-expanded` removed with the button made a `div` (focus and tap), `aria-describedby` removed, the panel always
+rendered, a changed sentence. Screenshots at 1280 and 390px in both themes were looked at. **No spec creates data.**
+**Not covered:** a screen reader (the pattern is a native `button` with `aria-expanded` and `aria-describedby`, and was not
+listened to), right-to-left, and the production image (`docker/web*` untouched, `smoke-web-image.sh` not re-run).
+
+**Found, not fixed.** On the subject page at 390px a long mode (`FULL_TRANSITIVE`) in the Compatibility cell runs into the
+Content model cell beside it: the cell is half the screen and the token is 16px bold monospace. It predates this change.
 
 ---
 
@@ -816,15 +859,15 @@ described shipped code since decision 25 landed the day before.
 
 ### M4 — the web application
 
-The honest count is **2** — the part-built Dashboard, and the one box M4.4 still has open
-(the compatibility tooltips, below). **No page is missing**, and the schema editor's three boxes
+The honest count is **1** — the part-built Dashboard; the one box M4.4 had open (the compatibility
+tooltips) is closed ([the first section](#compatibility-explanations-visible-text-and-a-disclosure-not-a-tooltip-2026-10-14)). **No page is missing**, and the schema editor's three boxes
 are done ([the section above](#the-schema-editor-and-the-web-container-2026-10-13)). On
 2026-10-13 the seven pages that were missing — the version diff, impact analysis, approvals,
 contracts, the audit log, the settings split and notification forms — shipped, each driven in a
 browser against the real registry, and later the same day so did the screen that creates a subject
 ([the first section](#the-create-subject-screen-and-a-500-that-was-not-what-it-looked-like-2026-10-13)).
 
-**Genuinely missing:** the prototype's *compatibility tooltips*. The *auto-slugged id with a "touched"
+**Genuinely missing:** ~~the prototype's *compatibility tooltips*~~ (built 2026-10-14, as text and a disclosure). The *auto-slugged id with a "touched"
 flag* was waiting on a screen that creates a subject, and ~~**no screen creates one**~~ one does now:
 M4's exit criterion ("create a subject, register a version, …entirely in the UI"), which had been
 recorded as met while its first step was not, **is met**, and `e2e/new-subject.spec.ts` walks the first

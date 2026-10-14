@@ -274,7 +274,15 @@ rather than deleted, because "why is there no zod here?" is a question worth ans
       name is returned unchanged, `+` and `:` become `.` as `SubjectNormalizer` does for the SDKs,
       accents are folded, other runs become one `_` — and it never changes case or joins words in a
       style, because a name is case-sensitive and that would be guessing which subject was meant
-- [ ] Preserve, **not built**: *compatibility tooltips*
+- [x] Preserve: *compatibility tooltips* — **built as visible text and a disclosure, not as a tooltip**
+      (2026-10-14). The prototype explained each mode and surface on hover, and hover does not exist on
+      a phone and is not reachable from a keyboard, so each mode (7) and surface (3) is explained where a
+      screen shows or chooses one: a sentence under the select, tied to it by `aria-describedby`, and a
+      "What do these mean?" button (`aria-expanded`, native, so Tab/Enter/Space/tap) that opens the terms
+      in the page. The wording is one domain constant per axis, `COMPATIBILITY_MODE_MEANING`,
+      `COMPATIBILITY_SURFACE_MEANING` and `COMPATIBILITY_DIRECTION_MEANING` in
+      `domain/registry/compatibility.ts`, written from ADR-016 and the engine's own tests (each sentence's
+      comment names the test that pins its claim) and held against the token lists by a spec
 - [x] ~~Collapse the two competing HTTP paths into one typed data-access layer~~ — **moot.**
       There is one: `HttpClient` plus three interceptors, and a typed data-access file per feature
 - [x] ~~Uncontrolled `defaultValue` forms → reactive forms~~ — **moot.** A React idiom; no such

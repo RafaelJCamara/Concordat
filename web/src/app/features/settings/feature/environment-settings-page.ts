@@ -20,6 +20,8 @@ import {
   type CompatibilityMode,
   type CompatibilitySurface,
 } from '../../../domain/registry/compatibility';
+import { CompatibilityGuide } from '../../../shared/ui/compatibility-meaning/compatibility-guide';
+import { CompatibilityMeaning } from '../../../shared/ui/compatibility-meaning/compatibility-meaning';
 import { StatusBadge } from '../../../shared/ui/status-badge/status-badge';
 import { EnvironmentStore } from '../application/environment-store';
 import { SettingsNav } from './settings-nav';
@@ -69,6 +71,8 @@ interface FormValue {
     HlmAlertImports,
     HlmButton,
     HlmSkeleton,
+    CompatibilityGuide,
+    CompatibilityMeaning,
     IfScope,
     SettingsNav,
     StatusBadge,
@@ -127,6 +131,16 @@ interface FormValue {
           </div>
         </dl>
 
+        <!--
+          Whoever may read the settings may ask what the default is. Only the default that is
+          shown: the form below has its own, with every word, for whoever is choosing.
+        -->
+        <cd-compatibility-guide
+          [modes]="[environment.defaultCompatibility.mode]"
+          [surfaces]="[environment.defaultCompatibility.surface]"
+          label="What does this default mean?"
+        />
+
         <form
           *cdIfScope="writeScopes"
           [formGroup]="form"
@@ -164,24 +178,49 @@ interface FormValue {
           <div class="grid gap-4 sm:grid-cols-2">
             <div class="space-y-1.5">
               <label class="text-sm font-medium" for="env-mode">Default compatibility mode</label>
-              <select id="env-mode" formControlName="mode" [class]="input">
+              <select
+                id="env-mode"
+                formControlName="mode"
+                aria-describedby="env-mode-meaning"
+                [class]="input"
+              >
                 @for (mode of modes; track mode) {
                   <option [value]="mode">{{ mode }}</option>
                 }
               </select>
+              <cd-compatibility-meaning
+                axis="mode"
+                [value]="value().mode ?? null"
+                textId="env-mode-meaning"
+              />
             </div>
 
             <div class="space-y-1.5">
               <label class="text-sm font-medium" for="env-surface">
                 Default compatibility surface
               </label>
-              <select id="env-surface" formControlName="surface" [class]="input">
+              <select
+                id="env-surface"
+                formControlName="surface"
+                aria-describedby="env-surface-meaning"
+                [class]="input"
+              >
                 @for (surface of surfaces; track surface) {
                   <option [value]="surface">{{ surface }}</option>
                 }
               </select>
+              <cd-compatibility-meaning
+                axis="surface"
+                [value]="value().surface ?? null"
+                textId="env-surface-meaning"
+              />
             </div>
           </div>
+          <cd-compatibility-guide
+            [modes]="modes"
+            [surfaces]="surfaces"
+            label="What do these choices mean?"
+          />
           <p class="text-muted-foreground -mt-2 text-xs">
             Takes effect at once for every subject here that has not set its own — which is what
             inheriting means: the next version registered, checked or compared is judged by it.
@@ -255,7 +294,8 @@ export class EnvironmentSettingsPage {
     preRelease: [false],
   });
 
-  private readonly value = toSignal(this.form.valueChanges, {
+  /** What the form holds now, for the sentences under the compatibility selects. */
+  protected readonly value = toSignal(this.form.valueChanges, {
     initialValue: this.form.getRawValue(),
   });
 

@@ -129,6 +129,32 @@ describe('CompatibilityDiffPage', () => {
     expect(host.textContent).toContain('BACKWARD · WIRE_JSON');
   });
 
+  describe('explaining the policy in the header', () => {
+    const policyGuide = (host: HTMLElement) =>
+      host.querySelector<HTMLButtonElement>('header cd-compatibility-guide button');
+
+    it('offers to explain the mode and the surface it is judged under, and only those two', () => {
+      const { fixture, host } = render({
+        diff: diff({ policy: { mode: 'FULL_TRANSITIVE', surface: 'SOURCE' } }),
+      });
+
+      expect(policyGuide(host)!.textContent).toContain('What does this policy mean?');
+      policyGuide(host)!.click();
+      fixture.detectChanges();
+
+      const terms = [...host.querySelectorAll('header cd-compatibility-guide dt')].map((dt) =>
+        dt.textContent?.trim(),
+      );
+      expect(terms).toEqual(['FULL_TRANSITIVE', 'SOURCE']);
+    });
+
+    it('has nothing to explain when the registry named no policy', () => {
+      const { host } = render({ diff: diff({ policy: { mode: null, surface: null } }) });
+
+      expect(policyGuide(host)).toBeNull();
+    });
+  });
+
   describe('the three answers', () => {
     it('lists the divergences when there are some', () => {
       const { host } = render({ diff: diff() });

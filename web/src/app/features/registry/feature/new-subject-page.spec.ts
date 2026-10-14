@@ -5,6 +5,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { SessionStore } from '../../../core/auth/session-store';
 import { provideConcordatConfig } from '../../../core/config/app-config';
 import { ConcordatError } from '../../../core/http/problem-details';
+import {
+  COMPATIBILITY_MODE_MEANING,
+  COMPATIBILITY_MODES,
+  COMPATIBILITY_SURFACE_MEANING,
+  COMPATIBILITY_SURFACES,
+} from '../../../domain/registry/compatibility';
 import type { NewSubject } from '../../../domain/registry/new-subject';
 import type { Subject } from '../../../domain/registry/subject';
 import { NewSubjectStore } from '../application/new-subject-store';
@@ -289,6 +295,57 @@ describe('NewSubjectPage', () => {
       choose(r.fixture, 'subject-surface', 'WIRE_JSON');
 
       expect(submit(r.host).disabled).toBe(false);
+    });
+  });
+
+  describe('saying what the policy choices mean', () => {
+    const sentence = (host: HTMLElement, id: string) =>
+      host.querySelector<HTMLElement>(
+        '#' + host.querySelector('#' + id)!.getAttribute('aria-describedby')!,
+      )!;
+
+    it('describes each select by the meaning of its choice, under the select, as the choice changes', () => {
+      const r = render();
+
+      expect(sentence(r.host, 'subject-mode').hidden).toBe(true);
+
+      choose(r.fixture, 'subject-mode', 'FORWARD_TRANSITIVE');
+      choose(r.fixture, 'subject-surface', 'SOURCE');
+
+      expect(sentence(r.host, 'subject-mode').textContent?.trim()).toBe(
+        COMPATIBILITY_MODE_MEANING.FORWARD_TRANSITIVE,
+      );
+      expect(sentence(r.host, 'subject-surface').textContent?.trim()).toBe(
+        COMPATIBILITY_SURFACE_MEANING.SOURCE,
+      );
+    });
+
+    it('leaves the selects named by their labels, which the e2e specs find them by', () => {
+      const r = render();
+
+      for (const [id, label] of [
+        ['subject-mode', 'Mode'],
+        ['subject-surface', 'Surface'],
+      ] as const) {
+        const select = r.host.querySelector<HTMLSelectElement>('#' + id)!;
+
+        expect(select.labels?.[0]?.textContent?.trim()).toBe(label);
+        expect(select.hasAttribute('aria-label')).toBe(false);
+      }
+    });
+
+    it('offers every word at once, on a button, and shows none of them until it is pressed', () => {
+      const r = render();
+      // The form's own selects hold the tokens as options; the guide's are terms.
+      expect(r.host.querySelectorAll('cd-compatibility-guide dt')).toHaveLength(0);
+
+      click(r.fixture, 'What do these mean?');
+
+      expect(
+        [...r.host.querySelectorAll('cd-compatibility-guide dt')].map((dt) =>
+          dt.textContent?.trim(),
+        ),
+      ).toEqual([...COMPATIBILITY_MODES, ...COMPATIBILITY_SURFACES]);
     });
   });
 

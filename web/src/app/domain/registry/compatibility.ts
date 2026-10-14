@@ -52,8 +52,11 @@ export function isInherited(policy: CompatibilityPolicy): boolean {
   return policy.mode === null && policy.surface === null;
 }
 
+/** The directions a divergence can break. */
+export const COMPATIBILITY_DIRECTIONS = ['BACKWARD', 'FORWARD'] as const;
+
 /** Which direction of compatibility a divergence breaks. */
-export type CompatibilityDirection = 'BACKWARD' | 'FORWARD';
+export type CompatibilityDirection = (typeof COMPATIBILITY_DIRECTIONS)[number];
 
 /**
  * One way a schema diverges from a prior version.
@@ -76,3 +79,63 @@ export interface Divergence {
   /** The prior version this was compared against. */
   readonly conflictsWithVersion: number;
 }
+
+/**
+ * What each mode asks, in one sentence, for somebody choosing or reading one.
+ *
+ * <b>One source of truth for the wording.</b> Every screen that shows a mode, or lets someone choose
+ * one, reads these; `compatibility.spec.ts` pins that this has exactly the tokens in
+ * {@link COMPATIBILITY_MODES} so a mode added there cannot appear without words.
+ *
+ * Each sentence restates the engine, not the prototype's memory of it:
+ *
+ * - The direction comes from the XML docs on `CompatibilityMode` in
+ *   `Concordat.Domain/Registry/Compatibility.cs` and `JsonSchemaDiff`'s remarks: backward is the
+ *   new schema reading data written under the old one; forward is the old reading the new.
+ * - "Only the most recent earlier version" against "every earlier version" is
+ *   `JsonSchemaCompatibilityChecker.SelectPriors`, pinned by `NonTransitive_ComparesOnlyAgainst
+ *   TheHighestOrdinal` and `Transitive_ComparesAgainstEveryPriorVersion` in
+ *   `Concordat.Formats.Json.Tests/CompatibilityTests.cs`. The transitive form is the one that
+ *   catches a chain of individually compatible changes.
+ * - `FULL` is both directions, pinned by `Full_ReportsBothDirections`; `NONE` skips checking
+ *   entirely, pinned by `ModeNone_SkipsCheckingEntirely`.
+ */
+export const COMPATIBILITY_MODE_MEANING: Readonly<Record<CompatibilityMode, string>> = {
+  NONE: 'No compatibility checking: no change is reported as breaking.',
+  BACKWARD:
+    'The new version must read data written under the previous one. Compared against the most recent earlier version only.',
+  BACKWARD_TRANSITIVE:
+    'As BACKWARD, checked against every earlier version instead of the most recent one, so a chain of changes that are each compatible cannot add up to one that is not.',
+  FORWARD:
+    'The most recent earlier version must read data written under the new one. Compared against that version only.',
+  FORWARD_TRANSITIVE:
+    'As FORWARD, checked against every earlier version instead of the most recent one, so a chain of changes that are each compatible cannot add up to one that is not.',
+  FULL: 'Both BACKWARD and FORWARD: the new version and the most recent earlier version must each read what the other writes.',
+  FULL_TRANSITIVE: 'As FULL, checked against every earlier version instead of the most recent one.',
+};
+
+/** What each surface counts as a break, in one sentence. See {@link COMPATIBILITY_MODE_MEANING}. */
+export const COMPATIBILITY_SURFACE_MEANING: Readonly<Record<CompatibilitySurface, string>> = {
+  WIRE: 'Blocks only changes that stop existing bytes decoding. JSON Schema has no such change, so for a JSON subject this blocks nothing; differences are still listed.',
+  WIRE_JSON:
+    'Blocks what WIRE blocks, and changes to which JSON documents are valid. The default for a new environment.',
+  SOURCE:
+    'The strictest. Blocks what WIRE_JSON blocks, and changes that only alter generated code, such as an integer widened to a number or a changed format.',
+};
+
+/** What each direction of a finding means. See {@link COMPATIBILITY_MODE_MEANING}. */
+export const COMPATIBILITY_DIRECTION_MEANING: Readonly<Record<CompatibilityDirection, string>> = {
+  BACKWARD: 'Breaks the new version’s ability to read data written under an earlier one.',
+  FORWARD: 'Breaks an earlier version’s ability to read data written under the new one.',
+};
+
+/**
+ * How to read the surface on a finding, as opposed to on a policy.
+ *
+ * A policy's surface is how much must keep working; a finding's is the narrowest surface it
+ * breaks, and `CompatibilityPolicy.IsViolatedBy` is `finding <= policy surface`: a `WIRE`
+ * finding violates every policy, a `SOURCE` one only a `SOURCE` policy. Without this sentence the
+ * same token means two things on one screen.
+ */
+export const COMPATIBILITY_FINDING_SURFACE_NOTE =
+  'Each finding carries the narrowest surface it breaks. A policy at that surface, or a wider one, blocks it.';

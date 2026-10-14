@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import type { Divergence } from '../../../domain/registry/compatibility';
+import { CompatibilityGuide } from '../../../shared/ui/compatibility-meaning/compatibility-guide';
 import { StatusBadge } from '../../../shared/ui/status-badge/status-badge';
 
 interface DivergenceGroup {
@@ -25,7 +26,7 @@ interface DivergenceGroup {
 @Component({
   selector: 'cd-divergence-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [StatusBadge],
+  imports: [CompatibilityGuide, StatusBadge],
   host: { class: 'block' },
   template: `
     <h2 class="text-foreground mb-2 text-sm font-semibold">
@@ -61,6 +62,20 @@ interface DivergenceGroup {
         </div>
       }
     </div>
+
+    @if (divergences().length > 0) {
+      <!--
+        Once, under the list, for the tags that are on it. The rows repeat the same few words, and
+        a button on each row would be a list of identical buttons to tab through.
+      -->
+      <cd-compatibility-guide
+        class="mt-3"
+        [directions]="tags().directions"
+        [surfaces]="tags().surfaces"
+        [findings]="true"
+        label="What do these tags mean?"
+      />
+    }
   `,
 })
 export class DivergenceList {
@@ -73,6 +88,12 @@ export class DivergenceList {
    * it is every difference, and on a registration it is why the change was held.
    */
   readonly heading = input<string>('Differences');
+
+  /** The directions and surfaces the findings carry, for the explanation under the list. */
+  protected readonly tags = computed(() => ({
+    directions: this.divergences().map((d) => d.direction),
+    surfaces: this.divergences().map((d) => d.surface),
+  }));
 
   protected readonly groups = computed<readonly DivergenceGroup[]>(() => {
     const byVersion = new Map<number, Divergence[]>();

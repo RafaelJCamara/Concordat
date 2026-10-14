@@ -1,6 +1,12 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { CompatibilityPolicy } from '../../../domain/registry/compatibility';
+import {
+  COMPATIBILITY_MODE_MEANING,
+  COMPATIBILITY_MODES,
+  COMPATIBILITY_SURFACE_MEANING,
+  COMPATIBILITY_SURFACES,
+  type CompatibilityPolicy,
+} from '../../../domain/registry/compatibility';
 import { SubjectPolicyEditor } from './subject-policy-editor';
 
 // What is the editor's own: when it lets somebody ask, how the two requests that look alike —
@@ -76,6 +82,66 @@ describe('SubjectPolicyEditor', () => {
       expect(
         [...select('subject-policy-surface').options].map((o) => o.value).filter((v) => v !== ''),
       ).toEqual(['WIRE', 'WIRE_JSON', 'SOURCE']);
+    });
+  });
+
+  describe('saying what a choice means', () => {
+    // Under each select, as text: a tooltip is not there on a phone or from a keyboard. The
+    // select is described by the sentence, not named by it — the e2e specs find these by label.
+    const described = (id: string) =>
+      host.querySelector<HTMLElement>(
+        '#' + select(id).getAttribute('aria-describedby')!.split(' ')[0],
+      )!;
+
+    it('describes each select by the meaning of what it is on, and follows the choice', () => {
+      open({ mode: 'BACKWARD', surface: 'WIRE_JSON' });
+
+      expect(described('subject-policy-mode').textContent?.trim()).toBe(
+        COMPATIBILITY_MODE_MEANING.BACKWARD,
+      );
+      expect(described('subject-policy-surface').textContent?.trim()).toBe(
+        COMPATIBILITY_SURFACE_MEANING.WIRE_JSON,
+      );
+
+      choose('FULL_TRANSITIVE', 'SOURCE');
+
+      expect(described('subject-policy-mode').textContent?.trim()).toBe(
+        COMPATIBILITY_MODE_MEANING.FULL_TRANSITIVE,
+      );
+      expect(described('subject-policy-surface').textContent?.trim()).toBe(
+        COMPATIBILITY_SURFACE_MEANING.SOURCE,
+      );
+    });
+
+    it('has no sentence for inherit, which is not a mode', () => {
+      open({ mode: null, surface: null });
+
+      expect(described('subject-policy-mode').hidden).toBe(true);
+      expect(described('subject-policy-surface').hidden).toBe(true);
+    });
+
+    it('offers every word at once, since a select shows one choice and its sentence only that one', () => {
+      open({ mode: null, surface: null });
+
+      host.querySelector<HTMLButtonElement>('cd-compatibility-guide button')!.click();
+      fixture.detectChanges();
+
+      const terms = [...host.querySelectorAll('cd-compatibility-guide dt')].map((dt) =>
+        dt.textContent?.trim(),
+      );
+      expect(terms).toEqual([...COMPATIBILITY_MODES, ...COMPATIBILITY_SURFACES]);
+    });
+
+    it('does not rename either select, which the e2e specs find by their label', () => {
+      open({ mode: 'FULL', surface: 'SOURCE' });
+
+      for (const [id, label] of [
+        ['subject-policy-mode', 'Mode'],
+        ['subject-policy-surface', 'Surface'],
+      ] as const) {
+        expect(select(id).labels?.[0]?.textContent?.trim()).toBe(label);
+        expect(select(id).hasAttribute('aria-label')).toBe(false);
+      }
     });
   });
 

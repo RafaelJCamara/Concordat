@@ -5,6 +5,7 @@ import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmSkeleton } from '@spartan-ng/helm/skeleton';
 import { ActiveEnvironmentStore } from '../../../core/config/active-environment-store';
 import type { SchemaVersion } from '../../../domain/registry/subject';
+import { CompatibilityGuide } from '../../../shared/ui/compatibility-meaning/compatibility-guide';
 import { Icon } from '../../../shared/ui/icon/icon';
 import { StatusBadge, type StatusTone } from '../../../shared/ui/status-badge/status-badge';
 import { DiffStore } from '../application/diff-store';
@@ -36,7 +37,16 @@ const STATUS_TONES: Record<SchemaVersion['status'], StatusTone> = {
   selector: 'cd-compatibility-diff-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [DiffStore],
-  imports: [RouterLink, HlmAlertImports, HlmButton, HlmSkeleton, Icon, StatusBadge, DivergenceList],
+  imports: [
+    RouterLink,
+    HlmAlertImports,
+    HlmButton,
+    HlmSkeleton,
+    CompatibilityGuide,
+    Icon,
+    StatusBadge,
+    DivergenceList,
+  ],
   template: `
     <section class="mx-auto w-full max-w-6xl space-y-6 p-6 lg:p-8">
       <a
@@ -67,6 +77,14 @@ const STATUS_TONES: Record<SchemaVersion['status'], StatusTone> = {
                 {{ diff.policy.mode ?? 'default' }} · {{ diff.policy.surface ?? 'default' }}
               </span>
             </p>
+            @if (diff.policy.mode !== null) {
+              <cd-compatibility-guide
+                class="mt-1"
+                [modes]="[diff.policy.mode]"
+                [surfaces]="[diff.policy.surface]"
+                label="What does this policy mean?"
+              />
+            }
           </div>
 
           <a

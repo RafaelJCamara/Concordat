@@ -183,6 +183,16 @@ it, and `dev` already holds the other specs' contracts and every earlier run's, 
 answer with all of them and the spec could not say that _its_ binding is what resolves. A run that goes red part-way leaves what it
 made, like every spec here that creates something permanent.
 
+**The compatibility explanations read and create nothing, and are checked on a phone.** `settings.spec.ts` (390px, light and
+dark, and a touch context), `new-subject.spec.ts` and `registry-data.spec.ts` open the "What do these mean?" buttons from the
+keyboard and check the words against `COMPATIBILITY_*_MEANING` in the app's domain, which they import rather than retype. They
+use the default signed-in browser (no sign-in), choose options in selects without saving, and add the one extra
+assertion to a test that already creates its subject. `compatibility-help.ts` holds the helpers, including a contrast
+check that paints the ancestors' backgrounds onto a canvas, so it holds in either theme whatever colour syntax the browser
+reports. A guide is closed with no token in the DOM because other specs find a policy by `getByText(token, { exact: true })`,
+which matches hidden text; a new control near a policy must not repeat a token in the DOM while closed, and must not
+carry an `aria-label` containing "mode" or "surface", because `getByLabel('Mode')` matches by substring.
+
 **Match the account control, not the account's email.** A subject the browser creates is owned by
 the signed-in account, so its email now appears in a table cell on the list as well as in the
 sidebar, and `getByText(email)` stopped being unique the first time `new-subject.spec.ts` ran. The

@@ -27,6 +27,8 @@ import {
   type PolicyDraft,
 } from '../../../domain/registry/subject-settings';
 import { ChangeConfirmation } from '../../../shared/ui/change-confirmation/change-confirmation';
+import { CompatibilityGuide } from '../../../shared/ui/compatibility-meaning/compatibility-guide';
+import { CompatibilityMeaning } from '../../../shared/ui/compatibility-meaning/compatibility-meaning';
 
 const INPUT =
   'border-input bg-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm focus-visible:ring-1 focus-visible:outline-none';
@@ -61,7 +63,14 @@ const INPUT =
 @Component({
   selector: 'cd-subject-policy-editor',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, HlmAlertImports, HlmButton, ChangeConfirmation],
+  imports: [
+    ReactiveFormsModule,
+    HlmAlertImports,
+    HlmButton,
+    ChangeConfirmation,
+    CompatibilityGuide,
+    CompatibilityMeaning,
+  ],
   host: { class: 'block' },
   template: `
     <section
@@ -91,25 +100,46 @@ const INPUT =
           <div class="grid gap-4 sm:grid-cols-2">
             <div class="space-y-1.5">
               <label class="text-muted-foreground text-xs" for="subject-policy-mode">Mode</label>
-              <select id="subject-policy-mode" formControlName="mode" [class]="input">
+              <select
+                id="subject-policy-mode"
+                formControlName="mode"
+                aria-describedby="subject-policy-mode-meaning"
+                [class]="input"
+              >
                 <option value="">Inherit the environment default</option>
                 @for (mode of modes; track mode) {
                   <option [value]="mode">{{ mode }}</option>
                 }
               </select>
+              <cd-compatibility-meaning
+                axis="mode"
+                [value]="draft().mode"
+                textId="subject-policy-mode-meaning"
+              />
             </div>
             <div class="space-y-1.5">
               <label class="text-muted-foreground text-xs" for="subject-policy-surface"
                 >Surface</label
               >
-              <select id="subject-policy-surface" formControlName="surface" [class]="input">
+              <select
+                id="subject-policy-surface"
+                formControlName="surface"
+                aria-describedby="subject-policy-surface-meaning"
+                [class]="input"
+              >
                 <option value="">Inherit the environment default</option>
                 @for (surface of surfaces; track surface) {
                   <option [value]="surface">{{ surface }}</option>
                 }
               </select>
+              <cd-compatibility-meaning
+                axis="surface"
+                [value]="draft().surface"
+                textId="subject-policy-surface-meaning"
+              />
             </div>
           </div>
+          <cd-compatibility-guide [modes]="modes" [surfaces]="surfaces" />
           <div aria-live="polite">
             @if (refusal(); as finding) {
               <p class="text-destructive text-xs">{{ finding.message }}</p>
@@ -219,7 +249,8 @@ export class SubjectPolicyEditor {
 
   private readonly events = toSignal(this.form.events);
 
-  private readonly draft = computed((): PolicyDraft => {
+  /** What the form holds now, for the sentences under the selects as well as for the checks. */
+  protected readonly draft = computed((): PolicyDraft => {
     this.events();
 
     const { mode, surface } = this.form.getRawValue();

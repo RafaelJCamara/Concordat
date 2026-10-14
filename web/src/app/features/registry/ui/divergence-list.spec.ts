@@ -1,6 +1,11 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { Divergence } from '../../../domain/registry/compatibility';
+import {
+  COMPATIBILITY_DIRECTION_MEANING,
+  COMPATIBILITY_FINDING_SURFACE_NOTE,
+  COMPATIBILITY_SURFACE_MEANING,
+  type Divergence,
+} from '../../../domain/registry/compatibility';
 import { DivergenceList } from './divergence-list';
 
 // Shared by registration, the diff screen and the approval queue. The property worth pinning
@@ -119,5 +124,48 @@ describe('DivergenceList', () => {
     const host = render([]);
 
     expect(host.querySelectorAll('li')).toHaveLength(0);
+  });
+
+  describe('saying what the tags on a finding mean', () => {
+    const open = (host: HTMLElement) => {
+      host.querySelector<HTMLButtonElement>('cd-compatibility-guide button')!.click();
+      fixture.detectChanges();
+    };
+    const terms = (host: HTMLElement) =>
+      [...host.querySelectorAll('cd-compatibility-guide dt')].map((dt) => dt.textContent?.trim());
+
+    it('explains the directions and surfaces that are on the list, and only those', () => {
+      const host = render([
+        divergence({ direction: 'FORWARD', surface: 'SOURCE', path: '/a' }),
+        divergence({ direction: 'FORWARD', surface: 'SOURCE', path: '/b' }),
+        divergence({ direction: 'BACKWARD', surface: 'WIRE_JSON', path: '/c' }),
+      ]);
+
+      open(host);
+
+      expect(terms(host)).toEqual(['BACKWARD', 'FORWARD', 'WIRE_JSON', 'SOURCE']);
+      expect(host.textContent).toContain(COMPATIBILITY_DIRECTION_MEANING.FORWARD);
+      expect(host.textContent).toContain(COMPATIBILITY_SURFACE_MEANING.SOURCE);
+      expect(host.textContent).not.toContain(COMPATIBILITY_SURFACE_MEANING.WIRE);
+    });
+
+    it('says that a finding’s surface is the narrowest it breaks, because the same word is a policy’s elsewhere', () => {
+      const host = render([divergence()]);
+
+      open(host);
+
+      expect(host.textContent).toContain(COMPATIBILITY_FINDING_SURFACE_NOTE);
+    });
+
+    it('is closed to begin with, so the tags appear once and not twice', () => {
+      const host = render([divergence({ surface: 'SOURCE' })]);
+
+      expect(terms(host)).toEqual([]);
+      expect(host.textContent!.match(/SOURCE/g)).toHaveLength(1);
+    });
+
+    it('is not offered when there is nothing to explain', () => {
+      expect(render([]).querySelector('cd-compatibility-guide')).toBeNull();
+    });
   });
 });

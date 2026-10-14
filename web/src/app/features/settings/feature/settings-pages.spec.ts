@@ -7,6 +7,12 @@ import { provideConcordatConfig } from '../../../core/config/app-config';
 import { ConcordatError } from '../../../core/http/problem-details';
 import type { Broker, Environment } from '../../../domain/environments/environment';
 import type { Scope } from '../../../domain/identity/scope';
+import {
+  COMPATIBILITY_MODE_MEANING,
+  COMPATIBILITY_MODES,
+  COMPATIBILITY_SURFACE_MEANING,
+  COMPATIBILITY_SURFACES,
+} from '../../../domain/registry/compatibility';
 import { EnvironmentStore } from '../application/environment-store';
 import { BrokersPage } from './brokers-page';
 import { changesBetween, EnvironmentSettingsPage } from './environment-settings-page';
@@ -249,6 +255,80 @@ describe('EnvironmentSettingsPage', () => {
     expect(host.textContent).toContain('BACKWARD · WIRE_JSON');
     expect(host.textContent).toContain('Not allowed');
     expect(host.textContent).toContain('Shared development');
+  });
+
+  describe('saying what the default compatibility means', () => {
+    const sentence = (host: HTMLElement, id: string) =>
+      host.querySelector<HTMLElement>(
+        '#' + host.querySelector('#' + id)!.getAttribute('aria-describedby')!,
+      )!;
+
+    it('describes each select by the meaning of what it is on, as the choice changes', () => {
+      const { fixture, host } = renderEnvironment();
+
+      expect(sentence(host, 'env-mode').textContent?.trim()).toBe(
+        COMPATIBILITY_MODE_MEANING.BACKWARD,
+      );
+      expect(sentence(host, 'env-surface').textContent?.trim()).toBe(
+        COMPATIBILITY_SURFACE_MEANING.WIRE_JSON,
+      );
+
+      fill(host, 'env-mode', 'FULL_TRANSITIVE');
+      fill(host, 'env-surface', 'SOURCE');
+      fixture.detectChanges();
+
+      expect(sentence(host, 'env-mode').textContent?.trim()).toBe(
+        COMPATIBILITY_MODE_MEANING.FULL_TRANSITIVE,
+      );
+      expect(sentence(host, 'env-surface').textContent?.trim()).toBe(
+        COMPATIBILITY_SURFACE_MEANING.SOURCE,
+      );
+    });
+
+    it('leaves the selects named by their labels, which the e2e specs find them by', () => {
+      const { host } = renderEnvironment();
+
+      for (const [id, label] of [
+        ['env-mode', 'Default compatibility mode'],
+        ['env-surface', 'Default compatibility surface'],
+      ] as const) {
+        const select = host.querySelector<HTMLSelectElement>('#' + id)!;
+
+        expect(select.labels?.[0]?.textContent?.trim()).toBe(label);
+        expect(select.hasAttribute('aria-label')).toBe(false);
+      }
+    });
+
+    it('explains the default it shows, to a reader too, and only that one', () => {
+      const { fixture, host } = renderEnvironment(
+        { environment: environment({ defaultCompatibility: { mode: 'FULL', surface: 'SOURCE' } }) },
+        ['subject:read'],
+      );
+      const summary = host.querySelector<HTMLButtonElement>('dl + cd-compatibility-guide button')!;
+
+      expect(summary.textContent).toContain('What does this default mean?');
+      summary.click();
+      fixture.detectChanges();
+
+      const terms = [...host.querySelectorAll('dl + cd-compatibility-guide dt')].map((dt) =>
+        dt.textContent?.trim(),
+      );
+      expect(terms).toEqual(['FULL', 'SOURCE']);
+    });
+
+    it('offers every word at once to somebody choosing, since a select shows one at a time', () => {
+      const { fixture, host } = renderEnvironment();
+      const form = host.querySelector<HTMLButtonElement>('form cd-compatibility-guide button')!;
+
+      form.click();
+      fixture.detectChanges();
+
+      expect(
+        [...host.querySelectorAll('form cd-compatibility-guide dt')].map((dt) =>
+          dt.textContent?.trim(),
+        ),
+      ).toEqual([...COMPATIBILITY_MODES, ...COMPATIBILITY_SURFACES]);
+    });
   });
 
   it('offers no "Not set" default, because the registry never has one (ADR-033)', () => {

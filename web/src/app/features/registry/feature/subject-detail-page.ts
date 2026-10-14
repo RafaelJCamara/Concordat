@@ -16,6 +16,7 @@ import { ActiveEnvironmentStore } from '../../../core/config/active-environment-
 import { POLICY_WRITE_SCOPES, SCHEMA_WRITE_SCOPES } from '../../../domain/identity/scope';
 import type { CompatibilityPolicy } from '../../../domain/registry/compatibility';
 import { describePolicy } from '../../../domain/registry/subject-settings';
+import { CompatibilityGuide } from '../../../shared/ui/compatibility-meaning/compatibility-guide';
 import { Icon } from '../../../shared/ui/icon/icon';
 import { StatusBadge } from '../../../shared/ui/status-badge/status-badge';
 import { SubjectName } from '../../../shared/ui/subject-name/subject-name';
@@ -47,6 +48,7 @@ import { VersionTable } from '../ui/version-table';
     HlmAlertImports,
     HlmButton,
     HlmSkeleton,
+    CompatibilityGuide,
     Icon,
     IfScope,
     StatusBadge,
@@ -241,6 +243,19 @@ import { VersionTable } from '../ui/version-table';
             <dd class="text-foreground mt-1 font-mono font-medium">{{ subject.contentModel }}</dd>
           </div>
         </dl>
+
+        @if (subject.compatibilityPolicy.mode !== null) {
+          <!--
+            Under the cells, full width, rather than in the Compatibility cell: the cell is half of
+            a 390px screen, and an explanation of two terms does not fit in half of one. Only for
+            a policy the subject set — an inheriting subject's own mode and surface are not on this
+            page, so there is nothing here to explain.
+          -->
+          <cd-compatibility-guide
+            [modes]="[subject.compatibilityPolicy.mode]"
+            [surfaces]="[subject.compatibilityPolicy.surface]"
+          />
+        }
 
         @if (subject.versions.length === 0) {
           <div class="border-border bg-card rounded-xl border p-10 text-center">

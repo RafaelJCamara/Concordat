@@ -1,4 +1,18 @@
 import { expect, test } from '@playwright/test';
+import {
+  COMPATIBILITY_MODE_MEANING,
+  COMPATIBILITY_MODES,
+  COMPATIBILITY_SURFACE_MEANING,
+  COMPATIBILITY_SURFACES,
+  type CompatibilityMode,
+  type CompatibilitySurface,
+} from '../src/app/domain/registry/compatibility';
+import {
+  chooseAppearance,
+  contrastOf,
+  expectNoSidewaysOverflow,
+  openByKeyboard,
+} from './compatibility-help';
 import { READER_STORAGE_STATE } from './global-setup';
 
 /**
@@ -108,6 +122,135 @@ test.describe('environment settings', () => {
     // Not saved: the registry is still on its own policy. This only reads the explanation.
     await page.reload();
     await expect(page.getByLabel('Registration policy')).not.toHaveValue('CI_ONLY');
+  });
+});
+
+/**
+ * What a compatibility mode and surface mean, where the environment's default is shown and chosen.
+ *
+ * <b>Reads and changes nothing.</b> It chooses other options in the selects and never saves, which
+ * is how `explains the registration policy` above is written, because `dev`'s default is what
+ * every other spec is judged against.
+ *
+ * It is a phone, in both appearances, because that is where the prototype's hover tooltip simply did
+ * not exist. Each run opens the explanation with the keyboard, checks that the words on the page are
+ * the words the domain holds for the tokens on the page, that the page does not scroll sideways with
+ * every term open, and that the text is readable against what is behind it.
+ */
+for (const appearance of ['light', 'dark'] as const) {
+  test.describe(`explaining compatibility, ${appearance}, at 390px`, () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test.beforeEach(async ({ page }) => {
+      await chooseAppearance(page, appearance);
+    });
+
+    test('describes each select by what its choice means, and follows the choice', async ({
+      page,
+    }) => {
+      await page.goto('/settings/environment');
+
+      const mode = page.getByLabel('Default compatibility mode');
+      const surface = page.getByLabel('Default compatibility surface');
+      await expect(mode).toBeVisible();
+
+      // Whatever the environment holds now: this spec does not decide `dev`'s default.
+      const held = {
+        mode: (await mode.inputValue()) as CompatibilityMode,
+        surface: (await surface.inputValue()) as CompatibilitySurface,
+      };
+      await expect(mode).toHaveAccessibleDescription(COMPATIBILITY_MODE_MEANING[held.mode]);
+      await expect(surface).toHaveAccessibleDescription(
+        COMPATIBILITY_SURFACE_MEANING[held.surface],
+      );
+
+      // The sentence is a description and not a name: the label is still the only way in, which
+      // is what every other spec in this suite finds these two by.
+      await expect(page.getByLabel('Default compatibility mode')).toHaveCount(1);
+      await expect(page.getByLabel('Default compatibility surface')).toHaveCount(1);
+
+      await mode.selectOption('FULL_TRANSITIVE');
+      await surface.selectOption('SOURCE');
+
+      await expect(mode).toHaveAccessibleDescription(COMPATIBILITY_MODE_MEANING.FULL_TRANSITIVE);
+      await expect(surface).toHaveAccessibleDescription(COMPATIBILITY_SURFACE_MEANING.SOURCE);
+
+      // Not saved: the registry still holds what it held.
+      await page.reload();
+      await expect(page.getByLabel('Default compatibility mode')).toHaveValue(held.mode);
+    });
+
+    test('opens from the keyboard, explains the default shown, and fits the screen', async ({
+      page,
+    }) => {
+      await page.goto('/settings/environment');
+
+      const mode = await page.getByLabel('Default compatibility mode').inputValue();
+      const surface = await page.getByLabel('Default compatibility surface').inputValue();
+      const guide = page.getByRole('button', { name: 'What does this default mean?' });
+
+      // Closed, the terms are not on the page: `getByText(token, { exact: true })` is how other
+      // specs find a policy, and it matches hidden text too.
+      await expect(page.locator('dt', { hasText: new RegExp(`^${mode}$`) })).toHaveCount(0);
+
+      await openByKeyboard(page, guide);
+
+      const panel = page.locator(`#${await guide.getAttribute('aria-controls')}`);
+      await expect(panel.locator('dt')).toHaveText([mode, surface]);
+      await expect(panel.locator('dd')).toHaveText([
+        COMPATIBILITY_MODE_MEANING[mode as CompatibilityMode],
+        COMPATIBILITY_SURFACE_MEANING[surface as CompatibilitySurface],
+      ]);
+
+      await expectNoSidewaysOverflow(page, panel.locator('dt, dd'));
+      for (const ratio of await contrastOf(panel.locator('dt, dd'))) {
+        expect(ratio).toBeGreaterThanOrEqual(4.5);
+      }
+
+      // The same key closes it.
+      await page.keyboard.press('Enter');
+      await expect(guide).toHaveAttribute('aria-expanded', 'false');
+      await expect(panel).toHaveCount(0);
+    });
+
+    test('offers every word to somebody choosing, and still fits with all ten open', async ({
+      page,
+    }) => {
+      await page.goto('/settings/environment');
+
+      const guide = page.getByRole('button', { name: 'What do these choices mean?' });
+      // Space as well as Enter: a button answers both, and a handler on keydown would not.
+      await openByKeyboard(page, guide, 'Space');
+
+      const panel = page.locator(`#${await guide.getAttribute('aria-controls')}`);
+      await expect(panel.locator('dt')).toHaveText([
+        ...COMPATIBILITY_MODES,
+        ...COMPATIBILITY_SURFACES,
+      ]);
+      await expect(panel.locator('dd')).toHaveText([
+        ...COMPATIBILITY_MODES.map((m) => COMPATIBILITY_MODE_MEANING[m]),
+        ...COMPATIBILITY_SURFACES.map((s) => COMPATIBILITY_SURFACE_MEANING[s]),
+      ]);
+
+      await expectNoSidewaysOverflow(page, panel.locator('dt, dd'));
+      for (const ratio of await contrastOf(panel.locator('dt, dd'))) {
+        expect(ratio).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+  });
+}
+
+test.describe('explaining compatibility on a touch screen', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test('opens with a tap, which is all a phone has', async ({ page }) => {
+    await page.goto('/settings/environment');
+
+    const guide = page.getByRole('button', { name: 'What does this default mean?' });
+    await guide.tap();
+
+    await expect(guide).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator(`#${await guide.getAttribute('aria-controls')}`)).toBeVisible();
   });
 });
 

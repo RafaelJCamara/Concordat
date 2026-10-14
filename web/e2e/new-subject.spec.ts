@@ -1,4 +1,11 @@
 import { expect, test, type Page, type Request } from '@playwright/test';
+import {
+  COMPATIBILITY_MODE_MEANING,
+  COMPATIBILITY_MODES,
+  COMPATIBILITY_SURFACE_MEANING,
+  COMPATIBILITY_SURFACES,
+} from '../src/app/domain/registry/compatibility';
+import { expectNoSidewaysOverflow, openByKeyboard } from './compatibility-help';
 import { ensureEnvironment, OWNER, ownerCredential, readSubject } from './registry';
 import { setSchema, waitForSubject } from './schema-editor';
 
@@ -161,6 +168,59 @@ test.describe('creating a subject', () => {
     // And the subject page reads the same account back.
     await expect(page.getByText('FULL_TRANSITIVE', { exact: true })).toBeVisible();
     await expect(page.getByText('CLOSED', { exact: true })).toBeVisible();
+
+    // The subject page explains the policy it shows, in the words the domain holds for exactly
+    // these two tokens and for no others, and opening it does not add a second copy of either
+    // token to a page that finds them by their exact text.
+    const guide = page.getByRole('button', { name: 'What do these mean?' });
+    await openByKeyboard(page, guide);
+    const panel = page.locator(`#${await guide.getAttribute('aria-controls')}`);
+    await expect(panel.locator('dt')).toHaveText(['FULL_TRANSITIVE', 'SOURCE']);
+    await expect(panel.locator('dd')).toHaveText([
+      COMPATIBILITY_MODE_MEANING.FULL_TRANSITIVE,
+      COMPATIBILITY_SURFACE_MEANING.SOURCE,
+    ]);
+  });
+
+  test('says what each policy choice means, under the select, and creates nothing', async ({
+    page,
+  }) => {
+    // At the width a phone has, where the prototype's hover tooltip did not exist. The sentence
+    // is a description of the select, not part of its name: `getByLabel('Mode')` still finds
+    // exactly one select, which is how every test here reaches it.
+    await page.setViewportSize({ width: 390, height: 844 });
+    const sent = creates(page);
+    await openForm(page);
+
+    const mode = page.getByLabel('Mode');
+    const surface = page.getByLabel('Surface');
+    await expect(mode).toHaveCount(1);
+    await expect(surface).toHaveCount(1);
+
+    // Inherit says nothing of its own: it is not a mode.
+    await expect(mode).toHaveAccessibleDescription('');
+
+    await mode.selectOption('BACKWARD_TRANSITIVE');
+    await surface.selectOption('WIRE');
+
+    await expect(mode).toHaveAccessibleDescription(COMPATIBILITY_MODE_MEANING.BACKWARD_TRANSITIVE);
+    await expect(surface).toHaveAccessibleDescription(COMPATIBILITY_SURFACE_MEANING.WIRE);
+
+    // And back: the sentence follows the choice, it is not left behind by it.
+    await mode.selectOption('');
+    await expect(mode).toHaveAccessibleDescription('');
+
+    // The whole vocabulary, from the keyboard, without leaving the form or scrolling sideways.
+    const guide = page.getByRole('button', { name: 'What do these mean?' });
+    await openByKeyboard(page, guide);
+    const panel = page.locator(`#${await guide.getAttribute('aria-controls')}`);
+    await expect(panel.locator('dt')).toHaveText([
+      ...COMPATIBILITY_MODES,
+      ...COMPATIBILITY_SURFACES,
+    ]);
+    await expectNoSidewaysOverflow(page, panel.locator('dt, dd'));
+
+    expect(sent).toHaveLength(0);
   });
 
   test('withdraws the confirmation when what it named is edited', async ({ page }) => {

@@ -31,6 +31,8 @@ import {
 } from '../../../domain/registry/new-subject';
 import { checkSubjectName, slugSubjectName } from '../../../domain/registry/subject-name';
 import type { ContentModel, SchemaFormat } from '../../../domain/registry/wire-tokens';
+import { CompatibilityGuide } from '../../../shared/ui/compatibility-meaning/compatibility-guide';
+import { CompatibilityMeaning } from '../../../shared/ui/compatibility-meaning/compatibility-meaning';
 import { Icon } from '../../../shared/ui/icon/icon';
 import { NewSubjectStore } from '../application/new-subject-store';
 import { SubjectListStore } from '../application/subject-list-store';
@@ -76,6 +78,8 @@ const INPUT =
     HlmButton,
     Icon,
     CreateSubjectConfirmation,
+    CompatibilityGuide,
+    CompatibilityMeaning,
   ],
   template: `
     <section class="mx-auto w-full max-w-2xl space-y-6 p-6 lg:p-8">
@@ -254,23 +258,44 @@ const INPUT =
           <div class="grid gap-4 sm:grid-cols-2">
             <div class="space-y-1.5">
               <label class="text-muted-foreground text-xs" for="subject-mode">Mode</label>
-              <select id="subject-mode" formControlName="mode" [class]="input">
+              <select
+                id="subject-mode"
+                formControlName="mode"
+                aria-describedby="subject-mode-meaning"
+                [class]="input"
+              >
                 <option value="">Inherit the environment default</option>
                 @for (mode of modes; track mode) {
                   <option [value]="mode">{{ mode }}</option>
                 }
               </select>
+              <cd-compatibility-meaning
+                axis="mode"
+                [value]="chosenMode()"
+                textId="subject-mode-meaning"
+              />
             </div>
             <div class="space-y-1.5">
               <label class="text-muted-foreground text-xs" for="subject-surface">Surface</label>
-              <select id="subject-surface" formControlName="surface" [class]="input">
+              <select
+                id="subject-surface"
+                formControlName="surface"
+                aria-describedby="subject-surface-meaning"
+                [class]="input"
+              >
                 <option value="">Inherit the environment default</option>
                 @for (surface of surfaces; track surface) {
                   <option [value]="surface">{{ surface }}</option>
                 }
               </select>
+              <cd-compatibility-meaning
+                axis="surface"
+                [value]="chosenSurface()"
+                textId="subject-surface-meaning"
+              />
             </div>
           </div>
+          <cd-compatibility-guide [modes]="modes" [surfaces]="surfaces" />
           <div aria-live="polite">
             @if (compatibilityRefusal(); as finding) {
               <p class="text-destructive text-xs">{{ finding.message }}</p>
@@ -342,6 +367,19 @@ export class NewSubjectPage {
    * signal — so every computed below reads this first. It covers value, status *and* touched.
    */
   private readonly formEvents = toSignal(this.form.events);
+
+  /** The mode and surface the form holds, for the sentence under each select. */
+  protected readonly chosenMode = computed(() => {
+    this.formEvents();
+
+    return this.form.controls.mode.value;
+  });
+
+  protected readonly chosenSurface = computed(() => {
+    this.formEvents();
+
+    return this.form.controls.surface.value;
+  });
 
   protected readonly titleText = computed(() => {
     this.formEvents();
