@@ -43,7 +43,8 @@ public class SubjectCommandHandlerTests
 
     private Task<Result<Subject>> SetPolicyAsync(
         CompatibilityPolicy? policy, string name = Name) =>
-        new SetCompatibilityPolicyHandler(_subjects, _caller, _audit, _unitOfWork, _clock).HandleAsync(
+        new SetCompatibilityPolicyHandler(
+            _subjects, _caller, _audit, _outbox, _unitOfWork, _clock).HandleAsync(
             new SetCompatibilityPolicyCommand(_environment, name, policy),
             CancellationToken.None);
 
@@ -565,6 +566,158 @@ public class SubjectCommandHandlerTests
         await SetPolicyAsync(FullSource);
 
         Assert.DoesNotContain(AuditAction.SubjectUpdated, _audit.Actions);
+    }
+
+    // ------------------------------------------------- policy: the notification (ADR-034)
+
+    [Fact]
+    public async Task APolicyChange_StagesOneNotificationForTheSubjectInItsEnvironment()
+    {
+        // The reversal of ADR-033's "No notification": a team reading this subject may now be
+        // judged more laxly or strictly than the one it built against, which is what an alert is
+        // for. One message, about this subject, in this environment, stamped by the injected clock.
+        var moment = new DateTimeOffset(2029, 11, 4, 6, 7, 8, TimeSpan.FromHours(-5));
+        _clock.SetUtcNow(moment);
+        _subjects.Seed(Build.Subject(_environment, policy: BackwardWire));
+
+        var result = await SetPolicyAsync(FullSource);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+
+        var message = Assert.Single(_outbox.Staged);
+        Assert.Equal(NotificationEvent.SubjectPolicyChanged, message.Event);
+        Assert.Equal(Name, message.Target);
+        Assert.Equal(_environment, message.EnvironmentId);
+        Assert.Equal(moment.ToUniversalTime(), message.OccurredAt);
+    }
+
+    [Fact]
+    public async Task ThePolicyChangeNotification_SaysWhichSubjectWhoAndTheOldAndNewPolicy()
+    {
+        _caller.Current = _caller.Current with { Actor = ActorId.Create("carol").Value };
+        _subjects.Seed(Build.Subject(_environment, policy: BackwardWire));
+
+        await SetPolicyAsync(FullSource);
+
+        Assert.Equal(
+            "The compatibility policy of acme.orders.OrderCreated was changed by carol: " +
+            "BACKWARD/WIRE -> FULL/SOURCE. " +
+            "(\"inherited\" means the environment's default applies.) " +
+            "Versions already registered are not judged again.",
+            Assert.Single(_outbox.Staged).Body);
+    }
+
+    [Theory]
+    [InlineData(false, "inherited -> FULL/SOURCE")]
+    [InlineData(true, "FULL/SOURCE -> inherited")]
+    public async Task ThePolicyChangeNotification_SpellsInheritedAsTheAuditEntryDoes(
+        bool clearing, string expected)
+    {
+        // One spelling in two places: the message reuses the audit detail's own function, so a
+        // subscriber and an auditor read the same words for the same change.
+        _subjects.Seed(Build.Subject(_environment, policy: clearing ? FullSource : null));
+
+        await SetPolicyAsync(clearing ? null : FullSource);
+
+        var entry = Assert.Single(_audit.Entries);
+        var message = Assert.Single(_outbox.Staged);
+
+        Assert.Equal($"policy {expected}", entry.Detail);
+        Assert.Contains($": {expected}.", message.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ThePolicyChangeNotification_NamesTheCallerAndNeverAnythingInTheRequest()
+    {
+        // The approval, rejection, promotion and breaking-registration messages end "by <actor>",
+        // and a team told its contract is now judged differently asks who. The deprecation message
+        // is the one that names nobody, and it is advisory. The name is the audit entry's own: the
+        // authenticated caller (the command has no actor to take another from), so the two cannot
+        // disagree about who did it (ADR-034).
+        _caller.Current = _caller.Current with { Actor = ActorId.Create("carol").Value };
+        _subjects.Seed(Build.Subject(_environment));
+
+        await SetPolicyAsync(FullSource);
+
+        var entry = Assert.Single(_audit.Entries);
+        Assert.Contains(
+            $"changed by {entry.Actor.Value}:", Assert.Single(_outbox.Staged).Body, StringComparison.Ordinal);
+        Assert.Equal("carol", entry.Actor.Value);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SettingThePolicyTheSubjectAlreadyHas_StagesNothing(bool inheriting)
+    {
+        // A change that changes nothing tells nobody anything: the guard that keeps the audit
+        // trail honest is the one that keeps a subscriber from being alerted to a non-event.
+        CompatibilityPolicy? current = inheriting ? null : FullSource;
+        _subjects.Seed(Build.Subject(_environment, policy: current));
+
+        var result = await SetPolicyAsync(current);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Empty(_outbox.Staged);
+    }
+
+    [Fact]
+    public async Task APolicyChange_StagesItsNotificationInTheSameUnitOfWorkAsTheAuditEntry()
+    {
+        // The outbox's whole point: the notification rides the same SaveChanges as the change and
+        // its entry, so there is no "your policy changed" for a change that rolled back and no
+        // change whose notification was lost.
+        _subjects.Seed(Build.Subject(_environment));
+        var auditedAtSave = -1;
+        var stagedAtSave = -1;
+        _unitOfWork.OnSave = () =>
+        {
+            auditedAtSave = _audit.Entries.Count;
+            stagedAtSave = _outbox.Staged.Count;
+        };
+
+        await SetPolicyAsync(FullSource);
+
+        Assert.Equal(1, auditedAtSave);
+        Assert.Equal(1, stagedAtSave);
+        Assert.Equal(1, _unitOfWork.Saves);
+    }
+
+    [Fact]
+    public async Task ARetiredSubject_RefusesAPolicyChangeAndStagesNothing()
+    {
+        var subject = Build.Subject(_environment, policy: BackwardWire);
+        Assert.True(subject.Retire().IsSuccess);
+        _subjects.Seed(subject);
+
+        var result = await SetPolicyAsync(FullSource);
+
+        Assert.Equal(ConcordatCodes.LifecycleTransitionInvalid, result.Error!.Code);
+        Assert.Empty(_outbox.Staged);
+    }
+
+    [Fact]
+    public async Task APolicyChangeThatIsRefusedForAnUnknownOrInvalidSubject_StagesNothing()
+    {
+        await SetPolicyAsync(FullSource);
+        await SetPolicyAsync(FullSource, name: "acme.orders.Order-Created");
+
+        Assert.Empty(_outbox.Staged);
+        Assert.Equal(0, _unitOfWork.Saves);
+    }
+
+    [Fact]
+    public async Task ADeprecatedSubject_StagesAPolicyChangeNotificationAndNotADeprecationOne()
+    {
+        // The two events stay separate: a policy change on a deprecated subject is a policy
+        // change, and must not be mistaken for (or suppressed by) the deprecation's own event.
+        var subject = Build.Subject(_environment);
+        Assert.True(subject.Deprecate().IsSuccess);
+        _subjects.Seed(subject);
+
+        await SetPolicyAsync(FullSource);
+
+        Assert.Equal([NotificationEvent.SubjectPolicyChanged], _outbox.Events);
     }
 
     // ------------------------------------------------------------------ retire

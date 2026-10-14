@@ -15,6 +15,7 @@ import { READER_STORAGE_STATE } from './global-setup';
 const RUN = Date.now();
 const EMAIL = `e2e-notify-${RUN}@concordat.test`;
 const HOOK = 'https://127.0.0.1:1/e2e-hook';
+const HOOK_POLICY = 'https://127.0.0.1:1/e2e-policy-change-hook';
 
 test.describe.serial('notifications', () => {
   test('is a settings tab, marked as the current page', async ({ page }) => {
@@ -85,6 +86,37 @@ test.describe.serial('notifications', () => {
     expect(await page.content()).not.toContain('whsec_');
   });
 
+  test('subscribes to a policy change, an event the registry accepts as its own', async ({
+    page,
+  }) => {
+    // ADR-034. The web's list of events and the registry's are two lists, and a registry that has
+    // not been taught the token answers 400 "unknown event" for it: this is the one place the two
+    // are asked to agree at runtime. It is a webhook to a closed port, deleted below, for the
+    // reason in the header: a live subscription is delivered to by a background pump, and the rest
+    // of the suite changes policies.
+    await page.goto('/settings/notifications');
+
+    await page.getByLabel('Channel').selectOption('WEBHOOK');
+    await page.getByLabel('Webhook URL').fill(HOOK_POLICY);
+    await expect(page.getByText('A subject’s compatibility policy was changed.')).toBeVisible();
+    await page.getByLabel('SUBJECT_POLICY_CHANGED').check();
+    await expect(page.getByText('1 of 8 events.')).toBeVisible();
+    await page.getByRole('button', { name: 'Subscribe' }).click();
+
+    // A registry that does not know the token answers 400 here, and the page shows "Could not
+    // subscribe" instead of the secret.
+    await expect(page.getByText(/will not be shown again/)).toBeVisible();
+    await page.getByRole('button', { name: 'I have saved it' }).click();
+
+    // As the registry stored it and sent it back, after a fresh read.
+    await page.reload();
+
+    const row = page.getByRole('listitem').filter({ hasText: HOOK_POLICY });
+
+    await expect(row).toContainText('SUBJECT_POLICY_CHANGED');
+    await expect(row).not.toContainText('Every event');
+  });
+
   test('does not show the secret again after a reload, because it cannot', async ({ page }) => {
     await page.goto('/settings/notifications');
 
@@ -143,6 +175,18 @@ test.describe.serial('notifications', () => {
     await row.getByRole('button', { name: 'Confirm' }).click();
 
     await expect(page.getByRole('listitem').filter({ hasText: HOOK })).toHaveCount(0);
+  });
+
+  test('deletes the policy-change webhook, so no policy a later spec changes is sent anywhere', async ({
+    page,
+  }) => {
+    await page.goto('/settings/notifications');
+
+    const row = page.getByRole('listitem').filter({ hasText: HOOK_POLICY });
+    await row.getByRole('button', { name: 'Delete' }).click();
+    await row.getByRole('button', { name: 'Confirm' }).click();
+
+    await expect(page.getByRole('listitem').filter({ hasText: HOOK_POLICY })).toHaveCount(0);
   });
 
   test('deletes the email subscription, leaving the registry as it was found', async ({ page }) => {

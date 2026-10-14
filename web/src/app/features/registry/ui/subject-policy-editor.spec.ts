@@ -140,14 +140,32 @@ describe('SubjectPolicyEditor', () => {
       expect(host.textContent).toContain('does not follow');
     });
 
-    it('says what the registry records, and that it tells nobody', () => {
+    it('says what the registry records', () => {
       // Measured against the real registry (ADR-033): one SUBJECT_POLICY_CHANGED entry, attributed
       // to the caller, reading the old policy and the new. `e2e/subject-settings.spec.ts` holds it.
       const text = host.textContent ?? '';
 
       expect(text).toContain('SUBJECT_POLICY_CHANGED');
       expect(text).toContain('naming the account that made it and the policy before and after');
-      expect(text).toContain('Nobody is notified');
+    });
+
+    it('says who is notified, including a subscription with no filter, and what the message names', () => {
+      // ADR-034: the confirmation said "Nobody is notified" until the event existed. An empty event
+      // list means every event, so an unfiltered subscription is told too, and the sentence says so
+      // because that is the part an operator does not expect. The message names the subject, the
+      // caller and both policies, as the registry's own does.
+      const text = host.textContent ?? '';
+
+      expect(text).toContain(
+        'Subscribers to SUBJECT_POLICY_CHANGED in this environment are notified, including every subscription with no event filter',
+      );
+      expect(text).toContain(
+        'The message names the subject, the account that made the change and the policy before and after',
+      );
+    });
+
+    it('no longer says nobody is notified, which was true until ADR-034', () => {
+      expect(host.textContent).not.toContain('Nobody is notified');
     });
 
     it('no longer says the change is missing from the audit log, which was true until ADR-033', () => {
@@ -188,6 +206,13 @@ describe('SubjectPolicyEditor', () => {
       button(/Yes, inherit/).click();
 
       expect(confirmed).toEqual([{ mode: null, surface: null }]);
+    });
+
+    it('tells subscribers too: inheriting is a policy change like any other', () => {
+      expect(host.textContent).toContain(
+        'Subscribers to SUBJECT_POLICY_CHANGED in this environment are notified',
+      );
+      expect(host.textContent).not.toContain('Nobody is notified');
     });
 
     it('says inheriting is not the same as choosing the current default', () => {

@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+using Concordat.Application.Abstractions;
 using Concordat.Application.Governance;
+using Concordat.Domain.Governance;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Concordat.Api.IntegrationTests;
@@ -316,6 +318,124 @@ public class NotificationApiTests(ApiFactory factory)
         Assert.Equal(0, after.Parked);
     }
 
+    // ----------------------------------------------- a policy change, delivered (ADR-034)
+
+    /// <summary>The events the registry could be subscribed to before a policy change was one.</summary>
+    private static readonly string[] EventsBeforeAPolicyChangeWasOne =
+    [
+        "VERSION_REGISTERED",
+        "BREAKING_CHANGE_SUBMITTED",
+        "BREAKING_CHANGE_APPROVED",
+        "BREAKING_CHANGE_REJECTED",
+        "VERSION_PROMOTED",
+        "SUBJECT_DEPRECATED",
+        "ENFORCEMENT_VIOLATION",
+    ];
+
+    /// <summary>
+    /// Pumps the real dispatcher, against the real database and real subscriptions, with a channel
+    /// that keeps what it is sent in place of the webhook that would leave the machine.
+    /// </summary>
+    private async Task<IReadOnlyList<(string Endpoint, Notification Notification)>> PumpCapturingAsync()
+    {
+        var channel = new CapturingWebhookChannel();
+
+        // Until nothing is due: the pump claims fifty oldest-first across the whole tenant, and a
+        // sibling test's leftovers can sit ahead of the message under test.
+        for (var pass = 0; pass < 100; pass++)
+        {
+            using var scope = factory.Services.CreateScope();
+
+            var dispatcher = ActivatorUtilities.CreateInstance<NotificationDispatcher>(
+                scope.ServiceProvider, (IEnumerable<INotificationChannel>)[channel]);
+
+            var result = await dispatcher.PumpAsync(CancellationToken.None);
+
+            if (result.Claimed is 0)
+            {
+                break;
+            }
+        }
+
+        return channel.Sent;
+    }
+
+    [Fact]
+    public async Task APolicyChangeIsDeliveredToTheSubscriptionsThatWantIt()
+    {
+        // The three cases the upgrade note turns on. A subscription that lists the event is told.
+        // A subscription that lists every *other* event is not (so an explicit list is untouched by
+        // this release). And one that lists nothing, which means every event, is told too: that is
+        // the behaviour change, and it is deliberate (ADR-034).
+        var (client, environment) = await NewEnvironmentAsync();
+        var subject = await RegisterAsync(client, environment);
+
+        const string Wants = "https://wants.example.invalid/hook";
+        const string ListsTheOthers = "https://lists-the-others.example.invalid/hook";
+        const string Unfiltered = "https://unfiltered.example.invalid/hook";
+
+        (await SubscribeAsync(client, environment, endpoint: Wants, events: ["SUBJECT_POLICY_CHANGED"]))
+            .EnsureSuccessStatusCode();
+        (await SubscribeAsync(
+            client, environment, endpoint: ListsTheOthers, events: EventsBeforeAPolicyChangeWasOne))
+            .EnsureSuccessStatusCode();
+        (await SubscribeAsync(client, environment, endpoint: Unfiltered)).EnsureSuccessStatusCode();
+
+        var put = await client.PutAsJsonAsync(
+            $"/v1/environments/{environment}/subjects/{subject}/compatibility-policy",
+            new SetCompatibilityPolicyRequest("FULL", "SOURCE"),
+            ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+
+        var sent = (await PumpCapturingAsync())
+            .Where(s => s.Notification.Environment == environment)
+            .ToList();
+
+        var wanted = Assert.Single(
+            sent, s => s.Endpoint == Wants && s.Notification.Event == "SUBJECT_POLICY_CHANGED");
+        Assert.Equal(subject, wanted.Notification.Target);
+        Assert.Contains(
+            $"The compatibility policy of {subject} was changed by ",
+            wanted.Notification.Body,
+            StringComparison.Ordinal);
+        Assert.Contains(": inherited -> FULL/SOURCE.", wanted.Notification.Body, StringComparison.Ordinal);
+
+        // It asked for nothing else, so the registration that created the subject is not sent.
+        Assert.Single(sent, s => s.Endpoint == Wants);
+
+        // The explicit list is the same list it was: the registration, and no policy change.
+        Assert.DoesNotContain(
+            sent, s => s.Endpoint == ListsTheOthers && s.Notification.Event == "SUBJECT_POLICY_CHANGED");
+        Assert.Single(
+            sent, s => s.Endpoint == ListsTheOthers && s.Notification.Event == "VERSION_REGISTERED");
+
+        // Every event means this one too.
+        Assert.Single(
+            sent, s => s.Endpoint == Unfiltered && s.Notification.Event == "SUBJECT_POLICY_CHANGED");
+        Assert.Single(
+            sent, s => s.Endpoint == Unfiltered && s.Notification.Event == "VERSION_REGISTERED");
+    }
+
+    [Fact]
+    public async Task ASubscriptionWhoseListNamesAPolicyChangeSurvivesAReadBack()
+    {
+        // The token is stored as text and parsed on every read (the rollback cost in ADR-034 is the
+        // other direction of this). A round trip through the real column proves the token this
+        // build writes is one this build reads.
+        var (client, environment) = await NewEnvironmentAsync();
+
+        var created = (await ApiFactory.ReadAsync<CreatedSubscriptionResponse>(
+            await SubscribeAsync(client, environment, events: ["SUBJECT_POLICY_CHANGED"])))
+            .Subscription;
+
+        var listed = await client.GetFromJsonAsync<IReadOnlyList<SubscriptionResponse>>(
+            $"/v1/environments/{environment}/notifications", ApiFactory.Json);
+
+        Assert.Equal(["SUBJECT_POLICY_CHANGED"], created.Events);
+        Assert.Equal(["SUBJECT_POLICY_CHANGED"], Assert.Single(listed!).Events);
+    }
+
     [Fact]
     public async Task AMutedSubscriptionDoesNotBlockDelivery()
     {
@@ -333,5 +453,28 @@ public class NotificationApiTests(ApiFactory factory)
         var result = await PumpAsync();
 
         Assert.True(result.Delivered > 0);
+    }
+}
+
+/// <summary>
+/// Stands in for the webhook channel and keeps what it was asked to send, so a test can say who
+/// was told what without a request leaving the machine.
+/// </summary>
+internal sealed class CapturingWebhookChannel : INotificationChannel
+{
+    private readonly List<(string Endpoint, Notification Notification)> _sent = [];
+
+    public NotificationChannel Channel => NotificationChannel.Webhook;
+
+    public IReadOnlyList<(string Endpoint, Notification Notification)> Sent => _sent;
+
+    public Task SendAsync(
+        string endpoint,
+        Notification notification,
+        string? signingSecret,
+        CancellationToken cancellationToken)
+    {
+        _sent.Add((endpoint, notification));
+        return Task.CompletedTask;
     }
 }

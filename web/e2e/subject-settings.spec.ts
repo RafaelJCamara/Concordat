@@ -273,12 +273,31 @@ test.describe('changing the compatibility policy', () => {
     await expect(page.getByText(`Pin ${name} to FULL_TRANSITIVE · SOURCE?`)).toBeVisible();
     await expect(page.getByText(/takes effect for the next version registered/)).toBeVisible();
     await expect(page.getByText(/Versions already registered are not judged again/)).toBeVisible();
-    await expect(page.getByText('SUBJECT_POLICY_CHANGED', { exact: true })).toBeVisible();
+    // The token now appears twice, once as the audit entry's action and once as the event
+    // subscribers are told by (ADR-034): one name, two places, so each is looked up by its line.
+    await expect(
+      page
+        .getByRole('listitem')
+        .filter({ hasText: 'The audit log gets one entry' })
+        .getByText('SUBJECT_POLICY_CHANGED', { exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByText(/naming the account that made it and the policy before and after/),
     ).toBeVisible();
     await expect(page.getByText('not written to the audit log')).toHaveCount(0);
-    await expect(page.getByText('Nobody is notified.')).toBeVisible();
+    // Until ADR-034 this read "Nobody is notified." and was true. An unfiltered subscription is
+    // told too (an empty event list means every event), and the sentence says so.
+    await expect(
+      page.getByText(
+        /Subscribers to SUBJECT_POLICY_CHANGED in this environment are notified, including every subscription with no event filter/,
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        /The message names the subject, the account that made the change and the policy before and after/,
+      ),
+    ).toBeVisible();
+    await expect(page.getByText('Nobody is notified.')).toHaveCount(0);
     expect(sent.puts).toHaveLength(0);
     expect((await readSubject(credential, ENVIRONMENT, name)).compatibilityPolicy).toEqual({
       mode: null,

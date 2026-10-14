@@ -1,14 +1,15 @@
 # What is missing
 
-**As of 2026-08-15**, except [inheriting and the audited policy change, 2026-10-13](#a-subject-with-no-policy-of-its-own-follows-its-environments-default-and-a-policy-change-is-audited-2026-10-13),
+**As of 2026-08-15**, except [the policy-change notification, 2026-10-14](#a-policy-change-notifies-subscribers-and-every-subscription-with-no-event-filter-is-one-2026-10-14),
+[inheriting and the audited policy change, 2026-10-13](#a-subject-with-no-policy-of-its-own-follows-its-environments-default-and-a-policy-change-is-audited-2026-10-13),
 [the subject settings, 2026-10-13](#a-subjects-owner-and-policy-are-editable-and-the-registry-did-three-things-nobody-had-written-down-2026-10-13),
 [the create-subject screen, 2026-10-13](#the-create-subject-screen-and-a-500-that-was-not-what-it-looked-like-2026-10-13),
 [the schema editor and the web container, 2026-10-13](#the-schema-editor-and-the-web-container-2026-10-13),
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14: 1,689 .NET,
-1,425 Angular, 223 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the policy-change notification): 1,705 .NET,
+1,435 Angular, 225 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
 aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
@@ -19,6 +20,88 @@ ten milestone files as unchecked boxes.
 
 Everything under "verified locally" below was run on this machine today, against the real
 container image and a real PostgreSQL. Everything else is claimed on the strength of tests.
+
+---
+
+## A policy change notifies subscribers, and every subscription with no event filter is one, 2026-10-14
+
+The maintainer decided what ADR-033 left open ([ADR-034](adr/034-a-policy-change-notifies-subscribers.md)): a subject's
+policy change stages a notification. A new event, **`SUBJECT_POLICY_CHANGED`** (the eighth; the audit action's own
+spelling, pinned equal by `WireTokenTests`), is staged by `SetCompatibilityPolicyHandler` in the **same unit of work** as the
+audit entry and **under the same guard**: a change stages one message, a no-op (the policy the subject already has,
+including inherit on an inheriting one) and every refused request (half a policy, an unknown subject, a retired one)
+stage none. The message names the subject, **the caller** (as the approval, rejection, promotion and breaking-registration
+messages do; the deprecation one is the only one that names nobody) and the old and new policy, spelled by the audit detail's
+own function. It does not say which is stricter (modes on one axis and surfaces on another are not a total order).
+The confirmation on the subject page says who is told. The counts are **1,705 .NET** (from 1,689), **1,435 Angular**
+(from 1,425) and **225 browser** (from 223), against the dev server and the production image.
+
+**The behaviour change, and the one to read first. Every existing "all events" subscription starts receiving policy
+changes the moment this ships**, because an empty event set means every event (unchanged). A subscription that lists its
+events does not. **An operator should check, before upgrading:** `GET /v1/environments/{env}/notifications` for each
+environment, and every entry with `"events": []`. On a webhook it is a new `event` value the receiver may not expect; on an
+email it is a new kind of message. There is no edit endpoint for a subscription's events, so keeping one out means **mute**
+(which stops everything) or **delete and recreate it listing the events you want**, and a recreated webhook is issued **a new
+signing secret** the receiver must be given. Policy changes are rare and need `subject:admin`: this is not a new stream.
+
+**Measured against the real registry** (the rebuilt image, a probe environment named by timestamp, three dead-webhook
+subscriptions: one listing only the new event, one listing the other seven, one with no filter; a registration, then a policy
+change): the registration was attempted at the seven-event and the unfiltered subscription and **not** at the new-event-only
+one; the policy change was attempted at the new-event-only and the unfiltered subscription and **not** at the seven-event one
+(`Delivering … to … failed`, from the registry's own log). That is the upgrade note above, observed outside the test suite. (Run
+twice: the first run's log went with the container when it was recreated for the production-image run, so the second, whose
+log was read in full, is the one reported.) The
+browser suite does not assert a staged message: the registry's pump drains the outbox every fifteen seconds, so a depth read
+from a browser races it, and `notifications.spec.ts` checks the other half instead (the real screen subscribes to the new
+event and the registry accepts, stores and returns it).
+
+**The rollback cost is real, was measured, and is worse than the audit one** (ADR-033's, which only broke a page). The previous
+image (`concordat/api:prev`) was run against the same database while a probe subscription and an undelivered
+`SUBJECT_POLICY_CHANGED` outbox row existed:
+
+- `GET /v1/environments/{env}/notifications` for the environment with the subscription: **500**, and the pump's pass failed
+  with `A subscription names event 'SUBJECT_POLICY_CHANGED', which this build does not know.`
+- with the subscription removed and only the **outbox row** left: every pass failed with `The outbox contains event
+  'SUBJECT_POLICY_CHANGED', which this build does not know.` (`An outbox pass failed. The next pass will retry.`), and **a message
+  staged in an unrelated environment with no subscribers, which a healthy pump marks delivered at once, stayed pending** over the
+  following passes. So **one undelivered row stops notifications for every tenant** while the registry keeps accepting changes.
+- On the new build, with the probe subscriptions deleted, the outbox drained to zero.
+
+**Before rolling back:** delete subscriptions whose events name `SUBJECT_POLICY_CHANGED`, and mark undelivered
+`SUBJECT_POLICY_CHANGED` outbox rows delivered (ADR-034 has the statement). Delivered and parked rows are never read by the pump.
+The probe also found that this **hazard is not specific to this event**: any future event has it, since the outbox converter
+throws on a token the build does not know and the claim query materialises the rows. That is pre-existing; this change is
+what first made it reachable by a rollback, and it is listed in the holes table.
+
+### What was verified, and what was not
+
+Run on this machine, on Windows, only; GitHub has not run them. **Verified:** the full .NET suite (1,705, Docker running,
+`HeaderSurvival` included); `dotnet format --verify-no-changes`; the web unit suite, lint, prettier, `codes:check`,
+`monaco:check` and `ng build`; `docs/api/openapi.v1.json` regenerated by the build (two description strings: the policy `PUT`'s
+"Nobody is notified" and the subscription route's "every event" note) and committed; the whole browser suite against the dev
+server and the production image, each after a registry restart. **Red first:** the token pin, 7 of the 11 new handler
+tests (the other four assert absence and pass before any code stages anything, so each has a mutant below), the HTTP test
+that deepens the outbox and the delivery test (the no-op and refusal HTTP tests pass vacuously until a mutant stages), and 8
+web specs, against the old sources; the new browser test against the old registry (the registry answered `400` and the
+page showed no secret). **Mutation-checked against the final code, each restored and rebuilt:** the handler (built but never
+staged: 7 red; staged for a no-op: 4 red, the two audit ones with it; staged before a refusal can happen: the
+retired-subject test red; staged before the subject is even found: the unknown-or-invalid-subject test red; staged after the
+commit: exactly the unit-of-work test red; wrong event: 2 red; the caller left out of the message: 4 red), the same widening
+of the guard against HTTP (the two no-op tests red),
+`Wants` reading an empty list as none (the delivery test red) and ignoring the filter (red), and the confirmation losing its
+"no event filter" clause (its spec red). Looked at in a real browser, at 1280 and 390 px, light and dark, fresh load each
+(`concordat.appearance` set before it): the policy confirmation and the notifications form with the new box ticked; both wrap
+cleanly and neither overflows horizontally. **Not run:** `smoke-web-image.sh`; the CLI, SDKs and GitHub Action (they hold no
+copy of the event list); a real webhook or SMTP delivery of this event; an environment with no row; CI (nothing pushed).
+
+**What did not exist as the brief described.** No OpenAPI text enumerates the event list (`GovernanceEndpoints.cs` mentions
+`ENFORCEMENT_VIOLATION` once, in a violations route, and the notification routes never list events), so the only
+OpenAPI strings touched are the two above.
+
+**The local compose database now holds**, from this stretch: three more `probe-*` environments (`probe-policy-…`,
+`probe-bystander-…` and `probe-reproof-…`, each with a subject and a version, and no subscription left), the e2e additions (36 `SUBJECT_POLICY_CHANGED` outbox rows exist, all
+delivered), and nothing changed on `dev`'s defaults, `e2e-inherit`, `e2e-names`, `e2e-empty`, `e2e-follows`' default or the three
+shared fixtures. `concordat/api:prev` (this change's predecessor) and `concordat/api:mutant` still exist.
 
 ---
 
@@ -74,7 +157,8 @@ pins the vocabulary (`AuditAction`/`AuditTokens`, `WireTokenTests`, the web `AUD
 the confirmation). **A change that changes nothing writes nothing**, and a refused one (half a policy, an unknown subject, a
 retired one) writes nothing; every status and body of the endpoint is what it was (the parity spec runs them all against the
 registry). **No notification:** none of the seven `NotificationEvent`s is a policy change, a new one is a decision about who
-is told, and *Nobody is notified* stays true, measured by the outbox not deepening.
+is told, and *Nobody is notified* stays true, measured by the outbox not deepening. *(Reversed 2026-10-14, the section
+above: there is an eighth event now, and the outbox does deepen.)*
 
 **Measured against the real registry** (six `PUT`s, one subject): three entries, `inherited -> FULL/SOURCE`,
 `FULL/SOURCE -> BACKWARD/WIRE` (sent as lowercase, stored as the registry's own spelling) and `BACKWARD/WIRE -> inherited`;
@@ -89,6 +173,7 @@ that parsed the old fixed string will see a different one.
 
 **A cost to know:** the audit table is read by action *token*, and the registry throws on a stored token its build does not
 know. Rolling the registry back past this change breaks the audit page for as long as a `SUBJECT_POLICY_CHANGED` row exists.
+*(2026-10-14: the notification event of the same name adds a worse one, in the outbox and in subscriptions; see the section above.)*
 
 ### What was verified, and what was not
 
@@ -640,8 +725,8 @@ conflict".
 
 **Done 2026-08-15:** the design-system port — the prototype's tokens, a light theme, self-hosted
 fonts ([ADR-026](adr/026-self-hosted-web-fonts.md)), the sidebar shell, the icon set and the
-cards — and the Playwright suite that now pins it. The E2E suite stands at **223 tests across nineteen
-specs** as of 2026-10-13, up from the 11 it launched with; `design-system.spec.ts` asserts the palette, both
+cards — and the Playwright suite that now pins it. The E2E suite stands at **225 tests across nineteen
+specs** as of 2026-10-14, up from the 11 it launched with; `design-system.spec.ts` asserts the palette, both
 themes, the typography and the shell as **computed styles rather than pixel screenshots**, which
 are exact and identical on Windows and on CI's Linux. It exists because the placeholder palette
 survived a whole milestone with every other test green: nothing named a colour, so nothing could
@@ -715,12 +800,15 @@ These matter more than the two lists above, because the surface exists and looks
 | **The registry accepts a schema that is not valid JSON Schema** | `{"type":"bogus"}` registers. Canonicalisation and the portability check never read the document against the 2020-12 metaschema, so it is stored, given an id and offered to consumers — and fails every message validated against it. The web editor reports it as advice (`ajv`); the registry does not. Whether registration should refuse it is a product decision, not a bug fix: refusing changes what existing users can register. |
 | ~~A lone-surrogate escape in a schema answers 500~~ | **Closed 2026-10-13** ([ADR-031](adr/031-unpaired-surrogates-are-refused.md)): `schema_malformed`, from registration, the dry run and the lookup, in values and keys and in Avro, pinned by five conformance fixtures. It had been recorded as a bare 500 from the writer; it was a generic Problem Details body from the *reader*, and wider than the one string. |
 | ~~An undefined enum number is stored, and then breaks every list that reads it~~ | **Closed 2026-10-13**, at six sites. `compatibilityMode: "99"` parsed (`Enum.TryParse` accepts any integer), was committed, answered 500 while projecting its own response, and every `GET …/subjects` in that environment answered 500 for every caller after it; environment defaults, the registration policy and contract enforcement parsed the same way. `WireEnums.TryParseDefined` refuses it, and a comma list that silently meant a third member. Not part of the brief; found by the probes the brief asked for. A number that *is* a member is still read as it always was. |
+| **One outbox row the build cannot read stops notifications for every tenant** | Found 2026-10-14 while measuring the rollback cost of `SUBJECT_POLICY_CHANGED` ([ADR-034](adr/034-a-policy-change-notifies-subscribers.md)), and **not specific to it**. `OutboxMessageConfiguration` throws on an event token the build does not know, and `ClaimDueAcrossTenantsAsync` materialises its rows, so a single undelivered row with an unknown token fails every pump pass (`An outbox pass failed`) and nothing marks it delivered; a message in an unrelated environment with no subscribers stayed pending behind it (measured). The pump survives and the registry keeps accepting changes, so it fails quietly. It is only reachable by running an older build over a newer one's rows (a rollback, or two versions behind a load balancer), which is why it had not been seen. A fix would read the token leniently (park the row with the error recorded, as a message nobody can deliver already is) and is separable from this change. |
+| **A subscription's events cannot be edited** | There is `POST`, `PUT …/enabled` and `DELETE`, and nothing else, so keeping an existing "all events" subscription out of a newly added event (as `SUBJECT_POLICY_CHANGED`, ADR-034) means muting it or deleting it and creating it again, which issues **a new webhook signing secret** the receiver must be given. Found 2026-10-14. |
+| **A failing `notifications.spec.ts` leaves its subscriptions behind** | The block is serial and its deletes are its last tests, so a red test skips them: the email subscription (no event filter) and the webhook stay live in `dev`, and the registry delivers to them for the rest of the run, and after it. Found 2026-10-14 when the new spec was run red on purpose (they were deleted by hand). A `test.afterAll` that deletes by endpoint would close it; not done here. |
 | **Hard delete does not exist** | Soft delete is all there is. The full rule — no registered consumers, force flag, audit entry — is an outstanding commitment. |
 | **Subject prefix search is not implemented** | Value converters do not translate `StartsWith`; it needs a `ComplexProperty` mapping or a shadow column. |
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | ~~A page reload signs you out~~ | **Closed 2026-08-14** by decision 26 — an httpOnly `SameSite=Strict` cookie and a `/auth/resume` route that is the only thing accepting it. The credential still never touches `localStorage`. |
 | ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Still on, and now audible** (decision 27). The API logs a warning naming both ways to close it and repeats hourly until claimed; the web app shows a banner. Verified against a real container. |
-| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 223 tests today across nineteen specs, up from the 11 it launched with, and run against the production image as well as the dev server. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
+| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 225 tests today across nineteen specs, up from the 11 it launched with, and run against the production image as well as the dev server. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
 | ~~`Tenant` is not an aggregate~~ | **Closed by M9.1**, recorded here 2026-09-24 — `Tenant.Create` carries the name and slug invariants, signup writes a row per organisation, bootstrap writes the self-hosted one, and `CloudTenancyTests` drives two organisations through the real host. Self-hosted still holds exactly one row, `TenantId.SelfHosted`: the profiles differ in how many rows there are, not in whether the table means anything. |
 | ~~The derived-environment-id decision is unmade~~ | **Closed 2026-08-14.** Adopted, by creating rows that carry the derived id. No migration, and no orphaned subjects. |
 
@@ -744,20 +832,20 @@ Nothing here can be done from inside the repository.
 
 ## What the tests actually cover
 
-Six kinds, not one. Worth knowing which, because "1,689 tests" says nothing about what would
+Six kinds, not one. Worth knowing which, because "1,705 tests" says nothing about what would
 survive being wrong.
 
 | Kind | Where | Tests | What it proves |
 |---|---|---|---|
-| Domain unit | `Domain.Tests`, three `Formats.*` | ~910 | Invariants in isolation. No I/O |
-| Application handler | `Application.Tests` | 199 | Handler refusals and **ordering**, with hand-written fakes |
-| HTTP integration | `Api.IntegrationTests` | 286 | Real HTTP against real PostgreSQL, via Testcontainers |
+| Domain unit | `Domain.Tests`, three `Formats.*` | ~911 | Invariants in isolation. No I/O |
+| Application handler | `Application.Tests` | 210 | Handler refusals and **ordering**, with hand-written fakes |
+| HTTP integration | `Api.IntegrationTests` | 290 | Real HTTP against real PostgreSQL, via Testcontainers |
 | Conformance corpus | `Conformance` | 104, over 103 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 64 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
-| Browser end-to-end | `web/e2e` | 223 | A real Chromium against the real stack, design system included — and against the production image |
+| Browser end-to-end | `web/e2e` | 225 | A real Chromium against the real stack, design system included — and against the production image |
 
-Plus 1,425 Angular unit tests. *(Counts above re-measured 2026-10-13; the unit rows are approximate because
+Plus 1,435 Angular unit tests. *(Counts above re-measured 2026-10-14; the unit rows are approximate because
 the assemblies that do not fit a row — the client, the CLI and the contract testing — are not in them.)*
 
 **No mocking framework, deliberately.** No Moq, NSubstitute, FluentAssertions or AutoFixture —

@@ -4,6 +4,13 @@
 - **Date:** 2026-10-13
 - **Deciders:** Rafael Camara
 
+> **Amended 2026-10-14 by [ADR-034](034-a-policy-change-notifies-subscribers.md).** "No notification" below was
+> reversed by the maintainer: a policy change now stages a `SUBJECT_POLICY_CHANGED` notification, in the same unit of
+> work as the audit entry, and the policy confirmation no longer says *Nobody is notified*. Read the "No notification"
+> paragraph, its line under "Alternatives considered", the "Nobody is notified" in the web paragraph and the
+> "a policy-change notification" under "Not covered" as the registry stood when this was written. The rest of this
+> ADR (inherit, the audit action, the actor, the no-op rule) stands, and ADR-034 reuses its guard.
+
 ## Context
 
 [ADR-032](032-subject-settings.md) put an owner and policy editor on the subject's page and, to say
@@ -146,7 +153,9 @@ and a deprecation is the only subject-level one. A consumer team *would* plausib
 read became laxer, but a new event is a new subscription vocabulary (`NotificationTokens`, webhook bodies, the
 subscription screen), and that is a decision about who is told, not a side effect of an audit entry. The handler holds
 no outbox, the confirmation keeps saying *Nobody is notified*, and `APolicyChangeNotifiesNobody` measures it where a
-notification would show: the tenant's outbox does not deepen.
+notification would show: the tenant's outbox does not deepen. *Reversed 2026-10-14 (ADR-034): the maintainer decided
+who is told. The event is `SUBJECT_POLICY_CHANGED`, `APolicyChangeNotifiesNobody` became
+`APolicyChangeStagesExactlyOneNotification`, and the paragraph above describes the registry as it stood the day before.*
 
 **The owner-change entry was left alone in this change, and changed in the next one (2026-10-13, at the maintainer's
 word).** It read "owner changed", with neither the previous nor the new owner, and the policy entry made it the odd one
@@ -163,7 +172,7 @@ different one.
 
 **The web app.** The policy confirmation says what is now true: the audit log gets one entry, `SUBJECT_POLICY_CHANGED`,
 naming the account that made it and the policy before and after ("inherited" for none of its own), and nobody is
-notified. The policy journey asserts the row (its action, the signed-in account as actor, the exact detail
+notified *(until 2026-10-14: now it says who is, ADR-034)*. The policy journey asserts the row (its action, the signed-in account as actor, the exact detail
 `policy inherited -> FULL_TRANSITIVE/SOURCE`) and then finds it on the audit page by filtering on the new action.
 
 ## Alternatives considered
@@ -181,7 +190,8 @@ notified. The policy journey asserts the row (its action, the signed-in account 
   inheriting and pinned (`ANullPolicyIsStoredAsNull…`), and is the thing nullable policy exists to avoid.
 - **Reuse `SUBJECT_UPDATED` for a policy change, with a detail.** Above: it saves a vocabulary change and a rollback
   hazard (below) and costs the filter its meaning.
-- **Stage a notification for a policy change.** Above: a new event is a decision about who is told.
+- **Stage a notification for a policy change.** Above: a new event is a decision about who is told. *Taken on
+  2026-10-14, when the maintainer decided it: ADR-034.*
 - **Record the previous and new owner in the same change.** Done afterwards, as its own commit, once asked.
 - **Write an entry for a change that changes nothing**, as the owner path does. The owner path's entry is a recorded
   defect ("owner changed" for `{}`); this one did not have to inherit it.
@@ -201,10 +211,12 @@ notified. The policy journey asserts the row (its action, the signed-in account 
 - **Negative: rolling the registry back past this change breaks the audit page** for as long as a
   `SUBJECT_POLICY_CHANGED` row exists. `AuditEntryConfiguration` throws on a stored action the build does not know
   ("the audit trail contains action…"), which is deliberate (it names the row rather than reading it as the first
-  member) and is the cost of any new action, written down because a rollback is when it is paid.
+  member) and is the cost of any new action, written down because a rollback is when it is paid. *2026-10-14:
+  ADR-034 adds a worse one for the same reason, in the notification vocabulary: an undelivered
+  `SUBJECT_POLICY_CHANGED` outbox row stops the pump for everyone, and read before rolling back.*
 - **Negative:** the dry run and the diff each cost one more read (the environment row).
 - **Not covered:** an environment with no row, in the browser or over HTTP (only legacy data produces one; it is
-  tested at the application layer, once per call site); a policy-change notification; the owner entry's detail; the
+  tested at the application layer, once per call site); a policy-change notification *(built 2026-10-14, ADR-034)*; the owner entry's detail; the
   `concordat` CLI and the GitHub Action, which call the same endpoints and so change with them, but were not run for
   this; a `subject:write`-only account (it cannot `PUT` a policy, and no browser role is one).
 - **Found, not fixed** (separable, all in [STATUS.md](../STATUS.md)): **the environment settings screen cannot change
@@ -224,7 +236,8 @@ notified. The policy journey asserts the row (its action, the signed-in account 
 ## References
 
 - [ADR-016](016-two-axis-compatibility.md), [ADR-017](017-gated-latest-pointer.md),
-  [ADR-028](028-schema-editor.md), [ADR-032](032-subject-settings.md)
+  [ADR-028](028-schema-editor.md), [ADR-032](032-subject-settings.md),
+  [ADR-034](034-a-policy-change-notifies-subscribers.md) (reverses "No notification")
 - [STATUS.md](../STATUS.md), [DECISIONS-PENDING.md](../DECISIONS-PENDING.md) decision 39
 - `src/core/Concordat.Application/Registry/` (`EnvironmentCommands.cs`: `EnvironmentPolicies`;
   `RegisterVersion.cs`, `SubjectQueries.cs`, `DiffAndLifecycle.cs`: `SetCompatibilityPolicyHandler`),

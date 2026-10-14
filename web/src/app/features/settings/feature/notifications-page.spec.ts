@@ -235,7 +235,7 @@ describe('NotificationsPage', () => {
       tick(host, 'BREAKING_CHANGE_SUBMITTED');
       fixture.detectChanges();
 
-      expect(host.textContent).toContain('2 of 7 events');
+      expect(host.textContent).toContain('2 of 8 events');
 
       host.querySelector('form')!.dispatchEvent(new Event('submit'));
 
@@ -243,6 +243,34 @@ describe('NotificationsPage', () => {
         channel: 'WEBHOOK',
         endpoint: 'https://hooks.example.com/new',
         events: ['BREAKING_CHANGE_SUBMITTED', 'VERSION_PROMOTED'],
+      });
+    });
+
+    it('offers a policy change as an event of its own, with what it means', () => {
+      // ADR-034. The form is driven by `NOTIFICATION_EVENTS`, so the box is there only if the web
+      // vocabulary was taught the registry's new one (WireTokenTests pins the registry's side).
+      const { host } = render();
+      const labels = [...host.querySelectorAll('fieldset label')];
+      const policy = labels.find(
+        (l) => l.querySelector('.font-mono')?.textContent?.trim() === 'SUBJECT_POLICY_CHANGED',
+      );
+
+      expect(labels).toHaveLength(8);
+      expect(policy?.textContent).toContain('compatibility policy');
+    });
+
+    it('sends a ticked policy change like any other event, alone', () => {
+      const { fixture, host, create } = render();
+
+      fill(host, 'sub-endpoint', 'a@b.c');
+      tick(host, 'SUBJECT_POLICY_CHANGED');
+      fixture.detectChanges();
+      host.querySelector('form')!.dispatchEvent(new Event('submit'));
+
+      expect(create).toHaveBeenCalledWith({
+        channel: 'EMAIL',
+        endpoint: 'a@b.c',
+        events: ['SUBJECT_POLICY_CHANGED'],
       });
     });
 

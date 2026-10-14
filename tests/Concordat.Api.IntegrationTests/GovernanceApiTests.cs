@@ -823,11 +823,14 @@ public class GovernanceApiTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task APolicyChangeNotifiesNobody()
+    public async Task APolicyChangeStagesExactlyOneNotification()
     {
-        // The confirmation says "Nobody is notified", and the handler holds no outbox to say it
-        // with, so this is measured where a notification would show: the tenant's outbox does not
-        // deepen. Relative, because the outbox is tenant-wide, and nothing else runs in between.
+        // This was `APolicyChangeNotifiesNobody` until ADR-034 reversed ADR-033's "No notification"
+        // and the confirmation stopped saying *Nobody is notified*; it is that test's inverse and
+        // measures the same place, where a notification would show: the tenant's outbox deepens, by
+        // exactly one (a policy is one change, so one message, and not one per audit row or per
+        // member of the pair). Relative, because the outbox is tenant-wide, and nothing else runs
+        // in between.
         var (client, environment) = await NewEnvironmentAsync();
         var subject = await NewSubjectAsync(client, environment);
 
@@ -840,6 +843,78 @@ public class GovernanceApiTests(ApiFactory factory)
             ApiFactory.Json);
 
         Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+
+        var after = await client.GetFromJsonAsync<OutboxDepthResponse>(
+            "/v1/notifications/outbox", ApiFactory.Json);
+
+        Assert.Equal(before!.Pending + 1, after!.Pending);
+
+        // And clearing it is a change too, with its own message.
+        var cleared = await client.PutAsJsonAsync(
+            $"/v1/environments/{environment}/subjects/{subject}/compatibility-policy",
+            new SetCompatibilityPolicyRequest(null, null),
+            ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.OK, cleared.StatusCode);
+
+        var last = await client.GetFromJsonAsync<OutboxDepthResponse>(
+            "/v1/notifications/outbox", ApiFactory.Json);
+
+        Assert.Equal(before.Pending + 2, last!.Pending);
+    }
+
+    [Fact]
+    public async Task APolicyChangeThatChangesNothingStagesNothing()
+    {
+        var (client, environment) = await NewEnvironmentAsync();
+        var subject = await NewSubjectAsync(client, environment);
+        var route = $"/v1/environments/{environment}/subjects/{subject}/compatibility-policy";
+
+        // It inherits, so inheriting again changes nothing; and pinning twice changes it once.
+        await client.PutAsJsonAsync(
+            route, new SetCompatibilityPolicyRequest("FULL", "SOURCE"), ApiFactory.Json);
+
+        var before = await client.GetFromJsonAsync<OutboxDepthResponse>(
+            "/v1/notifications/outbox", ApiFactory.Json);
+
+        var again = await client.PutAsJsonAsync(
+            route, new SetCompatibilityPolicyRequest("full", "source"), ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+
+        var after = await client.GetFromJsonAsync<OutboxDepthResponse>(
+            "/v1/notifications/outbox", ApiFactory.Json);
+
+        Assert.Equal(before!.Pending, after!.Pending);
+    }
+
+    [Fact]
+    public async Task ARefusedPolicyChangeStagesNothing()
+    {
+        // The reason the outbox is written by the unit of work that carries the change: a
+        // notification for a change that did not happen is worse than a missing one. Half a
+        // policy, an unknown subject and a retired one are each refused.
+        var (client, environment) = await NewEnvironmentAsync();
+        var subject = await NewSubjectAsync(client, environment);
+        var route = $"/v1/environments/{environment}/subjects/{subject}/compatibility-policy";
+
+        await client.DeleteAsync($"/v1/environments/{environment}/subjects/{subject}");
+
+        var before = await client.GetFromJsonAsync<OutboxDepthResponse>(
+            "/v1/notifications/outbox", ApiFactory.Json);
+
+        var half = await client.PutAsJsonAsync(
+            route, new SetCompatibilityPolicyRequest("FULL", null), ApiFactory.Json);
+        var unknown = await client.PutAsJsonAsync(
+            $"/v1/environments/{environment}/subjects/acme.gov.Missing/compatibility-policy",
+            new SetCompatibilityPolicyRequest("FULL", "SOURCE"),
+            ApiFactory.Json);
+        var retired = await client.PutAsJsonAsync(
+            route, new SetCompatibilityPolicyRequest("FULL", "SOURCE"), ApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, half.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, retired.StatusCode);
 
         var after = await client.GetFromJsonAsync<OutboxDepthResponse>(
             "/v1/notifications/outbox", ApiFactory.Json);

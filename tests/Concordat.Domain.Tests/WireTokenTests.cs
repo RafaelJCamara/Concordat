@@ -149,11 +149,27 @@ public class WireTokenTests
                 "BREAKING_CHANGE_SUBMITTED",
                 "ENFORCEMENT_VIOLATION",
                 "SUBJECT_DEPRECATED",
+                "SUBJECT_POLICY_CHANGED",
                 "VERSION_PROMOTED",
                 "VERSION_REGISTERED",
             ],
             Enum.GetValues<NotificationEvent>().Select(NotificationTokens.For)
                 .Order(StringComparer.Ordinal).ToArray());
+
+    /// <summary>
+    /// A policy change is one name on both sides of the registry: the audit action an auditor
+    /// filters by and the event a subscriber subscribes to.
+    /// </summary>
+    /// <remarks>
+    /// Two spellings for one thing would make "who changed it" and "tell me when it changes" look
+    /// like different questions, and the subscription screen would offer a token the audit page
+    /// does not know (ADR-034).
+    /// </remarks>
+    [Fact]
+    public void APolicyChangeIsOneNameInTheAuditTrailAndInTheNotificationVocabulary() =>
+        Assert.Equal(
+            AuditTokens.For(AuditAction.SubjectPolicyChanged),
+            NotificationTokens.For(NotificationEvent.SubjectPolicyChanged));
 
     /// <summary>Every notification channel the registry can emit is one the web app knows.</summary>
     [Fact]

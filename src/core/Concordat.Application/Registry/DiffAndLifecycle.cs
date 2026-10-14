@@ -299,16 +299,21 @@ public sealed record SetCompatibilityPolicyCommand(
 /// something happened which did not. The same rule an idempotent registration follows.
 /// </para>
 /// <para>
-/// <b>Nobody is notified</b>: there is no <c>IOutbox</c> here, and no <see cref="NotificationEvent"/>
-/// is a policy change. A consumer team might well want to hear that a subject they read became
-/// laxer, but that is a new subscription vocabulary and a decision about who is told, not a side
-/// effect of recording who did it.
+/// <b>Subscribers are notified, in the same unit of work and under the same guard.</b> ADR-033
+/// held a policy-change event back as a decision about who is told; ADR-034 is that decision. A
+/// team reading a subject that became laxer (a breaking change now goes live without a reviewer)
+/// or stricter (a change that used to go straight in is now held) is exactly who an alert is for.
+/// The event is <see cref="NotificationEvent.SubjectPolicyChanged"/>, spelled as the audit action
+/// is, and a subscription with no event filter wants it, because an empty filter means every
+/// event: a behaviour change for every such subscription the day this ships, written down in the
+/// ADR for the operator to read first.
 /// </para>
 /// </remarks>
 public sealed class SetCompatibilityPolicyHandler(
     ISubjectRepository subjects,
     ICallerContext caller,
     IAuditLog audit,
+    IOutbox outbox,
     IUnitOfWork unitOfWork,
     TimeProvider clock)
     : ICommandHandler<SetCompatibilityPolicyCommand, Subject>
@@ -342,13 +347,32 @@ public sealed class SetCompatibilityPolicyHandler(
         {
             // Old and new, which is what answers "who made this stricter". Nothing here is
             // private: a policy is two enum tokens, and the subject page shows it to any reader.
+            var change = $"{Describe(previous)} -> {Describe(command.Policy)}";
+
             audit.Append(AuditEntry.Record(
                 command.EnvironmentId,
                 AuditAction.SubjectPolicyChanged,
                 caller.Current.Actor,
                 subject.Value.Name.Value,
                 clock.GetUtcNow(),
-                $"policy {Describe(previous)} -> {Describe(command.Policy)}"));
+                $"policy {change}"));
+
+            // Under the same guard as the entry, so a no-op and a refusal tell nobody, and in the
+            // same unit of work, so there is no alert for a change that rolled back. It names the
+            // caller, as the approval, rejection, promotion and breaking-registration messages do
+            // ("... by carol"): a team told its contract is now judged differently asks who, and a
+            // mailbox on the receiving end cannot read the audit log. The deprecation message is
+            // the one that names nobody, and it is advisory; a rule change is not. The actor is the
+            // authenticated caller, never anything in the request (ADR-034).
+            outbox.Stage(OutboxMessage.Stage(
+                command.EnvironmentId,
+                NotificationEvent.SubjectPolicyChanged,
+                subject.Value.Name.Value,
+                $"The compatibility policy of {subject.Value.Name} was changed by " +
+                $"{caller.Current.Actor.Value}: {change}. " +
+                "(\"inherited\" means the environment's default applies.) " +
+                "Versions already registered are not judged again.",
+                clock.GetUtcNow()));
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

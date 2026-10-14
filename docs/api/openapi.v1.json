@@ -1862,7 +1862,7 @@
           "Notifications"
         ],
         "summary": "Subscribe a channel to an environment's events",
-        "description": "An empty event list means every event. The alternative is a subscription that is configured, enabled, and silently delivers nothing — which looks correct from every screen. A WEBHOOK subscription also gets a signing secret, returned here once: every delivery to it carries an X-Concordat-Signature header, an HMAC-SHA256 of the body keyed on that secret, so the receiver can tell this registry sent it from anything else that found the URL.\n\nRequires scope: `env:write`.",
+        "description": "An empty event list means every event, including any event added later: a subscription with no filter starts receiving a new kind of event the day a registry that emits it is deployed. The alternative is a subscription that is configured, enabled, and silently delivers nothing — which looks correct from every screen. A WEBHOOK subscription also gets a signing secret, returned here once: every delivery to it carries an X-Concordat-Signature header, an HMAC-SHA256 of the body keyed on that secret, so the receiver can tell this registry sent it from anything else that found the URL.\n\nRequires scope: `env:write`.",
         "parameters": [
           {
             "name": "env",
@@ -3403,7 +3403,7 @@
           "Subjects"
         ],
         "summary": "Set the compatibility policy",
-        "description": "Send nulls to clear it and inherit the environment default. It takes effect for the next version registered; versions already registered, or held at the approval gate, are not judged again. A change is recorded in the audit trail as SUBJECT_POLICY_CHANGED, naming the caller and the old and new policy; setting the policy the subject already has records nothing. Nobody is notified.\n\nRequires scope: `subject:admin`.",
+        "description": "Send nulls to clear it and inherit the environment default. It takes effect for the next version registered; versions already registered, or held at the approval gate, are not judged again. A change is recorded in the audit trail as SUBJECT_POLICY_CHANGED, naming the caller and the old and new policy; setting the policy the subject already has records nothing. A change also notifies the environment's subscribers to SUBJECT_POLICY_CHANGED, which includes every subscription with no event filter (an empty list means every event); a request that changes nothing, or is refused, notifies nobody.\n\nRequires scope: `subject:admin`.",
         "parameters": [
           {
             "name": "env",

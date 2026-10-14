@@ -136,7 +136,10 @@ public static class SubjectEndpoints
                 "the next version registered; versions already registered, or held at the " +
                 "approval gate, are not judged again. A change is recorded in the audit trail as " +
                 "SUBJECT_POLICY_CHANGED, naming the caller and the old and new policy; setting " +
-                "the policy the subject already has records nothing. Nobody is notified.")
+                "the policy the subject already has records nothing. A change also notifies the " +
+                "environment's subscribers to SUBJECT_POLICY_CHANGED, which includes every " +
+                "subscription with no event filter (an empty list means every event); a request " +
+                "that changes nothing, or is refused, notifies nobody.")
             .Produces<PolicyResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)

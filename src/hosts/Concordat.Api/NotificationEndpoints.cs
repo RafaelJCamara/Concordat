@@ -26,7 +26,9 @@ public static class NotificationEndpoints
         group.MapPost("/", Create)
             .WithSummary("Subscribe a channel to an environment's events")
             .WithDescription(
-                "An empty event list means every event. The alternative is a subscription that " +
+                "An empty event list means every event, including any event added later: a " +
+                "subscription with no filter starts receiving a new kind of event the day a " +
+                "registry that emits it is deployed. The alternative is a subscription that " +
                 "is configured, enabled, and silently delivers nothing — which looks correct " +
                 "from every screen. A WEBHOOK subscription also gets a signing secret, " +
                 "returned here once: every delivery to it carries an X-Concordat-Signature " +

@@ -48,3 +48,4 @@ it; write a new one and mark the old **Superseded by**.
 | [031](031-unpaired-surrogates-are-refused.md) | A schema containing an unpaired surrogate escape is refused, not repaired | Accepted |
 | [032](032-subject-settings.md) | A subject's owner and policy are changed on its own page, and each confirmation says only what the registry was measured to do | Accepted |
 | [033](033-inherit-means-the-environments-default.md) | A subject with no policy of its own is judged by its environment's default, and changing a policy is audited | Accepted |
+| [034](034-a-policy-change-notifies-subscribers.md) | A subject's policy change notifies subscribers, and a subscription with no event filter is one | Accepted |

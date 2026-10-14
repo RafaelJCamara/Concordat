@@ -128,8 +128,15 @@ the way that were **yours to decide**, which I did not. **Both are decided and f
     web `AUDIT_ACTIONS` and the audit page's filter). Reuse of `SUBJECT_UPDATED` with a detail could say it without
     leaking, but would have cost the filter its meaning: that row is already an owner change and a deprecation.
     It records the old and new policy as the authenticated caller, in the same transaction; a no-op and a refusal
-    write nothing. **No notification**: no `NotificationEvent` is a policy change and a new one is a decision about who
-    is told, so *Nobody is notified* stays true. **Then decided, once asked:** the owner-change entry
+    write nothing. ~~**No notification**: no `NotificationEvent` is a policy change and a new one is a decision about who
+    is told, so *Nobody is notified* stays true.~~ **Decided 2026-10-14: notify**
+    ([ADR-034](adr/034-a-policy-change-notifies-subscribers.md)): a new event, `SUBJECT_POLICY_CHANGED` (the audit
+    action's own spelling), staged in the same unit of work and under the same guard. The message names the subject,
+    the caller and the old and new policy, not which is stricter. **A behaviour change, and the one to read first:** an
+    empty event set means every event, so every existing subscription with no event filter now receives it; one that
+    lists its events does not. And a **rollback cost worse than the audit one**: a build that does not know the token
+    throws on an undelivered outbox row, which stops the pump for every tenant (ADR-034 says what to do before rolling
+    back). **Then decided, once asked:** the owner-change entry
     now reads `owner <previous> -> <new>` instead of "owner changed" (a separate commit; a no-op `PATCH` kept the old text until 2026-10-14, when it began writing nothing).
 
 ### 33. `ci` is a marker scope, and no role grants it
@@ -620,8 +627,8 @@ it is for.
 **The browser E2E half is now done too, 2026-08-15.** Playwright is in, `web/e2e/` holds 11
 tests, and the reload case above is one of them — the only way to prove a *browser* keeps the
 cookie across a real navigation and that the app asks for it before the first render. That count
-is the day's snapshot and nothing else: the suite stands at **223 tests across nineteen specs** as of
-2026-10-13, which is the figure [STATUS.md](STATUS.md) carries.
+is the day's snapshot and nothing else: the suite stands at **225 tests across nineteen specs** as of
+2026-10-14, which is the figure [STATUS.md](STATUS.md) carries.
 
 It earned its place in the first ten seconds: the subject list was **broken** against a real
 registry, because `VersionStatus.Dismissed` shipped with M7 and `wire-tokens.ts` never learned

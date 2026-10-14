@@ -51,8 +51,12 @@ const INPUT =
  * judges the *next* registration. Versions already registered are not judged again, and a version
  * held at the approval gate stays held when the policy is relaxed. The change is written to the
  * audit log as `SUBJECT_POLICY_CHANGED`, naming the account that made it and the old and new
- * policy (ADR-033; until then it was not written at all, and this screen said so), and notifies
- * nobody.
+ * policy (ADR-033; until then it was not written at all, and this screen said so).
+ *
+ * <b>It also notifies, and the sentence says who.</b> Subscribers to the event of the same name
+ * are told, and so is every subscription with no event filter, because an empty filter means every
+ * event (ADR-034). That second half is the one nobody expects, which is why it is on the screen.
+ * Until that ADR the line read "Nobody is notified", and was true.
  */
 @Component({
   selector: 'cd-subject-policy-editor',
@@ -163,7 +167,14 @@ const INPUT =
               naming the account that made it and the policy before and after (“inherited”, for none
               of its own).
             </li>
-            <li>Nobody is notified.</li>
+            <li>
+              <span class="text-foreground"
+                >Subscribers to <span class="font-mono">SUBJECT_POLICY_CHANGED</span> in this
+                environment are notified, including every subscription with no event filter.</span
+              >
+              The message names the subject, the account that made the change and the policy before
+              and after.
+            </li>
           </cd-change-confirmation>
         } @else {
           <div class="flex items-center gap-2">

@@ -26,6 +26,7 @@ export const NOTIFICATION_EVENTS = [
   'VERSION_PROMOTED',
   'SUBJECT_DEPRECATED',
   'ENFORCEMENT_VIOLATION',
+  'SUBJECT_POLICY_CHANGED',
 ] as const;
 
 /** An event a subscription may ask for. */
@@ -40,6 +41,7 @@ export const NOTIFICATION_EVENT_MEANING: Readonly<Record<NotificationEvent, stri
   VERSION_PROMOTED: 'A version was promoted in from another environment.',
   SUBJECT_DEPRECATED: 'A subject was marked deprecated.',
   ENFORCEMENT_VIOLATION: 'A service reported a message that broke its contract.',
+  SUBJECT_POLICY_CHANGED: 'A subject’s compatibility policy was changed.',
 };
 
 /** A channel subscribed to an environment's events. */

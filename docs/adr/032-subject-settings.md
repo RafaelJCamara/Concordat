@@ -13,6 +13,10 @@
 > and new policy), and the policy journey asserts it. The owner entry now reads both owners ("owner a -> b") rather
 > than "owner changed" (ADR-033), so the owner row of the table and the "owner changed" detail described below are the
 > registry as it stood when this was written.
+>
+> **Amended again 2026-10-14 by [ADR-034](034-a-policy-change-notifies-subscribers.md).** A policy change is no longer
+> one that "notifies nobody": it stages a `SUBJECT_POLICY_CHANGED` notification, and the policy confirmation says who is
+> told. An *owner* change still notifies nobody, and its sentence is unchanged.
 
 ## Context
 

@@ -32,6 +32,16 @@ public enum NotificationEvent
 
     /// <summary>A publisher sent a message a contract forbids.</summary>
     EnforcementViolation,
+
+    /// <summary>A subject's compatibility policy was changed.</summary>
+    /// <remarks>
+    /// Worth an alert because the policy decides how a registration is judged: a team reading the
+    /// subject may find the next version judged more laxly (a breaking change goes live without a
+    /// reviewer) or more strictly (a change that used to go straight in is now held) than the one
+    /// they built against. Its wire token is the audit action's, so one name means one thing
+    /// (ADR-034).
+    /// </remarks>
+    SubjectPolicyChanged,
 }
 
 /// <summary>The wire spellings of <see cref="NotificationEvent"/>.</summary>
@@ -51,6 +61,7 @@ public static class NotificationTokens
         [NotificationEvent.VersionPromoted] = "VERSION_PROMOTED",
         [NotificationEvent.SubjectDeprecated] = "SUBJECT_DEPRECATED",
         [NotificationEvent.EnforcementViolation] = "ENFORCEMENT_VIOLATION",
+        [NotificationEvent.SubjectPolicyChanged] = "SUBJECT_POLICY_CHANGED",
     };
 
     private static readonly Dictionary<string, NotificationEvent> Events =

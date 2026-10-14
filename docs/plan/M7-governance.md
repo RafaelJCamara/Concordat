@@ -220,6 +220,13 @@ now advances a counter on the root.
 - [x] `INotificationChannel`: Email (SMTP, MailKit) and Webhook
 - [x] Events: version registered, breaking change submitted/approved/rejected, version
       promoted, subject deprecated
+- [x] `SUBJECT_POLICY_CHANGED` — **added 2026-10-14** ([ADR-034](../adr/034-a-policy-change-notifies-subscribers.md)),
+      the eighth event, the same spelling as the audit action of the same name. Staged by
+      `SetCompatibilityPolicyHandler` in the same unit of work as the audit entry and under the same
+      guard: a change stages one message, a no-op or a refused request stages none. **Because an empty
+      event set means every event, every existing subscription with no event filter starts receiving
+      it the day this ships**; one that lists its events does not (ADR-034 says what to check first, and
+      what rolling back costs)
 - [x] Per-environment subscriptions, `GET|POST|DELETE /v1/environments/{env}/notifications`
 - [x] `ENFORCEMENT_VIOLATION` — **closed 2026-08-14** by [decision 25](../DECISIONS-PENDING.md).
       The violation happens in the SDK, on the publisher's machine, so the registry cannot
@@ -260,7 +267,9 @@ count, and nothing else will say so.
 
 **An empty event set means every event**, and an unknown event token is refused rather than
 ignored. The failure this avoids is a subscription that is configured, enabled, and
-silently delivers nothing — which looks correct from every screen.
+silently delivers nothing — which looks correct from every screen. It also means a new event
+reaches every subscription with no filter on the day it ships, which is what happened on
+2026-10-14 with `SUBJECT_POLICY_CHANGED` ([ADR-034](../adr/034-a-policy-change-notifies-subscribers.md)).
 
 **`http://` webhooks are refused, not warned about.** A webhook body names subjects,
 versions and reviewers: the shape of an organisation's message contracts.
