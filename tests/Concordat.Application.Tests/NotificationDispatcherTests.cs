@@ -234,6 +234,71 @@ public class NotificationDispatcherTests
         Assert.Equal(1, _subscriptions.Lists);
     }
 
+    [Fact]
+    public async Task ASubscriptionThisBuildCannotRead_FailsOnlyItsOwnEnvironmentsMessages()
+    {
+        // One environment's subscription names an event a newer build wrote (a rollback, or an old
+        // instance beside a new one). Reading it throws, and that used to abort the whole pass: no
+        // message in any other environment or tenant was delivered, on every pass, for as long as
+        // the row existed, while the registry went on accepting changes. Now the messages that
+        // needed that read fail and back off like any other undeliverable message, and the rest of
+        // the batch is delivered.
+        var other = EnvironmentId.New();
+        var stuck = Stage();
+        var unaffected = OutboxMessage.Stage(other, NotificationEvent.VersionRegistered, "acme.Other", "x", Now);
+        _outbox.Stage(unaffected);
+        _subscriptions.Seed(NotificationSubscription
+            .Create(other, NotificationChannel.Webhook, "https://other.example.com/hook", [], Now).Value);
+        _subscriptions.Unreadable.Add(_environment);
+        var channel = new RecordingChannel(NotificationChannel.Webhook);
+
+        var result = await Dispatcher(channel).PumpAsync(CancellationToken.None);
+
+        Assert.Equal(1, result.Delivered);
+        Assert.Equal(1, result.Failed);
+        Assert.Equal("acme.Other", Assert.Single(channel.Sent).Notification.Target);
+        Assert.NotNull(unaffected.DeliveredAt);
+
+        Assert.Null(stuck.DeliveredAt);
+        Assert.Equal(1, stuck.Attempts);
+        Assert.Contains("A_FUTURE_EVENT", stuck.LastError, StringComparison.Ordinal);
+        Assert.True(stuck.NextAttemptAt > Now);
+        Assert.Equal(1, _unitOfWork.Saves);
+    }
+
+    [Fact]
+    public async Task AnUnreadableEnvironmentIsReadOncePerPassNotOncePerMessage()
+    {
+        for (var i = 0; i < 5; i++)
+        {
+            Stage();
+        }
+
+        _subscriptions.Unreadable.Add(_environment);
+
+        var result = await Dispatcher().PumpAsync(CancellationToken.None);
+
+        Assert.Equal(5, result.Failed);
+        Assert.Equal(1, _subscriptions.Lists);
+    }
+
+    [Fact]
+    public async Task AMessageWhoseSubscriptionsCannotBeReadIsParkedLikeAnyOtherUndeliverableOne()
+    {
+        // Parked, not retried forever and not deleted: it is evidence, and a build that can read the
+        // subscription can have it re-queued. The same ending as a webhook that stays down.
+        var message = Stage();
+        _subscriptions.Unreadable.Add(_environment);
+
+        for (var i = 0; i < OutboxMessage.MaxAttempts; i++)
+        {
+            _clock.SetUtcNow(_clock.GetUtcNow().AddHours(1));
+            await Dispatcher().PumpAsync(CancellationToken.None);
+        }
+
+        Assert.True(message.Parked);
+    }
+
     private sealed record Sent(string Endpoint, Notification Notification, string? SigningSecret);
 
     private sealed class RecordingChannel(NotificationChannel channel) : INotificationChannel
@@ -274,6 +339,9 @@ public class NotificationDispatcherTests
 
         public int Lists { get; private set; }
 
+        /// <summary>Environments whose subscriptions cannot be read by this build.</summary>
+        public HashSet<EnvironmentId> Unreadable { get; } = [];
+
         public void Seed(NotificationSubscription subscription) => _all.Add(subscription);
 
         public Task<IReadOnlyList<NotificationSubscription>> ListAsync(
@@ -291,6 +359,15 @@ public class NotificationDispatcherTests
             // SubscriptionsAreReadOncePerEnvironmentPerPass asserts on this same counter and the
             // pump now always calls the cross-tenant overload.
             Lists++;
+
+            if (Unreadable.Contains(environmentId))
+            {
+                // What the real mapping does for an `events` value naming a token this build does
+                // not know (NotificationSubscriptionConfiguration.Deserialise).
+                throw new InvalidOperationException(
+                    "A subscription names event 'A_FUTURE_EVENT', which this build does not know.");
+            }
+
             return Task.FromResult<IReadOnlyList<NotificationSubscription>>(
                 [.. _all.Where(s => s.EnvironmentId == environmentId)]);
         }

@@ -8,7 +8,7 @@
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the policy-change notification): 1,705 .NET,
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the policy-change notification and the unreadable-row fix): 1,710 .NET,
 1,435 Angular, 225 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
@@ -71,7 +71,7 @@ image (`concordat/api:prev`) was run against the same database while a probe sub
 `SUBJECT_POLICY_CHANGED` outbox rows delivered (ADR-034 has the statement). Delivered and parked rows are never read by the pump.
 The probe also found that this **hazard is not specific to this event**: any future event has it, since the outbox converter
 throws on a token the build does not know and the claim query materialises the rows. That is pre-existing; this change is
-what first made it reachable by a rollback, and it is listed in the holes table.
+what first made it reachable by a rollback, and it was listed in the holes table and **closed later the same day** for builds that contain the fix (the claim skips a row it cannot read; the dispatcher fails only the environment whose subscriptions it cannot read). Rolling back to a build without the fix still needs the cleanup above.
 
 ### What was verified, and what was not
 
@@ -800,7 +800,7 @@ These matter more than the two lists above, because the surface exists and looks
 | **The registry accepts a schema that is not valid JSON Schema** | `{"type":"bogus"}` registers. Canonicalisation and the portability check never read the document against the 2020-12 metaschema, so it is stored, given an id and offered to consumers — and fails every message validated against it. The web editor reports it as advice (`ajv`); the registry does not. Whether registration should refuse it is a product decision, not a bug fix: refusing changes what existing users can register. |
 | ~~A lone-surrogate escape in a schema answers 500~~ | **Closed 2026-10-13** ([ADR-031](adr/031-unpaired-surrogates-are-refused.md)): `schema_malformed`, from registration, the dry run and the lookup, in values and keys and in Avro, pinned by five conformance fixtures. It had been recorded as a bare 500 from the writer; it was a generic Problem Details body from the *reader*, and wider than the one string. |
 | ~~An undefined enum number is stored, and then breaks every list that reads it~~ | **Closed 2026-10-13**, at six sites. `compatibilityMode: "99"` parsed (`Enum.TryParse` accepts any integer), was committed, answered 500 while projecting its own response, and every `GET …/subjects` in that environment answered 500 for every caller after it; environment defaults, the registration policy and contract enforcement parsed the same way. `WireEnums.TryParseDefined` refuses it, and a comma list that silently meant a third member. Not part of the brief; found by the probes the brief asked for. A number that *is* a member is still read as it always was. |
-| **One outbox row the build cannot read stops notifications for every tenant** | Found 2026-10-14 while measuring the rollback cost of `SUBJECT_POLICY_CHANGED` ([ADR-034](adr/034-a-policy-change-notifies-subscribers.md)), and **not specific to it**. `OutboxMessageConfiguration` throws on an event token the build does not know, and `ClaimDueAcrossTenantsAsync` materialises its rows, so a single undelivered row with an unknown token fails every pump pass (`An outbox pass failed`) and nothing marks it delivered; a message in an unrelated environment with no subscribers stayed pending behind it (measured). The pump survives and the registry keeps accepting changes, so it fails quietly. It is only reachable by running an older build over a newer one's rows (a rollback, or two versions behind a load balancer), which is why it had not been seen. A fix would read the token leniently (park the row with the error recorded, as a message nobody can deliver already is) and is separable from this change. |
+| ~~One outbox row the build cannot read stops notifications for every tenant~~ | **Closed 2026-10-14**, for builds that contain the fix. Found while measuring the rollback cost of `SUBJECT_POLICY_CHANGED` ([ADR-034](adr/034-a-policy-change-notifies-subscribers.md)) and not specific to it: the stored event is a token parsed on read, and a build older than the one that wrote it threw while the pump materialised its batch, so one undelivered row failed every pass for every tenant and nothing marked it delivered (a message in an unrelated environment stayed pending behind it, measured). **Two changes.** `ClaimDueAcrossTenantsAsync` filters on the tokens the build knows (`event IN (...)`, in SQL, before the `Take`), so a row it cannot read is not claimed: it stays pending, is still counted by the depth endpoint, and is delivered by whichever build can read it. And `NotificationDispatcher` catches a failed read of an environment's subscriptions (a subscription naming an unknown event) and fails *that environment's* messages (recorded, backed off, eventually parked, never discarded) instead of aborting the pass; the failed read is remembered for the pass, so it costs one query. Not done, on purpose: reading an unknown token "as far as possible" (dropping it from a subscription's list would leave it empty, and empty means every event). **What it does not do:** it protects a rollback *to a build that has it*. Rolling back to `e511c11` or `01bce23` has the old behaviour and still needs ADR-034's cleanup first. `GET …/notifications` still answers 500 for an environment holding such a subscription. Measured on the real registry with `A_FUTURE_EVENT` injected by SQL into one outbox row and one subscription: the bystander environment's message was delivered, the unreadable outbox row stayed pending with 0 attempts, and the subscription's message was failed with the reason recorded, in the same pass. Pinned by two integration tests (real PostgreSQL) and three dispatcher tests, each mutation-checked. |
 | **A subscription's events cannot be edited** | There is `POST`, `PUT …/enabled` and `DELETE`, and nothing else, so keeping an existing "all events" subscription out of a newly added event (as `SUBJECT_POLICY_CHANGED`, ADR-034) means muting it or deleting it and creating it again, which issues **a new webhook signing secret** the receiver must be given. Found 2026-10-14. |
 | **A failing `notifications.spec.ts` leaves its subscriptions behind** | The block is serial and its deletes are its last tests, so a red test skips them: the email subscription (no event filter) and the webhook stay live in `dev`, and the registry delivers to them for the rest of the run, and after it. Found 2026-10-14 when the new spec was run red on purpose (they were deleted by hand). A `test.afterAll` that deletes by endpoint would close it; not done here. |
 | **Hard delete does not exist** | Soft delete is all there is. The full rule — no registered consumers, force flag, audit entry — is an outstanding commitment. |
@@ -832,14 +832,14 @@ Nothing here can be done from inside the repository.
 
 ## What the tests actually cover
 
-Six kinds, not one. Worth knowing which, because "1,705 tests" says nothing about what would
+Six kinds, not one. Worth knowing which, because "1,710 tests" says nothing about what would
 survive being wrong.
 
 | Kind | Where | Tests | What it proves |
 |---|---|---|---|
 | Domain unit | `Domain.Tests`, three `Formats.*` | ~911 | Invariants in isolation. No I/O |
-| Application handler | `Application.Tests` | 210 | Handler refusals and **ordering**, with hand-written fakes |
-| HTTP integration | `Api.IntegrationTests` | 290 | Real HTTP against real PostgreSQL, via Testcontainers |
+| Application handler | `Application.Tests` | 213 | Handler refusals and **ordering**, with hand-written fakes |
+| HTTP integration | `Api.IntegrationTests` | 292 | Real HTTP against real PostgreSQL, via Testcontainers |
 | Conformance corpus | `Conformance` | 104, over 103 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 64 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |

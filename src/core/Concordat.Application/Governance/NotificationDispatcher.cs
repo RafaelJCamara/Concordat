@@ -68,34 +68,35 @@ public sealed partial class NotificationDispatcher(
 
         // Subscriptions are read once per (tenant, environment) per pass, not once per message.
         // A batch is usually one tenant's worth of activity, and re-reading per message turns a
-        // 50-message batch into 50 identical queries.
+        // 50-message batch into 50 identical queries. A read that failed is remembered too, so an
+        // environment this build cannot read costs one failed query per pass and not one per message.
         var byEnvironment =
-            new Dictionary<(TenantId, EnvironmentId), IReadOnlyList<NotificationSubscription>>();
+            new Dictionary<(TenantId, EnvironmentId), (IReadOnlyList<NotificationSubscription>? Subscribers, string? Error)>();
 
         foreach (var (tenantId, message) in due)
         {
             var key = (tenantId, message.EnvironmentId);
 
-            if (!byEnvironment.TryGetValue(key, out var subscribers))
+            if (!byEnvironment.TryGetValue(key, out var read))
             {
-                subscribers = await subscriptions
-                    .ListAcrossTenantsAsync(tenantId, message.EnvironmentId, cancellationToken)
+                read = await ReadSubscribersAsync(tenantId, message.EnvironmentId, cancellationToken)
                     .ConfigureAwait(false);
 
-                byEnvironment[key] = subscribers;
+                byEnvironment[key] = read;
             }
 
-            var wanted = subscribers.Where(s => s.Wants(message.Event)).ToList();
+            var wanted = read.Subscribers?.Where(s => s.Wants(message.Event)).ToList() ?? [];
 
-            if (wanted.Count is 0)
+            if (read.Error is null && wanted.Count is 0)
             {
                 message.MarkDelivered(clock.GetUtcNow());
                 delivered++;
                 continue;
             }
 
-            var error = await DeliverAsync(tenantId, message, wanted, cancellationToken)
-                .ConfigureAwait(false);
+            var error = read.Error
+                ?? await DeliverAsync(tenantId, message, wanted, cancellationToken)
+                    .ConfigureAwait(false);
 
             if (error is null)
             {
@@ -124,6 +125,48 @@ public sealed partial class NotificationDispatcher(
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return new DispatchResult(due.Count, delivered, failed, parked);
+    }
+
+    /// <summary>
+    /// Reads an environment's subscriptions, or says why it could not.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A failed read fails the messages that needed it, not the pass.</b> A subscription stores
+    /// its events as tokens and a build parses them on read, so one that names an event a newer
+    /// build wrote (a rollback, or an old instance beside a new one) throws here. Letting that
+    /// escape aborted the whole batch before anything was saved, for every environment and every
+    /// tenant, on every pass, while the registry kept accepting changes and told nobody anything.
+    /// The messages in that environment now fail like any undeliverable one (recorded, backed off,
+    /// eventually parked, never discarded), so a build that can read the subscription can have them
+    /// re-queued, and everything else in the batch is delivered.
+    /// </para>
+    /// <para>
+    /// Not a recovery that reads the subscription "as far as possible": an unknown token dropped
+    /// from a list would leave it empty, and empty means every event, so a subscription for one
+    /// thing would start receiving everything (and be saved that way by the next mute).
+    /// </para>
+    /// </remarks>
+    private async Task<(IReadOnlyList<NotificationSubscription>? Subscribers, string? Error)>
+        ReadSubscribersAsync(
+            TenantId tenantId, EnvironmentId environmentId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var subscribers = await subscriptions
+                .ListAcrossTenantsAsync(tenantId, environmentId, cancellationToken)
+                .ConfigureAwait(false);
+
+            return (subscribers, null);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Broad on purpose, for the reason DeliverAsync's is: what a read can throw (a mapping, a
+            // connection, a timeout) is not enumerable, and one environment must not stop the rest.
+            Log.SubscriptionsUnreadable(logger, environmentId.ToString(), ex);
+
+            return (null, $"Could not read this environment's subscriptions: {ex.Message}");
+        }
     }
 
     private async Task<string?> DeliverAsync(
@@ -209,5 +252,12 @@ public sealed partial class NotificationDispatcher(
             Message = "Delivering {MessageId} to {Endpoint} failed")]
         public static partial void DeliveryFailed(
             ILogger logger, Guid messageId, string endpoint, Exception exception);
+
+        [LoggerMessage(
+            EventId = 7505,
+            Level = LogLevel.Warning,
+            Message = "The subscriptions of environment {Environment} could not be read; its messages are failed and retried")]
+        public static partial void SubscriptionsUnreadable(
+            ILogger logger, string environment, Exception exception);
     }
 }

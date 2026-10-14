@@ -117,6 +117,14 @@ is a decision that its notification will not be sent (`UPDATE outbox_message SET
 = 'SUBJECT_POLICY_CHANGED' AND delivered_at IS NULL`). The audit rows can only be waited out, as ADR-033 said.
 The probe that measured the above is in [STATUS.md](../STATUS.md).
 
+> **Amended 2026-10-14, later the same day.** The outbox hazard above is closed for builds that contain the fix, in a
+> separate change: the pump's claim no longer reads a row whose event token the build does not know (it filters on the
+> tokens it does, in SQL, so the row stays pending, still counted, for a build that can read it), and the dispatcher fails
+> only the messages of an environment whose subscriptions it cannot read, instead of aborting the pass. So a **future**
+> new event does not carry this rollback cost, **but rolling back to `01bce23` or earlier, which lack the fix, still
+> does**, and the cleanup above still applies to them. `GET …/notifications` still answers 500 for an environment holding
+> a subscription naming an unknown event, and the audit page's behaviour is unchanged. STATUS has the measurement.
+
 ## Alternatives considered
 
 - **Keep ADR-033's "No notification".** Rejected by the maintainer; the reasoning above is why: a rule change that

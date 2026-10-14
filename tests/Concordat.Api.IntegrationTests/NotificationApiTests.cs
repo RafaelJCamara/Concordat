@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using Concordat.Application.Abstractions;
 using Concordat.Application.Governance;
 using Concordat.Domain.Governance;
+using Concordat.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Concordat.Api.IntegrationTests;
@@ -434,6 +436,110 @@ public class NotificationApiTests(ApiFactory factory)
 
         Assert.Equal(["SUBJECT_POLICY_CHANGED"], created.Events);
         Assert.Equal(["SUBJECT_POLICY_CHANGED"], Assert.Single(listed!).Events);
+    }
+
+    // -------------------------------- a row this build cannot read blocks nobody (the hazard)
+
+    private async Task<T> ScalarAsync<T>(string sql)
+    {
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ConcordatDbContext>();
+
+        return (await context.Database.SqlQueryRaw<T>(sql).ToListAsync()).Single();
+    }
+
+    private async Task ExecuteAsync(string sql)
+    {
+        using var scope = factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ConcordatDbContext>();
+
+        await context.Database.ExecuteSqlRawAsync(sql);
+    }
+
+    [Fact]
+    public async Task AnOutboxRowWithATokenThisBuildDoesNotKnow_IsLeftPendingAndBlocksNobody()
+    {
+        // What an older build sees when a newer one has written an event it was never taught (a
+        // rollback, or an old instance beside a new one). The converter used to throw while the
+        // pump materialised its batch, which failed every pass for every tenant, and nothing marked
+        // the row delivered: notifications stopped everywhere while the registry kept accepting
+        // changes (measured with the previous image, STATUS). The claim now leaves such a row alone.
+        // It is not parked or discarded: it stays pending, and counted, for a build that can read it.
+        var (client, stuckEnvironment) = await NewEnvironmentAsync();
+        var (_, otherEnvironment) = await NewEnvironmentAsync();
+        var stuckSubject = await RegisterAsync(client, stuckEnvironment);
+        var otherSubject = await RegisterAsync(client, otherEnvironment);
+
+        try
+        {
+            await ExecuteAsync(
+                $"UPDATE outbox_message SET event = 'A_FUTURE_EVENT' WHERE target = '{stuckSubject}'");
+
+            var depthBefore = await client.GetFromJsonAsync<OutboxDepthResponse>(
+                "/v1/notifications/outbox", ApiFactory.Json);
+
+            // Not asserting a count: other tests leave messages for the pump to find. What matters is
+            // that the pass completes and reaches the one behind the row it cannot read.
+            await PumpAsync();
+
+            Assert.Equal(1, await ScalarAsync<int>(
+                $"SELECT count(*)::int AS \"Value\" FROM outbox_message WHERE target = '{otherSubject}' AND delivered_at IS NOT NULL"));
+
+            Assert.Equal(1, await ScalarAsync<int>(
+                "SELECT count(*)::int AS \"Value\" FROM outbox_message " +
+                $"WHERE target = '{stuckSubject}' AND event = 'A_FUTURE_EVENT' " +
+                "AND delivered_at IS NULL AND NOT parked AND attempts = 0"));
+
+            // Still counted as pending, so the depth endpoint does not hide it either.
+            var depthAfter = await client.GetFromJsonAsync<OutboxDepthResponse>(
+                "/v1/notifications/outbox", ApiFactory.Json);
+
+            Assert.True(depthAfter!.Pending >= 1);
+            Assert.True(depthAfter.Pending <= depthBefore!.Pending);
+        }
+        finally
+        {
+            await ExecuteAsync($"DELETE FROM outbox_message WHERE target = '{stuckSubject}'");
+        }
+    }
+
+    [Fact]
+    public async Task ASubscriptionNamingATokenThisBuildDoesNotKnow_FailsOnlyItsOwnEnvironment()
+    {
+        // The other half: a subscription row the converter cannot read made the pump's read of that
+        // environment's subscriptions throw, which aborted the pass. Now the messages that needed
+        // that read fail and back off, and the pass delivers the rest.
+        var (client, stuckEnvironment) = await NewEnvironmentAsync();
+        var (_, otherEnvironment) = await NewEnvironmentAsync();
+
+        (await SubscribeAsync(client, stuckEnvironment, endpoint: "https://stuck.example.invalid/hook"))
+            .EnsureSuccessStatusCode();
+
+        var stuckSubject = await RegisterAsync(client, stuckEnvironment);
+        var otherSubject = await RegisterAsync(client, otherEnvironment);
+
+        try
+        {
+            await ExecuteAsync(
+                "UPDATE notification_subscription SET events = 'A_FUTURE_EVENT' " +
+                "WHERE endpoint = 'https://stuck.example.invalid/hook'");
+
+            await PumpAsync();
+
+            Assert.Equal(1, await ScalarAsync<int>(
+                $"SELECT count(*)::int AS \"Value\" FROM outbox_message WHERE target = '{otherSubject}' AND delivered_at IS NOT NULL"));
+
+            Assert.Equal(1, await ScalarAsync<int>(
+                "SELECT count(*)::int AS \"Value\" FROM outbox_message " +
+                $"WHERE target = '{stuckSubject}' AND delivered_at IS NULL AND attempts = 1 " +
+                "AND last_error LIKE '%A_FUTURE_EVENT%'"));
+        }
+        finally
+        {
+            await ExecuteAsync($"DELETE FROM outbox_message WHERE target = '{stuckSubject}'");
+            await ExecuteAsync(
+                "DELETE FROM notification_subscription WHERE endpoint = 'https://stuck.example.invalid/hook'");
+        }
     }
 
     [Fact]
