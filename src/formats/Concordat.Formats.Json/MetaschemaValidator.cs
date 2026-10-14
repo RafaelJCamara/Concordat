@@ -368,7 +368,7 @@ internal sealed class MetaschemaValidator
                 case "propertyNames" when instance.ValueKind is JsonValueKind.Object:
                     foreach (var property in instance.EnumerateObject())
                     {
-                        using var name = JsonDocument.Parse(JsonSerializer.SerializeToUtf8Bytes(property.Name));
+                        using var name = JsonDocument.Parse($"\"{JsonEncodedText.Encode(property.Name)}\"");
                         var found = new List<(string, string)>();
 
                         Evaluate(keyword.Value, resource, name.RootElement, string.Empty, found);
@@ -562,7 +562,9 @@ internal sealed class MetaschemaValidator
 
     /// <summary>A value, bounded and escaped, for a message that is sent to a caller.</summary>
     private static string Quote(string value) =>
-        JsonSerializer.Serialize(value.Length <= MaxQuoted ? value : value[..MaxQuoted] + "…");
+        // JsonEncodedText and not JsonSerializer: the CLI is published NativeAOT, where reflection-based
+        // serialisation is a build error (IL2026, IL3050), and this escapes the same way.
+        $"\"{JsonEncodedText.Encode(value.Length <= MaxQuoted ? value : value[..MaxQuoted] + "…")}\"";
 
     // RFC 6901: '~' becomes '~0' and '/' becomes '~1'.
     private static string Escape(string token) =>

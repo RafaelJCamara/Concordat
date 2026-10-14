@@ -261,7 +261,9 @@ public sealed class JsonSchemaValidityChecker : ISchemaValidityChecker
 
     /// <summary>A piece of the document, bounded and escaped, for a message sent to a caller.</summary>
     private static string Quote(string value) =>
-        JsonSerializer.Serialize(value.Length <= 80 ? value : value[..80] + "…");
+        // JsonEncodedText and not JsonSerializer: the CLI is published NativeAOT, where reflection-based
+        // serialisation is a build error (IL2026, IL3050), and this escapes the same way.
+        $"\"{JsonEncodedText.Encode(value.Length <= 80 ? value : value[..80] + "…")}\"";
 
     // RFC 6901: '~' becomes '~0' and '/' becomes '~1'.
     private static string Escape(string token) =>
