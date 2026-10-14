@@ -94,6 +94,29 @@ public class PortabilityApiTests(ApiFactory factory)
     }
 
     [Fact]
+    public async Task APatternThatIsNotARegularExpressionRegistersAndIsWarnedAbout()
+    {
+        var client = factory.CreateClient();
+        var subject = await NewSubjectAsync(client);
+
+        var response = await RegisterAsync(
+            client,
+            subject,
+            """{"type":"object","properties":{"code":{"type":"string","pattern":"("}}}""");
+
+        // Registered, not refused: format-like keywords are not asserted (ADR-039), and which
+        // syntax would decide is not settled (ADR-041).
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var body = await ApiFactory.ReadAsync<RegisterVersionResponse>(response);
+        var finding = Assert.Single(body.Portability);
+
+        Assert.Equal("regex_invalid", finding.Kind);
+        Assert.Equal("WARNING", finding.Severity);
+        Assert.Equal("#/properties/code/pattern", finding.Path);
+    }
+
+    [Fact]
     public async Task AnUnsupportedDialectIsRefused()
     {
         var client = factory.CreateClient();

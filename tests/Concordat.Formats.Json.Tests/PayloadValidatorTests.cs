@@ -141,6 +141,38 @@ public class PayloadValidatorTests
         Assert.Equal("schema_uncompilable", Assert.Single(result.Errors).Kind);
     }
 
+    [Theory]
+    [InlineData("""{"type":"array","items":{"type":"string","pattern":"("}}""", """["x"]""")]
+    [InlineData("""{"type":"object","properties":{"a":{"type":"string","pattern":"("}}}""", """{"a":"x"}""")]
+    [InlineData("""{"type":"object","patternProperties":{"(":{"type":"string"}}}""", """{"a":"x"}""")]
+    public void APatternThatIsNotARegularExpression_IsTheSchemasFaultNotMalformedJson(
+        string schema, string payload)
+    {
+        // NJsonSchema compiles a pattern when a value first reaches it, so the failure arrives
+        // at validation time, from a payload that is perfectly well-formed. Reporting it as
+        // malformed_json sent whoever read the quarantine to the producer's message when the
+        // defect is in the registered schema, and it is the same defect the other SDKs report
+        // at compile time as schema_uncompilable.
+        var result = Validator.Validate(Schema(schema), payload);
+
+        var error = Assert.Single(result.Errors);
+        Assert.False(result.IsValid);
+        Assert.Equal("schema_uncompilable", error.Kind);
+        Assert.DoesNotContain("well-formed", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MalformedJsonAgainstASchemaWithAPattern_IsStillMalformedJson()
+    {
+        // The pattern path validates on a second thread and its failures arrive wrapped; the
+        // regex rule above must not claim a payload that is simply not JSON.
+        var result = Validator.Validate(
+            Schema("""{"type":"object","properties":{"a":{"type":"string","pattern":"^a"}}}"""),
+            "not json");
+
+        Assert.Equal("malformed_json", Assert.Single(result.Errors).Kind);
+    }
+
     [Fact]
     public void AnOversizedPayload_IsRejectedBeforeParsing()
     {

@@ -39,6 +39,13 @@ public static class PortabilityKinds
     /// most importantly Go's RE2, which has no lookaround or backreferences at all.
     /// </summary>
     public const string RegexNotPortable = "regex_not_portable";
+
+    /// <summary>
+    /// A <c>pattern</c> or <c>patternProperties</c> key that is not a regular expression the
+    /// .NET SDK can compile (ADR-041). The registry does not refuse it, because which syntax
+    /// decides is not settled: .NET, ECMA-262 and RE2 disagree about what one is.
+    /// </summary>
+    public const string RegexInvalid = "regex_invalid";
 }
 
 /// <summary>One reason a schema may not behave identically in every SDK.</summary>

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Concordat.Domain.Registry;
 using Concordat.Formats.Abstractions;
 using NJsonSchema;
@@ -108,6 +109,24 @@ public sealed class NJsonSchemaPayloadValidator : IPayloadValidator
                     "A 'pattern' or 'patternProperties' regular expression took too long to " +
                     "match this payload and was aborted.")]);
         }
+        catch (RegexParseException ex)
+        {
+            // A "pattern" or "patternProperties" key that is not a regular expression. NJsonSchema
+            // compiles it when a value first reaches it, not when the schema is compiled, so it
+            // arrives here from a payload that is perfectly well-formed, and the catch below
+            // would blame that payload. The defect is in the registered schema, the same one
+            // the other SDKs report at compile time as schema_uncompilable, and a reader of the
+            // quarantine needs to be sent to the schema and not to the producer.
+            //
+            // Honest about its limit: this fires only for a message that reaches the pattern, so
+            // one that does not (a missing optional property, say) is still accepted here.
+            return new PayloadValidationResult(
+                false,
+                [new PayloadError(
+                    "#",
+                    "schema_uncompilable",
+                    $"A 'pattern' or 'patternProperties' key is not a valid regular expression: {ex.Message}")]);
+        }
         catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
             // Malformed JSON arrives here rather than as a throw: this runs on the delivery
@@ -168,7 +187,10 @@ public sealed class NJsonSchemaPayloadValidator : IPayloadValidator
 
         var task = Task.Run(() => schema.Validate(payload));
 
-        if (!task.Wait(HardMatchTimeout))
+        // WaitAny, not Wait: Wait throws a faulted task's exception wrapped in an
+        // AggregateException, which hid the real type from the caller's catch clauses.
+        // GetResult below rethrows the original.
+        if (Task.WaitAny([task], HardMatchTimeout) < 0)
         {
             throw new PatternMatchTimedOutException();
         }

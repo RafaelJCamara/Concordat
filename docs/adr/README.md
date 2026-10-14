@@ -55,3 +55,4 @@ it; write a new one and mark the old **Superseded by**.
 | [038](038-subject-prefix-search.md) | Subjects are searched by the start of their name, and the registry does the searching | Accepted |
 | [039](039-a-schema-that-is-not-a-schema-is-refused.md) | A document that is not a valid schema is refused, unless the registry already holds it | Accepted |
 | [040](040-a-change-already-awaiting-approval-is-not-proposed-again.md) | A change that is already awaiting approval is not proposed again | Accepted |
+| [041](041-a-pattern-that-is-not-a-regular-expression-is-warned-about.md) | A pattern that is not a regular expression is warned about, not refused, and is named as the schema's fault | Accepted |

@@ -1,6 +1,7 @@
 # What is missing
 
-**As of 2026-08-15**, except [a change already awaiting approval is not proposed again, 2026-10-14](#a-change-that-is-already-awaiting-approval-is-not-proposed-again-2026-10-14),
+**As of 2026-08-15**, except [a pattern that is not a regular expression, 2026-10-14](#a-pattern-that-is-not-a-regular-expression-is-named-as-the-schemas-fault-and-warned-about-2026-10-14),
+[a change already awaiting approval is not proposed again, 2026-10-14](#a-change-that-is-already-awaiting-approval-is-not-proposed-again-2026-10-14),
 [a document that is not a valid schema is refused, 2026-10-14](#a-document-that-is-not-a-valid-schema-is-refused-unless-the-registry-already-holds-it-2026-10-14),
 [the compatibility explanations, 2026-10-14](#compatibility-explanations-visible-text-and-a-disclosure-not-a-tooltip-2026-10-14),
 [a tolerant audit read, 2026-10-14](#the-audit-read-returns-an-action-its-build-does-not-know-as-stored-2026-10-14),
@@ -29,6 +30,46 @@ Everything under "verified locally" below was run on this machine today, against
 container image and a real PostgreSQL. Everything else is claimed on the strength of tests.
 
 ---
+
+## A pattern that is not a regular expression is named as the schema's fault and warned about, 2026-10-14
+
+Two separable parts of the hole ADR-039 left open ([ADR-041](adr/041-a-pattern-that-is-not-a-regular-expression-is-warned-about.md)).
+
+- **The mislabel is fixed.** `{"type":"string","pattern":"("}` registers (format is an annotation, ADR-039) and the .NET validator
+  reported every message that reached the pattern as `malformed_json: The payload is not well-formed JSON ... Invalid pattern`.
+  It is now **`schema_uncompilable`** with a message naming the `pattern` or `patternProperties` key. Two things the probe found that
+  shaped the fix: NJsonSchema parses a pattern when a value first reaches it (a message that does not reach it validates clean), and
+  a schema containing the word "pattern" is validated on a second thread whose failure arrives wrapped in an `AggregateException`,
+  so catching the regex exception alone changed nothing until the wait was changed to unwrap it.
+- **The registry now warns.** A `pattern` or `patternProperties` key that .NET's `Regex` cannot parse is a **`regex_invalid`**
+  `WARNING` finding in the registration response and the dry-run check. It is never a refusal. The message says it is .NET's
+  judgement alone.
+
+**Whose syntax decides, measured, not assumed.** 78 hand-made patterns (about 20 deliberately broken; a measure of which
+constructs the engines disagree about, not of how often anyone writes them) through .NET `Regex`, node's `RegExp` with the `u` flag
+(ECMA-262, what `ajv` uses) and Go 1.26 `regexp` (RE2): **17 refused by all three; 4 refused by .NET and accepted by ECMA-262
+(`\p{Letter}`, `\u{1F600}`, `[]`, `[^]`); 19 accepted by .NET and refused by ECMA-262 (`(?i)`, `\A`, `\z`, `(?>`, `a{,3}`, POSIX
+classes); 10 accepted by both and refused by RE2.** Any single refusal rule would turn valid schemas away in one direction or the
+other, which is why this is a warning ([ADR-041](adr/041-a-pattern-that-is-not-a-regular-expression-is-warned-about.md) holds the
+table and the rejected options). Parsing at registration is cheap and safe: 250,000 nested groups parsed in 124 ms with no stack
+overflow.
+
+**What it does not do:** it does **not refuse** (the hole row below stays open for that, deliberately); it is silent on the 19 that
+a Node consumer fails to compile and warns on the 4 it accepts; the validator still reports a bad pattern only for a message that
+reaches it; and **the RE2 list in the portability checker is still short**: Go also cannot compile `\uXXXX` (so
+`[\u4e00-\u9fff]`, a common CJK range, and `\u00e9`), `\cA`, `\e`, `\Z` or `[\b]`, none of which warns. That last point is a
+finding of this work and is **not fixed here**.
+
+### What was verified, and what was not
+
+**Red first, on behaviour:** the three validator cases failed as `Expected: "schema_uncompilable"  Actual: "malformed_json"`, and
+the checker tests (5 patterns, a `patternProperties` key, one-finding-per-pattern) failed before the check existed. **Mutation-checked:**
+the new catch removed or pointed at another exception type (3 validator cases); `Wait` put back for `WaitAny` (the same 3: the
+wrapping is real); the checker's `return` removed (the one-finding test); the parse removed (all checker cases and the HTTP test).
+The malformed-JSON-with-a-pattern test pins existing behaviour and is a regression pin. **Not verified:** the findings were not run
+against a Go or Node consumer end to end (the oracles were `regexp.Compile` and `new RegExp`, which decide syntax and not what an
+SDK then does); the conformance corpus has no case for it and cannot, because the engines disagree; the browser suite does not
+exercise it; the NativeAOT CLI publish was run once at the end of the series, not per change.
 
 ## A change that is already awaiting approval is not proposed again, 2026-10-14
 
@@ -96,7 +137,7 @@ has no parser to fail.
   schema, an `$anchor` that is not a name, a `$id` with a fragment, a root that is not an object or a boolean), and a `$ref` of the
   form `#/…` into the same document that points at nothing (`reference_unresolved`).
 - **Still does not:** it does **not assert `format`**, so a `pattern` that is not a regular expression registers (ECMA-262, RE2 and
-  .NET disagree about what one is) and throws when a message is validated; it accepts unknown keywords and vocabularies; it does not
+  .NET disagree about what one is; since [ADR-041](adr/041-a-pattern-that-is-not-a-regular-expression-is-warned-about.md) it is a `regex_invalid` warning, and the validator names it `schema_uncompilable`) and throws when a message is validated; it accepts unknown keywords and vocabularies; it does not
   judge a reference to another document, a `concordat://` address or an anchor, and never fetches one; it goes silent about
   `#/…` references once any resource inside the document declares its own `$id`; and it does not judge a pointer with an escape
   RFC 6901 does not define. Another dialect is still `schema_dialect_unsupported`, decided first.
@@ -1331,7 +1372,7 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~A `PATCH` that changes nothing still writes "owner changed"~~ | **Closed 2026-10-14.** `{}`, a `null` owner and a blank one still answer 200 with the subject as it was, and now write no entry, save nothing and stage nothing: the rule a policy change and an idempotent registration already follow. **Deliberately not widened to an explicit owner the subject already has**, which is a request and still reads `owner a -> a` (pinned, so widening it is a decision); a blank owner beside `deprecate` still deprecates and says only "deprecated". Red first at both levels (`APatchThatChangesNothing_WritesNothingAndSavesNothing`, `APatchThatChangesNothingAnswers200AndWritesNoEntry`, and the parity spec's count of `SUBJECT_UPDATED` rows around the bodies it sends, which gained two before the fix). The old test that pinned "owner changed" so it would not change by accident was replaced. |
 | ~~Retiring a subject records the subject's owner as the actor~~ | **Closed 2026-10-14.** `RetireSubjectHandler` takes `ICallerContext` and records the authenticated caller, as `UpdateSubjectHandler` and `SetCompatibilityPolicyHandler` do; the command still carries no actor. Before: retiring someone else's subject was attributed to them (measured in the browser parity spec: the actor was the owner `after-deprecation`, not the account that retired it). A refused retirement (the second one) writes nothing, pinned at both levels. Retiring is still not on any screen. |
 | ~~The registry accepts a schema that is not valid JSON Schema~~ | **Closed 2026-10-14** ([ADR-039](adr/039-a-schema-that-is-not-a-schema-is-refused.md)): a new registration or dry-run `check` of a document that fails the 2020-12 meta-schema's assertions, or has a `#/…` `$ref` into itself that points at nothing, is `400 schema_invalid` with the first defect's JSON Pointer; a document the caller's tenant already holds keeps registering, being read, and being promoted. **What it still does not refuse:** a `pattern` that is not a regular expression (`format` is an annotation; see the next row), an unknown keyword, and a reference to anything outside the document. Measured while closing it: the row's "fails every message" was true of some and the rest was worse, since on .NET `{"type":"bogus"}` compiles and validates nothing. |
-| **A `pattern` that is not a regular expression registers** | `{"type":"string","pattern":"("}` is accepted ([ADR-039](adr/039-a-schema-that-is-not-a-schema-is-refused.md) reads `format` as an annotation, as the 2020-12 meta-schema does) and throws when a message is validated: NJsonSchema compiles the expression lazily and reports the failure as `malformed_json`, which is the wrong word for it. ECMA-262, RE2 and .NET disagree about what a regular expression is, so refusing needs a decision about whose syntax, and the portability checker already warns about the RE2 subset. The editor's `ajv` does not flag it either. |
+| **A `pattern` that is not a regular expression registers** (**narrowed 2026-10-14, [ADR-041](adr/041-a-pattern-that-is-not-a-regular-expression-is-warned-about.md): it now warns `regex_invalid`, and the validator says `schema_uncompilable` instead of `malformed_json`; refusing is still open**) | `{"type":"string","pattern":"("}` is accepted ([ADR-039](adr/039-a-schema-that-is-not-a-schema-is-refused.md) reads `format` as an annotation, as the 2020-12 meta-schema does) and throws when a message is validated: NJsonSchema compiles the expression lazily and reports the failure as `malformed_json`, which is the wrong word for it. ECMA-262, RE2 and .NET disagree about what a regular expression is, so refusing needs a decision about whose syntax, and the portability checker already warns about the RE2 subset. The editor's `ajv` does not flag it either. |
 | ~~A lone-surrogate escape in a schema answers 500~~ | **Closed 2026-10-13** ([ADR-031](adr/031-unpaired-surrogates-are-refused.md)): `schema_malformed`, from registration, the dry run and the lookup, in values and keys and in Avro, pinned by five conformance fixtures. It had been recorded as a bare 500 from the writer; it was a generic Problem Details body from the *reader*, and wider than the one string. |
 | ~~An undefined enum number is stored, and then breaks every list that reads it~~ | **Closed 2026-10-13**, at six sites. `compatibilityMode: "99"` parsed (`Enum.TryParse` accepts any integer), was committed, answered 500 while projecting its own response, and every `GET …/subjects` in that environment answered 500 for every caller after it; environment defaults, the registration policy and contract enforcement parsed the same way. `WireEnums.TryParseDefined` refuses it, and a comma list that silently meant a third member. Not part of the brief; found by the probes the brief asked for. A number that *is* a member is still read as it always was. |
 | ~~One outbox row the build cannot read stops notifications for every tenant~~ | **Closed 2026-10-14**, for builds that contain the fix. Found while measuring the rollback cost of `SUBJECT_POLICY_CHANGED` ([ADR-034](adr/034-a-policy-change-notifies-subscribers.md)) and not specific to it: the stored event is a token parsed on read, and a build older than the one that wrote it threw while the pump materialised its batch, so one undelivered row failed every pass for every tenant and nothing marked it delivered (a message in an unrelated environment stayed pending behind it, measured). **Two changes.** `ClaimDueAcrossTenantsAsync` filters on the tokens the build knows (`event IN (...)`, in SQL, before the `Take`), so a row it cannot read is not claimed: it stays pending, is still counted by the depth endpoint, and is delivered by whichever build can read it. And `NotificationDispatcher` catches a failed read of an environment's subscriptions (a subscription naming an unknown event) and fails *that environment's* messages (recorded, backed off, eventually parked, never discarded) instead of aborting the pass; the failed read is remembered for the pass, so it costs one query. Not done, on purpose: reading an unknown token "as far as possible" (dropping it from a subscription's list would leave it empty, and empty means every event). **What it does not do:** it protects a rollback *to a build that has it*. Rolling back to `e511c11` or `01bce23` has the old behaviour and still needs ADR-034's cleanup first. `GET …/notifications` still answers 500 for an environment holding such a subscription. Measured on the real registry with `A_FUTURE_EVENT` injected by SQL into one outbox row and one subscription: the bystander environment's message was delivered, the unreadable outbox row stayed pending with 0 attempts, and the subscription's message was failed with the reason recorded, in the same pass. Pinned by two integration tests (real PostgreSQL) and three dispatcher tests, each mutation-checked. |

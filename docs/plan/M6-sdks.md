@@ -131,13 +131,14 @@ ordinal was allocated, and a client treating them alike double-counts versions.
 ### Portability is warnings, with one exception
 
 The schemas this flags are legal and usually intentional, so refusing them would be the
-Confluent mistake in the other direction. Three findings:
+Confluent mistake in the other direction. Four findings:
 
 | Kind | Severity | Why it exists |
 |---|---|---|
 | `dialect_unsupported` | **Error** | Keywords changed meaning between drafts; Concordat would be applying rules the author never wrote against |
 | `keyword_not_compared` | Warning | The keyword validates but the compatibility engine cannot see it, so a change confined to it reads as compatible |
 | `regex_not_portable` | Warning | Go's RE2 has no lookaround or backreferences **at all**, so a Go consumer fails to build the validator rather than disagreeing with it |
+| `regex_invalid` | Warning | The .NET parser cannot compile the `pattern` or `patternProperties` key, so the .NET SDK quarantines every message that reaches it as `schema_uncompilable`. .NET's judgement alone ([ADR-041](../adr/041-a-pattern-that-is-not-a-regular-expression-is-warned-about.md)) |
 
 The regex one is the sharpest: it is not "behaves differently in Go", it is "the payload check
 is lost entirely on that SDK", and no corpus can fix it because the schema never compiles there.

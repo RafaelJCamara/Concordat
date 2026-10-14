@@ -151,7 +151,7 @@ the step. Six calls, each yours to confirm:
   *If you would rather warn*, the evaluator turns each defect into a `Warning` finding and the two `SchemaValidityGate` calls go.
 - **"Valid" is the 2020-12 meta-schema's assertions, plus a `$ref` into the same document that points at nothing.** Unknown
   keywords and vocabularies are accepted. **`format` is an annotation, so a `pattern` that is not a regular expression still
-  registers** (ECMA-262, RE2 and .NET disagree about what one is). That is the largest thing still open.
+  registers** (ECMA-262, RE2 and .NET disagree about what one is), though since [ADR-041](adr/041-a-pattern-that-is-not-a-regular-expression-is-warned-about.md) it carries a `regex_invalid` warning. Refusing it is the largest thing still open.
 - **The behaviour change to look at first:** a draft-07 or draft-04 document **with no `$schema`** that uses tuple `items`,
   boolean `exclusiveMinimum`, `required: true` or a `#fragment` `$id` is read as 2020-12 (as it already was) and is refused now.
   With a `$schema` it is `schema_dialect_unsupported`, as before.

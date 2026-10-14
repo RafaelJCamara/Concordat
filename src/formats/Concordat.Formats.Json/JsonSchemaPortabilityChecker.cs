@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Concordat.Domain.Registry;
 using Concordat.Formats.Abstractions;
 
@@ -217,6 +218,38 @@ public sealed class JsonSchemaPortabilityChecker : ISchemaPortabilityChecker
 
         static void Inspect(string expression, string path, List<PortabilityFinding> found)
         {
+            // Whether it is a regular expression at all comes before whether it is a portable
+            // one: an expression that does not parse has no lookahead to report, and naming a
+            // construct in it would send the author to the wrong fix first.
+            //
+            // The .NET parser decides, and the message says so, because the SDKs disagree
+            // about what a regular expression is in both directions (ADR-041): some patterns
+            // ECMA-262 accepts are refused here ('[^]', and the long Unicode property names),
+            // and many that ECMA-262 refuses are accepted ('(?i)', the start-of-text anchor,
+            // atomic groups). It is the right judge of one thing, which
+            // is that the .NET SDK, the one this repository ships, throws when a message
+            // reaches a pattern it cannot parse. Construction only parses; it matches nothing,
+            // so no timeout is needed and a pattern chosen to backtrack costs nothing here.
+            try
+            {
+                _ = new Regex(expression);
+            }
+            catch (RegexParseException ex)
+            {
+                found.Add(new PortabilityFinding(
+                    path,
+                    PortabilityKinds.RegexInvalid,
+                    PortabilitySeverity.Warning,
+                    "This is not a regular expression the .NET SDK can compile " +
+                    $"({ex.Message}). Every message that reaches it is quarantined there as " +
+                    "schema_uncompilable. It is registered anyway, because ECMA-262, RE2 and " +
+                    ".NET disagree about what a regular expression is and this check is " +
+                    ".NET's alone: another SDK may accept it, or refuse it for a different " +
+                    "reason."));
+
+                return;
+            }
+
             foreach (var (token, name) in UnportableRegex)
             {
                 if (!expression.Contains(token, StringComparison.Ordinal))

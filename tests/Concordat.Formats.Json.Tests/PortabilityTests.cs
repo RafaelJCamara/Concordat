@@ -114,6 +114,42 @@ public class PortabilityTests
         Assert.Contains("RE2", finding.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("(")]
+    [InlineData("[a-")]
+    [InlineData("*abc")]
+    [InlineData("a{2,1}")]
+    [InlineData("[z-a]")]
+    public void APatternThatIsNotARegularExpression_WarnsWithoutBlocking(string pattern)
+    {
+        // ADR-041. Format-like keywords are not asserted (ADR-039), so this registers; the
+        // warning is the one place the author is told that every message reaching it will be
+        // quarantined as schema_uncompilable on the .NET SDK.
+        var finding = Assert.Single(Check($$"""{"type":"string","pattern":"{{pattern}}"}"""));
+
+        Assert.Equal(PortabilityKinds.RegexInvalid, finding.Kind);
+        Assert.Equal(PortabilitySeverity.Warning, finding.Severity);
+        Assert.Equal("#/pattern", finding.Path);
+        Assert.Contains(".NET", finding.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ABrokenPatternPropertiesKey_IsReportedAtTheKey()
+    {
+        var findings = Check("""{"type":"object","patternProperties":{"(":{"type":"string"}}}""");
+
+        var finding = Assert.Single(findings, f => f.Kind == PortabilityKinds.RegexInvalid);
+        Assert.Equal("#/patternProperties/(", finding.Path);
+    }
+
+    [Fact]
+    public void ABrokenPatternDoesNotAlsoClaimItIsMerelyUnportable() =>
+        // One finding per pattern: an expression that does not parse has no lookahead to
+        // report, and saying both would send the author to the wrong fix first.
+        Assert.Equal(
+            PortabilityKinds.RegexInvalid,
+            Assert.Single(Check("""{"type":"string","pattern":"(?=x"}""")).Kind);
+
     [Fact]
     public void AnOrdinaryRegex_DoesNotWarn() =>
         Assert.Empty(Check("""{"type":"string","pattern":"^[a-z0-9_.]+$"}"""));
