@@ -132,6 +132,91 @@ describe('ContractsApi', () => {
     });
   });
 
+  describe('replacePublishBinding', () => {
+    const ID = '11111111-1111-1111-1111-111111111111';
+    const subjects = [{ subject: 'orders.created', selector: '2' }];
+
+    it('puts to the binding’s own route', () => {
+      const { api, backend } = setUp();
+      api.replacePublishBinding('dev', 'payments', ID, { subjects, precedence: 3 }).subscribe();
+
+      const request = backend.expectOne(`/v1/environments/dev/contracts/payments/publishes/${ID}`);
+
+      expect(request.request.method).toBe('PUT');
+      expect(request.request.body).toEqual({ subjects, precedence: 3 });
+    });
+
+    it('sends no precedence to clear it, because a PUT replaces and the registry reads absent as none', () => {
+      const { api, backend } = setUp();
+      api.replacePublishBinding('dev', 'payments', ID, { subjects, precedence: null }).subscribe();
+
+      const body = backend.expectOne(`/v1/environments/dev/contracts/payments/publishes/${ID}`)
+        .request.body;
+
+      expect(body).toEqual({ subjects });
+      expect('precedence' in body).toBe(false);
+    });
+
+    it('sends a precedence of zero, which is a precedence', () => {
+      const { api, backend } = setUp();
+      api.replacePublishBinding('dev', 'payments', ID, { subjects, precedence: 0 }).subscribe();
+
+      expect(
+        backend.expectOne(`/v1/environments/dev/contracts/payments/publishes/${ID}`).request.body
+          .precedence,
+      ).toBe(0);
+    });
+
+    it('answers with the contract as it now stands', () => {
+      let answered: Contract | null = null;
+      const { api, backend } = setUp();
+      api
+        .replacePublishBinding('dev', 'payments', ID, { subjects, precedence: 1 })
+        .subscribe((value) => (answered = value));
+
+      backend.expectOne(`/v1/environments/dev/contracts/payments/publishes/${ID}`).flush(dto);
+
+      expect((answered as Contract | null)?.name).toBe('payments');
+    });
+  });
+
+  describe('removePublishBinding', () => {
+    it('deletes the binding’s own route and answers with the contract', () => {
+      let answered: Contract | null = null;
+      const { api, backend } = setUp();
+      api.removePublishBinding('dev', 'payments', 'abc').subscribe((value) => (answered = value));
+
+      const request = backend.expectOne('/v1/environments/dev/contracts/payments/publishes/abc');
+
+      expect(request.request.method).toBe('DELETE');
+      request.flush(dto);
+      expect((answered as Contract | null)?.name).toBe('payments');
+    });
+  });
+
+  describe('replaceConsumeBinding and removeConsumeBinding', () => {
+    const subjects = [{ subject: 'orders.created', selector: 'latest' }];
+
+    it('puts the subjects to the binding’s own route', () => {
+      const { api, backend } = setUp();
+      api.replaceConsumeBinding('dev', 'payments', 'abc', { subjects }).subscribe();
+
+      const request = backend.expectOne('/v1/environments/dev/contracts/payments/consumes/abc');
+
+      expect(request.request.method).toBe('PUT');
+      expect(request.request.body).toEqual({ subjects });
+    });
+
+    it('deletes the binding’s own route', () => {
+      const { api, backend } = setUp();
+      api.removeConsumeBinding('dev', 'payments', 'abc').subscribe();
+
+      expect(
+        backend.expectOne('/v1/environments/dev/contracts/payments/consumes/abc').request.method,
+      ).toBe('DELETE');
+    });
+  });
+
   describe('addConsumeBinding', () => {
     it('posts to the consumes route with the queue and subjects', () => {
       const { api, backend } = setUp();

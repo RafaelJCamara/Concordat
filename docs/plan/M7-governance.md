@@ -72,6 +72,13 @@ was malformed, which is the one thing it was not.
 - [x] A single-subject binding supplies the subject an un-instrumented publisher omitted
 - [x] Route conformance: `contract_subject_not_permitted`, `contract_version_not_permitted`
 - [x] `ConcordatChannel.BasicConsumeAsync` wraps consumers, so consume is enforced like publish
+- [x] **A binding can be changed and removed** — **added 2026-10-14**
+      ([ADR-035](../adr/035-contract-bindings-have-an-identity.md)). Each binding has an id (its table's
+      key), and `PUT`/`DELETE` on `…/publishes/{id}` and `…/consumes/{id}` change its subjects (and a
+      publish binding's precedence) or remove it; the overlap invariant is run again for an edit, a
+      change that changes nothing writes nothing, and both are audited as
+      `CONTRACT_BINDING_CHANGED`/`CONTRACT_BINDING_REMOVED`. It closed the case where a binding added
+      with no precedence could never be separated from a later overlapping one. Nobody is notified
 
 **Overlap is intersection, not text equality.** `orders.*` and `*.created` share no
 characters in common yet both match `orders.created`, so comparing the pattern strings

@@ -20,6 +20,7 @@ function contract(name: string): Contract {
     createdAt: new Date('2026-08-13T09:00:00Z'),
     publishes: [
       {
+        id: 'p1',
         exchange: 'orders',
         routingKeyPattern: 'orders.*',
         brokerId: null,

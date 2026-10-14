@@ -21,6 +21,7 @@ export interface SubjectRefDto {
 
 /** `PublishBindingResponse`. */
 export interface PublishBindingDto {
+  readonly id: string;
   readonly exchange: string;
   readonly routingKeyPattern: string;
   readonly brokerId: string | null;
@@ -31,6 +32,7 @@ export interface PublishBindingDto {
 
 /** `ConsumeBindingResponse`. */
 export interface ConsumeBindingDto {
+  readonly id: string;
   readonly queue: string;
   readonly brokerId: string | null;
   readonly virtualHost: string;
@@ -56,6 +58,17 @@ export interface AddPublishBindingDto {
   readonly precedence?: number;
 }
 
+/** `ReplacePublishBindingRequest`: the precedence is left off to clear it. */
+export interface ReplacePublishBindingDto {
+  readonly subjects: readonly SubjectRefDto[];
+  readonly precedence?: number;
+}
+
+/** `ReplaceConsumeBindingRequest`. */
+export interface ReplaceConsumeBindingDto {
+  readonly subjects: readonly SubjectRefDto[];
+}
+
 /** `AddConsumeBindingRequest`. */
 export interface AddConsumeBindingDto {
   readonly queue: string;
@@ -75,6 +88,7 @@ export function toContract(dto: ContractDto): Contract {
 
 function toPublishBinding(dto: PublishBindingDto): PublishBinding {
   return {
+    id: dto.id,
     exchange: dto.exchange,
     routingKeyPattern: dto.routingKeyPattern,
     brokerId: dto.brokerId,
@@ -86,6 +100,7 @@ function toPublishBinding(dto: PublishBindingDto): PublishBinding {
 
 function toConsumeBinding(dto: ConsumeBindingDto): ConsumeBinding {
   return {
+    id: dto.id,
     queue: dto.queue,
     brokerId: dto.brokerId,
     virtualHost: dto.virtualHost,

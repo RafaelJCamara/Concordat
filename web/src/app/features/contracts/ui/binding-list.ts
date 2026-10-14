@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import type { ConsumeBinding, PublishBinding } from '../../../domain/contracts/contract';
 
@@ -8,6 +8,10 @@ import type { ConsumeBinding, PublishBinding } from '../../../domain/contracts/c
  *
  * Presentational. Every subject links to its own screen — that is the point of a binding, and a
  * reviewer reading "orders.* carries orders.created@>=2" is always one click from the subject.
+ *
+ * <b>Changing or removing is offered, never done, here.</b> When it is `editable` each binding gets a
+ * button for each, and pressing one only says which binding and which action: the screen owns the
+ * panel that asks the second question, so this stays a list.
  *
  * <b>Precedence is shown only when one was declared.</b> A null precedence is what makes an
  * overlap a conflict rather than a resolution, so its absence is information, but a column of
@@ -30,8 +34,11 @@ import type { ConsumeBinding, PublishBinding } from '../../../domain/contracts/c
         </p>
       } @else {
         <ul class="space-y-2">
-          @for (binding of publishes(); track $index) {
-            <li class="border-border bg-card rounded-lg border p-3">
+          @for (binding of publishes(); track binding.id) {
+            <li
+              class="border-border bg-card rounded-lg border p-3"
+              [class.border-primary]="binding.id === activeId()"
+            >
               <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <code class="text-foreground font-mono text-sm font-medium">
                   {{ binding.exchange }}
@@ -48,6 +55,16 @@ import type { ConsumeBinding, PublishBinding } from '../../../domain/contracts/c
                 [ngTemplateOutlet]="subjects"
                 [ngTemplateOutletContext]="{ $implicit: binding.subjects }"
               />
+              @if (editable()) {
+                <ng-container
+                  [ngTemplateOutlet]="actions"
+                  [ngTemplateOutletContext]="{
+                    kind: 'publish',
+                    id: binding.id,
+                    label: binding.exchange + ' / ' + binding.routingKeyPattern,
+                  }"
+                />
+              }
             </li>
           }
         </ul>
@@ -63,8 +80,11 @@ import type { ConsumeBinding, PublishBinding } from '../../../domain/contracts/c
         <p class="text-muted-foreground text-sm">No consume bindings.</p>
       } @else {
         <ul class="space-y-2">
-          @for (binding of consumes(); track $index) {
-            <li class="border-border bg-card rounded-lg border p-3">
+          @for (binding of consumes(); track binding.id) {
+            <li
+              class="border-border bg-card rounded-lg border p-3"
+              [class.border-primary]="binding.id === activeId()"
+            >
               <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <code class="text-foreground font-mono text-sm font-medium">
                   {{ binding.queue }}
@@ -77,11 +97,43 @@ import type { ConsumeBinding, PublishBinding } from '../../../domain/contracts/c
                 [ngTemplateOutlet]="subjects"
                 [ngTemplateOutletContext]="{ $implicit: binding.subjects }"
               />
+              @if (editable()) {
+                <ng-container
+                  [ngTemplateOutlet]="actions"
+                  [ngTemplateOutletContext]="{
+                    kind: 'consume',
+                    id: binding.id,
+                    label: binding.queue,
+                  }"
+                />
+              }
             </li>
           }
         </ul>
       }
     </section>
+
+    <ng-template #actions let-kind="kind" let-id="id" let-label="label">
+      <div class="mt-2 flex gap-1">
+        <button
+          type="button"
+          class="text-primary hover:underline text-xs font-medium"
+          [attr.aria-label]="'Change ' + label"
+          (click)="changeRequested.emit({ kind, id })"
+        >
+          Change
+        </button>
+        <span class="text-muted-foreground text-xs" aria-hidden="true">·</span>
+        <button
+          type="button"
+          class="text-destructive hover:underline text-xs font-medium"
+          [attr.aria-label]="'Remove ' + label"
+          (click)="removeRequested.emit({ kind, id })"
+        >
+          Remove
+        </button>
+      </div>
+    </ng-template>
 
     <ng-template #subjects let-refs>
       <ul class="mt-2 flex flex-wrap gap-2">
@@ -102,4 +154,22 @@ import type { ConsumeBinding, PublishBinding } from '../../../domain/contracts/c
 export class BindingList {
   readonly publishes = input.required<readonly PublishBinding[]>();
   readonly consumes = input.required<readonly ConsumeBinding[]>();
+
+  /** Whether to offer Change and Remove (the caller holds `contract:write`). */
+  readonly editable = input(false);
+
+  /** The binding the screen is working on, drawn with the primary border. */
+  readonly activeId = input<string | null>(null);
+
+  /** Change was pressed for this binding. */
+  readonly changeRequested = output<BindingRef>();
+
+  /** Remove was pressed for this binding. */
+  readonly removeRequested = output<BindingRef>();
+}
+
+/** Which binding a button was pressed for. */
+export interface BindingRef {
+  readonly kind: 'publish' | 'consume';
+  readonly id: string;
 }

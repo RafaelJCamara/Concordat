@@ -205,6 +205,6 @@ here.
 - [M4.3](../plan/M4-web-app.md), [DESIGN §9](../DESIGN.md#9-frontend-architecture-angular)
 - `web/src/app/domain/registry/subject-settings.ts`, `web/src/app/features/registry/`
   (`feature/subject-detail-page.ts`, `application/subject-settings-store.ts`,
-  `ui/subject-owner-editor.ts`, `ui/subject-policy-editor.ts`, `ui/change-confirmation.ts`),
+  `ui/subject-owner-editor.ts`, `ui/subject-policy-editor.ts`, `shared/ui/change-confirmation/change-confirmation.ts` (moved there by ADR-035, so the contracts screen can use it)),
   `web/e2e/subject-settings.spec.ts`, `web/e2e/subject-settings-parity.spec.ts`,
   `UpdateSubjectHandler` in `src/core/Concordat.Application/Registry/DiffAndLifecycle.cs`

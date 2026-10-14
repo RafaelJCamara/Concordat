@@ -39,6 +39,7 @@ token and an operator can alert across a fleet.
 | `routing_key_pattern_invalid` | A routing key pattern was not a valid AMQP topic pattern. |
 | `version_selector_invalid` | A version selector was not `latest`, an ordinal, or `>=N`. |
 | `binding_conflict` | Two bindings overlap and carry different subjects with no precedence to separate them. |
+| `binding_not_found` | The contract has no binding with that id (including one already removed). |
 | `contract_subject_not_permitted` | A message carried a subject the contract governing that route does not permit. Raised by the SDK, not the registry. |
 | `contract_version_not_permitted` | The subject is permitted on the route, but not at the version being sent. Raised by the SDK. |
 | `contract_subject_ambiguous` | The route is governed and permits several subjects, and the message declared none — so the subject cannot be chosen without guessing. Raised by the SDK. |

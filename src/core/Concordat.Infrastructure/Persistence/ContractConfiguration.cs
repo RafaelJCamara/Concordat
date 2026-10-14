@@ -50,6 +50,11 @@ internal sealed class ContractConfiguration : IEntityTypeConfiguration<Contract>
             publish.ToTable("publish_binding");
             publish.WithOwner().HasForeignKey("contract_id");
 
+            // The binding's own identity is its key (it used to be a shadow integer, which nothing
+            // outside the table could name). What an edit or a removal addresses.
+            publish.HasKey(b => b.Id);
+            publish.Property(b => b.Id).HasColumnName("binding_id").ValueGeneratedNever();
+
             publish.Property(b => b.Exchange).HasColumnName("exchange").HasMaxLength(255)
                 .IsRequired();
 
@@ -75,6 +80,9 @@ internal sealed class ContractConfiguration : IEntityTypeConfiguration<Contract>
         {
             consume.ToTable("consume_binding");
             consume.WithOwner().HasForeignKey("contract_id");
+
+            consume.HasKey(b => b.Id);
+            consume.Property(b => b.Id).HasColumnName("binding_id").ValueGeneratedNever();
 
             consume.Property(b => b.Queue).HasColumnName("queue").HasMaxLength(255).IsRequired();
 

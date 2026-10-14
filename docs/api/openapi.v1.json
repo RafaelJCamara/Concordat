@@ -1221,6 +1221,314 @@
         ]
       }
     },
+    "/v1/environments/{env}/contracts/{contract}/publishes/{binding}": {
+      "put": {
+        "tags": [
+          "Contracts"
+        ],
+        "summary": "Change a publish binding's subjects and precedence",
+        "description": "Replaces the subjects and the precedence of one binding; send no precedence to clear it. The exchange, pattern and scope are what the binding is and cannot be changed: remove it and add another. The overlap rule that applies when adding applies here, and a refused change leaves the binding as it was (409). This is how a binding added without a precedence is given one, so that a later overlapping binding can be separated from it. A request that changes nothing answers 200 and records nothing. A change is recorded in the audit trail as CONTRACT_BINDING_CHANGED, naming the caller. Nobody is notified.\n\nRequires scope: `contract:write`.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contract",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "binding",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplacePublishBindingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Contracts"
+        ],
+        "summary": "Remove a publish binding",
+        "description": "The routes it governed stop being governed by this binding. A route that nothing else governs (no other binding of this contract matches it, and no other contract does) resolves as ungoverned (OFF) from the next resolution. Removing it again is 404. Recorded in the audit trail as CONTRACT_BINDING_REMOVED, naming the caller. Nobody is notified.\n\nRequires scope: `contract:write`.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contract",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "binding",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/v1/environments/{env}/contracts/{contract}/consumes/{binding}": {
+      "put": {
+        "tags": [
+          "Contracts"
+        ],
+        "summary": "Change a consume binding's subjects",
+        "description": "Replaces the subjects of one binding. The queue and scope cannot be changed. Refused (409) when another binding for the same queue would then expect different subjects. A request that changes nothing answers 200 and records nothing; a change is recorded as CONTRACT_BINDING_CHANGED. Nobody is notified.\n\nRequires scope: `contract:write`.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contract",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "binding",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceConsumeBindingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Contracts"
+        ],
+        "summary": "Remove a consume binding",
+        "description": "Recorded in the audit trail as CONTRACT_BINDING_REMOVED, naming the caller. Removing it again is 404. Nobody is notified.\n\nRequires scope: `contract:write`.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contract",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "binding",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContractResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
     "/v1/environments/{env}/contracts/{contract}/enforcement": {
       "put": {
         "tags": [
@@ -4220,6 +4528,7 @@
       },
       "ConsumeBindingResponse": {
         "required": [
+          "id",
           "queue",
           "brokerId",
           "virtualHost",
@@ -4227,6 +4536,11 @@
         ],
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "description": "Its identity, which a change or a removal addresses.",
+            "format": "uuid"
+          },
           "queue": {
             "type": "string",
             "description": "The queue."
@@ -5146,6 +5460,7 @@
       },
       "PublishBindingResponse": {
         "required": [
+          "id",
           "exchange",
           "routingKeyPattern",
           "brokerId",
@@ -5155,6 +5470,11 @@
         ],
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "description": "Its identity, which a change or a removal addresses.",
+            "format": "uuid"
+          },
           "exchange": {
             "type": "string",
             "description": "The exchange."
@@ -5392,6 +5712,48 @@
           }
         },
         "description": "Who may register schemas in an environment, and what that requires of them."
+      },
+      "ReplaceConsumeBindingRequest": {
+        "required": [
+          "subjects"
+        ],
+        "type": "object",
+        "properties": {
+          "subjects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubjectRefInput"
+            },
+            "description": "The subjects it should expect from now on."
+          }
+        },
+        "description": "Request to change a consume binding."
+      },
+      "ReplacePublishBindingRequest": {
+        "required": [
+          "subjects"
+        ],
+        "type": "object",
+        "properties": {
+          "subjects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubjectRefInput"
+            },
+            "description": "The subjects it should carry from now on."
+          },
+          "precedence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Its precedence; omit or send null to clear it.",
+            "format": "int32"
+          }
+        },
+        "description": "Request to change a publish binding."
       },
       "ReportViolationsRequest": {
         "required": [

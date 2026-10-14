@@ -911,14 +911,9 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                 {
                     b.OwnsMany("Concordat.Domain.Contracts.ConsumeBinding", "Consumes", b1 =>
                         {
-                            b1.Property<Guid>("contract_id")
-                                .HasColumnType("uuid");
-
-                            b1.Property<int>("Id")
-                                .ValueGeneratedOnAdd()
-                                .HasColumnType("integer");
-
-                            NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b1.Property<int>("Id"));
+                            b1.Property<Guid>("Id")
+                                .HasColumnType("uuid")
+                                .HasColumnName("binding_id");
 
                             b1.Property<string>("Queue")
                                 .IsRequired()
@@ -932,7 +927,12 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                                 .HasColumnType("character varying(4096)")
                                 .HasColumnName("subjects");
 
-                            b1.HasKey("contract_id", "Id");
+                            b1.Property<Guid>("contract_id")
+                                .HasColumnType("uuid");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("contract_id");
 
                             b1.ToTable("consume_binding", (string)null);
 
@@ -941,11 +941,8 @@ namespace Concordat.Infrastructure.Persistence.Migrations
 
                             b1.OwnsOne("Concordat.Domain.Contracts.TopologyScope", "Scope", b2 =>
                                 {
-                                    b2.Property<Guid>("ConsumeBindingcontract_id")
+                                    b2.Property<Guid>("ConsumeBindingId")
                                         .HasColumnType("uuid");
-
-                                    b2.Property<int>("ConsumeBindingId")
-                                        .HasColumnType("integer");
 
                                     b2.Property<Guid?>("BrokerId")
                                         .HasColumnType("uuid")
@@ -957,12 +954,12 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                                         .HasColumnType("character varying(256)")
                                         .HasColumnName("virtual_host");
 
-                                    b2.HasKey("ConsumeBindingcontract_id", "ConsumeBindingId");
+                                    b2.HasKey("ConsumeBindingId");
 
                                     b2.ToTable("consume_binding");
 
                                     b2.WithOwner()
-                                        .HasForeignKey("ConsumeBindingcontract_id", "ConsumeBindingId");
+                                        .HasForeignKey("ConsumeBindingId");
                                 });
 
                             b1.Navigation("Scope")
@@ -971,14 +968,9 @@ namespace Concordat.Infrastructure.Persistence.Migrations
 
                     b.OwnsMany("Concordat.Domain.Contracts.PublishBinding", "Publishes", b1 =>
                         {
-                            b1.Property<Guid>("contract_id")
-                                .HasColumnType("uuid");
-
-                            b1.Property<int>("Id")
-                                .ValueGeneratedOnAdd()
-                                .HasColumnType("integer");
-
-                            NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b1.Property<int>("Id"));
+                            b1.Property<Guid>("Id")
+                                .HasColumnType("uuid")
+                                .HasColumnName("binding_id");
 
                             b1.Property<string>("Exchange")
                                 .IsRequired()
@@ -1002,7 +994,12 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                                 .HasColumnType("character varying(4096)")
                                 .HasColumnName("subjects");
 
-                            b1.HasKey("contract_id", "Id");
+                            b1.Property<Guid>("contract_id")
+                                .HasColumnType("uuid");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("contract_id");
 
                             b1.ToTable("publish_binding", (string)null);
 
@@ -1011,11 +1008,8 @@ namespace Concordat.Infrastructure.Persistence.Migrations
 
                             b1.OwnsOne("Concordat.Domain.Contracts.TopologyScope", "Scope", b2 =>
                                 {
-                                    b2.Property<Guid>("PublishBindingcontract_id")
+                                    b2.Property<Guid>("PublishBindingId")
                                         .HasColumnType("uuid");
-
-                                    b2.Property<int>("PublishBindingId")
-                                        .HasColumnType("integer");
 
                                     b2.Property<Guid?>("BrokerId")
                                         .HasColumnType("uuid")
@@ -1027,12 +1021,12 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                                         .HasColumnType("character varying(256)")
                                         .HasColumnName("virtual_host");
 
-                                    b2.HasKey("PublishBindingcontract_id", "PublishBindingId");
+                                    b2.HasKey("PublishBindingId");
 
                                     b2.ToTable("publish_binding");
 
                                     b2.WithOwner()
-                                        .HasForeignKey("PublishBindingcontract_id", "PublishBindingId");
+                                        .HasForeignKey("PublishBindingId");
                                 });
 
                             b1.Navigation("Scope")

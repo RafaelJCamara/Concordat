@@ -76,6 +76,8 @@ public class WireTokenTests
                 "BROKER_CREDENTIAL_SET",
                 "BROKER_REMOVED",
                 "CONTRACT_BINDING_ADDED",
+                "CONTRACT_BINDING_CHANGED",
+                "CONTRACT_BINDING_REMOVED",
                 "CONTRACT_CREATED",
                 "CONTRACT_ENFORCEMENT_CHANGED",
                 "ENVIRONMENT_CREATED",

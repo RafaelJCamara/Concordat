@@ -7,12 +7,24 @@ import { toConcordatError, type ConcordatError } from '../../../core/http/proble
 import type { Contract, EnforcementMode } from '../../../domain/contracts/contract';
 import {
   ContractsApi,
+  type ConsumeBindingChange,
   type NewConsumeBinding,
   type NewPublishBinding,
+  type PublishBindingChange,
 } from '../data-access/contracts-api';
 
 /** The things this screen can change about a contract. */
-export type ContractAction = 'enforcement' | 'publish' | 'consume';
+export type ContractAction = 'enforcement' | 'publish' | 'consume' | 'change' | 'remove';
+
+/** A change to one publish binding: which, and what it becomes. */
+export interface PublishChange extends PublishBindingChange {
+  readonly id: string;
+}
+
+/** A change to one consume binding: which, and what it becomes. */
+export interface ConsumeChange extends ConsumeBindingChange {
+  readonly id: string;
+}
 
 interface ContractDetailState {
   readonly contract: Contract | null;
@@ -36,14 +48,15 @@ const INITIAL: ContractDetailState = {
 };
 
 /**
- * One contract, its bindings, and the three ways it can be changed.
+ * One contract, its bindings, and the ways it can be changed: its enforcement, a binding added,
+ * a binding's subjects or precedence changed, and a binding removed.
  *
  * <b>Every change answers with the contract as it now stands, and that replaces the copy on
  * screen.</b> A binding can be refused for what it overlaps — a conflict only the registry can
  * see, since overlap is the intersection of patterns and not their text — so the screen never
  * adds a binding it was not told was stored.
  *
- * <b>One write at a time</b>, across all three, because they rewrite the same aggregate: a
+ * <b>One write at a time</b>, across all of them, because they rewrite the same aggregate: a
  * second, concurrent change would be computed against a contract that the first had already
  * altered, and whichever finished last would silently win.
  *
@@ -125,6 +138,38 @@ export const ContractDetailStore = signalStore(
         pipe(
           exhaustMap((binding) =>
             change('consume', (env, name) => api.addConsumeBinding(env, name, binding)),
+          ),
+        ),
+      ),
+
+      replacePublishBinding: rxMethod<PublishChange>(
+        pipe(
+          exhaustMap(({ id, ...replacement }) =>
+            change('change', (env, name) => api.replacePublishBinding(env, name, id, replacement)),
+          ),
+        ),
+      ),
+
+      removePublishBinding: rxMethod<string>(
+        pipe(
+          exhaustMap((id) =>
+            change('remove', (env, name) => api.removePublishBinding(env, name, id)),
+          ),
+        ),
+      ),
+
+      replaceConsumeBinding: rxMethod<ConsumeChange>(
+        pipe(
+          exhaustMap(({ id, ...replacement }) =>
+            change('change', (env, name) => api.replaceConsumeBinding(env, name, id, replacement)),
+          ),
+        ),
+      ),
+
+      removeConsumeBinding: rxMethod<string>(
+        pipe(
+          exhaustMap((id) =>
+            change('remove', (env, name) => api.removeConsumeBinding(env, name, id)),
           ),
         ),
       ),

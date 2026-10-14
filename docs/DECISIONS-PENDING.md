@@ -627,7 +627,7 @@ it is for.
 **The browser E2E half is now done too, 2026-08-15.** Playwright is in, `web/e2e/` holds 11
 tests, and the reload case above is one of them — the only way to prove a *browser* keeps the
 cookie across a real navigation and that the app asks for it before the first render. That count
-is the day's snapshot and nothing else: the suite stands at **225 tests across nineteen specs** as of
+is the day's snapshot and nothing else: the suite stands at **234 tests across twenty specs** as of
 2026-10-14, which is the figure [STATUS.md](STATUS.md) carries.
 
 It earned its place in the first ten seconds: the subject list was **broken** against a real
@@ -873,6 +873,7 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | A binding must carry at least one subject | M7.3 | Low. An empty binding governs a route while saying nothing about it, which reads as enforcement and is not |
 | `resolve` answers an unmatched route with `{contract: null, enforcement: "OFF"}` rather than omitting it | M7.3 | Low, but it is the contract with the SDK: the answers are positional, and "ungoverned" must be distinguishable from "not asked" |
 | A binding's subjects are one `subject@selector` text column, not a child table | M7.3, `ContractConfiguration` | Low, needs a migration. The value comparer is load-bearing — without it EF compares by reference and an edited binding is silently never written |
+| A binding has a `Guid` identity (its table's key); only its subjects and precedence can change; a `PUT` replaces, so no precedence clears it; nobody is notified | [ADR-035](adr/035-contract-bindings-have-an-identity.md), 2026-10-14 | Medium, and the part to read. The exchange, pattern and scope are what a binding *is*, so changing them is a removal and an addition. The overlap rule is run again for an edit. **No notification** is a decision, not an omission: a binding change on an `ENFORCE` contract changes what services refuse, and a new event would reach every subscription with no filter ([ADR-034](adr/034-a-policy-change-notifies-subscribers.md)); it is yours to add. |
 | `resolve` is `POST`, not `GET` with a query string | M7.3 | Low. A whole topology does not fit in a URL, and the request is a body-shaped question even though it is a read |
 | Impact analysis is evaluated **FORWARD**, not under the subject's own policy | [M7.4](plan/M7-governance.md) | Low, and it is the feature. Registration asks "can the new schema read old data"; impact asks the opposite question about a different party. Getting this backwards would report every added required field as breaking every consumer |
 | The surface comes from the subject's effective policy; only the mode is forced | M7.4 | Low. A subject governed at `WIRE` tolerates JSON-name changes by design, and reporting its consumers as broken by one would contradict the verdict the registry gave the change |

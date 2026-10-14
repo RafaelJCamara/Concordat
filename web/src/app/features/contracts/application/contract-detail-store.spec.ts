@@ -61,6 +61,10 @@ function fakeApi() {
     setEnforcement: (...args: unknown[]) => write('enforcement', ...args),
     addPublishBinding: (...args: unknown[]) => write('publish', ...args),
     addConsumeBinding: (...args: unknown[]) => write('consume', ...args),
+    replacePublishBinding: (...args: unknown[]) => write('changePublish', ...args),
+    removePublishBinding: (...args: unknown[]) => write('removePublish', ...args),
+    replaceConsumeBinding: (...args: unknown[]) => write('changeConsume', ...args),
+    removeConsumeBinding: (...args: unknown[]) => write('removeConsume', ...args),
   };
 }
 
@@ -138,6 +142,7 @@ describe('ContractDetailStore', () => {
         contract({
           publishes: [
             {
+              id: 'p1',
               exchange: 'orders',
               routingKeyPattern: 'orders.*',
               brokerId: null,
@@ -164,6 +169,102 @@ describe('ContractDetailStore', () => {
 
     it('does nothing before a contract has loaded', () => {
       store.setEnforcement('ENFORCE');
+
+      expect(api.writes).toEqual([]);
+    });
+  });
+
+  describe('changing and removing a binding', () => {
+    const subjects = [{ subject: 'orders.created', selector: '2' }];
+
+    it('sends a publish change to the binding’s id, in this contract and environment', () => {
+      loaded();
+      store.replacePublishBinding({ id: 'p1', subjects, precedence: 3 });
+
+      expect(api.writes[0]).toMatchObject({
+        kind: 'changePublish',
+        args: ['dev', 'payments', 'p1', { subjects, precedence: 3 }],
+      });
+      expect(store.saving()).toBe('change');
+    });
+
+    it('sends the other three the same way', () => {
+      loaded();
+      store.removePublishBinding('p1');
+      api.writes[0]!.stream.next(contract());
+      store.replaceConsumeBinding({ id: 'c1', subjects });
+      api.writes[1]!.stream.next(contract());
+      store.removeConsumeBinding('c1');
+
+      expect(api.writes.map((w) => w.kind)).toEqual([
+        'removePublish',
+        'changeConsume',
+        'removeConsume',
+      ]);
+      expect(api.writes[0]!.args).toEqual(['dev', 'payments', 'p1']);
+      expect(api.writes[1]!.args).toEqual(['dev', 'payments', 'c1', { subjects }]);
+      expect(api.writes[2]!.args).toEqual(['dev', 'payments', 'c1']);
+    });
+
+    it('shows the change only once the registry has answered, and says which kind it was', () => {
+      loaded();
+      store.replacePublishBinding({ id: 'p1', subjects, precedence: 1 });
+
+      expect(store.contract()?.publishes).toEqual([]);
+
+      api.writes[0]!.stream.next(contract({ enforcement: 'ENFORCE' }));
+
+      expect(store.contract()?.enforcement).toBe('ENFORCE');
+      expect(store.lastSaved()).toBe('change');
+      expect(store.saving()).toBeNull();
+    });
+
+    it('says a removal was a removal', () => {
+      loaded();
+      store.removeConsumeBinding('c1');
+      api.writes[0]!.stream.next(contract());
+
+      expect(store.lastSaved()).toBe('remove');
+    });
+
+    it('keeps the registry’s refusal of a change with that action and leaves the contract', () => {
+      // The refusal an overlap produces is an ordinary answer, and has to leave the binding and
+      // everything else on screen exactly where it was.
+      loaded();
+      store.replacePublishBinding({ id: 'p1', subjects, precedence: 1 });
+      api.writes[0]!.stream.error(
+        new ConcordatError({ status: 409, code: 'binding_conflict', detail: 'overlaps orders.*' }),
+      );
+
+      expect(store.actionErrors().change?.detail).toBe('overlaps orders.*');
+      expect(store.actionErrors().remove).toBeUndefined();
+      expect(store.contract()?.name).toBe('payments');
+      expect(store.lastSaved()).toBeNull();
+      expect(store.saving()).toBeNull();
+    });
+
+    it('keeps a refused removal with the removal', () => {
+      loaded();
+      store.removePublishBinding('p1');
+      api.writes[0]!.stream.error(
+        new ConcordatError({ status: 404, code: 'binding_not_found', detail: 'gone' }),
+      );
+
+      expect(store.actionErrors().remove?.code).toBe('binding_not_found');
+      expect(store.actionErrors().change).toBeUndefined();
+    });
+
+    it('is one write at a time with everything else', () => {
+      loaded();
+      store.removePublishBinding('p1');
+      store.replaceConsumeBinding({ id: 'c1', subjects });
+      store.setEnforcement('OFF');
+
+      expect(api.writes).toHaveLength(1);
+    });
+
+    it('does nothing before a contract has loaded', () => {
+      store.removePublishBinding('p1');
 
       expect(api.writes).toEqual([]);
     });

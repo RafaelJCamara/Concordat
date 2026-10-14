@@ -70,8 +70,9 @@ test.describe('contracts', () => {
     await page.getByLabel('Exchange').fill('orders');
     await page.getByLabel('Routing key pattern').fill('orders.*');
     await page.getByLabel('Subjects', { exact: true }).first().fill(SUBJECT);
-    // Declared up front: a binding cannot be edited afterwards, and the registry only separates
-    // an overlap when *both* bindings carry a value and the values differ.
+    // Declared up front here, though it can be changed afterwards (`contract-bindings.spec.ts`):
+    // the registry only separates an overlap when *both* bindings carry a value and the values
+    // differ, and this test is about the overlap, not about the way out of it.
     await page.getByLabel(/Precedence/).fill('1');
     await page.getByRole('button', { name: 'Add publish binding' }).click();
 

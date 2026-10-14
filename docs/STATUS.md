@@ -1,6 +1,7 @@
 # What is missing
 
-**As of 2026-08-15**, except [the policy-change notification, 2026-10-14](#a-policy-change-notifies-subscribers-and-every-subscription-with-no-event-filter-is-one-2026-10-14),
+**As of 2026-08-15**, except [contract bindings that can be changed and removed, 2026-10-14](#a-contracts-bindings-can-be-changed-and-removed-2026-10-14),
+[the policy-change notification, 2026-10-14](#a-policy-change-notifies-subscribers-and-every-subscription-with-no-event-filter-is-one-2026-10-14),
 [inheriting and the audited policy change, 2026-10-13](#a-subject-with-no-policy-of-its-own-follows-its-environments-default-and-a-policy-change-is-audited-2026-10-13),
 [the subject settings, 2026-10-13](#a-subjects-owner-and-policy-are-editable-and-the-registry-did-three-things-nobody-had-written-down-2026-10-13),
 [the create-subject screen, 2026-10-13](#the-create-subject-screen-and-a-500-that-was-not-what-it-looked-like-2026-10-13),
@@ -8,8 +9,8 @@
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the policy-change notification and the unreadable-row fix): 1,710 .NET,
-1,435 Angular, 225 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the policy-change notification, the unreadable-row fix and the binding editor): 1,762 .NET,
+1,504 Angular, 234 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
 aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
@@ -20,6 +21,95 @@ ten milestone files as unchecked boxes.
 
 Everything under "verified locally" below was run on this machine today, against the real
 container image and a real PostgreSQL. Everything else is claimed on the strength of tests.
+
+---
+
+## A contract's bindings can be changed and removed, 2026-10-14
+
+The hole recorded on 2026-10-13 is closed ([ADR-035](adr/035-contract-bindings-have-an-identity.md)). A binding had no
+identity, so there was an `add` for each kind and nothing else, and a binding added **without a precedence could never be
+separated from a later overlapping one**: the registry's refusal says to "give the two bindings different precedence
+values", and the first had none to change. Every binding now has an `id` (the primary key of its table, returned by every
+route that returns a contract), and four routes address it: `PUT` and `DELETE` on `…/publishes/{id}` and
+`…/consumes/{id}`, `contract:write`, each answering `200` with the contract. The contract's page offers **Change** and
+**Remove** on every row, absent without the scope, each taking two clicks and saying what it does. The counts are
+**1,762 .NET** (from 1,710), **1,504 Angular** (from 1,435) and **234 browser across twenty specs** (from 225 across nineteen).
+
+**What can change, and what cannot.** A publish binding's **subjects and precedence**; a consume binding's **subjects**.
+The exchange, pattern, virtual host and broker are what a binding *is*, so changing them is a removal and an addition. A
+`PUT` replaces, so an absent precedence clears it. **The overlap rule is run again for an edit** (equal precedence with an
+overlapping binding, clearing the one that separated two, or pointing one at subjects the other does not carry are each
+`409 binding_conflict`, naming a key both match, and leave the binding as it was). **A `PUT` that changes nothing answers `200`
+and writes nothing**; the same subjects in another order are a change. An unknown id, or a publish id used on a consume
+route, is `404 binding_not_found` (a new code).
+
+**Audited as two new actions, as the caller, in the same unit of work:** `CONTRACT_BINDING_CHANGED` (the detail names only
+what changed: `publish orders / orders.#: precedence none -> 1`) and `CONTRACT_BINDING_REMOVED` (the way the entry for adding it
+reads). **Nobody is notified**, a decision and not an omission (ADR-035: a new event is a new subscription vocabulary, and
+an empty filter means every event). The audit vocabulary is pinned on both sides, so it touched `AuditAction`/`AuditTokens`,
+`WireTokenTests`, the web's `AUDIT_ACTIONS` and the audit page's filter (now 27 options).
+
+**The migration changes the key of two tables, and the scaffolded one was wrong for any database with a row in it** (it altered
+the integer key to `uuid`, which PostgreSQL refuses). It is written by hand: add the column, give every existing binding a
+fresh `gen_random_uuid()`, make it the key, drop the integer. **Measured on the local compose database as it stood** (57 publish
+and 28 consume bindings from earlier browser runs): the content of every binding hashed in a fixed order was identical before and
+after, the counts unchanged, every id unique. **`Down` was run on a scratch database with rows in it** (up, down, up): the data
+survived and the integer identity came back. The ids bindings now have did not exist before, so none is preserved.
+
+**What the real registry and the browser corrected, which reading the code did not:**
+
+- **A refusal left the person on the confirmation.** The first browser run of "refused a change that would undo the
+  separation" waited for a Cancel button that was not there: after the registry refused, the panel stayed on "Yes, change the
+  binding", so the second click would have resent the same refused request with nothing to edit. A refusal now returns to the
+  form with what was typed (held by a spec that goes red without it, and by the browser).
+- **The removal sentence was wrong.** It said a route "stops being governed" and, if no other *contract* governs it, resolves as
+  ungoverned. The e2e removed the specific binding and the route was **still governed**, by the broader binding of the *same*
+  contract. The sentence (and the endpoint's description) now say "another binding of this contract, or another contract", and a
+  test holds the case.
+- **A resolve in `dev` is not about one contract.** The first draft resolved `orders` / `orders.created` and got every
+  contract in the environment that matches it (the other specs' and every earlier run's). The spec uses an exchange of its own
+  per run.
+- **The SDK keeps what it resolved.** `ContractTtl` is one minute by default (read from the SDK's options, not measured against a
+  running service), so a change or removal is not instant for a running service; the confirmations say so.
+
+**Found on the way, not fixed (separable):**
+
+- **The audit read still throws on an action its build does not know.** Rolling back past this change breaks the audit page for
+  as long as a `CONTRACT_BINDING_CHANGED`/`…_REMOVED` row exists, and the fix that made the notification pump tolerant of an
+  unknown token does not reach it. A tolerant read (show the token as received, as the web app already does) would close this
+  one and the `SUBJECT_POLICY_CHANGED` one ADR-033 recorded.
+- **There is no route that deletes a contract**, so a run of the browser suite leaves its contracts behind. This spec makes
+  three per run (see the e2e README), and the first two runs of it, which were red while it was being written, left a few more.
+- **A dependency advisory broke a fresh restore** — see the next section and the holes table.
+- **The local compose database now holds** eight `e2e-bindings-*` contracts (three per run: two complete runs and three that
+  went red part-way while the spec was written), one `probe-shots-*` contract left by the screenshot pass, and 41 contracts in
+  all; nothing on `dev`'s defaults, `e2e-inherit`, `e2e-names`, `e2e-empty`, `e2e-follows`' default or the shared fixtures was changed.
+  `concordat/api:prev` and `:mutant` still exist.
+
+### A fresh `dotnet restore` failed a day after the same sources had built, 2026-10-14
+
+Rebuilding the registry image for the above died with `NU1902`/`NU1903` on the API and Infrastructure projects. Five
+denial-of-service advisories against `System.Security.Cryptography.Pkcs` and `…Xml` (GHSA-846f-f764-76mx, GHSA-2fmv-rv2c-59x7,
+GHSA-7hqp-7c5m-4vq6, GHSA-c399-9853-6jmj, GHSA-r955-8q5j-3h83, published 2026-10-13, fixed in 10.0.13) had reached nuget.org's
+vulnerability data, and this repository turns an audit finding into an error. Nothing fails until a restore runs, which is why
+CI was still green at 07:58 UTC: **any fresh restore, so any push, would have failed.** `dotnet restore --force` on the host
+reproduced it. Both packages are transitive (Pkcs 10.0.0 in the API, Pkcs and Xml 10.0.11 in Infrastructure), so they are
+**pinned forward** in the transitive-pins group, the way SSH.NET was, not suppressed. It is its own commit (`538e8d9`) and does
+not depend on anything else here. **It needs pushing before, or with, anything else**: without it the next CI run fails at restore.
+
+### What was verified, and what was not
+
+Run on this machine, on Windows, only. **Verified:** the full .NET suite (1,762, Docker running, `HeaderSurvival` included);
+`dotnet format --verify-no-changes`; the web unit suite, lint, prettier, `codes:check`, `monaco:check` and `ng build`;
+`docs/api/openapi.v1.json` regenerated by the build and committed; the migration against the live database and on a scratch
+database both ways; the whole browser suite against the dev server **and the production image**, each after a registry restart.
+**Red first:** the domain's fifteen new tests against stubs that throw, the handler tests against stub handlers, the HTTP tests
+against a model with a pending migration (the registry refuses to start with one), the audit vocabulary pin, and the web specs
+as compile and assertion failures. **Mutation-checked:** the domain (overlap check skipped, no-change never reported, removal
+removing everything), the handler (a change recorded as an addition), the page (removal opening the change editor), the store (a
+change filed under removal) and the edit check (a no-op draft sendable), each killed by the tests that should. **Not run:**
+`smoke-web-image.sh`; the CLI, SDKs and GitHub Action (none manages bindings); two editors at once; the SDK's cache against a
+live service; CI.
 
 ---
 
@@ -439,7 +529,7 @@ a budget the suite had quietly outgrown.
   genuinely breaks one.
 - **Separating two overlapping contract bindings needs a distinct precedence on *both*.** One
   with a value and one without is still a conflict, and bindings cannot be edited afterwards —
-  recorded as a hole below.
+  recorded as a hole below. *(Closed 2026-10-14, ADR-035: a binding can be changed and removed.)*
 - **The sidebar was dropping `aria-current`** the moment you moved between two child routes of
   one active row. Angular's `RouterLinkActive` strips the attribute on every navigation unless
   told to manage it with `ariaCurrentWhenActive`, and the hand-bound attribute the sidebar used
@@ -725,7 +815,7 @@ conflict".
 
 **Done 2026-08-15:** the design-system port — the prototype's tokens, a light theme, self-hosted
 fonts ([ADR-026](adr/026-self-hosted-web-fonts.md)), the sidebar shell, the icon set and the
-cards — and the Playwright suite that now pins it. The E2E suite stands at **225 tests across nineteen
+cards — and the Playwright suite that now pins it. The E2E suite stands at **234 tests across twenty
 specs** as of 2026-10-14, up from the 11 it launched with; `design-system.spec.ts` asserts the palette, both
 themes, the typography and the shell as **computed styles rather than pixel screenshots**, which
 are exact and identical on Windows and on CI's Linux. It exists because the placeholder palette
@@ -786,7 +876,9 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~Nine routes answered anonymously on a claimed instance~~ | **Closed 2026-09-24**, thirteen months of exposure after [ADR-027](adr/027-read-requires-authentication.md) said they did not: three governance `GET`s, five read-shaped `POST`s, and `POST …/environments/{env}/bootstrap`, which returns every subject and schema in an environment. `EveryRouteUnderV1DeclaresAScope` now covers reads, not only mutations. |
 | ~~Signup named its reason for refusing~~ | **Narrowed 2026-09-24.** The neutral `detail` was the only neutral part; the code, title and type URI all said `user_already_exists`. Now `signup_refused`. Not closed: synchronous provisioning still distinguishes refusal from creation — [M9.2](plan/M9-cloud.md) says what closing it would take. |
 | **Approval reviewers do not exist** | Anyone with `subject:admin` can approve anything. A reviewer *set* was deferred to M8 and M8 did not build it. |
-| **A contract's bindings cannot be edited or removed** | There is an `add` endpoint for each kind and nothing else, so a binding added without a precedence can never be separated from a later overlapping one — the registry's own refusal says to "give the two bindings different precedence values", and the first has none to change. Found by the web app's first real overlap test (2026-10-13); the form now says to set precedence up front, which is a workaround, not a fix. |
+| ~~A contract's bindings cannot be edited or removed~~ | **Closed 2026-10-14** ([ADR-035](adr/035-contract-bindings-have-an-identity.md)): every binding has an id, and `PUT`/`DELETE` on `…/publishes/{id}` and `…/consumes/{id}` change its subjects and precedence or remove it, with the overlap rule run again for an edit. A binding added without a precedence can now be given one, and the overlapping binding that was refused is then accepted. What it was: there was an `add` endpoint for each kind and nothing else, so a binding added without a precedence could never be separated from a later overlapping one, and the registry's own refusal says to "give the two bindings different precedence values". Found by the web app's first real overlap test (2026-10-13). |
+| **Dependency advisories are live, and an audit finding is an error** | Found 2026-10-14. NuGet audit runs at restore and `TreatWarningsAsErrors` makes a finding fatal, so an advisory published against any transitive package breaks the next fresh restore (any push, any image build) with no change to the repository, as five against `System.Security.Cryptography.Pkcs`/`.Xml` did a day after the same sources had built. They are pinned forward (`538e8d9`), which is how SSH.NET was handled, and it will recur. The alternatives are a scheduled job that restores and reports before a push does, or a lock file (`RestorePackagesWithLockFile` breaks solution restore on SDK 10.0.301); neither is done. |
+| **The audit read throws on an action its build does not know** | `AuditEntryConfiguration` throws on a stored action it was not taught, so rolling back past a change that adds an action breaks the audit page for as long as such a row exists (ADR-033, ADR-035). The notification pump and the subscription read were made tolerant on 2026-10-14; this one was not. The web app already shows an unknown action as received. Separable. |
 | ~~No screen creates a subject~~ | **Closed 2026-10-13** by `/subjects/new-subject` ([ADR-030](adr/030-create-subject-screen.md)): M4's exit criterion had been recorded as met when its first step was not, and the list's "New subject" was a button with no handler. What is left of it is the next row. |
 | ~~No screen edits a subject afterwards~~ | **Closed 2026-10-13** by the panels on a subject's page ([ADR-032](adr/032-subject-settings.md)): Change owner (`subject:write` or `subject:admin`) and Change policy (`subject:admin`), each two clicks, each saying only what the registry was measured to do. Name, format and content model remain permanent (probed: `PATCH` ignores them and answers 200). **Deprecating and retiring are left out on purpose**: neither can be undone, and deprecating notifies every subscriber. The CLI still edits neither. |
 | ~~A subject with no policy of its own is judged by `BACKWARD · WIRE_JSON`, not by its environment's default~~ | **Closed 2026-10-13** by [ADR-033](adr/033-inherit-means-the-environments-default.md): registration, the dry-run `check` and the diff read the environment's default, through `EnvironmentPolicies.EffectiveFor`, as impact analysis and promotion always did. **A behaviour change** for every environment whose default is not the built-in (see the section at the top for what to check). Pinned by `InheritedPolicyApiTests`, the three handler test classes, and `e2e/subject-settings.spec.ts` and `e2e/environment-default.spec.ts`. |
@@ -808,7 +900,7 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | ~~A page reload signs you out~~ | **Closed 2026-08-14** by decision 26 — an httpOnly `SameSite=Strict` cookie and a `/auth/resume` route that is the only thing accepting it. The credential still never touches `localStorage`. |
 | ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Still on, and now audible** (decision 27). The API logs a warning naming both ways to close it and repeats hourly until claimed; the web app shows a banner. Verified against a real container. |
-| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 225 tests today across nineteen specs, up from the 11 it launched with, and run against the production image as well as the dev server. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
+| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 234 tests today across twenty specs, up from the 11 it launched with, and run against the production image as well as the dev server. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
 | ~~`Tenant` is not an aggregate~~ | **Closed by M9.1**, recorded here 2026-09-24 — `Tenant.Create` carries the name and slug invariants, signup writes a row per organisation, bootstrap writes the self-hosted one, and `CloudTenancyTests` drives two organisations through the real host. Self-hosted still holds exactly one row, `TenantId.SelfHosted`: the profiles differ in how many rows there are, not in whether the table means anything. |
 | ~~The derived-environment-id decision is unmade~~ | **Closed 2026-08-14.** Adopted, by creating rows that carry the derived id. No migration, and no orphaned subjects. |
 
@@ -832,20 +924,20 @@ Nothing here can be done from inside the repository.
 
 ## What the tests actually cover
 
-Six kinds, not one. Worth knowing which, because "1,710 tests" says nothing about what would
+Six kinds, not one. Worth knowing which, because "1,762 tests" says nothing about what would
 survive being wrong.
 
 | Kind | Where | Tests | What it proves |
 |---|---|---|---|
-| Domain unit | `Domain.Tests`, three `Formats.*` | ~911 | Invariants in isolation. No I/O |
-| Application handler | `Application.Tests` | 213 | Handler refusals and **ordering**, with hand-written fakes |
-| HTTP integration | `Api.IntegrationTests` | 292 | Real HTTP against real PostgreSQL, via Testcontainers |
+| Domain unit | `Domain.Tests`, three `Formats.*` | ~927 | Invariants in isolation. No I/O |
+| Application handler | `Application.Tests` | 232 | Handler refusals and **ordering**, with hand-written fakes |
+| HTTP integration | `Api.IntegrationTests` | 309 | Real HTTP against real PostgreSQL, via Testcontainers |
 | Conformance corpus | `Conformance` | 104, over 103 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 64 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
-| Browser end-to-end | `web/e2e` | 225 | A real Chromium against the real stack, design system included — and against the production image |
+| Browser end-to-end | `web/e2e` | 234 | A real Chromium against the real stack, design system included — and against the production image |
 
-Plus 1,435 Angular unit tests. *(Counts above re-measured 2026-10-14; the unit rows are approximate because
+Plus 1,504 Angular unit tests. *(Counts above re-measured 2026-10-14; the unit rows are approximate because
 the assemblies that do not fit a row — the client, the CLI and the contract testing — are not in them.)*
 
 **No mocking framework, deliberately.** No Moq, NSubstitute, FluentAssertions or AutoFixture —

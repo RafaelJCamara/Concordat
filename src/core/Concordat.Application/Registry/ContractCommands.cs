@@ -59,6 +59,44 @@ public sealed record AddConsumeBindingCommand(
 public sealed record SetContractEnforcementCommand(
     string? EnvironmentName, string? ContractName, string? Enforcement) : ICommand<Contract>;
 
+/// <summary>Changes which subjects a publish binding carries, and its precedence.</summary>
+/// <param name="EnvironmentName">Which environment.</param>
+/// <param name="ContractName">Which contract.</param>
+/// <param name="BindingId">Which binding.</param>
+/// <param name="Subjects">The subjects it should carry from now on.</param>
+/// <param name="Precedence">Its precedence, or <see langword="null"/> for none.</param>
+public sealed record ReplacePublishBindingCommand(
+    string? EnvironmentName,
+    string? ContractName,
+    Guid BindingId,
+    IReadOnlyList<SubjectRefInput>? Subjects,
+    int? Precedence) : ICommand<Contract>;
+
+/// <summary>Removes a publish binding from a contract.</summary>
+/// <param name="EnvironmentName">Which environment.</param>
+/// <param name="ContractName">Which contract.</param>
+/// <param name="BindingId">Which binding.</param>
+public sealed record RemovePublishBindingCommand(
+    string? EnvironmentName, string? ContractName, Guid BindingId) : ICommand<Contract>;
+
+/// <summary>Changes which subjects a consume binding expects.</summary>
+/// <param name="EnvironmentName">Which environment.</param>
+/// <param name="ContractName">Which contract.</param>
+/// <param name="BindingId">Which binding.</param>
+/// <param name="Subjects">The subjects it should expect from now on.</param>
+public sealed record ReplaceConsumeBindingCommand(
+    string? EnvironmentName,
+    string? ContractName,
+    Guid BindingId,
+    IReadOnlyList<SubjectRefInput>? Subjects) : ICommand<Contract>;
+
+/// <summary>Removes a consume binding from a contract.</summary>
+/// <param name="EnvironmentName">Which environment.</param>
+/// <param name="ContractName">Which contract.</param>
+/// <param name="BindingId">Which binding.</param>
+public sealed record RemoveConsumeBindingCommand(
+    string? EnvironmentName, string? ContractName, Guid BindingId) : ICommand<Contract>;
+
 /// <summary>Lists an environment's contracts.</summary>
 /// <param name="EnvironmentName">Which environment.</param>
 public sealed record ListContractsQuery(string? EnvironmentName)
@@ -387,6 +425,278 @@ public sealed class SetContractEnforcementHandler(
     }
 }
 
+/// <summary>Handles <see cref="ReplacePublishBindingCommand"/>.</summary>
+/// <remarks>
+/// <para>
+/// <b>One audit entry of its own action, as the authenticated caller, in the same unit of work as
+/// the change.</b> The command carries no actor, so a request cannot name another, and the entry
+/// says what changed (only the parts that did) rather than describing the binding all over again.
+/// </para>
+/// <para>
+/// <b>A change that changes nothing writes nothing</b>, and answers as the success it is, with the
+/// contract as it stands: the rule a policy change and an idempotent registration follow. A
+/// refused request (an unknown contract or binding, nothing to carry, or an edit that would leave
+/// two overlapping bindings carrying different subjects with no precedence between them) never
+/// reaches a commit. The order of refusals is the order of the other handlers: the contract
+/// (404), the binding (404), the subjects (400), then the invariant (409).
+/// </para>
+/// <para>
+/// <b>Nobody is notified.</b> There is no <c>IOutbox</c> here and no event for it, and that is a
+/// decision, not an omission (ADR-035).
+/// </para>
+/// </remarks>
+public sealed class ReplacePublishBindingHandler(
+    IEnvironmentRepository environments,
+    IContractRepository contracts,
+    IAuditLog audit,
+    ICallerContext caller,
+    IUnitOfWork unitOfWork,
+    TimeProvider clock)
+    : ICommandHandler<ReplacePublishBindingCommand, Contract>
+{
+    /// <inheritdoc />
+    public async Task<Result<Contract>> HandleAsync(
+        ReplacePublishBindingCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var found = await ContractPolicies.RequireAsync(
+            environments, contracts, command.EnvironmentName, command.ContractName,
+            cancellationToken).ConfigureAwait(false);
+
+        if (found.IsFailure)
+        {
+            return found;
+        }
+
+        var binding = found.Value.Publishes.FirstOrDefault(b => b.Id == command.BindingId);
+        if (binding is null)
+        {
+            return Result<Contract>.Failure(
+                ConcordatCodes.BindingNotFound,
+                $"This contract has no publish binding '{command.BindingId}'.");
+        }
+
+        var subjects = ContractPolicies.ParseSubjects(command.Subjects, out var refs);
+        if (subjects.IsFailure)
+        {
+            return Result<Contract>.Failure(subjects.Error!);
+        }
+
+        // What it was, before it is changed, for the entry.
+        var previousSubjects = binding.Subjects;
+        var previousPrecedence = binding.Precedence;
+
+        var replaced = found.Value.ReplacePublish(binding.Id, refs, command.Precedence);
+        if (replaced.IsFailure)
+        {
+            return Result<Contract>.Failure(replaced.Error!);
+        }
+
+        if (!replaced.Value)
+        {
+            return found;
+        }
+
+        var changes = new List<string>(2);
+
+        if (previousPrecedence != command.Precedence)
+        {
+            changes.Add(
+                $"precedence {ContractPolicies.Describe(previousPrecedence)} -> " +
+                ContractPolicies.Describe(command.Precedence));
+        }
+
+        if (!previousSubjects.SequenceEqual(refs))
+        {
+            changes.Add(
+                $"subjects {ContractPolicies.Describe(previousSubjects)} -> " +
+                ContractPolicies.Describe(refs));
+        }
+
+        audit.Append(AuditEntry.Record(
+            found.Value.EnvironmentId,
+            AuditAction.ContractBindingChanged,
+            caller.Current.Actor,
+            found.Value.Name,
+            clock.GetUtcNow(),
+            $"publish {binding.Exchange} / {binding.RoutingKeyPattern.Value}: " +
+            string.Join("; ", changes)));
+
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return found;
+    }
+}
+
+/// <summary>Handles <see cref="RemovePublishBindingCommand"/>.</summary>
+/// <remarks>
+/// The entry reads the way the one for adding it did (<c>publish orders / orders.# -&gt; a@latest</c>),
+/// so the trail can be read as "this was added" and later "this was removed" about the same text.
+/// Removing a binding can stop a route being governed by this contract, which is not a refusal and
+/// is the confirmation's to say, not this handler's.
+/// </remarks>
+public sealed class RemovePublishBindingHandler(
+    IEnvironmentRepository environments,
+    IContractRepository contracts,
+    IAuditLog audit,
+    ICallerContext caller,
+    IUnitOfWork unitOfWork,
+    TimeProvider clock)
+    : ICommandHandler<RemovePublishBindingCommand, Contract>
+{
+    /// <inheritdoc />
+    public async Task<Result<Contract>> HandleAsync(
+        RemovePublishBindingCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var found = await ContractPolicies.RequireAsync(
+            environments, contracts, command.EnvironmentName, command.ContractName,
+            cancellationToken).ConfigureAwait(false);
+
+        if (found.IsFailure)
+        {
+            return found;
+        }
+
+        var binding = found.Value.Publishes.FirstOrDefault(b => b.Id == command.BindingId);
+
+        var removed = found.Value.RemovePublish(command.BindingId);
+        if (removed.IsFailure)
+        {
+            return Result<Contract>.Failure(removed.Error!);
+        }
+
+        audit.Append(AuditEntry.Record(
+            found.Value.EnvironmentId,
+            AuditAction.ContractBindingRemoved,
+            caller.Current.Actor,
+            found.Value.Name,
+            clock.GetUtcNow(),
+            $"publish {binding!.Exchange} / {binding.RoutingKeyPattern.Value} -> " +
+            ContractPolicies.Describe(binding.Subjects)));
+
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return found;
+    }
+}
+
+/// <summary>Handles <see cref="ReplaceConsumeBindingCommand"/>.</summary>
+/// <remarks>
+/// The same rules as <see cref="ReplacePublishBindingHandler"/>, on the one thing a consume
+/// binding lets change: which subjects it expects.
+/// </remarks>
+public sealed class ReplaceConsumeBindingHandler(
+    IEnvironmentRepository environments,
+    IContractRepository contracts,
+    IAuditLog audit,
+    ICallerContext caller,
+    IUnitOfWork unitOfWork,
+    TimeProvider clock)
+    : ICommandHandler<ReplaceConsumeBindingCommand, Contract>
+{
+    /// <inheritdoc />
+    public async Task<Result<Contract>> HandleAsync(
+        ReplaceConsumeBindingCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var found = await ContractPolicies.RequireAsync(
+            environments, contracts, command.EnvironmentName, command.ContractName,
+            cancellationToken).ConfigureAwait(false);
+
+        if (found.IsFailure)
+        {
+            return found;
+        }
+
+        var binding = found.Value.Consumes.FirstOrDefault(b => b.Id == command.BindingId);
+        if (binding is null)
+        {
+            return Result<Contract>.Failure(
+                ConcordatCodes.BindingNotFound,
+                $"This contract has no consume binding '{command.BindingId}'.");
+        }
+
+        var subjects = ContractPolicies.ParseSubjects(command.Subjects, out var refs);
+        if (subjects.IsFailure)
+        {
+            return Result<Contract>.Failure(subjects.Error!);
+        }
+
+        var previousSubjects = binding.Subjects;
+
+        var replaced = found.Value.ReplaceConsume(binding.Id, refs);
+        if (replaced.IsFailure)
+        {
+            return Result<Contract>.Failure(replaced.Error!);
+        }
+
+        if (!replaced.Value)
+        {
+            return found;
+        }
+
+        audit.Append(AuditEntry.Record(
+            found.Value.EnvironmentId,
+            AuditAction.ContractBindingChanged,
+            caller.Current.Actor,
+            found.Value.Name,
+            clock.GetUtcNow(),
+            $"consume {binding.Queue}: subjects {ContractPolicies.Describe(previousSubjects)} -> " +
+            ContractPolicies.Describe(refs)));
+
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return found;
+    }
+}
+
+/// <summary>Handles <see cref="RemoveConsumeBindingCommand"/>.</summary>
+public sealed class RemoveConsumeBindingHandler(
+    IEnvironmentRepository environments,
+    IContractRepository contracts,
+    IAuditLog audit,
+    ICallerContext caller,
+    IUnitOfWork unitOfWork,
+    TimeProvider clock)
+    : ICommandHandler<RemoveConsumeBindingCommand, Contract>
+{
+    /// <inheritdoc />
+    public async Task<Result<Contract>> HandleAsync(
+        RemoveConsumeBindingCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var found = await ContractPolicies.RequireAsync(
+            environments, contracts, command.EnvironmentName, command.ContractName,
+            cancellationToken).ConfigureAwait(false);
+
+        if (found.IsFailure)
+        {
+            return found;
+        }
+
+        var binding = found.Value.Consumes.FirstOrDefault(b => b.Id == command.BindingId);
+
+        var removed = found.Value.RemoveConsume(command.BindingId);
+        if (removed.IsFailure)
+        {
+            return Result<Contract>.Failure(removed.Error!);
+        }
+
+        audit.Append(AuditEntry.Record(
+            found.Value.EnvironmentId,
+            AuditAction.ContractBindingRemoved,
+            caller.Current.Actor,
+            found.Value.Name,
+            clock.GetUtcNow(),
+            $"consume {binding!.Queue} -> {ContractPolicies.Describe(binding.Subjects)}"));
+
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return found;
+    }
+}
+
 /// <summary>Handles <see cref="ListContractsQuery"/>.</summary>
 public sealed class ListContractsHandler(
     IEnvironmentRepository environments, IContractRepository contracts)
@@ -583,6 +893,14 @@ internal static class ContractPolicies
                 $"No contract named '{trimmed}' in environment '{environment.Value.Name.Value}'.")
             : Result<Contract>.Success(contract);
     }
+
+    /// <summary>A subject list as the audit trail writes it: <c>a@latest, b@2</c>.</summary>
+    public static string Describe(IEnumerable<SubjectRef> refs) =>
+        string.Join(", ", refs.Select(r => $"{r.Subject.Value}@{r.Selector}"));
+
+    /// <summary>A precedence as the audit trail writes it: the number, or <c>none</c>.</summary>
+    public static string Describe(int? precedence) =>
+        precedence is { } value ? value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "none";
 
     /// <summary>The virtual host, defaulting to the broker's own default.</summary>
     public static string Vhost(string? value) =>

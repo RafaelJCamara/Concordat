@@ -27,6 +27,8 @@ export interface SubjectRef {
 
 /** What a publisher on an exchange may send. */
 export interface PublishBinding {
+  /** Its identity: what a change or a removal addresses. Stable for the life of the binding. */
+  readonly id: string;
   readonly exchange: string;
   /** An AMQP topic pattern. `*` is one word and `#` is any number of them. */
   readonly routingKeyPattern: string;
@@ -40,6 +42,8 @@ export interface PublishBinding {
 
 /** What a queue is expected to receive. */
 export interface ConsumeBinding {
+  /** Its identity: what a change or a removal addresses. Stable for the life of the binding. */
+  readonly id: string;
   readonly queue: string;
   readonly brokerId: string | null;
   readonly virtualHost: string;
@@ -57,6 +61,14 @@ export interface Contract {
 
 /** The selector a subject reference gets when its author names none. */
 export const DEFAULT_SELECTOR = 'latest';
+
+/**
+ * Writes subject references the way they are typed, so changing a binding starts from what it
+ * carries: `orders.created@latest, orders.updated@>=2`. The inverse of {@link parseSubjectRefs}.
+ */
+export function formatSubjectRefs(refs: readonly SubjectRef[]): string {
+  return refs.map((ref) => `${ref.subject}@${ref.selector}`).join(', ');
+}
 
 /**
  * Reads subject references as people type them: `orders.created`, `orders.created@2` or
@@ -99,4 +111,11 @@ export function parseSubjectRefs(text: string): readonly SubjectRef[] | null {
   }
 
   return refs;
+}
+
+/** Says which part of the subjects text is the problem, rather than that something is. */
+export function subjectsRefusal(text: string): string {
+  return text.trim() === ''
+    ? 'Name at least one subject.'
+    : 'Each subject needs a name before the @ and a version after it, like orders.created@2.';
 }

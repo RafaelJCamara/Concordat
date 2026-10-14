@@ -76,6 +76,57 @@ public static class ContractEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict)
             .RequireScope(Scope.ContractWrite);
 
+        group.MapPut("/{contract}/publishes/{binding:guid}", ReplacePublishBinding)
+            .WithSummary("Change a publish binding's subjects and precedence")
+            .WithDescription(
+                "Replaces the subjects and the precedence of one binding; send no precedence to " +
+                "clear it. The exchange, pattern and scope are what the binding is and cannot be " +
+                "changed: remove it and add another. The overlap rule that applies when adding " +
+                "applies here, and a refused change leaves the binding as it was (409). This is " +
+                "how a binding added without a precedence is given one, so that a later " +
+                "overlapping binding can be separated from it. A request that changes nothing " +
+                "answers 200 and records nothing. A change is recorded in the audit trail as " +
+                "CONTRACT_BINDING_CHANGED, naming the caller. Nobody is notified.")
+            .Produces<ContractResponse>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .RequireScope(Scope.ContractWrite);
+
+        group.MapDelete("/{contract}/publishes/{binding:guid}", RemovePublishBinding)
+            .WithSummary("Remove a publish binding")
+            .WithDescription(
+                "The routes it governed stop being governed by this binding. A route that " +
+                "nothing else governs (no other binding of this contract matches it, and no other " +
+                "contract does) resolves as ungoverned (OFF) from the next resolution. " +
+                "Removing it again is 404. Recorded in the audit trail as " +
+                "CONTRACT_BINDING_REMOVED, naming the caller. Nobody is notified.")
+            .Produces<ContractResponse>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.ContractWrite);
+
+        group.MapPut("/{contract}/consumes/{binding:guid}", ReplaceConsumeBinding)
+            .WithSummary("Change a consume binding's subjects")
+            .WithDescription(
+                "Replaces the subjects of one binding. The queue and scope cannot be changed. " +
+                "Refused (409) when another binding for the same queue would then expect " +
+                "different subjects. A request that changes nothing answers 200 and records " +
+                "nothing; a change is recorded as CONTRACT_BINDING_CHANGED. Nobody is notified.")
+            .Produces<ContractResponse>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .RequireScope(Scope.ContractWrite);
+
+        group.MapDelete("/{contract}/consumes/{binding:guid}", RemoveConsumeBinding)
+            .WithSummary("Remove a consume binding")
+            .WithDescription(
+                "Recorded in the audit trail as CONTRACT_BINDING_REMOVED, naming the caller. " +
+                "Removing it again is 404. Nobody is notified.")
+            .Produces<ContractResponse>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.ContractWrite);
+
         group.MapPut("/{contract}/enforcement", SetEnforcement)
             .WithSummary("Change how much a contract may do")
             .Produces<ContractResponse>()
@@ -177,6 +228,77 @@ public static class ContractEndpoints
                 ContractResponse.From(result.Value));
     }
 
+    private static async Task<IResult> ReplacePublishBinding(
+        string env,
+        string contract,
+        Guid binding,
+        ReplacePublishBindingRequest request,
+        IDispatcher dispatcher,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var result = await dispatcher.SendAsync(
+            new ReplacePublishBindingCommand(
+                env, contract, binding, request.Subjects, request.Precedence),
+            cancellationToken).ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(ContractResponse.From(result.Value));
+    }
+
+    private static async Task<IResult> RemovePublishBinding(
+        string env,
+        string contract,
+        Guid binding,
+        IDispatcher dispatcher,
+        CancellationToken cancellationToken)
+    {
+        var result = await dispatcher.SendAsync(
+            new RemovePublishBindingCommand(env, contract, binding),
+            cancellationToken).ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(ContractResponse.From(result.Value));
+    }
+
+    private static async Task<IResult> ReplaceConsumeBinding(
+        string env,
+        string contract,
+        Guid binding,
+        ReplaceConsumeBindingRequest request,
+        IDispatcher dispatcher,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var result = await dispatcher.SendAsync(
+            new ReplaceConsumeBindingCommand(env, contract, binding, request.Subjects),
+            cancellationToken).ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(ContractResponse.From(result.Value));
+    }
+
+    private static async Task<IResult> RemoveConsumeBinding(
+        string env,
+        string contract,
+        Guid binding,
+        IDispatcher dispatcher,
+        CancellationToken cancellationToken)
+    {
+        var result = await dispatcher.SendAsync(
+            new RemoveConsumeBindingCommand(env, contract, binding),
+            cancellationToken).ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(ContractResponse.From(result.Value));
+    }
+
     private static async Task<IResult> SetEnforcement(
         string env,
         string contract,
@@ -256,6 +378,16 @@ public sealed record AddConsumeBindingRequest(
     Guid? BrokerId = null,
     string? VirtualHost = null);
 
+/// <summary>Request to change a publish binding.</summary>
+/// <param name="Subjects">The subjects it should carry from now on.</param>
+/// <param name="Precedence">Its precedence; omit or send null to clear it.</param>
+public sealed record ReplacePublishBindingRequest(
+    IReadOnlyList<SubjectRefInput> Subjects, int? Precedence = null);
+
+/// <summary>Request to change a consume binding.</summary>
+/// <param name="Subjects">The subjects it should expect from now on.</param>
+public sealed record ReplaceConsumeBindingRequest(IReadOnlyList<SubjectRefInput> Subjects);
+
 /// <summary>Request to change enforcement.</summary>
 /// <param name="Enforcement"><c>OFF</c>, <c>MONITOR</c> or <c>ENFORCE</c>.</param>
 public sealed record SetEnforcementRequest(string Enforcement);
@@ -295,6 +427,7 @@ public sealed record SubjectRefResponse(string Subject, string Selector)
 }
 
 /// <summary>A publish binding.</summary>
+/// <param name="Id">Its identity, which a change or a removal addresses.</param>
 /// <param name="Exchange">The exchange.</param>
 /// <param name="RoutingKeyPattern">The pattern.</param>
 /// <param name="BrokerId">The broker, or null for all of them.</param>
@@ -302,6 +435,7 @@ public sealed record SubjectRefResponse(string Subject, string Selector)
 /// <param name="Precedence">Which binding wins when two overlap.</param>
 /// <param name="Subjects">The subjects permitted.</param>
 public sealed record PublishBindingResponse(
+    Guid Id,
     string Exchange,
     string RoutingKeyPattern,
     Guid? BrokerId,
@@ -310,11 +444,13 @@ public sealed record PublishBindingResponse(
     IReadOnlyList<SubjectRefResponse> Subjects);
 
 /// <summary>A consume binding.</summary>
+/// <param name="Id">Its identity, which a change or a removal addresses.</param>
 /// <param name="Queue">The queue.</param>
 /// <param name="BrokerId">The broker, or null for all of them.</param>
 /// <param name="VirtualHost">The virtual host.</param>
 /// <param name="Subjects">The subjects expected.</param>
 public sealed record ConsumeBindingResponse(
+    Guid Id,
     string Queue,
     Guid? BrokerId,
     string VirtualHost,
@@ -345,6 +481,7 @@ public sealed record ContractResponse(
             EnforcementToken(contract.Enforcement),
             contract.CreatedAt,
             [.. contract.Publishes.Select(b => new PublishBindingResponse(
+                b.Id,
                 b.Exchange,
                 b.RoutingKeyPattern.Value,
                 b.Scope.BrokerId,
@@ -352,6 +489,7 @@ public sealed record ContractResponse(
                 b.Precedence,
                 [.. b.Subjects.Select(SubjectRefResponse.From)]))],
             [.. contract.Consumes.Select(b => new ConsumeBindingResponse(
+                b.Id,
                 b.Queue,
                 b.Scope.BrokerId,
                 b.Scope.VirtualHost,

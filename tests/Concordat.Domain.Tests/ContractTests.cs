@@ -404,6 +404,259 @@ public class ContractTests
         Assert.False(contract.Consumes is ICollection<ConsumeBinding> { IsReadOnly: false });
     }
 
+    // ------------------------------------------------- editing and removing a binding
+
+    [Fact]
+    public void EveryBindingHasItsOwnIdentity()
+    {
+        // What an edit or a removal addresses. A binding used to have none, so it could not be
+        // named after it was added, and a binding added without a precedence could never be
+        // separated from a later overlapping one.
+        var contract = NewContract();
+        contract.AddPublish(Publish("orders.created", "acme.A"));
+        contract.AddPublish(Publish("orders.updated", "acme.A"));
+        contract.AddConsume(new ConsumeBinding(TopologyScope.Default, "q", [Ref("acme.A")]));
+
+        var ids = contract.Publishes.Select(b => b.Id)
+            .Concat(contract.Consumes.Select(b => b.Id)).ToList();
+
+        Assert.DoesNotContain(Guid.Empty, ids);
+        Assert.Equal(3, ids.Distinct().Count());
+    }
+
+    [Fact]
+    public void ThePrecedenceTrap_IsClosedByGivingTheFirstBindingOneAfterTheFact()
+    {
+        // The hole this closes, step by step. A is added with no precedence. B overlaps it and
+        // carries other subjects, so it is refused with advice to "give the two bindings different
+        // precedence values", and A has none to change.
+        var contract = NewContract();
+        contract.AddPublish(Publish("orders.#", "acme.Fallback"));
+        var specific = Publish("orders.created", "acme.Created", precedence: 10);
+
+        Assert.Equal(ConcordatCodes.BindingConflict, contract.AddPublish(specific).Error!.Code);
+
+        var first = contract.Publishes.Single();
+        var changed = contract.ReplacePublish(first.Id, first.Subjects, precedence: 1);
+
+        Assert.True(changed.IsSuccess, changed.Error?.Message);
+        Assert.True(changed.Value);
+        Assert.Equal(1, first.Precedence);
+        Assert.True(contract.AddPublish(specific).IsSuccess);
+    }
+
+    [Fact]
+    public void ReplacingABindingChangesItsSubjectsAndPrecedenceAndNothingElse()
+    {
+        var contract = NewContract();
+        contract.AddPublish(new PublishBinding(
+            new TopologyScope(Guid.CreateVersion7(), "/v"), "ex", Pattern("a.*"), [Ref("acme.A")], 3));
+        contract.AddPublish(Publish("zzz", "acme.Z"));
+        var binding = contract.Publishes[0];
+        var untouched = contract.Publishes[1];
+        var id = binding.Id;
+        var scope = binding.Scope;
+
+        var result = contract.ReplacePublish(id, [Ref("acme.B", "2"), Ref("acme.C")], precedence: null);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Equal(id, binding.Id);
+        Assert.Equal(scope, binding.Scope);
+        Assert.Equal("ex", binding.Exchange);
+        Assert.Equal("a.*", binding.RoutingKeyPattern.Value);
+        Assert.Null(binding.Precedence);
+        Assert.Equal(["acme.B", "acme.C"], binding.Subjects.Select(s => s.Subject.Value));
+        Assert.Equal("acme.Z", Assert.Single(untouched.Subjects).Subject.Value);
+    }
+
+    [Fact]
+    public void ReplacingABindingWithWhatItAlreadyHasChangesNothing()
+    {
+        // Reported, so a caller can say so and write nothing, the rule a policy change follows.
+        var contract = NewContract();
+        contract.AddPublish(Publish("orders.created", "acme.A", precedence: 4));
+        var binding = contract.Publishes.Single();
+
+        var result = contract.ReplacePublish(binding.Id, [Ref("acme.A")], precedence: 4);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.False(result.Value);
+    }
+
+    [Fact]
+    public void ReorderingSubjectsIsAChange()
+    {
+        // The order is stored and shown, so it is not nothing; only an identical request is.
+        var contract = NewContract();
+        contract.AddPublish(new PublishBinding(
+            TopologyScope.Default, "ex", Pattern("a"), [Ref("acme.A"), Ref("acme.B")]));
+        var binding = contract.Publishes.Single();
+
+        var result = contract.ReplacePublish(binding.Id, [Ref("acme.B"), Ref("acme.A")], null);
+
+        Assert.True(result.Value);
+        Assert.Equal(["acme.B", "acme.A"], binding.Subjects.Select(s => s.Subject.Value));
+    }
+
+    [Fact]
+    public void EqualisingPrecedenceWithAnOverlappingBindingIsRefusedAndChangesNothing()
+    {
+        // A deliberate ordering is the only thing that lets two overlapping bindings carry
+        // different subjects, so an edit may not quietly destroy it.
+        var contract = NewContract();
+        contract.AddPublish(Publish("orders.#", "acme.Fallback", precedence: 1));
+        contract.AddPublish(Publish("orders.created", "acme.Created", precedence: 10));
+        var fallback = contract.Publishes[0];
+
+        var result = contract.ReplacePublish(fallback.Id, fallback.Subjects, precedence: 10);
+
+        Assert.Equal(ConcordatCodes.BindingConflict, result.Error!.Code);
+        Assert.Equal(1, fallback.Precedence);
+    }
+
+    [Fact]
+    public void ClearingThePrecedenceThatSeparatedTwoBindingsIsRefused()
+    {
+        var contract = NewContract();
+        contract.AddPublish(Publish("orders.#", "acme.Fallback", precedence: 1));
+        contract.AddPublish(Publish("orders.created", "acme.Created", precedence: 10));
+        var specific = contract.Publishes[1];
+
+        var result = contract.ReplacePublish(specific.Id, specific.Subjects, precedence: null);
+
+        Assert.Equal(ConcordatCodes.BindingConflict, result.Error!.Code);
+        Assert.Equal(10, specific.Precedence);
+    }
+
+    [Fact]
+    public void ChangingSubjectsSoThatTwoOverlappingBindingsDisagreeIsRefusedAndChangesNothing()
+    {
+        var contract = NewContract();
+        contract.AddPublish(Publish("orders.*", "acme.Same"));
+        contract.AddPublish(Publish("*.created", "acme.Same"));
+        var second = contract.Publishes[1];
+
+        var result = contract.ReplacePublish(second.Id, [Ref("acme.Different")], precedence: null);
+
+        Assert.Equal(ConcordatCodes.BindingConflict, result.Error!.Code);
+        Assert.Contains("orders.created", result.Error.Message, StringComparison.Ordinal);
+        Assert.Equal("acme.Same", Assert.Single(second.Subjects).Subject.Value);
+    }
+
+    [Fact]
+    public void ABindingIsNotInConflictWithItself()
+    {
+        // The check skips the binding being changed: it overlaps itself by definition.
+        var contract = NewContract();
+        contract.AddPublish(Publish("orders.*", "acme.A"));
+        var only = contract.Publishes.Single();
+
+        Assert.True(contract.ReplacePublish(only.Id, [Ref("acme.B")], precedence: null).IsSuccess);
+    }
+
+    [Fact]
+    public void ReplacingAnUnknownPublishBindingIsBindingNotFound()
+    {
+        var contract = NewContract();
+        contract.AddPublish(Publish("orders.created", "acme.A"));
+
+        var result = contract.ReplacePublish(Guid.CreateVersion7(), [Ref("acme.A")], null);
+
+        Assert.Equal(ConcordatCodes.BindingNotFound, result.Error!.Code);
+    }
+
+    [Fact]
+    public void ARemovedPublishBindingIsGoneAndTheOthersAreUntouched()
+    {
+        var contract = NewContract();
+        contract.AddPublish(Publish("orders.created", "acme.A"));
+        contract.AddPublish(Publish("orders.updated", "acme.B"));
+        var gone = contract.Publishes[0].Id;
+        var kept = contract.Publishes[1];
+
+        var result = contract.RemovePublish(gone);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Same(kept, Assert.Single(contract.Publishes));
+        Assert.Empty(contract.ResolvePublish(Guid.CreateVersion7(), "/", "orders", "orders.created"));
+    }
+
+    [Fact]
+    public void RemovingAnUnknownOrAlreadyRemovedPublishBindingIsBindingNotFound()
+    {
+        var contract = NewContract();
+        contract.AddPublish(Publish("orders.created", "acme.A"));
+        var id = contract.Publishes.Single().Id;
+        contract.RemovePublish(id);
+
+        Assert.Equal(ConcordatCodes.BindingNotFound, contract.RemovePublish(id).Error!.Code);
+        Assert.Equal(
+            ConcordatCodes.BindingNotFound,
+            contract.RemovePublish(Guid.CreateVersion7()).Error!.Code);
+    }
+
+    [Fact]
+    public void ABindingCannotBeRemovedThroughTheOtherKindsId()
+    {
+        // A publish id is not a consume id: removing by the wrong kind must not find anything.
+        var contract = NewContract();
+        contract.AddPublish(Publish("orders.created", "acme.A"));
+        contract.AddConsume(new ConsumeBinding(TopologyScope.Default, "q", [Ref("acme.A")]));
+
+        Assert.Equal(
+            ConcordatCodes.BindingNotFound,
+            contract.RemoveConsume(contract.Publishes.Single().Id).Error!.Code);
+        Assert.Equal(
+            ConcordatCodes.BindingNotFound,
+            contract.RemovePublish(contract.Consumes.Single().Id).Error!.Code);
+        Assert.Single(contract.Publishes);
+        Assert.Single(contract.Consumes);
+    }
+
+    [Fact]
+    public void ReplacingAConsumeBindingChangesItsSubjectsAndNothingElse()
+    {
+        var contract = NewContract();
+        contract.AddConsume(new ConsumeBinding(TopologyScope.Default, "q", [Ref("acme.A")]));
+        var binding = contract.Consumes.Single();
+
+        var result = contract.ReplaceConsume(binding.Id, [Ref("acme.B", "3")]);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.True(result.Value);
+        Assert.Equal("q", binding.Queue);
+        Assert.Equal("acme.B", Assert.Single(binding.Subjects).Subject.Value);
+        Assert.False(contract.ReplaceConsume(binding.Id, [Ref("acme.B", "3")]).Value);
+    }
+
+    [Fact]
+    public void ChangingAConsumeBindingSoThatTheQueueDisagreesWithAnotherIsRefused()
+    {
+        // Two bindings for one queue that overlap in scope must agree, as when they were added.
+        var contract = NewContract();
+        contract.AddConsume(new ConsumeBinding(TopologyScope.Default, "q", [Ref("acme.A")]));
+        var second = new ConsumeBinding(TopologyScope.Default, "q", [Ref("acme.A")]);
+        contract.AddConsume(second);
+
+        var clash = contract.ReplaceConsume(second.Id, [Ref("acme.D")]);
+
+        Assert.Equal(ConcordatCodes.BindingConflict, clash.Error!.Code);
+        Assert.Equal("acme.A", Assert.Single(second.Subjects).Subject.Value);
+    }
+
+    [Fact]
+    public void ARemovedConsumeBindingIsGone()
+    {
+        var contract = NewContract();
+        contract.AddConsume(new ConsumeBinding(TopologyScope.Default, "q", [Ref("acme.A")]));
+
+        Assert.True(contract.RemoveConsume(contract.Consumes.Single().Id).IsSuccess);
+        Assert.Null(contract.ResolveConsume(Guid.CreateVersion7(), "/", "q"));
+        Assert.Equal(
+            ConcordatCodes.BindingNotFound,
+            contract.RemoveConsume(Guid.CreateVersion7()).Error!.Code);
+    }
+
     private static Result Bind(PublishBinding first, PublishBinding second)
     {
         var contract = NewContract();

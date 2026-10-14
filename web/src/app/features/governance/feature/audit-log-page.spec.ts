@@ -128,7 +128,9 @@ describe('AuditLogPage', () => {
       expect(options).toContain('VERSION_APPROVED');
       expect(options).toContain('API_KEY_REVOKED');
       expect(options).toContain('SUBJECT_POLICY_CHANGED');
-      expect(options).toHaveLength(25); // 24 actions and "any"
+      expect(options).toContain('CONTRACT_BINDING_CHANGED');
+      expect(options).toContain('CONTRACT_BINDING_REMOVED');
+      expect(options).toHaveLength(27); // 26 actions and "any"
     });
 
     it('widens to every environment, and says so in the heading', () => {

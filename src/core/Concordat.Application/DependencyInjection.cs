@@ -109,6 +109,14 @@ public static class DependencyInjection
         services.AddScoped<
             ICommandHandler<AddConsumeBindingCommand, Contract>, AddConsumeBindingHandler>();
         services.AddScoped<
+            ICommandHandler<ReplacePublishBindingCommand, Contract>, ReplacePublishBindingHandler>();
+        services.AddScoped<
+            ICommandHandler<RemovePublishBindingCommand, Contract>, RemovePublishBindingHandler>();
+        services.AddScoped<
+            ICommandHandler<ReplaceConsumeBindingCommand, Contract>, ReplaceConsumeBindingHandler>();
+        services.AddScoped<
+            ICommandHandler<RemoveConsumeBindingCommand, Contract>, RemoveConsumeBindingHandler>();
+        services.AddScoped<
             ICommandHandler<SetContractEnforcementCommand, Contract>,
             SetContractEnforcementHandler>();
         services.AddScoped<

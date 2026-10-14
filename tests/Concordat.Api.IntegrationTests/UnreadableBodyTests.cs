@@ -139,4 +139,57 @@ public class UnreadableBodyTests(ApiFactory factory)
             response.StatusCode == HttpStatusCode.BadRequest,
             $"{label}: expected 400, got {(int)response.StatusCode}.");
     }
+
+    private async Task<(string Environment, string Contract, Guid Publish, Guid Consume)>
+        NewContractWithBindingsAsync()
+    {
+        var environment = $"env-{Unique()}";
+        var contract = $"c-{Unique()}";
+        var client = factory.CreateClient();
+
+        (await client.PostAsJsonAsync(
+            "/v1/environments", new CreateEnvironmentRequest(environment), ApiFactory.Json))
+            .EnsureSuccessStatusCode();
+        (await client.PostAsJsonAsync(
+            $"/v1/environments/{environment}/contracts",
+            new CreateContractRequest(contract),
+            ApiFactory.Json)).EnsureSuccessStatusCode();
+
+        await client.PostAsJsonAsync(
+            $"/v1/environments/{environment}/contracts/{contract}/publishes",
+            new AddPublishBindingRequest(
+                "orders", "orders.*", [new SubjectRefInput("acme.A", "latest")]),
+            ApiFactory.Json);
+
+        var added = await ApiFactory.ReadAsync<ContractResponse>(
+            await client.PostAsJsonAsync(
+                $"/v1/environments/{environment}/contracts/{contract}/consumes",
+                new AddConsumeBindingRequest("q", [new SubjectRefInput("acme.A", "latest")]),
+                ApiFactory.Json));
+
+        return (environment, contract, added.Publishes.Single().Id, added.Consumes.Single().Id);
+    }
+
+    [Theory]
+    [InlineData("a lone surrogate in a subject", "{\"subjects\":[{\"subject\":\"acme.{S}\",\"selector\":\"latest\"}]}")]
+    [InlineData("a number for the subjects", "{\"subjects\":5}")]
+    [InlineData("a string for the precedence", "{\"subjects\":[],\"precedence\":\"high\"}")]
+    [InlineData("not JSON", "subjects=acme.A")]
+    public async Task AnUnreadableBindingChange_Is400NotA500(string label, string template)
+    {
+        var (environment, contract, publish, consume) = await NewContractWithBindingsAsync();
+        var body = template.Replace("{S}", LoneSurrogate, StringComparison.Ordinal);
+
+        var publishes = await factory.CreateClient().PutAsync(
+            $"/v1/environments/{environment}/contracts/{contract}/publishes/{publish}", Json(body));
+        var consumes = await factory.CreateClient().PutAsync(
+            $"/v1/environments/{environment}/contracts/{contract}/consumes/{consume}", Json(body));
+
+        Assert.True(
+            publishes.StatusCode == HttpStatusCode.BadRequest,
+            $"{label} (publish): expected 400, got {(int)publishes.StatusCode}.");
+        Assert.True(
+            consumes.StatusCode == HttpStatusCode.BadRequest,
+            $"{label} (consume): expected 400, got {(int)consumes.StatusCode}.");
+    }
 }

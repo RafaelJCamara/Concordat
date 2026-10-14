@@ -41,7 +41,7 @@ let nextId = 0;
           {{ busy() ? busyLabel() : confirmLabel() }}
         </button>
         <button hlmBtn type="button" variant="ghost" size="sm" (click)="declined.emit()">
-          Keep editing
+          {{ declineLabel() }}
         </button>
       </div>
     </div>
@@ -58,6 +58,9 @@ export class ChangeConfirmation {
   readonly busyLabel = input.required<string>();
 
   readonly busy = input(false);
+
+  /** The button that goes back. "Keep editing" when there is a form behind it; a removal has none. */
+  readonly declineLabel = input('Keep editing');
 
   readonly confirmed = output();
   readonly declined = output();

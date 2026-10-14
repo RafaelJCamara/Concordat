@@ -49,3 +49,4 @@ it; write a new one and mark the old **Superseded by**.
 | [032](032-subject-settings.md) | A subject's owner and policy are changed on its own page, and each confirmation says only what the registry was measured to do | Accepted |
 | [033](033-inherit-means-the-environments-default.md) | A subject with no policy of its own is judged by its environment's default, and changing a policy is audited | Accepted |
 | [034](034-a-policy-change-notifies-subscribers.md) | A subject's policy change notifies subscribers, and a subscription with no event filter is one | Accepted |
+| [035](035-contract-bindings-have-an-identity.md) | A contract's bindings have an identity, and can be changed and removed | Accepted |

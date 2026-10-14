@@ -1,9 +1,41 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SELECTOR, ENFORCEMENT_MODES, parseSubjectRefs } from './contract';
+import {
+  DEFAULT_SELECTOR,
+  ENFORCEMENT_MODES,
+  formatSubjectRefs,
+  parseSubjectRefs,
+} from './contract';
 
 // `parseSubjectRefs` checks shape and nothing else. Whether a subject exists, and whether a
 // selector is one the registry accepts, is the registry's to say — a second copy of that
 // grammar in the browser is one more place for the two to disagree.
+
+describe('formatSubjectRefs', () => {
+  // What fills the field when a binding is changed: the text a person would have typed to make
+  // exactly these references, so editing starts from what is stored and not from a blank.
+  it('writes each reference as subject@selector, comma separated, in order', () => {
+    expect(
+      formatSubjectRefs([
+        { subject: 'orders.created', selector: 'latest' },
+        { subject: 'orders.updated', selector: '>=2' },
+      ]),
+    ).toBe('orders.created@latest, orders.updated@>=2');
+  });
+
+  it('writes nothing for no references', () => {
+    expect(formatSubjectRefs([])).toBe('');
+  });
+
+  it('is the inverse of parseSubjectRefs, so what is shown can be sent back unchanged', () => {
+    const refs = [
+      { subject: 'a.b', selector: '3' },
+      { subject: 'c.d', selector: 'latest' },
+      { subject: 'e.f', selector: '>=1' },
+    ];
+
+    expect(parseSubjectRefs(formatSubjectRefs(refs))).toEqual(refs);
+  });
+});
 
 describe('parseSubjectRefs', () => {
   it('reads a bare subject as latest, which is what the registry would assume', () => {

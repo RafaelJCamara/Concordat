@@ -9,6 +9,8 @@ import {
   type AddConsumeBindingDto,
   type AddPublishBindingDto,
   type ContractDto,
+  type ReplaceConsumeBindingDto,
+  type ReplacePublishBindingDto,
 } from './contract-dtos';
 
 /** A publish binding as a person describes it. */
@@ -26,6 +28,18 @@ export interface NewConsumeBinding {
   readonly queue: string;
   readonly subjects: readonly SubjectRef[];
   readonly virtualHost: string;
+}
+
+/** What a publish binding is changed to: its subjects and its precedence, and nothing else. */
+export interface PublishBindingChange {
+  readonly subjects: readonly SubjectRef[];
+  /** Null clears it. */
+  readonly precedence: number | null;
+}
+
+/** What a consume binding is changed to. */
+export interface ConsumeBindingChange {
+  readonly subjects: readonly SubjectRef[];
 }
 
 /**
@@ -122,6 +136,63 @@ export class ContractsApi {
         body,
       )
       .pipe(map(toContract));
+  }
+
+  /**
+   * Replaces a publish binding's subjects and precedence.
+   *
+   * <b>A PUT replaces, so a null precedence is left off the body</b>: the registry reads an absent
+   * precedence as none, which is how one is cleared. The exchange, pattern and scope are not part
+   * of it and cannot be changed (remove the binding and add another).
+   */
+  replacePublishBinding(
+    environment: string,
+    name: string,
+    id: string,
+    change: PublishBindingChange,
+  ): Observable<Contract> {
+    const body: ReplacePublishBindingDto = {
+      subjects: change.subjects,
+      ...(change.precedence === null ? {} : { precedence: change.precedence }),
+    };
+
+    return this.http
+      .put<ContractDto>(this.bindingUrl(environment, name, 'publishes', id), body)
+      .pipe(map(toContract));
+  }
+
+  removePublishBinding(environment: string, name: string, id: string): Observable<Contract> {
+    return this.http
+      .delete<ContractDto>(this.bindingUrl(environment, name, 'publishes', id))
+      .pipe(map(toContract));
+  }
+
+  replaceConsumeBinding(
+    environment: string,
+    name: string,
+    id: string,
+    change: ConsumeBindingChange,
+  ): Observable<Contract> {
+    const body: ReplaceConsumeBindingDto = { subjects: change.subjects };
+
+    return this.http
+      .put<ContractDto>(this.bindingUrl(environment, name, 'consumes', id), body)
+      .pipe(map(toContract));
+  }
+
+  removeConsumeBinding(environment: string, name: string, id: string): Observable<Contract> {
+    return this.http
+      .delete<ContractDto>(this.bindingUrl(environment, name, 'consumes', id))
+      .pipe(map(toContract));
+  }
+
+  private bindingUrl(
+    environment: string,
+    name: string,
+    kind: 'publishes' | 'consumes',
+    id: string,
+  ): string {
+    return `${this.root(environment)}/contracts/${encodeURIComponent(name)}/${kind}/${encodeURIComponent(id)}`;
   }
 
   private root(environment: string): string {

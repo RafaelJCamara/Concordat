@@ -73,6 +73,12 @@ public enum AuditAction
     /// <summary>A binding was added to a contract.</summary>
     ContractBindingAdded,
 
+    /// <summary>A contract binding's subjects or precedence were changed.</summary>
+    ContractBindingChanged,
+
+    /// <summary>A binding was removed from a contract.</summary>
+    ContractBindingRemoved,
+
     /// <summary>A contract's enforcement mode changed.</summary>
     ContractEnforcementChanged,
 
@@ -242,6 +248,8 @@ public static class AuditTokens
         [AuditAction.BrokerCredentialRemoved] = "BROKER_CREDENTIAL_REMOVED",
         [AuditAction.ContractCreated] = "CONTRACT_CREATED",
         [AuditAction.ContractBindingAdded] = "CONTRACT_BINDING_ADDED",
+        [AuditAction.ContractBindingChanged] = "CONTRACT_BINDING_CHANGED",
+        [AuditAction.ContractBindingRemoved] = "CONTRACT_BINDING_REMOVED",
         [AuditAction.ContractEnforcementChanged] = "CONTRACT_ENFORCEMENT_CHANGED",
         [AuditAction.ServiceRegistered] = "SERVICE_REGISTERED",
         [AuditAction.MemberAdded] = "MEMBER_ADDED",

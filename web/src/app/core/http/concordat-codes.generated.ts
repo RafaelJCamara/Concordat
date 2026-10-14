@@ -25,6 +25,7 @@ export const DOMAIN_CONCORDAT_CODES = [
   'routing_key_pattern_invalid',
   'version_selector_invalid',
   'binding_conflict',
+  'binding_not_found',
   'contract_subject_not_permitted',
   'contract_version_not_permitted',
   'contract_subject_ambiguous',

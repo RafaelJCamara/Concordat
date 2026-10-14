@@ -73,6 +73,7 @@ public static class ProblemDetailsMapping
 
         // The request is well-formed; it is the existing bindings that refuse it.
         ConcordatCodes.BindingConflict => StatusCodes.Status409Conflict,
+        ConcordatCodes.BindingNotFound => StatusCodes.Status404NotFound,
 
         // Two requests raced at the database. See DbConflictExceptionHandler for where this
         // code comes from -- it is never raised by application code directly.

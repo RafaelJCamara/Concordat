@@ -31,6 +31,10 @@ interface Harness {
   setEnforcement: ReturnType<typeof vi.fn>;
   addPublishBinding: ReturnType<typeof vi.fn>;
   addConsumeBinding: ReturnType<typeof vi.fn>;
+  replacePublishBinding: ReturnType<typeof vi.fn>;
+  removePublishBinding: ReturnType<typeof vi.fn>;
+  replaceConsumeBinding: ReturnType<typeof vi.fn>;
+  removeConsumeBinding: ReturnType<typeof vi.fn>;
   lastSaved: WritableSignal<ContractAction | null>;
 }
 
@@ -48,6 +52,10 @@ function render(
   const setEnforcement = vi.fn();
   const addPublishBinding = vi.fn();
   const addConsumeBinding = vi.fn();
+  const replacePublishBinding = vi.fn();
+  const removePublishBinding = vi.fn();
+  const replaceConsumeBinding = vi.fn();
+  const removeConsumeBinding = vi.fn();
   const lastSaved = signal(state.lastSaved ?? null);
 
   TestBed.configureTestingModule({
@@ -70,6 +78,10 @@ function render(
             setEnforcement,
             addPublishBinding,
             addConsumeBinding,
+            replacePublishBinding,
+            removePublishBinding,
+            replaceConsumeBinding,
+            removeConsumeBinding,
           },
         },
       ],
@@ -88,6 +100,10 @@ function render(
     setEnforcement,
     addPublishBinding,
     addConsumeBinding,
+    replacePublishBinding,
+    removePublishBinding,
+    replaceConsumeBinding,
+    removeConsumeBinding,
     lastSaved,
   };
 }
@@ -120,7 +136,9 @@ describe('ContractDetailPage', () => {
   it('shows the bindings', () => {
     const { host } = render({
       contract: contract({
-        consumes: [{ queue: 'billing.orders', brokerId: null, virtualHost: '/', subjects: [] }],
+        consumes: [
+          { id: 'c1', queue: 'billing.orders', brokerId: null, virtualHost: '/', subjects: [] },
+        ],
       }),
     });
 
@@ -382,5 +400,169 @@ describe('ContractDetailPage', () => {
     const { host } = render({ lastSaved: 'publish' });
 
     expect(host.querySelector('[role="status"]')?.textContent).toContain('Publish binding added');
+  });
+
+  describe('changing and removing a binding', () => {
+    const fallback = {
+      id: 'p1',
+      exchange: 'orders',
+      routingKeyPattern: 'orders.#',
+      brokerId: null,
+      virtualHost: '/',
+      precedence: null,
+      subjects: [{ subject: 'orders.fallback', selector: 'latest' }],
+    };
+    const queue = {
+      id: 'c1',
+      queue: 'billing.orders',
+      brokerId: null,
+      virtualHost: '/',
+      subjects: [{ subject: 'orders.created', selector: '2' }],
+    };
+    const withBindings = () => contract({ publishes: [fallback], consumes: [queue] });
+
+    const named = (host: HTMLElement, label: string) =>
+      host.querySelector(`button[aria-label="${label}"]`) as HTMLButtonElement;
+
+    function press(host: HTMLElement, fixture: ComponentFixture<ContractDetailPage>, text: string) {
+      button(host, text)!.click();
+      fixture.detectChanges();
+    }
+
+    it('offers a binding Change and Remove to a writer', () => {
+      const { host } = render({ contract: withBindings() });
+
+      expect(named(host, 'Change orders / orders.#')).not.toBeNull();
+      expect(named(host, 'Remove billing.orders')).not.toBeNull();
+    });
+
+    it('offers nobody without contract:write either one, nor the editor', () => {
+      const { host } = render({ contract: withBindings() }, ['contract:read']);
+
+      expect(host.querySelector('button[aria-label^="Change"]')).toBeNull();
+      expect(host.querySelector('button[aria-label^="Remove"]')).toBeNull();
+      expect(host.querySelector('cd-binding-editor')).toBeNull();
+    });
+
+    it('shows no editor until one is asked for', () => {
+      expect(
+        render({ contract: withBindings() }).host.querySelector('cd-binding-editor'),
+      ).toBeNull();
+    });
+
+    it('changes a publish binding’s precedence on the second click, with its id', () => {
+      const { fixture, host, replacePublishBinding } = render({ contract: withBindings() });
+
+      named(host, 'Change orders / orders.#').click();
+      fixture.detectChanges();
+      fill(host, 'binding-precedence', '1');
+      fixture.detectChanges();
+      press(host, fixture, 'Review change');
+
+      expect(replacePublishBinding).not.toHaveBeenCalled();
+
+      press(host, fixture, 'Yes, change the binding');
+
+      expect(replacePublishBinding).toHaveBeenCalledWith({
+        id: 'p1',
+        subjects: fallback.subjects,
+        precedence: 1,
+      });
+    });
+
+    it('changes a consume binding’s subjects, with its id', () => {
+      const { fixture, host, replaceConsumeBinding } = render({ contract: withBindings() });
+
+      named(host, 'Change billing.orders').click();
+      fixture.detectChanges();
+      fill(host, 'binding-subjects', 'orders.created@3');
+      fixture.detectChanges();
+      press(host, fixture, 'Review change');
+      press(host, fixture, 'Yes, change the binding');
+
+      expect(replaceConsumeBinding).toHaveBeenCalledWith({
+        id: 'c1',
+        subjects: [{ subject: 'orders.created', selector: '3' }],
+      });
+    });
+
+    it('removes a publish binding only after the question', () => {
+      const { fixture, host, removePublishBinding } = render({ contract: withBindings() });
+
+      named(host, 'Remove orders / orders.#').click();
+      fixture.detectChanges();
+
+      expect(host.textContent).toContain('Remove the binding of orders / orders.#?');
+      expect(removePublishBinding).not.toHaveBeenCalled();
+
+      press(host, fixture, 'Yes, remove the binding');
+
+      expect(removePublishBinding).toHaveBeenCalledWith('p1');
+    });
+
+    it('removes a consume binding by its own id', () => {
+      const { fixture, host, removeConsumeBinding } = render({ contract: withBindings() });
+
+      named(host, 'Remove billing.orders').click();
+      fixture.detectChanges();
+      press(host, fixture, 'Yes, remove the binding');
+
+      expect(removeConsumeBinding).toHaveBeenCalledWith('c1');
+    });
+
+    it('goes back without sending anything', () => {
+      const { fixture, host, removePublishBinding } = render({ contract: withBindings() });
+
+      named(host, 'Remove orders / orders.#').click();
+      fixture.detectChanges();
+      press(host, fixture, 'Keep it');
+
+      expect(host.querySelector('cd-binding-editor')).toBeNull();
+      expect(removePublishBinding).not.toHaveBeenCalled();
+    });
+
+    it('closes the panel when the registry has stored the change', () => {
+      const { fixture, host, lastSaved } = render({ contract: withBindings() });
+
+      named(host, 'Change orders / orders.#').click();
+      fixture.detectChanges();
+      lastSaved.set('change');
+      fixture.detectChanges();
+
+      expect(host.querySelector('cd-binding-editor')).toBeNull();
+      expect(host.querySelector('[role="status"]')?.textContent).toContain('Binding changed');
+    });
+
+    it('says a removal was a removal', () => {
+      expect(render({ lastSaved: 'remove' }).host.textContent).toContain('Binding removed');
+    });
+
+    it('keeps the panel open with the registry’s refusal in it', () => {
+      // An overlap is an ordinary answer: the next move is to edit what was typed.
+      const { fixture, host } = render({
+        contract: withBindings(),
+        actionErrors: {
+          change: new ConcordatError({
+            status: 409,
+            code: 'binding_conflict',
+            detail: "'orders.created' overlaps 'orders.#'",
+          }),
+        },
+      });
+
+      named(host, 'Change orders / orders.#').click();
+      fixture.detectChanges();
+
+      expect(host.querySelector('cd-binding-editor')?.textContent).toContain(
+        "'orders.created' overlaps 'orders.#'",
+      );
+    });
+
+    it('no longer tells the person a binding cannot be edited once added', () => {
+      const { host } = render();
+
+      expect(host.textContent).not.toContain('cannot be edited once added');
+      expect(host.textContent).toContain('It can be changed afterwards');
+    });
   });
 });

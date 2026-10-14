@@ -1,20 +1,32 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmSkeleton } from '@spartan-ng/helm/skeleton';
 import { IfScope } from '../../../core/auth/if-scope';
+import { SessionStore } from '../../../core/auth/session-store';
 import { ActiveEnvironmentStore } from '../../../core/config/active-environment-store';
+import type { BindingChange } from '../../../domain/contracts/binding-edit';
 import {
   ENFORCEMENT_MODES,
   parseSubjectRefs,
+  subjectsRefusal,
   type EnforcementMode,
 } from '../../../domain/contracts/contract';
-import { CONTRACT_WRITE_SCOPES } from '../../../domain/identity/scope';
+import { CONTRACT_WRITE_SCOPES, grants } from '../../../domain/identity/scope';
 import { Icon } from '../../../shared/ui/icon/icon';
-import { ContractDetailStore } from '../application/contract-detail-store';
-import { BindingList } from '../ui/binding-list';
+import { ContractDetailStore, type ContractAction } from '../application/contract-detail-store';
+import { BindingEditor, type BindingTarget } from '../ui/binding-editor';
+import { BindingList, type BindingRef } from '../ui/binding-list';
 import { ENFORCEMENT_MEANING, EnforcementBadge } from '../ui/enforcement-badge';
 
 const INPUT =
@@ -53,6 +65,7 @@ const SUBJECTS_HELP =
     HlmSkeleton,
     IfScope,
     Icon,
+    BindingEditor,
     BindingList,
     EnforcementBadge,
   ],
@@ -152,7 +165,32 @@ const SUBJECTS_HELP =
           }
         </section>
 
-        <cd-binding-list [publishes]="contract.publishes" [consumes]="contract.consumes" />
+        <div *cdIfScope="writeScopes">
+          @if (active(); as work) {
+            <cd-binding-editor
+              [target]="work.target"
+              [mode]="work.mode"
+              [enforcement]="contract.enforcement"
+              [saving]="store.saving() !== null"
+              [error]="
+                (work.mode === 'change' ? store.actionErrors().change : store.actionErrors().remove)
+                  ?.detail ?? null
+              "
+              (changed)="applyChange(work.target, $event)"
+              (removed)="applyRemoval(work.target)"
+              (cancelled)="stopEditing()"
+            />
+          }
+        </div>
+
+        <cd-binding-list
+          [publishes]="contract.publishes"
+          [consumes]="contract.consumes"
+          [editable]="canWrite()"
+          [activeId]="editing()?.id ?? null"
+          (changeRequested)="startEditing($event, 'change')"
+          (removeRequested)="startEditing($event, 'remove')"
+        />
 
         <div *cdIfScope="writeScopes" class="grid gap-6 lg:grid-cols-2">
           <form
@@ -228,8 +266,8 @@ const SUBJECTS_HELP =
             </div>
             <p class="text-muted-foreground text-xs">
               Precedence decides which binding wins when two overlap, and it only separates them
-              when both have a value and the values differ. A binding cannot be edited once added,
-              so set one up front if another route may overlap this one.
+              when both have a value and the values differ. It can be changed afterwards, from the
+              binding's own Change button.
             </p>
 
             @if (publishError(); as message) {
@@ -331,6 +369,44 @@ export class ContractDetailPage {
   protected readonly writeScopes = CONTRACT_WRITE_SCOPES;
   protected readonly subjectsHelp = SUBJECTS_HELP;
 
+  private readonly session = inject(SessionStore);
+
+  /** Whether the caller may change a contract (the same rule as the `cdIfScope` guards). */
+  protected readonly canWrite = computed(
+    () => this.session.claimed() === false || grants(this.session.scopes(), CONTRACT_WRITE_SCOPES),
+  );
+
+  /** The binding being changed or removed, by kind and id, or null. */
+  protected readonly editing = signal<{
+    readonly kind: 'publish' | 'consume';
+    readonly id: string;
+    readonly mode: 'change' | 'remove';
+  } | null>(null);
+
+  /**
+   * The binding being worked on, read from the contract on screen rather than kept as a copy, so
+   * what the editor shows is always what the registry last said (and nothing when it is gone).
+   */
+  protected readonly active = computed(() => {
+    const work = this.editing();
+    const contract = this.store.contract();
+
+    if (work === null || contract === null) {
+      return null;
+    }
+
+    const target: BindingTarget | null =
+      work.kind === 'publish'
+        ? ((binding) => (binding ? { kind: 'publish' as const, binding } : null))(
+            contract.publishes.find((b) => b.id === work.id),
+          )
+        : ((binding) => (binding ? { kind: 'consume' as const, binding } : null))(
+            contract.consumes.find((b) => b.id === work.id),
+          );
+
+    return target === null ? null : { target, mode: work.mode };
+  });
+
   /** The mode picked in the selector but not yet applied, or null when it still shows the contract's own. */
   protected readonly chosen = signal<EnforcementMode | null>(null);
 
@@ -379,7 +455,41 @@ export class ContractDetailPage {
         this.chosen.set(null);
         this.confirming.set(false);
       }
+
+      // A stored change or removal closes its own panel. A refusal keeps it open, with the
+      // registry's words in it, because the next move is to edit what was typed.
+      if (saved === 'change' || saved === 'remove') {
+        this.editing.set(null);
+      }
     });
+  }
+
+  protected startEditing(binding: BindingRef, mode: 'change' | 'remove'): void {
+    this.editing.set({ ...binding, mode });
+  }
+
+  protected stopEditing(): void {
+    this.editing.set(null);
+  }
+
+  protected applyChange(target: BindingTarget, change: BindingChange): void {
+    if (target.kind === 'publish') {
+      this.store.replacePublishBinding({
+        id: target.binding.id,
+        subjects: change.subjects,
+        precedence: change.precedence,
+      });
+    } else {
+      this.store.replaceConsumeBinding({ id: target.binding.id, subjects: change.subjects });
+    }
+  }
+
+  protected applyRemoval(target: BindingTarget): void {
+    if (target.kind === 'publish') {
+      this.store.removePublishBinding(target.binding.id);
+    } else {
+      this.store.removeConsumeBinding(target.binding.id);
+    }
   }
 
   /** The mode the selector is on, if it differs from the contract's own. */
@@ -469,7 +579,7 @@ export class ContractDetailPage {
     });
   }
 
-  protected savedMessage(action: 'enforcement' | 'publish' | 'consume'): string {
+  protected savedMessage(action: ContractAction): string {
     switch (action) {
       case 'enforcement':
         return `Enforcement is now ${this.store.contract()?.enforcement}.`;
@@ -477,17 +587,14 @@ export class ContractDetailPage {
         return 'Publish binding added.';
       case 'consume':
         return 'Consume binding added.';
+      case 'change':
+        return 'Binding changed.';
+      case 'remove':
+        return 'Binding removed.';
     }
   }
 
   protected reload(): void {
     this.store.load(this.name());
   }
-}
-
-/** Says which part of the subjects text is the problem, rather than that something is. */
-function subjectsRefusal(text: string): string {
-  return text.trim() === ''
-    ? 'Name at least one subject.'
-    : 'Each subject needs a name before the @ and a version after it, like orders.created@2.';
 }

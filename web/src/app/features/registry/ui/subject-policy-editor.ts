@@ -26,7 +26,7 @@ import {
   describePolicy,
   type PolicyDraft,
 } from '../../../domain/registry/subject-settings';
-import { ChangeConfirmation } from './change-confirmation';
+import { ChangeConfirmation } from '../../../shared/ui/change-confirmation/change-confirmation';
 
 const INPUT =
   'border-input bg-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm focus-visible:ring-1 focus-visible:outline-none';

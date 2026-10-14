@@ -11,6 +11,7 @@ const dto: ContractDto = {
   createdAt: '2026-08-13T09:00:00+00:00',
   publishes: [
     {
+      id: '11111111-1111-1111-1111-111111111111',
       exchange: 'orders',
       routingKeyPattern: 'orders.*',
       brokerId: null,
@@ -21,6 +22,7 @@ const dto: ContractDto = {
   ],
   consumes: [
     {
+      id: '22222222-2222-2222-2222-222222222222',
       queue: 'billing.orders',
       brokerId: '0a0a0a0a-0a0a-0a0a-0a0a-0a0a0a0a0a0a',
       virtualHost: '/',
@@ -36,6 +38,7 @@ describe('toContract', () => {
     expect(contract.name).toBe('payments');
     expect(contract.enforcement).toBe('MONITOR');
     expect(contract.publishes[0]).toEqual({
+      id: '11111111-1111-1111-1111-111111111111',
       exchange: 'orders',
       routingKeyPattern: 'orders.*',
       brokerId: null,
@@ -44,6 +47,13 @@ describe('toContract', () => {
       subjects: [{ subject: 'orders.created', selector: '>=1' }],
     });
     expect(contract.consumes[0]?.queue).toBe('billing.orders');
+  });
+
+  it('keeps each binding’s id, which is what a change or a removal addresses', () => {
+    const contract = toContract(dto);
+
+    expect(contract.publishes[0]?.id).toBe('11111111-1111-1111-1111-111111111111');
+    expect(contract.consumes[0]?.id).toBe('22222222-2222-2222-2222-222222222222');
   });
 
   it('parses the creation timestamp', () => {

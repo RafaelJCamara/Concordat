@@ -173,6 +173,16 @@ drains it every fifteen seconds, so that claim is the .NET suite's (`APolicyChan
 `APolicyChangeIsDeliveredToTheSubscriptionsThatWantIt`). The policy journey in `subject-settings.spec.ts` holds the
 confirmation's sentence about who is notified as text, and asserts the old _Nobody is notified_ is gone.
 
+**Contract bindings are changed and removed on contracts of their own, and a contract cannot be deleted.**
+`contract-bindings.spec.ts` ([ADR-035](../../docs/adr/035-contract-bindings-have-an-identity.md)) makes **three
+contracts per run** in `dev` (`e2e-bindings-<timestamp>`, and `-quiet` and `-read` beside it, for the console-error check and the
+reader), arranged through the API where the arrangement is not what is tested. It never touches the contract
+`contracts.spec.ts` makes, and the other way round. **Its bindings use an exchange of its own per run**
+(`bindings-<timestamp>`), and that is not decoration: a route is governed by _every_ contract in the environment that matches
+it, and `dev` already holds the other specs' contracts and every earlier run's, so resolving `orders` / `orders.created` would
+answer with all of them and the spec could not say that _its_ binding is what resolves. A run that goes red part-way leaves what it
+made, like every spec here that creates something permanent.
+
 **Match the account control, not the account's email.** A subject the browser creates is owned by
 the signed-in account, so its email now appears in a table cell on the list as well as in the
 sidebar, and `getByText(email)` stopped being unique the first time `new-subject.spec.ts` ran. The

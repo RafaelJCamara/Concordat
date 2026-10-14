@@ -144,8 +144,12 @@ sign-in screen that lets someone pass it, which is recorded as
       **The real registry corrected the first draft here too.** Overlap is decided by
       intersecting patterns (`orders.*` and `*.created` both match `orders.created`), which the
       browser cannot see, and separating two overlapping bindings needs a *distinct precedence on
-      both* — one binding with a value and one without is still a conflict. Bindings cannot be
-      edited or removed (there is no endpoint), so the form says to set one up front. Not here:
+      both* — one binding with a value and one without is still a conflict. Bindings could not be
+      edited or removed (there was no endpoint), so the form said to set one up front; **they can be
+      since 2026-10-14** ([ADR-035](../adr/035-contract-bindings-have-an-identity.md)): every row offers
+      **Change** and **Remove** (absent without `contract:write`), each a panel above the list with a
+      two-click confirmation whose sentences are held against the registry by
+      `e2e/contract-bindings.spec.ts`. Not here:
       choosing a broker for a binding, which waits on the brokers page, so bindings apply to
       every broker in the environment
 - [x] `CompatibilityDiffPage` — `/subjects/:name/versions/:from/diff/:to`, the API's own path with the
@@ -280,7 +284,7 @@ rather than deleted, because "why is there no zod here?" is a question worth ans
 
 ## M4.5 Tests
 
-- [x] Playwright E2E against a real API — `web/e2e/`, 225 tests, **against the dev server and
+- [x] Playwright E2E against a real API — `web/e2e/`, 234 tests, **against the dev server and
       against the production image** (`CONCORDAT_WEB_URL=http://localhost:5063`). Found the subject list
       broken on its first run (see [STATUS.md](../STATUS.md)), and on 2026-08-15 found two
       more: a first-hit lazy-route compile that made a correct page look absent, and a

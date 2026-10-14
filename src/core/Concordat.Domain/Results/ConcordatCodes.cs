@@ -80,6 +80,9 @@ public static class ConcordatCodes
     /// </remarks>
     public const string BindingConflict = "binding_conflict";
 
+    /// <summary>The contract has no binding with that id.</summary>
+    public const string BindingNotFound = "binding_not_found";
+
     /// <summary>
     /// A message carried a subject the contract governing that route does not permit. Raised by
     /// the SDK, not the registry.

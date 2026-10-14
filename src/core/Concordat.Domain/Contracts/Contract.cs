@@ -63,6 +63,7 @@ public sealed class PublishBinding
         IReadOnlyList<SubjectRef> subjects,
         int? precedence = null)
     {
+        Id = Guid.CreateVersion7();
         Scope = scope;
         Exchange = exchange;
         RoutingKeyPattern = routingKeyPattern;
@@ -79,6 +80,9 @@ public sealed class PublishBinding
         Subjects = [];
     }
 
+    /// <summary>The binding's identity, which is what an edit or a removal addresses.</summary>
+    public Guid Id { get; private set; }
+
     /// <summary>Where the binding applies.</summary>
     public TopologyScope Scope { get; private set; }
 
@@ -93,6 +97,14 @@ public sealed class PublishBinding
 
     /// <summary>Which binding wins when two overlap, or null when none was declared.</summary>
     public int? Precedence { get; private set; }
+
+    // Only Contract.ReplacePublish calls this, after it has checked the result against every other
+    // binding: the invariant lives on the contract, not here.
+    internal void Change(IReadOnlyList<SubjectRef> subjects, int? precedence)
+    {
+        Subjects = subjects;
+        Precedence = precedence;
+    }
 }
 
 /// <summary>A consumer's contract: what may arrive on a queue.</summary>
@@ -105,6 +117,7 @@ public sealed class ConsumeBinding
     public ConsumeBinding(
         TopologyScope scope, string queue, IReadOnlyList<SubjectRef> subjects)
     {
+        Id = Guid.CreateVersion7();
         Scope = scope;
         Queue = queue;
         Subjects = subjects;
@@ -118,6 +131,9 @@ public sealed class ConsumeBinding
         Subjects = [];
     }
 
+    /// <summary>The binding's identity, which is what an edit or a removal addresses.</summary>
+    public Guid Id { get; private set; }
+
     /// <summary>Where the binding applies.</summary>
     public TopologyScope Scope { get; private set; }
 
@@ -126,6 +142,9 @@ public sealed class ConsumeBinding
 
     /// <summary>The subjects expected, and which versions.</summary>
     public IReadOnlyList<SubjectRef> Subjects { get; private set; }
+
+    // Only Contract.ReplaceConsume calls this, after it has checked the queue.
+    internal void Change(IReadOnlyList<SubjectRef> subjects) => Subjects = subjects;
 }
 
 /// <summary>
@@ -303,12 +322,7 @@ public sealed partial class Contract
             }
 
             return Result.Failure(
-                ConcordatCodes.BindingConflict,
-                $"'{binding.RoutingKeyPattern}' on exchange '{binding.Exchange}' overlaps " +
-                $"'{existing.RoutingKeyPattern}', which carries different subjects. A key like " +
-                $"'{SampleOverlap(existing, binding)}' would match both. Give the two bindings " +
-                "different precedence values to say which wins, or make them carry the same " +
-                "subjects.");
+                ConcordatCodes.BindingConflict, ConflictMessage(binding, existing));
         }
 
         _publishes.Add(binding);
@@ -342,6 +356,144 @@ public sealed partial class Contract
                 "contract.")
             : Add(binding);
     }
+
+    /// <summary>Changes which subjects a publish binding carries, and its precedence.</summary>
+    /// <param name="id">The identity of the binding.</param>
+    /// <param name="subjects">The subjects it should carry from now on.</param>
+    /// <param name="precedence">Its precedence, or <see langword="null"/> for none.</param>
+    /// <returns>
+    /// Whether anything changed (false for a request identical to what is stored), or a failure:
+    /// <see cref="ConcordatCodes.BindingNotFound"/> for an id this contract does not hold, and
+    /// <see cref="ConcordatCodes.BindingConflict"/> when the result would overlap another binding
+    /// that carries different subjects with no precedence to separate them. A refused change
+    /// leaves the binding exactly as it was.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>The same invariant as adding, run again on the way out.</b> An edit can create a conflict
+    /// that adding never saw: giving two overlapping bindings the same precedence, clearing the
+    /// one that separated them, or pointing one at subjects the other does not carry. Without the
+    /// check an edit would be the way round the rule <see cref="AddPublish"/> exists to enforce.
+    /// </para>
+    /// <para>
+    /// <b>Only the subjects and the precedence are editable.</b> The exchange, the pattern and the
+    /// scope are what the binding <em>is</em>: changing them is a different binding governing a
+    /// different route, and the audit entry for it would have to describe two things at once.
+    /// That is a removal and an addition, each recorded as what it is.
+    /// </para>
+    /// <para>
+    /// <b>The hole this closes:</b> a binding added with no precedence could never be separated
+    /// from a later overlapping one, because the registry's own refusal said to "give the two
+    /// bindings different precedence values" and the first had no way to be given one.
+    /// </para>
+    /// </remarks>
+    public Result<bool> ReplacePublish(
+        Guid id, IReadOnlyList<SubjectRef> subjects, int? precedence)
+    {
+        ArgumentNullException.ThrowIfNull(subjects);
+
+        var binding = _publishes.FirstOrDefault(b => b.Id == id);
+
+        if (binding is null)
+        {
+            return Result<bool>.Failure(
+                ConcordatCodes.BindingNotFound,
+                $"This contract has no publish binding '{id}'.");
+        }
+
+        // Order counts: it is stored and shown, so a reordering is a change. Only an identical
+        // request is not, and that is what lets a caller write nothing for it.
+        if (binding.Precedence == precedence && binding.Subjects.SequenceEqual(subjects))
+        {
+            return Result<bool>.Success(false);
+        }
+
+        var candidate = new PublishBinding(
+            binding.Scope, binding.Exchange, binding.RoutingKeyPattern, subjects, precedence);
+
+        foreach (var other in _publishes.Where(b => !ReferenceEquals(b, binding)))
+        {
+            if (Conflicts(other, candidate))
+            {
+                return Result<bool>.Failure(
+                    ConcordatCodes.BindingConflict, ConflictMessage(candidate, other));
+            }
+        }
+
+        binding.Change(subjects, precedence);
+        return Result<bool>.Success(true);
+    }
+
+    /// <summary>Removes a publish binding.</summary>
+    /// <param name="id">The identity of the binding.</param>
+    /// <returns>
+    /// Success, or <see cref="ConcordatCodes.BindingNotFound"/> for an id this contract does not
+    /// hold (including one already removed, which is a request about something that is gone).
+    /// </returns>
+    /// <remarks>
+    /// Never a conflict: removing a binding cannot make two others overlap. What it can do is stop
+    /// a route being governed by this contract, which is the caller's to say out loud.
+    /// </remarks>
+    public Result RemovePublish(Guid id) =>
+        _publishes.RemoveAll(b => b.Id == id) > 0
+            ? Result.Success()
+            : Result.Failure(
+                ConcordatCodes.BindingNotFound, $"This contract has no publish binding '{id}'.");
+
+    /// <summary>Changes which subjects a consume binding expects.</summary>
+    /// <param name="id">The identity of the binding.</param>
+    /// <param name="subjects">The subjects it should expect from now on.</param>
+    /// <returns>
+    /// Whether anything changed, or a failure: <see cref="ConcordatCodes.BindingNotFound"/>, or
+    /// <see cref="ConcordatCodes.BindingConflict"/> when another binding for the same queue,
+    /// overlapping in scope, would then expect different subjects. Only the subjects are editable;
+    /// the queue and the scope are what the binding is, for the reason
+    /// <see cref="ReplacePublish"/> gives.
+    /// </returns>
+    public Result<bool> ReplaceConsume(Guid id, IReadOnlyList<SubjectRef> subjects)
+    {
+        ArgumentNullException.ThrowIfNull(subjects);
+
+        var binding = _consumes.FirstOrDefault(b => b.Id == id);
+
+        if (binding is null)
+        {
+            return Result<bool>.Failure(
+                ConcordatCodes.BindingNotFound,
+                $"This contract has no consume binding '{id}'.");
+        }
+
+        if (binding.Subjects.SequenceEqual(subjects))
+        {
+            return Result<bool>.Success(false);
+        }
+
+        var clash = _consumes.FirstOrDefault(c =>
+            !ReferenceEquals(c, binding) &&
+            string.Equals(c.Queue, binding.Queue, StringComparison.Ordinal) &&
+            c.Scope.Overlaps(binding.Scope) &&
+            !SameSubjects(c.Subjects, subjects));
+
+        if (clash is not null)
+        {
+            return Result<bool>.Failure(
+                ConcordatCodes.BindingConflict,
+                $"Queue '{binding.Queue}' is already bound to different subjects in this " +
+                "contract.");
+        }
+
+        binding.Change(subjects);
+        return Result<bool>.Success(true);
+    }
+
+    /// <summary>Removes a consume binding.</summary>
+    /// <param name="id">The identity of the binding.</param>
+    /// <returns>Success, or <see cref="ConcordatCodes.BindingNotFound"/>.</returns>
+    public Result RemoveConsume(Guid id) =>
+        _consumes.RemoveAll(b => b.Id == id) > 0
+            ? Result.Success()
+            : Result.Failure(
+                ConcordatCodes.BindingNotFound, $"This contract has no consume binding '{id}'.");
 
     /// <summary>Changes how much this contract may do.</summary>
     /// <param name="enforcement">The new mode.</param>
@@ -380,6 +532,13 @@ public sealed partial class Contract
         _consumes.Add(binding);
         return Result.Success();
     }
+
+    private static string ConflictMessage(PublishBinding binding, PublishBinding existing) =>
+        $"'{binding.RoutingKeyPattern}' on exchange '{binding.Exchange}' overlaps " +
+        $"'{existing.RoutingKeyPattern}', which carries different subjects. A key like " +
+        $"'{SampleOverlap(existing, binding)}' would match both. Give the two bindings " +
+        "different precedence values to say which wins, or make them carry the same " +
+        "subjects.";
 
     private static bool Conflicts(PublishBinding existing, PublishBinding candidate) =>
         string.Equals(existing.Exchange, candidate.Exchange, StringComparison.Ordinal) &&

@@ -849,3 +849,121 @@ export async function deleteSubscriptionsAt(
 
   return mine.length;
 }
+
+/** A binding as the registry reports it, with the id a change or a removal addresses. */
+export interface BindingView {
+  readonly id: string;
+  readonly exchange?: string;
+  readonly queue?: string;
+  readonly routingKeyPattern?: string;
+  readonly virtualHost: string;
+  readonly precedence?: number | null;
+  readonly subjects: readonly { subject: string; selector: string }[];
+}
+
+/** A contract as the registry reports it. */
+export interface ContractView {
+  readonly name: string;
+  readonly enforcement: string;
+  readonly publishes: readonly BindingView[];
+  readonly consumes: readonly BindingView[];
+}
+
+/** Reads a contract straight from the registry, so a spec can say what a screen did to it. */
+export async function readContract(
+  credential: string,
+  environment: string,
+  name: string,
+): Promise<ContractView> {
+  const response = await call(`/v1/environments/${environment}/contracts/${name}`, {
+    headers: { authorization: `Bearer ${credential}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Reading contract '${name}' answered ${response.status}.`);
+  }
+
+  return (await response.json()) as ContractView;
+}
+
+/** Creates a contract (a per-run name; nothing deletes one). */
+export async function createContractRaw(
+  credential: string,
+  environment: string,
+  name: string,
+  enforcement?: string,
+): Promise<void> {
+  const response = await call(`/v1/environments/${environment}/contracts`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${credential}` },
+    body: JSON.stringify({ name, ...(enforcement ? { enforcement } : {}) }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Creating contract '${name}' answered ${response.status}.`);
+  }
+}
+
+/** Adds a consume binding through the API, to arrange a contract a spec then works on. */
+export async function addConsumeBindingRaw(
+  credential: string,
+  environment: string,
+  contract: string,
+  queue: string,
+  subjects: readonly { subject: string; selector: string }[],
+): Promise<void> {
+  const response = await call(`/v1/environments/${environment}/contracts/${contract}/consumes`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${credential}` },
+    body: JSON.stringify({ queue, subjects }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Adding a consume binding to '${contract}' answered ${response.status}.`);
+  }
+}
+
+/** What the environment's contracts say about one route: who governs it, and how strictly. */
+export interface RouteResolution {
+  readonly contracts: readonly string[];
+  readonly enforcement: string;
+  readonly subjects: readonly { subject: string; selector: string }[];
+}
+
+/** Resolves one publish route, as an SDK does at startup. */
+export async function resolveRoute(
+  credential: string,
+  environment: string,
+  exchange: string,
+  routingKey: string,
+): Promise<RouteResolution> {
+  const response = await call(`/v1/environments/${environment}/contracts/resolve`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${credential}` },
+    body: JSON.stringify({ publishes: [{ exchange, routingKey }] }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Resolving ${exchange}/${routingKey} answered ${response.status}.`);
+  }
+
+  return ((await response.json()) as { publishes: RouteResolution[] }).publishes[0]!;
+}
+
+/** Sets a contract's enforcement mode through the API. */
+export async function setEnforcementRaw(
+  credential: string,
+  environment: string,
+  contract: string,
+  enforcement: string,
+): Promise<void> {
+  const response = await call(`/v1/environments/${environment}/contracts/${contract}/enforcement`, {
+    method: 'PUT',
+    headers: { authorization: `Bearer ${credential}` },
+    body: JSON.stringify({ enforcement }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Setting enforcement on '${contract}' answered ${response.status}.`);
+  }
+}
