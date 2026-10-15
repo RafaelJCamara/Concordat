@@ -146,7 +146,8 @@ describe('AuditLogPage', () => {
       expect(options).toContain('CONTRACT_BINDING_CHANGED');
       expect(options).toContain('CONTRACT_BINDING_REMOVED');
       expect(options).toContain('SUBJECT_REVIEWERS_CHANGED');
-      expect(options).toHaveLength(28); // 27 actions and "any"
+      expect(options).toContain('SUBJECT_PURGED');
+      expect(options).toHaveLength(29); // 28 actions and "any"
     });
 
     it('widens to every environment, and says so in the heading', () => {

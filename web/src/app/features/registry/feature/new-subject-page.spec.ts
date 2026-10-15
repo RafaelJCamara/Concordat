@@ -381,7 +381,9 @@ describe('NewSubjectPage', () => {
       expect(r.store.create).not.toHaveBeenCalled();
       expect(r.host.textContent).toContain('Create acme.orders.OrderCreated in dev?');
       expect(r.host.textContent).toContain('The name is permanent');
-      expect(r.host.textContent).toContain('cannot be renamed or deleted');
+      expect(r.host.textContent).toContain(
+        'cannot be renamed, and a retired one keeps its name taken',
+      );
       expect(r.host.textContent).toContain('JSON Schema, open');
       expect(r.host.textContent).toContain('can be changed later, from the subject’s own page');
       expect(r.host.textContent).toContain('Changing the policy takes an admin');

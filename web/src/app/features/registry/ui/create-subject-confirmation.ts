@@ -7,9 +7,11 @@ import { HlmButton } from '@spartan-ng/helm/button';
  * <b>A subject is the one thing on this screen that cannot be taken back, and the prototype's
  * "immutable id" confirmation existed to say exactly that.</b> Every claim below was checked
  * against the real registry rather than read off its code: `PATCH` ignores a new name, format or
- * content model and answers 200 with them unchanged; there is no delete, retiring is terminal;
+ * content model and answers 200 with them unchanged; retiring is terminal;
  * and a retired name answers 409 when somebody tries to create it again, so the name stays taken
- * for good. What *can* change is the owner and the compatibility policy, and the subject's own
+ * until a retired subject is deleted for good (ADR-046), which only an administrator can do, through
+ * the API, and which no screen offers. What *can* change is the owner and the compatibility policy,
+ * and the subject's own
  * page has a control for each (ADR-032) — which is said only because it is true now: until that
  * page existed this line said "only through the API", since a confirmation that promised "you
  * can change that later" would have been sending somebody to a button that was not there. The
@@ -40,8 +42,9 @@ import { HlmButton } from '@spartan-ng/helm/button';
       <ul class="text-muted-foreground list-disc space-y-1 ps-5 text-sm">
         <li>
           <span class="text-foreground">The name is permanent.</span>
-          A subject cannot be renamed or deleted, and a retired one keeps its name for good, so
-          nobody can ever create <span class="font-mono break-words">{{ name() }}</span> again.
+          A subject cannot be renamed, and a retired one keeps its name taken: only an administrator
+          can delete a retired subject for good, through the API, and the audit log keeps the
+          record.
         </li>
         <li>
           <span class="text-foreground">So are its format and content model:</span>

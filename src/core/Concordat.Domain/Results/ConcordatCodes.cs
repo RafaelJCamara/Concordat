@@ -435,6 +435,34 @@ public static class ConcordatCodes
     public const string ChangelogTooLong = "changelog_too_long";
 
     /// <summary>
+    /// A subject was asked to be deleted for good without the caller saying they mean it (ADR-046).
+    /// </summary>
+    /// <remarks>
+    /// The flag is the DESIGN §4 rule's "explicit force flag", and it is not an override of anything:
+    /// every other refusal stands with it. It exists so the destructive route cannot be reached by a
+    /// request that merely resembles the harmless one.
+    /// </remarks>
+    public const string PurgeRequiresForce = "purge_requires_force";
+
+    /// <summary>
+    /// A subject that is not retired cannot be deleted for good: retiring is the decision, and the
+    /// deletion only removes what has already been said to be gone (ADR-046).
+    /// </summary>
+    public const string SubjectNotRetired = "subject_not_retired";
+
+    /// <summary>
+    /// A contract still binds the subject, or a service still declares it consumes it, so deleting it
+    /// would leave a binding or a registered consumer pointing at a name that is gone (ADR-046).
+    /// </summary>
+    public const string SubjectInUse = "subject_in_use";
+
+    /// <summary>
+    /// A schema another subject's version uses refers to this subject, so deleting it would leave a
+    /// reference that no longer resolves (ADR-046).
+    /// </summary>
+    public const string SubjectReferenced = "subject_referenced";
+
+    /// <summary>
     /// The caller holds the scope to decide a held version, and the subject names reviewers the
     /// caller is not among (ADR-043).
     /// </summary>

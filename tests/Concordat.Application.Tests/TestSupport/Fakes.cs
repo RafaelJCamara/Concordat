@@ -110,6 +110,45 @@ internal sealed class FakeSubjects : ISubjectRepository
         _subjects.Add(subject);
     }
 
+    /// <summary>Subjects staged for deletion by the handler.</summary>
+    public List<Subject> Removed { get; } = [];
+
+    public void Remove(Subject subject)
+    {
+        Removed.Add(subject);
+        _subjects.Remove(subject);
+    }
+
+    private readonly List<SubjectReferrer> _referrers = [];
+
+    /// <summary>How many times a handler asked what refers to a subject.</summary>
+    public int ReferrerLookups { get; private set; }
+
+    /// <summary>
+    /// Arranges that version <paramref name="version"/> of <paramref name="referrer"/>, which lives in
+    /// <paramref name="environment"/>, uses a schema holding the reference <paramref name="uri"/>: what the
+    /// fake cannot derive from the schemas it holds.
+    /// </summary>
+    public FakeSubjects Refers(string referrer, EnvironmentId environment, int version, string uri)
+    {
+        _referrers.Add(new SubjectReferrer(
+            SubjectName.Create(referrer).Value, environment, version, [uri]));
+        return this;
+    }
+
+    public Task<IReadOnlyList<SubjectReferrer>> FindReferrersAsync(
+        SubjectName subject, CancellationToken cancellationToken)
+    {
+        ReferrerLookups++;
+
+        // By the name in the reference, as the real query is: which environment it means is the caller's.
+        return Task.FromResult<IReadOnlyList<SubjectReferrer>>(
+            [.. _referrers
+                .Where(r => r.References.Any(
+                    uri => uri.Contains($"/{subject.Value}/", StringComparison.Ordinal)))
+                .OrderBy(r => r.Subject.Value, StringComparer.Ordinal)
+                .ThenBy(r => r.Version)]);
+    }
     /// <summary>Arranges an existing subject without counting as a write.</summary>
     public FakeSubjects Seed(Subject subject)
     {

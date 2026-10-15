@@ -42,6 +42,13 @@ public enum AuditAction
     /// <summary>A subject was retired.</summary>
     SubjectRetired,
 
+    /// <summary>A retired subject, and every version it held, was deleted for good (ADR-046).</summary>
+    /// <remarks>
+    /// The one change that removes rows the registry would otherwise keep forever, so the entry is the
+    /// only place left that says the subject existed, who removed it, and how many versions went.
+    /// </remarks>
+    SubjectPurged,
+
     /// <summary>A version was registered and became active immediately.</summary>
     VersionRegistered,
 
@@ -286,6 +293,7 @@ public static class AuditTokens
         [AuditAction.SubjectPolicyChanged] = "SUBJECT_POLICY_CHANGED",
         [AuditAction.SubjectReviewersChanged] = "SUBJECT_REVIEWERS_CHANGED",
         [AuditAction.SubjectRetired] = "SUBJECT_RETIRED",
+        [AuditAction.SubjectPurged] = "SUBJECT_PURGED",
         [AuditAction.VersionRegistered] = "VERSION_REGISTERED",
         [AuditAction.VersionSubmitted] = "VERSION_SUBMITTED",
         [AuditAction.VersionApproved] = "VERSION_APPROVED",

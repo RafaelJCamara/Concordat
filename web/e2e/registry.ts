@@ -584,6 +584,27 @@ export async function putReviewersRaw(
   );
 }
 
+/**
+ * Asks the registry to delete a subject for good, and reports how it was answered (ADR-046).
+ *
+ * `force` is the query value as sent, so a test can send it missing, false or nonsense. Not a helper that
+ * retires first: what refuses a subject that is not retired is part of what these tests look at.
+ */
+export async function purgeSubjectRaw(
+  credential: string,
+  environment: string,
+  subject: string,
+  force: string | null = 'true',
+): Promise<RawAnswer> {
+  const query = force === null ? '' : `?force=${encodeURIComponent(force)}`;
+
+  return answerOf(
+    await call(`/v1/environments/${environment}/subjects/${subject}/purge${query}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${credential}` },
+    }),
+  );
+}
 /** Approves or rejects a held version straight through the API, and reports how it was answered. */
 export async function decideRaw(
   credential: string,

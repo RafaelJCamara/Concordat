@@ -251,7 +251,7 @@ id test exists to make such a change impossible to miss.
 - [x] **`Schema` global, excluded from the filter** (ADR-015)
 - [x] `xmin` optimistic concurrency, check constraints, unique index per `(tenant, environment, name)`
 - [x] 12 Testcontainers integration tests against real PostgreSQL 17; 203 across the solution
-- [ ] Hard-delete semantics → **M7**, see below
+- [x] Hard-delete semantics → done 2026-10-15 ([ADR-046](../adr/046-a-retired-subject-can-be-deleted-for-good.md)), see below
 
 ### Two defects the migration caught before any data existed
 
@@ -286,11 +286,13 @@ intermittent one. `docker compose` runs it before the API in M1.8.
   parameterless constructor because EF cannot bind an owned collection through one. This is
   the single place persistence reaches into the domain.
 
-### Deferred to M7
+### Deferred to M7, and done there
 
 Hard delete requires "no registered consumers, an explicit force flag, and an audit entry".
-Registered consumers and the audit log are both M7. Soft delete works today —
-`Subject.Retire()` — and schemas are never deleted at all, which is the part ADR-015 requires.
+Registered consumers and the audit log were M7, and **it was built on 2026-10-15**
+([ADR-046](../adr/046-a-retired-subject-can-be-deleted-for-good.md)): `POST …/subjects/{subject}/purge?force=true`
+deletes a *retired* subject and its versions, refuses while a contract, a registered service or another schema
+refers to it, and is audited. Schemas are never deleted, which is the part ADR-015 requires.
 
 ## M1.6 REST API
 
@@ -368,7 +370,7 @@ policy is `Backward`, where a policy-filtered view would show nothing.
 ### There is still no hard delete
 
 `DELETE` retires. Schemas are never removed (ADR-015), and removing a subject needs the
-registered-consumer check and audit entry from DESIGN §4, both M7. Retirement is terminal and
+registered-consumer check and audit entry from DESIGN §4, both M7 — **now built** (ADR-046, 2026-10-15). Retirement is terminal and
 blocks further registration; deprecation is advisory and does not, because existing producers
 still need to patch their contract.
 

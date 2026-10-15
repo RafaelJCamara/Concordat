@@ -248,6 +248,9 @@ public class AuthorizationTests(AuthApiFactory factory)
             ("retire a subject", reader.DeleteAsync(
                 "/v1/environments/test/subjects/anything")),
 
+            ("delete a subject for good", reader.PostAsync(
+                "/v1/environments/test/subjects/anything/purge?force=true", content: null)),
+
             ("create a contract", reader.PostAsJsonAsync(
                 "/v1/environments/test/contracts",
                 new CreateContractRequest("c"),

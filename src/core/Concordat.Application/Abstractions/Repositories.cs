@@ -65,7 +65,36 @@ public interface ISubjectRepository
     /// <summary>Stages a new subject for insert.</summary>
     /// <param name="subject">The subject.</param>
     void Add(Subject subject);
+
+    /// <summary>Stages a subject, and every version it holds, for deletion (ADR-046).</summary>
+    /// <param name="subject">The subject.</param>
+    void Remove(Subject subject);
+
+    /// <summary>
+    /// Finds the versions, in any of the tenant's environments, whose schema holds a reference to a subject
+    /// of this name (ADR-046).
+    /// </summary>
+    /// <param name="subject">The subject name being referred to.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The candidates, ordered by subject and then ordinal.</returns>
+    /// <remarks>
+    /// <b>Candidates, not the answer.</b> A reference is <c>concordat://{environment}/{subject}/{ordinal}</c>:
+    /// it can name a subject in <em>another</em> environment, and the environment is a name that only the
+    /// caller can resolve to an id. A schema is also global (ADR-015), so this asks which schemas name the
+    /// subject and then which versions of the caller's tenant use them: another tenant's use of the same
+    /// bytes is not a candidate. Deciding which of them refer to <em>this</em> subject is the handler's.
+    /// </remarks>
+    Task<IReadOnlyList<SubjectReferrer>> FindReferrersAsync(
+        SubjectName subject, CancellationToken cancellationToken);
 }
+
+/// <summary>A version whose schema holds a reference to a subject of some name.</summary>
+/// <param name="Subject">The subject the version belongs to.</param>
+/// <param name="Environment">The environment that subject is in.</param>
+/// <param name="Version">The version ordinal.</param>
+/// <param name="References">The reference URIs in its schema that name the subject, as written.</param>
+public sealed record SubjectReferrer(
+    SubjectName Subject, EnvironmentId Environment, int Version, IReadOnlyList<string> References);
 
 /// <summary>Which rows of an ordered listing to read.</summary>
 /// <param name="Limit">The most rows.</param>

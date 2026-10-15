@@ -129,12 +129,28 @@ public static class SubjectEndpoints
         group.MapDelete("/{subject}", RetireSubject)
             .WithSummary("Retire a subject")
             .WithDescription(
-                "The soft delete, and terminal. There is no hard delete: schemas are never " +
-                "removed (ADR-015), and removing a subject needs the registered-consumer " +
-                "check and audit entry that arrive in M7.")
+                "The soft delete, and terminal: the subject stays, refuses new versions, and keeps " +
+                "every version it has. To remove it for good, see `POST /{subject}/purge`.")
             .Produces<SubjectResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.SubjectAdmin);
+
+        group.MapPost("/{subject}/purge", PurgeSubject)
+            .WithSummary("Delete a retired subject, and every version it holds, for good")
+            .WithDescription(
+                "Cannot be undone, and refused unless the caller sends `force=true`. The subject must " +
+                "already be retired (`409 subject_not_retired`), no contract may bind it and no " +
+                "registered service may consume it (`409 subject_in_use`), and no schema another " +
+                "subject's version uses may refer to it (`409 subject_referenced`); the refusal names " +
+                "what to remove first. Schemas are content-addressed and never deleted (ADR-015), so a " +
+                "schema that was reachable only through this subject is no longer reachable and answers " +
+                "`404 schema_not_found` by id. The name is free afterwards and a new subject with it " +
+                "starts at version 1. Recorded as `SUBJECT_PURGED` (ADR-046).")
+            .Produces<PurgeSubjectResponse>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
             .RequireScope(Scope.SubjectAdmin);
 
         group.MapGet("/{subject}/compatibility-policy", GetPolicy)
@@ -461,6 +477,22 @@ public static class SubjectEndpoints
         return result.IsFailure
             ? ProblemDetailsMapping.From(result.Error!)
             : TypedResults.Ok(SubjectResponse.From(result.Value));
+    }
+
+    private static async Task<IResult> PurgeSubject(
+        string env, string subject, bool? force,
+        IDispatcher dispatcher, IEnvironmentResolver environments,
+        CancellationToken cancellationToken)
+    {
+        // Only an explicit true is a yes: absent, false and anything else the binder could read as a
+        // bool are "no", and the handler refuses before it reads anything (ADR-046).
+        var result = await dispatcher.SendAsync(
+            new PurgeSubjectCommand(environments.Resolve(env), subject, force is true), cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(new PurgeSubjectResponse(result.Value.Name, result.Value.VersionsRemoved));
     }
 
     private static async Task<IResult> GetPolicy(

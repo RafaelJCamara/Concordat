@@ -85,6 +85,18 @@ describe('AuditTable', () => {
     expect(badges[1]!.outerHTML).toContain('bg-success/10');
   });
 
+  it('tones a permanent deletion as destructive, as a retirement is', () => {
+    const host = render([
+      entry({ action: 'SUBJECT_PURGED' }),
+      entry({ action: 'SUBJECT_RETIRED' }),
+    ]);
+
+    const badges = [...host.querySelectorAll('cd-status-badge')];
+
+    expect(badges[0]!.outerHTML).toContain('bg-destructive/10');
+    expect(badges[1]!.outerHTML).toContain('bg-destructive/10');
+  });
+
   it('leaves an action it has no tone for neutral', () => {
     const host = render([entry({ action: 'TENANT_SUSPENDED' })]);
 

@@ -16,6 +16,7 @@ const TONES: Readonly<Record<string, StatusTone>> = {
   VERSION_APPROVED: 'success',
   VERSION_REJECTED: 'destructive',
   SUBJECT_RETIRED: 'destructive',
+  SUBJECT_PURGED: 'destructive',
   BROKER_REMOVED: 'destructive',
   BROKER_CREDENTIAL_REMOVED: 'destructive',
   API_KEY_REVOKED: 'destructive',

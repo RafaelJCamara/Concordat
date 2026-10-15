@@ -3280,7 +3280,7 @@
           "Subjects"
         ],
         "summary": "Retire a subject",
-        "description": "The soft delete, and terminal. There is no hard delete: schemas are never removed (ADR-015), and removing a subject needs the registered-consumer check and audit entry that arrive in M7.\n\nRequires scope: `subject:admin`.",
+        "description": "The soft delete, and terminal: the subject stays, refuses new versions, and keeps every version it has. To remove it for good, see `POST /{subject}/purge`.\n\nRequires scope: `subject:admin`.",
         "parameters": [
           {
             "name": "env",
@@ -3839,6 +3839,87 @@
           },
           "404": {
             "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/v1/environments/{env}/subjects/{subject}/purge": {
+      "post": {
+        "tags": [
+          "Subjects"
+        ],
+        "summary": "Delete a retired subject, and every version it holds, for good",
+        "description": "Cannot be undone, and refused unless the caller sends `force=true`. The subject must already be retired (`409 subject_not_retired`), no contract may bind it and no registered service may consume it (`409 subject_in_use`), and no schema another subject's version uses may refer to it (`409 subject_referenced`); the refusal names what to remove first. Schemas are content-addressed and never deleted (ADR-015), so a schema that was reachable only through this subject is no longer reachable and answers `404 schema_not_found` by id. The name is free afterwards and a new subject with it starts at version 1. Recorded as `SUBJECT_PURGED` (ADR-046).\n\nRequires scope: `subject:admin`.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurgeSubjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6137,6 +6218,29 @@
           }
         },
         "description": "One route an SDK wants resolved."
+      },
+      "PurgeSubjectResponse": {
+        "required": [
+          "subject",
+          "versionsRemoved"
+        ],
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "The subject's name, which is free to be registered again."
+          },
+          "versionsRemoved": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many versions were deleted with it.",
+            "format": "int32"
+          }
+        },
+        "description": "What a permanent deletion removed (ADR-046)."
       },
       "ReferenceResponse": {
         "required": [

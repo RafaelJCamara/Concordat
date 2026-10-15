@@ -106,6 +106,10 @@ token and an operator can alert across a fleet.
 | `payload_invalid` | The payload did not validate against its declared schema. |
 | `version_not_awaiting_approval` | The version is not awaiting approval, so it cannot be approved or rejected. |
 | `changelog_too_long` | A changelog exceeded the permitted length. |
+| `purge_requires_force` | A subject was asked to be deleted for good without the caller saying they mean it (ADR-046). |
+| `subject_not_retired` | A subject that is not retired cannot be deleted for good: retiring is the decision, and the deletion only removes what has already been said to be gone (ADR-046). |
+| `subject_in_use` | A contract still binds the subject, or a service still declares it consumes it, so deleting it would leave a binding or a registered consumer pointing at a name that is gone (ADR-046). |
+| `subject_referenced` | A schema another subject's version uses refers to this subject, so deleting it would leave a reference that no longer resolves (ADR-046). |
 | `not_a_reviewer` | The caller holds the scope to decide a held version, and the subject names reviewers the caller is not among (ADR-043). |
 | `reviewers_invalid` | A subject's reviewer set was not acceptable: too many, or an entry that is not an actor. |
 | `schema_unresolvable` | A client could not resolve a schema, so the operation could not be enforced. |
@@ -114,7 +118,7 @@ token and an operator can alert across a fleet.
 | `middleware_faulted` | Concordat's own middleware threw while handling a delivery, which is reported as an unenforced outcome rather than allowed to reach the application. |
 | `concurrent_write_conflict` | Two requests raced on the same row: a unique constraint or an optimistic-concurrency check caught it at the database rather than in application logic. |
 
-**90 codes.**
+**94 codes.**
 
 ## Rules for implementers
 

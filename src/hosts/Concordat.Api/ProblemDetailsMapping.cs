@@ -94,6 +94,12 @@ public static class ProblemDetailsMapping
         ConcordatCodes.VerdictPolicyMismatch => StatusCodes.Status409Conflict,
         ConcordatCodes.ReferenceCycle => StatusCodes.Status409Conflict,
 
+        // The subject is well-formed and exists; the world around it (its lifecycle, a contract, a service,
+        // another schema) is what refuses the deletion (ADR-046). Not the missing flag, which is a 400.
+        ConcordatCodes.SubjectNotRetired => StatusCodes.Status409Conflict,
+        ConcordatCodes.SubjectInUse => StatusCodes.Status409Conflict,
+        ConcordatCodes.SubjectReferenced => StatusCodes.Status409Conflict,
+
         // Too big is its own status; everything else malformed is a 400.
         ConcordatCodes.SchemaTooLarge => StatusCodes.Status413PayloadTooLarge,
 

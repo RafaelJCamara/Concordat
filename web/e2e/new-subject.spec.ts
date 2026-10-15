@@ -82,7 +82,9 @@ test.describe('creating a subject', () => {
     await page.getByRole('button', { name: 'Create subject' }).click();
     await expect(page.getByText(`Create ${name} in ${ENVIRONMENT}?`)).toBeVisible();
     await expect(page.getByText('The name is permanent.')).toBeVisible();
-    await expect(page.getByText(/cannot be renamed or deleted/)).toBeVisible();
+    await expect(
+      page.getByText(/cannot be renamed, and a retired one keeps its name taken/),
+    ).toBeVisible();
     await expect(page.getByText(/can be changed later, from the subject’s own page/)).toBeVisible();
     await expect(page.getByText(/Changing the policy takes an admin/)).toBeVisible();
     await expect(page.getByText(/only through the API/)).toHaveCount(0);

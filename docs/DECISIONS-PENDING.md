@@ -166,6 +166,29 @@ the step. Six calls, each yours to confirm:
 > findings were advice before and are advice now ([ADR-028](adr/028-schema-editor.md)); a browser test holds them to agreeing
 > with the registry on the ordinary cases, and would need its expectations flipped.
 
+### 45. A retired subject can be deleted for good, and only a retired one
+
+**Implemented** ([ADR-046](adr/046-a-retired-subject-can-be-deleted-for-good.md)). Resolves decision 15. Six calls, each yours to confirm,
+the first two stricter than the design said:
+
+- **Only a retired subject.** DESIGN §4 did not require it. Retiring is the decision a person can be asked about; the deletion only removes
+  what was already said to be gone, and a deprecated or active subject has producers who have not been told. *If you would rather allow it
+  from any state*, it is one call in the handler and one method in the aggregate, and the retire-first habit becomes a convention.
+- **`force` overrides nothing.** DESIGN's "explicit force flag" is read as "the caller means it". A flag that overrode the consumer check
+  would turn the check into advice. *If you meant the flag to override a binding*, say so: it is a different feature, with a different audit
+  line.
+- **A verb (`POST …/purge`), not `DELETE` with a flag**, so a request that resembles the harmless one cannot be the destructive one. The cost
+  is a route that is not REST-shaped; Confluent's `?permanent=true` would have been the other answer.
+- **What a deletion does to a schema consumer.** A schema only this subject reached answers `404` by id afterwards (reachability, ADR-015),
+  which a consumer that caches ids will see. Schemas are never deleted, and one another subject holds stays reachable. *This is the one to
+  weigh first.*
+- **The name is free at once.** Nothing remembers the old subject but the audit trail. A tombstone table would keep the name taken; it is
+  not built.
+- **API only: no screen and no CLI command.** The web app cannot retire a subject, so a deletion screen would be the second half of
+  something with no first half. Retire and delete are both a `curl`.
+
+> **If you overturn it**, delete the route and the handler; nothing was migrated and nothing persisted needs unpicking. The
+> `SUBJECT_PURGED` entries already written stay readable.
 ### 44. The subject list is paged by offset, in an opt-in way, and the whole length is a header
 
 **Implemented** ([ADR-045](adr/045-the-subject-list-is-paged-by-the-registry.md)). Four calls, each yours to confirm:
@@ -823,12 +846,12 @@ behind and a successful one cannot exist without its record.
 > eventual operator console read the same way. **Building that role is the follow-up**, and it is
 > also what tenant suspension and billing events will need.
 
-### 15. Hard-delete semantics — before v1 ships
+### 15. ~~Hard-delete semantics — before v1 ships~~ — done, see #45
 
-M1.5 implements soft delete (`Subject.Retire()`) and never deletes schemas, which is what
-ADR-015 requires. **Hard delete is not implemented**: DESIGN §4 wants "no registered
-consumers, an explicit force flag, and an audit entry", and both registered consumers and the
-audit log are M7. Confirm that v1 can ship with retire-only, or pull the pieces forward.
+M1.5 implemented soft delete (`Subject.Retire()`) and never deletes schemas, which is what
+ADR-015 requires. DESIGN §4 wanted "no registered consumers, an explicit force flag, and an
+audit entry", and both registered consumers and the audit log were M7. **Built 2026-10-15**
+([ADR-046](adr/046-a-retired-subject-can-be-deleted-for-good.md)); the calls it took are #45.
 
 ---
 
@@ -847,7 +870,7 @@ into the milestone that owes it, and collected here because they are the ones th
 | ~~M2~~ ✅ | ~~Run the payload-validation fixtures against a real validator~~ | **Discharged.** NJsonSchema behind `IPayloadValidator`; the corpus caught a real draft-conformance gap on its first run |
 | ~~M7~~ ✅ | ~~Contract-resolution caching, deferred from M2.1~~ | **Discharged.** `ContractCache` at the specified 60 s, keyed by topology rather than subject; batch resolve at warm-up, on-demand for anything undeclared, stale-on-failure. The oldest outstanding commitment in this register, and closing it turned `/contracts/resolve` from an endpoint nothing called into the feature it was built to be |
 | ~~M2.5~~ ✅ | ~~Verify the AMQP 1.0 header conversion~~ | **Discharged.** Measured on `rabbitmq:4.1-management`: `concordat-*` arrive as application-properties, and an `x-`-prefixed control header on the same message is demoted to an annotation, so the prefix rule is load-bearing rather than precautionary |
-| **M7** | Hard delete: no registered consumers + force flag + audit entry | Soft delete is all that exists today |
+| ~~M7~~ ✅ | ~~Hard delete: no registered consumers + force flag + audit entry~~ | **Discharged 2026-10-15** ([ADR-046](adr/046-a-retired-subject-can-be-deleted-for-good.md)): `POST …/purge?force=true`, retired subjects only, refused while a contract, a service or another schema refers to it, audited as `SUBJECT_PURGED`. Calls to confirm are decision 45 |
 | ~~M7~~ ✅ | ~~Adopt the derived environment ids, or migrate `subject.environment_id`~~ | **Discharged by decision 23.** The row is now created on first write *carrying the derived id*, so nothing migrates and no subject is orphaned — the id was always deterministic, and this fills in the record it always implied |
 | ~~M7~~ ✅ | ~~`GET\|PUT …/registration-policy`~~ | **Discharged, and the routes were the smaller half.** `Environment.RegistrationPolicy` had been stored since M7.1, defaulted to `CiOnly` for production-sounding names, and documented in three places as "enforced server-side, which is the whole point" — while no handler read it. Now enforced on subject creation and version registration, refused with 403 `registration_policy_forbids`. See decision #33 for how a pipeline is told apart from a producer |
 | **After M1.5** | Any change to canonicalisation now needs a **preimage version bump and a migration** | Schemas are persisted from here on. The golden id test exists to make such a change impossible to miss |

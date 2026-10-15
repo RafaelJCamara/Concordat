@@ -74,6 +74,52 @@ internal sealed class SubjectRepository(ConcordatDbContext context) : ISubjectRe
 
     /// <inheritdoc />
     public void Add(Subject subject) => context.Subjects.Add(subject);
+
+    /// <inheritdoc />
+    public void Remove(Subject subject) =>
+        // The versions are owned, so they go with the row: the foreign key cascades and EF deletes the
+        // ones it has loaded (the aggregate always loads them). The schemas they pointed at are not
+        // touched (ADR-015).
+        context.Subjects.Remove(subject);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SubjectReferrer>> FindReferrersAsync(
+        SubjectName subject, CancellationToken cancellationToken)
+    {
+        // Which schemas name the subject (the index on the reference target answers this) and by what
+        // URIs, then which versions use one. The schema table is global; Subjects carries the tenant
+        // filter, so another tenant's use of the same bytes is not a candidate.
+        var naming = await context.Schemas
+            .Where(schema => schema.References.Any(reference => reference.Subject == subject))
+            .Select(schema => new
+            {
+                schema.Id,
+                Names = schema.References
+                    .Where(reference => reference.Subject == subject)
+                    .Select(reference => reference.Name)
+                    .ToList(),
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (naming.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = naming.Select(n => n.Id).ToList();
+        var byId = naming.ToDictionary(n => n.Id, n => (IReadOnlyList<string>)n.Names);
+
+        var rows = await context.Subjects
+            .SelectMany(s => s.Versions.Select(v => new { s.Name, s.EnvironmentId, v.SchemaId, v.Ordinal }))
+            .Where(x => ids.Contains(x.SchemaId))
+            .OrderBy(x => x.Name)
+            .ThenBy(x => x.Ordinal)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. rows.Select(r => new SubjectReferrer(r.Name, r.EnvironmentId, r.Ordinal, byId[r.SchemaId]))];
+    }
 }
 
 /// <inheritdoc />

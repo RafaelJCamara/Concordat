@@ -135,6 +135,7 @@ public static class DependencyInjection
         services.AddScoped<
             ICommandHandler<SetCompatibilityPolicyCommand, Subject>, SetCompatibilityPolicyHandler>();
         services.AddScoped<ICommandHandler<RetireSubjectCommand, Subject>, RetireSubjectHandler>();
+        services.AddScoped<ICommandHandler<PurgeSubjectCommand, PurgedSubject>, PurgeSubjectHandler>();
 
         services.AddScoped<IQueryHandler<GetSubjectQuery, Subject>, GetSubjectHandler>();
         services.AddScoped<

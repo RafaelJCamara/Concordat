@@ -109,8 +109,9 @@ what is still held**, even when a test failed. It cannot run if the process is k
 /v1/environments/dev/subjects/<name>/reviewers` and `{"reviewers":[]}` using the owner credential, and reject the version. The
 signed-in account is the one named, so the spec uses `OWNER.email` and a second address, `someone-else@example.com`, that no account
 holds. It never touches the shared pair (`PaymentTaken`, `LedgerPosted`) or `approvals.spec.ts`'s own subjects.
-**Creating a subject is the other thing that cannot be undone, so it leaves things behind.** There
-is no delete and a retired subject keeps its name, so a test that creates one has made it for good.
+**Creating a subject is the other thing that cannot be undone, so it leaves things behind.** Nothing
+in the app deletes a subject, and a retired subject keeps its name until an administrator deletes it through
+the API (ADR-046), which these tests do not do, so a test that creates one has made it for good.
 Three arrangements keep that from costing anything:
 
 - `new-subject.spec.ts` names what it creates for the run (`acme.e2e.created.<stem>.<timestamp>`)
@@ -212,6 +213,12 @@ subjects whatever earlier runs left behind and the case and underscore assertion
 It reads nothing another spec makes and no other spec reads these. Like every spec here that creates something, a run that goes
 red part-way leaves what it made. It signs in nowhere (the default browser is the owner); it holds two registry answers back with
 `page.route` to look at the in-between states, which are the only requests it touches.
+
+**The deletion test leaves no subject behind, which is the one exception to the rule above.**
+`subject-purge.spec.ts` ([ADR-046](../../docs/adr/046-a-retired-subject-can-be-deleted-for-good.md)) makes **two subjects per run** in
+`dev` (`acme.e2e.purge.<timestamp>.Gone` and `.StillActive`), deletes both again (one in a test, both in `afterAll`, so a red run does
+not leave them), and so does not change the permanent-subject counts above. What it leaves is audit entries, named for the run. It has
+no screen to click, because none deletes: it purges through the API and asserts on what the pages then show.
 
 **The dashboard is asserted against an environment of its own, and never by an absolute count of `dev`.**
 `dashboard.spec.ts` ([ADR-037](../../docs/adr/037-the-dashboard-is-answered-by-the-registry.md)) arranges **`e2e-dashboard`**, created

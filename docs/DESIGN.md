@@ -366,6 +366,9 @@ every referrer, so referrers are re-checked on the referenced subject's new vers
 soft-delete by moving to `Retired`; hard delete requires no registered consumers, an
 explicit force flag, and writes an audit entry. A version cannot be hard-deleted while
 referenced by a contract, another schema, or a registered consumer.
+> **Built 2026-10-15 ([ADR-046](adr/046-a-retired-subject-can-be-deleted-for-good.md)), and stricter in two ways.** Only a
+> *retired* subject can be deleted, and it goes with all its versions: a single version cannot be deleted, because that would break
+> the contiguous ordinals and every reference pinned to one. The force flag is an acknowledgment and overrides nothing.
 
 ### Context B — Topology / Contracts (the differentiator)
 

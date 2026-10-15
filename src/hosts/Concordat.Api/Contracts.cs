@@ -57,6 +57,11 @@ public sealed record UpdateSubjectRequest(string? Owner = null, bool Deprecate =
 /// </param>
 public sealed record SetSubjectReviewersRequest(IReadOnlyList<string>? Reviewers);
 
+/// <summary>What a permanent deletion removed (ADR-046).</summary>
+/// <param name="Subject">The subject's name, which is free to be registered again.</param>
+/// <param name="VersionsRemoved">How many versions were deleted with it.</param>
+public sealed record PurgeSubjectResponse(string Subject, int VersionsRemoved);
+
 /// <summary>Request to look a schema up by its content.</summary>
 /// <param name="Format">One of <c>json</c>, <c>avro</c>, <c>protobuf</c>.</param>
 /// <param name="Schema">The schema document.</param>

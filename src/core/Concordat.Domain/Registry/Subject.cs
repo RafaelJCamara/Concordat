@@ -593,6 +593,21 @@ public sealed class Subject
         return Result.Success();
     }
 
+    /// <summary>Whether this subject may be deleted for good (ADR-046): only once it is retired.</summary>
+    /// <returns>Success, or a failure naming the lifecycle state that forbids it.</returns>
+    /// <remarks>
+    /// <b>In the aggregate, so no handler can forget it.</b> Retiring is the decision a person took
+    /// and can be asked about; the deletion only removes what has already been said to be gone. A
+    /// subject that is still active or deprecated has producers and consumers who have not been told.
+    /// The rules that need other aggregates (contracts, services, references) are the handler's.
+    /// </remarks>
+    public Result CheckPurgeable() =>
+        Lifecycle is SubjectLifecycle.Retired
+            ? Result.Success()
+            : Result.Failure(
+                ConcordatCodes.SubjectNotRetired,
+                $"Subject '{Name}' is {WireTokens.For(Lifecycle).ToLowerInvariant()}. Retire it first: only a retired subject can be deleted for good.");
+
     /// <summary>Replaces the compatibility policy, or clears it to inherit the environment default.</summary>
     /// <param name="policy">The new policy, or <see langword="null"/> to inherit.</param>
     /// <returns>Success, or a failure when the subject is retired.</returns>
