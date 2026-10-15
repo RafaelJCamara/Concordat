@@ -245,7 +245,7 @@ shared owner or reader**: changing, resetting or disabling either would break ev
 is load-bearing: a second enabled owner would let `identity.spec.ts`'s "will not let an owner demote themselves" demote the shared owner for
 real. Members cannot be deleted, so an `afterAll` disables the member (it leaves no working credential), and a run adds one more disabled
 row to Settings → Members. It also holds a reader to the Account tab (and a refused password change that must not sign them out). Every
-sentence in the confirmations is asserted against the registry after the click; that a change ends the member's *other* sessions, that a
+sentence in the confirmations is asserted against the registry after the click; that a change ends the member's _other_ sessions, that a
 reset ends their sessions, that a disabled member is refused at sign-in, and that keys survive a change and a reset and die with a
 disabling, is the .NET HTTP suite's, which can arrange a second session and a key for free. **It spends two of the sign-in limiter's
 attempts** (the forced sign-in through the form, and the reader's refused password change). The first version spent six, and the last two
