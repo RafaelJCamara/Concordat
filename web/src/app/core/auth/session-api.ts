@@ -10,6 +10,16 @@ interface SignInDto {
   readonly credential: string;
   readonly actor: string;
   readonly scopes: readonly string[];
+  readonly mustChangePassword?: boolean;
+}
+
+/** What `/v1/auth/status` returns. */
+interface AuthStatusDto {
+  readonly claimed: boolean;
+  readonly authenticated: boolean;
+  readonly actor: string | null;
+  readonly scopes: readonly string[];
+  readonly mustChangePassword?: boolean;
 }
 
 /** A recovered session. */
@@ -17,6 +27,17 @@ export interface ResumedSession {
   readonly credential: string;
   readonly actor: string;
   readonly scopes: readonly Scope[];
+  /** Whether it can do nothing but replace a password an administrator set (ADR-048). */
+  readonly mustChangePassword: boolean;
+}
+
+/** What the registry says about the credential a request carried. */
+export interface CredentialStatus {
+  readonly claimed: boolean;
+  readonly authenticated: boolean;
+  readonly actor: string | null;
+  readonly scopes: readonly Scope[];
+  readonly mustChangePassword: boolean;
 }
 
 /**
@@ -28,7 +49,8 @@ function known(scopes: readonly string[]): Scope[] {
 }
 
 /**
- * The two session-cookie routes (decision 26).
+ * The two session-cookie routes (decision 26), and the status read that says what the credential
+ * holds once a temporary password has been replaced (ADR-048).
  *
  * <b>In `core/auth` rather than in the identity feature, because the shell and the app
  * initializer are the callers</b> — and neither may import a feature. Signing in belongs to the
@@ -71,10 +93,30 @@ export class SessionApi {
                 credential: dto.credential,
                 actor: dto.actor,
                 scopes: known(dto.scopes),
+                mustChangePassword: dto.mustChangePassword === true,
               }
             : null,
         ),
       );
+  }
+
+  /**
+   * Asks who the registry thinks the caller is, and what that credential holds right now.
+   *
+   * Where the app learns what a session may do once an administrator's temporary password has been
+   * replaced: the same credential holds its scopes again, and which ones is the registry's to say.
+   * Sent with the credential the interceptor attaches; with none it answers for an anonymous caller.
+   */
+  status(): Observable<CredentialStatus> {
+    return this.http.get<AuthStatusDto>(`${apiRoot(this.config)}/auth/status`).pipe(
+      map((dto) => ({
+        claimed: dto.claimed,
+        authenticated: dto.authenticated,
+        actor: dto.actor,
+        scopes: known(dto.scopes),
+        mustChangePassword: dto.mustChangePassword === true,
+      })),
+    );
   }
 
   /**

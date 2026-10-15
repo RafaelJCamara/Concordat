@@ -65,6 +65,10 @@ token and an operator can alert across a fleet.
 | `user_not_found` | No user with the given identity exists. |
 | `user_already_exists` | A user with that email address already exists. |
 | `signup_refused` | A signup was refused, without saying which of its fields caused it. |
+| `last_owner` | The change would leave the organisation with no enabled owner (ADR-048). |
+| `own_account` | The request would act on the caller's own account in a way that is refused (ADR-048). |
+| `member_outranks_caller` | The account belongs to someone whose authority the caller does not hold (ADR-048). |
+| `password_change_required` | The credential is good for one thing: replacing a password somebody else set (ADR-048). |
 | `api_key_not_found` | No API key with the given id exists. |
 | `api_key_label_invalid` | An API key label was empty or too long. |
 | `unauthenticated` | The credential was missing, malformed, expired or revoked. |
@@ -118,7 +122,7 @@ token and an operator can alert across a fleet.
 | `middleware_faulted` | Concordat's own middleware threw while handling a delivery, which is reported as an unenforced outcome rather than allowed to reach the application. |
 | `concurrent_write_conflict` | Two requests raced on the same row: a unique constraint or an optimistic-concurrency check caught it at the database rather than in application logic. |
 
-**94 codes.**
+**98 codes.**
 
 ## Rules for implementers
 

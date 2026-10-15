@@ -20,6 +20,20 @@ interface MembersState {
   readonly changing: readonly string[];
   /** Why the last role change for each member was refused. */
   readonly roleErrors: Readonly<Record<string, ConcordatError>>;
+  /** Which members have a password reset or a disabling in flight. One at a time each. */
+  readonly acting: readonly string[];
+  /** Why the last reset or disabling for each member was refused. */
+  readonly accountErrors: Readonly<Record<string, ConcordatError>>;
+  /** What the last reset, disabling or enabling did, in the registry's numbers, or null. */
+  readonly notice: AccountNotice | null;
+}
+
+/** What an account change did, for the screen to say. */
+export interface AccountNotice {
+  readonly kind: 'reset' | 'disabled' | 'enabled';
+  readonly email: string;
+  /** Sessions ended by a reset, or sessions and keys revoked by a disabling. Zero for an enabling. */
+  readonly count: number;
 }
 
 const INITIAL: MembersState = {
@@ -32,6 +46,9 @@ const INITIAL: MembersState = {
   added: null,
   changing: [],
   roleErrors: {},
+  acting: [],
+  accountErrors: {},
+  notice: null,
 };
 
 /**
@@ -48,7 +65,12 @@ const INITIAL: MembersState = {
  * would then be refused as a duplicate of an account that was in fact created.
  *
  * <b>The initial password is passed through and never kept.</b> It is an argument to the call,
- * not state, so nothing here could show it back.
+ * not state, so nothing here could show it back. The same goes for a temporary one, when an
+ * administrator resets a password.
+ *
+ * <b>A reset or a disabling is applied from the registry's answer too</b>, with the registry's own
+ * count of what it ended, and a refusal (the last owner, your own account) stays with the member it
+ * concerns instead of blanking the list. Each member is acted on one action at a time.
  */
 export const MembersStore = signalStore(
   withState<MembersState>(INITIAL),
@@ -58,6 +80,32 @@ export const MembersStore = signalStore(
   })),
   withMethods((store) => {
     const api = inject(IdentityApi);
+
+    const emailOf = (userId: string): string =>
+      store.members().find((m) => m.userId === userId)?.email ?? userId;
+
+    // An account action starts by clearing what the last one said about this member, and ends by
+    // letting them be acted on again.
+    const begin = (userId: string): void => {
+      const { [userId]: _cleared, ...remaining } = store.accountErrors();
+      patchState(store, {
+        acting: [...store.acting(), userId],
+        accountErrors: remaining,
+        notice: null,
+      });
+    };
+
+    const finish = (userId: string): void =>
+      patchState(store, { acting: store.acting().filter((id) => id !== userId) });
+
+    const refuse = (userId: string, error: unknown) => {
+      patchState(store, {
+        acting: store.acting().filter((id) => id !== userId),
+        accountErrors: { ...store.accountErrors(), [userId]: toConcordatError(error) },
+      });
+
+      return of(null);
+    };
 
     return {
       load: rxMethod<void>(
@@ -133,6 +181,83 @@ export const MembersStore = signalStore(
                 });
                 return of(null);
               }),
+            );
+          }),
+        ),
+      ),
+
+      /**
+       * Sets a member's password to a temporary one they must replace (ADR-048).
+       *
+       * One action per member at a time, and the same rules as a role change: nothing is shown ahead
+       * of the registry's answer, and a refusal stays with the member it concerns. The password is an
+       * argument to the call and nothing here holds it.
+       */
+      resetPassword: rxMethod<{ userId: string; password: string }>(
+        pipe(
+          mergeMap(({ userId, password }) => {
+            if (store.acting().includes(userId)) {
+              return of(null);
+            }
+
+            begin(userId);
+
+            return api.resetPassword(userId, password).pipe(
+              tap((answer) => {
+                patchState(store, {
+                  members: store
+                    .members()
+                    .map((m) =>
+                      m.userId === answer.userId
+                        ? { ...m, mustChangePassword: answer.mustChangePassword }
+                        : m,
+                    ),
+                  notice: {
+                    kind: 'reset',
+                    email: emailOf(userId),
+                    count: answer.sessionsSignedOut,
+                  },
+                });
+                finish(userId);
+              }),
+              catchError((error: unknown) => refuse(userId, error)),
+            );
+          }),
+        ),
+      ),
+
+      /**
+       * Disables or enables a member (ADR-048).
+       *
+       * The flag shown is the one the registry answers, which differs from the one asked for only
+       * when somebody else got there first, and it is the registry that knows.
+       */
+      setDisabled: rxMethod<{ userId: string; disabled: boolean }>(
+        pipe(
+          mergeMap(({ userId, disabled }) => {
+            if (store.acting().includes(userId)) {
+              return of(null);
+            }
+
+            begin(userId);
+
+            return api.setDisabled(userId, disabled).pipe(
+              tap((answer) => {
+                patchState(store, {
+                  members: store
+                    .members()
+                    .map((m) =>
+                      m.userId === answer.userId ? { ...m, disabled: answer.disabled } : m,
+                    ),
+                  notice: {
+                    kind: answer.disabled ? 'disabled' : 'enabled',
+                    email: emailOf(userId),
+                    count: answer.credentialsRevoked,
+                  },
+                });
+                finish(userId);
+              }),
+              catchError((error: unknown) => refuse(userId, error)),
             );
           }),
         ),

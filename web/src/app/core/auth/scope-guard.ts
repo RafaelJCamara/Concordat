@@ -8,6 +8,9 @@ import {
 } from '../../domain/identity/scope';
 import { SessionStore } from './session-store';
 
+/** Where a session goes while it must replace a password an administrator set (ADR-048). */
+const ACCOUNT_ROUTE = '/settings/account';
+
 /**
  * Keeps a route from rendering for someone who lacks the scopes it needs (ADR-018).
  *
@@ -24,6 +27,13 @@ export function scopeGuard(...required: readonly Scope[]): CanActivateFn {
   return (_route, state) => {
     const session = inject(SessionStore);
     const router = inject(Router);
+
+    // A session that must replace a temporary password holds no scopes whatever its role, and the
+    // fall-through below would send it to `/subjects`, which sends it here a hop later. Said once, at
+    // the place that knows why (ADR-048).
+    if (session.mustChangePassword()) {
+      return router.createUrlTree([ACCOUNT_ROUTE]);
+    }
 
     // An instance that answers an unclaimed caller as an owner (the opt-in, ADR-047) grants those
     // scopes in `/v1/auth/status`, so this needs no special case for it: holding the scopes is
@@ -62,6 +72,13 @@ export const signedInGuard: CanActivateFn = (_route, state) => {
   const session = inject(SessionStore);
   const router = inject(Router);
 
+  // Every read this person's session makes would answer 403 `password_change_required`, so a screen
+  // that rendered would fail everything it asked for and look broken. The account screen is the one
+  // place that works (ADR-048).
+  if (session.mustChangePassword()) {
+    return router.createUrlTree([ACCOUNT_ROUTE]);
+  }
+
   // Nothing to gate on an instance that answers an unclaimed caller as an owner (the opt-in,
   // ADR-047). A closed one, claimed or not, sends a visitor to sign-in, which is the setup screen
   // while nobody has an account.
@@ -70,6 +87,24 @@ export const signedInGuard: CanActivateFn = (_route, state) => {
   }
 
   return router.createUrlTree(['/sign-in'], { queryParams: { returnTo: state.url } });
+};
+
+/**
+ * The guard for the account screen: anybody who is signed in, and nobody else.
+ *
+ * <b>It is the one guard that lets a session through that must change its password</b>, because that
+ * session is exactly who the screen is for, and it asks for no scope, because everybody owns their
+ * own password: a reader changes theirs. An instance that answers a caller with no credential as an
+ * owner (the opt-in, ADR-047) has nobody signed in and so no password to change, and sends them to
+ * sign-in like any other signed-out visitor.
+ */
+export const accountGuard: CanActivateFn = (_route, state) => {
+  const session = inject(SessionStore);
+  const router = inject(Router);
+
+  return session.isSignedIn()
+    ? true
+    : router.createUrlTree(['/sign-in'], { queryParams: { returnTo: state.url } });
 };
 
 /**

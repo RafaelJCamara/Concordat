@@ -11,6 +11,7 @@ interface AuthStatusDto {
   readonly authenticated: boolean;
   readonly actor: string | null;
   readonly scopes: readonly string[];
+  readonly mustChangePassword?: boolean;
 }
 
 /** What `/v1/auth/signin` returns. */
@@ -19,6 +20,7 @@ interface SignInDto {
   readonly actor: string;
   readonly scopes: readonly string[];
   readonly expiresAt: string;
+  readonly mustChangePassword?: boolean;
 }
 
 /** Whether this instance has any accounts, and who the caller currently is. */
@@ -27,14 +29,22 @@ export interface AuthStatus {
   readonly authenticated: boolean;
   readonly actor: string | null;
   readonly scopes: readonly Scope[];
+  /** Whether the caller's password was set by an administrator and has to be replaced (ADR-048). */
+  readonly mustChangePassword: boolean;
 }
 
 /** A credential and what it grants. */
 export interface SignedIn {
   readonly credential: string;
   readonly actor: string;
+  /** Empty while {@link mustChangePassword} is true: the credential can do nothing else yet. */
   readonly scopes: readonly Scope[];
   readonly expiresAt: Date;
+  /**
+   * Whether the password that was just used is one an administrator set (ADR-048). The credential is
+   * good for replacing it and for nothing else until it has.
+   */
+  readonly mustChangePassword: boolean;
 }
 
 /**
@@ -69,9 +79,13 @@ export class AuthApi {
    * whether there is anybody to sign in as.
    */
   status(): Observable<AuthStatus> {
-    return this.http
-      .get<AuthStatusDto>(`${apiRoot(this.config)}/auth/status`)
-      .pipe(map((dto) => ({ ...dto, scopes: toScopes(dto.scopes) })));
+    return this.http.get<AuthStatusDto>(`${apiRoot(this.config)}/auth/status`).pipe(
+      map((dto) => ({
+        ...dto,
+        scopes: toScopes(dto.scopes),
+        mustChangePassword: dto.mustChangePassword === true,
+      })),
+    );
   }
 
   /**
@@ -94,6 +108,7 @@ export class AuthApi {
           actor: dto.actor,
           scopes: toScopes(dto.scopes),
           expiresAt: new Date(dto.expiresAt),
+          mustChangePassword: dto.mustChangePassword === true,
         })),
       );
   }

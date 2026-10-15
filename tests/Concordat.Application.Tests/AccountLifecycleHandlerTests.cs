@@ -609,6 +609,25 @@ public class AccountLifecycleHandlerTests
     }
 
     [Fact]
+    public async Task Enabling_ChangesTheFlagAndNothingElse()
+    {
+        // An account disabled before this build existed, or by hand, may still hold live credentials.
+        // Enabling it must not revoke them, any more than it restores any: it only lets the person
+        // sign in. (A credential of a disabled account does not authenticate either way.)
+        var owner = Member("owner@example.com", Role.Owner);
+        var bob = Member("bob@example.com", Role.Reader, disabled: true);
+        var session = _keys.Seed(bob.Id, ApiKeyKind.Session);
+        var standing = _keys.Seed(bob.Id, ApiKeyKind.Standing, label: "ci");
+        CallerIs(owner);
+
+        var result = await SetDisabledAsync(bob, disabled: false);
+
+        Assert.Equal(0, result.Value.CredentialsEnded);
+        Assert.True(Live(session.Key));
+        Assert.True(Live(standing.Key));
+    }
+
+    [Fact]
     public async Task Enabling_SomeoneWhoIsNotDisabledIsAnAnswerNotAChange()
     {
         var owner = Member("owner@example.com", Role.Owner);

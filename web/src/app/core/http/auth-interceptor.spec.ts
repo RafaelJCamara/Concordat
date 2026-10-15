@@ -1,5 +1,6 @@
 import {
   HttpClient,
+  HttpContext,
   type HttpInterceptorFn,
   provideHttpClient,
   withInterceptors,
@@ -9,7 +10,7 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SessionStore } from '../auth/session-store';
 import { provideConcordatConfig } from '../config/app-config';
-import { authInterceptor } from './auth-interceptor';
+import { authInterceptor, REFUSAL_IS_NOT_EXPIRY } from './auth-interceptor';
 import { problemDetailsInterceptor } from './problem-details-interceptor';
 
 // Two separate concerns live in this interceptor and both are security-shaped: which
@@ -96,6 +97,40 @@ describe('authInterceptor', () => {
 
       expect(session.credential()).toBeNull();
       expect(session.scopes()).toEqual([]);
+    });
+
+    it('keeps the session on a 401 that says a password was wrong, when the request says so', () => {
+      // Changing a password answers a wrong current password the way sign-in does, as 401
+      // `unauthenticated` (ADR-048). On a request that is made WITH a good credential that is not
+      // the credential being dead, and signing the person out for mistyping a password would be the
+      // worst way to find out. Only a request that opts in is read this way.
+      const { http, backend, session } = signedIn();
+      http
+        .post(API, {}, { context: new HttpContext().set(REFUSAL_IS_NOT_EXPIRY, true) })
+        .subscribe({ error: () => undefined });
+
+      backend
+        .expectOne(API)
+        .flush(
+          { detail: 'That is not your current password.', concordatCode: 'unauthenticated' },
+          { status: 401, statusText: 'Unauthorized' },
+        );
+
+      expect(session.credential()).toBe('token-abc');
+    });
+
+    it('still drops the session on a 401 from a request that did not opt in', () => {
+      const { http, backend, session } = signedIn();
+      http.post(API, {}).subscribe({ error: () => undefined });
+
+      backend
+        .expectOne(API)
+        .flush(
+          { detail: 'That is not your current password.', concordatCode: 'unauthenticated' },
+          { status: 401, statusText: 'Unauthorized' },
+        );
+
+      expect(session.credential()).toBeNull();
     });
 
     it('keeps the session on 403', () => {

@@ -31,12 +31,24 @@ interface SessionState {
    * {@link SessionStore.openInstance}.
    */
   readonly claimed: boolean | null;
+
+  /**
+   * Whether the password in force is one an administrator typed, so this session can do nothing but
+   * replace it (ADR-048).
+   *
+   * Said by the registry, in the sign-in answer, the resumed session and `/v1/auth/status`, and
+   * never worked out here. While it is true `scopes` is empty, so every guard and every affordance
+   * that reads the scopes already hides what the registry would refuse; this is what lets the app
+   * say why, and send the person to the one screen that works.
+   */
+  readonly mustChangePassword: boolean;
 }
 
 const SIGNED_OUT = {
   credential: null,
   actor: null,
   scopes: [],
+  mustChangePassword: false,
 } satisfies Omit<SessionState, 'claimed'>;
 
 /**
@@ -91,18 +103,46 @@ export const SessionStore = signalStore(
   })),
 
   withMethods((store) => ({
-    /** Records what `/v1/auth/status` said before anyone signed in. */
-    observeInstance(state: { claimed: boolean; actor: string | null; scopes: readonly Scope[] }) {
+    /** Records what `/v1/auth/status` said, before anyone signed in or after a session was resumed. */
+    observeInstance(state: {
+      claimed: boolean;
+      actor: string | null;
+      scopes: readonly Scope[];
+      mustChangePassword?: boolean;
+    }) {
       patchState(store, {
         claimed: state.claimed,
         actor: state.actor,
         scopes: state.scopes,
+        mustChangePassword: state.mustChangePassword ?? false,
       });
     },
 
     /** Records a sign-in. Scopes come from the API's response, never from the client. */
-    signIn(session: { credential: string; actor: string; scopes: readonly Scope[] }): void {
-      patchState(store, { ...session, claimed: true });
+    signIn(session: {
+      credential: string;
+      actor: string;
+      scopes: readonly Scope[];
+      mustChangePassword?: boolean;
+    }): void {
+      patchState(store, {
+        credential: session.credential,
+        actor: session.actor,
+        scopes: session.scopes,
+        mustChangePassword: session.mustChangePassword ?? false,
+        claimed: true,
+      });
+    },
+
+    /**
+     * Records that the password was replaced, and what the same credential holds now.
+     *
+     * The credential is not replaced and was never cut down: the registry limited it on every request
+     * while the password was somebody else's, so the scopes it grants are read again, from the
+     * registry, and passed in.
+     */
+    passwordReplaced(scopes: readonly Scope[]): void {
+      patchState(store, { scopes, mustChangePassword: false });
     },
 
     /**

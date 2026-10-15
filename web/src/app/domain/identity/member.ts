@@ -30,6 +30,11 @@ export interface Member {
   readonly role: Role;
   /** Whether they have been stopped from signing in. */
   readonly disabled: boolean;
+  /**
+   * Whether an administrator reset their password and they have not replaced it yet (ADR-048). Until
+   * they have, their sessions can do nothing but change it.
+   */
+  readonly mustChangePassword: boolean;
   readonly createdAt: Date;
   readonly lastSignedInAt: Date | null;
 }

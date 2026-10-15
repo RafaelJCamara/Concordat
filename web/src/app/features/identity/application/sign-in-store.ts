@@ -53,6 +53,7 @@ export const SignInStore = signalStore(
                   credential: result.credential,
                   actor: result.actor,
                   scopes: result.scopes,
+                  mustChangePassword: result.mustChangePassword,
                 });
 
                 patchState(store, { submitting: false, succeeded: true });
@@ -89,6 +90,7 @@ export const SignInStore = signalStore(
                   credential: result.credential,
                   actor: result.actor,
                   scopes: result.scopes,
+                  mustChangePassword: result.mustChangePassword,
                 });
 
                 patchState(store, { submitting: false, succeeded: true });

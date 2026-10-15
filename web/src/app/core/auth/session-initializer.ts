@@ -12,6 +12,7 @@ interface AuthStatusDto {
   readonly authenticated: boolean;
   readonly actor: string | null;
   readonly scopes: readonly string[];
+  readonly mustChangePassword?: boolean;
 }
 
 function known(scopes: readonly string[]): Scope[] {
@@ -56,6 +57,7 @@ export function provideSessionInitializer() {
           claimed: status.claimed,
           actor: status.actor,
           scopes: known(status.scopes),
+          mustChangePassword: status.mustChangePassword === true,
         }),
       ),
       catchError(() => of(null)),

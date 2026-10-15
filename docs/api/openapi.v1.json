@@ -2728,7 +2728,7 @@
           "Identity"
         ],
         "summary": "Change your own password",
-        "description": "Any signed-in person may, a Reader included, and it is the one thing a person whose password an administrator reset may do before they have changed it. The current password is required and is checked before the new one is judged; a wrong one is refused as 401 'unauthenticated', as a wrong sign-in is, and counts against the same limit. The new one must be at least 12 characters, with no other rule, and must differ from the current one. Every OTHER session of yours is signed out and the one you are using is kept; your API keys are not touched. Recorded in the audit trail as PASSWORD_CHANGED. Neither password is ever logged, audited or returned.\n\nRequires a credential, and no particular scope.",
+        "description": "Any signed-in person may, a Reader included, and it is the one thing a person whose password an administrator reset may do before they have changed it. The current password is required and is checked before the new one is judged; a wrong one is refused as 401 'unauthenticated', as a wrong sign-in is, and counts against the same limit. The new one must be at least 12 characters, with no other rule, and must differ from the current one. Every OTHER session of yours is signed out and the one you are using is kept; your API keys are not touched. Recorded in the audit trail as PASSWORD_CHANGED. Neither password is ever logged, audited or returned.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2780,12 +2780,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "Bearer": [ ]
-          }
-        ]
+        }
       }
     },
     "/v1/auth/signout": {

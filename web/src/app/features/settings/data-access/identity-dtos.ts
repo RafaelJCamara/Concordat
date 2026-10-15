@@ -20,8 +20,28 @@ export interface MemberDto {
   readonly displayName: string;
   readonly role: string;
   readonly disabled: boolean;
+  readonly mustChangePassword: boolean;
   readonly createdAt: string;
   readonly lastSignedInAt: string | null;
+}
+
+/** `PasswordChangedResponse`. */
+export interface PasswordChangedDto {
+  readonly otherSessionsSignedOut: number;
+}
+
+/** `MemberPasswordResetResponse`. */
+export interface MemberPasswordResetDto {
+  readonly userId: string;
+  readonly mustChangePassword: boolean;
+  readonly sessionsSignedOut: number;
+}
+
+/** `MemberDisabledResponse`. */
+export interface MemberDisabledDto {
+  readonly userId: string;
+  readonly disabled: boolean;
+  readonly credentialsRevoked: number;
 }
 
 /** `ApiKeyResponse`. */
@@ -49,6 +69,7 @@ export function toMember(dto: MemberDto): Member {
     displayName: dto.displayName,
     role: wireToken('role', dto.role, ROLES) as Role,
     disabled: dto.disabled,
+    mustChangePassword: dto.mustChangePassword,
     createdAt: wireTimestamp(dto.createdAt),
     lastSignedInAt: optionalTimestamp(dto.lastSignedInAt),
   };

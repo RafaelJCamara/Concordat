@@ -1,8 +1,9 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { map, type Observable } from 'rxjs';
 import { CONCORDAT_CONFIG } from '../../../core/config/app-config';
 import { apiRoot } from '../../../core/http/api-url';
+import { REFUSAL_IS_NOT_EXPIRY } from '../../../core/http/auth-interceptor';
 import { wireToken } from '../../../core/http/wire-token';
 import {
   ROLES,
@@ -18,7 +19,10 @@ import {
   toMember,
   type ApiKeyDto,
   type IssuedApiKeyDto,
+  type MemberDisabledDto,
   type MemberDto,
+  type MemberPasswordResetDto,
+  type PasswordChangedDto,
 } from './identity-dtos';
 
 /** A member as a person describes one. */
@@ -27,6 +31,30 @@ export interface NewMember {
   readonly password: string;
   readonly role: Role;
   readonly displayName: string;
+}
+
+/** What changing one's own password did. */
+export interface PasswordChanged {
+  /** How many of the person's other sessions the registry signed out. */
+  readonly otherSessionsSignedOut: number;
+}
+
+/** What resetting a member's password did. */
+export interface MemberPasswordReset {
+  readonly userId: string;
+  /** Always true: the member has to replace the temporary password. */
+  readonly mustChangePassword: boolean;
+  /** How many of the member's sessions the registry signed out. */
+  readonly sessionsSignedOut: number;
+}
+
+/** What disabling or enabling a member did. */
+export interface MemberDisabled {
+  readonly userId: string;
+  /** Whether the member is disabled now, as the registry says. */
+  readonly disabled: boolean;
+  /** How many sessions and API keys this request revoked. Zero for an enabling. */
+  readonly credentialsRevoked: number;
 }
 
 /** An API key as a person asks for one. */
@@ -86,6 +114,67 @@ export class IdentityApi {
           role: wireToken('role', response.role, ROLES) as Role,
         })),
       );
+  }
+
+  /**
+   * Sets a member's password to a temporary one they must replace (ADR-048).
+   *
+   * The password goes out in the body and is not held on this side of the call, like the one
+   * `addMember` sends. The answer carries none: the registry never returns a password.
+   */
+  resetPassword(userId: string, password: string): Observable<MemberPasswordReset> {
+    return this.http
+      .put<MemberPasswordResetDto>(
+        `${apiRoot(this.config)}/members/${encodeURIComponent(userId)}/password`,
+        { password },
+      )
+      .pipe(
+        map((dto) => ({
+          userId: dto.userId,
+          mustChangePassword: dto.mustChangePassword,
+          sessionsSignedOut: dto.sessionsSignedOut,
+        })),
+      );
+  }
+
+  /**
+   * Disables or enables a member (ADR-048).
+   *
+   * The flag is always sent, in both directions. The registry refuses a body without it, because a
+   * missing boolean reads as `false` and a misspelt field must not enable the member it was meant
+   * to disable.
+   */
+  setDisabled(userId: string, disabled: boolean): Observable<MemberDisabled> {
+    return this.http
+      .put<MemberDisabledDto>(
+        `${apiRoot(this.config)}/members/${encodeURIComponent(userId)}/disabled`,
+        { disabled },
+      )
+      .pipe(
+        map((dto) => ({
+          userId: dto.userId,
+          disabled: dto.disabled,
+          credentialsRevoked: dto.credentialsRevoked,
+        })),
+      );
+  }
+
+  /**
+   * Changes the signed-in person's own password (ADR-048).
+   *
+   * <b>Marked so that a wrong current password is not read as an expired session.</b> The registry
+   * answers it `401 unauthenticated` exactly as it answers a wrong sign-in, on a request made with a
+   * credential that is perfectly good; the auth interceptor would otherwise sign the person out for
+   * a typo. Both passwords go out in the body and neither is held here.
+   */
+  changePassword(currentPassword: string, newPassword: string): Observable<PasswordChanged> {
+    return this.http
+      .post<PasswordChangedDto>(
+        `${apiRoot(this.config)}/auth/password`,
+        { currentPassword, newPassword },
+        { context: new HttpContext().set(REFUSAL_IS_NOT_EXPIRY, true) },
+      )
+      .pipe(map((dto) => ({ otherSessionsSignedOut: dto.otherSessionsSignedOut })));
   }
 
   listApiKeys(): Observable<readonly ApiKey[]> {

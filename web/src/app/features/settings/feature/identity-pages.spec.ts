@@ -8,7 +8,7 @@ import { ConcordatError } from '../../../core/http/problem-details';
 import type { ApiKey, IssuedApiKey, Member, Role } from '../../../domain/identity/member';
 import type { Scope } from '../../../domain/identity/scope';
 import { ApiKeysStore } from '../application/api-keys-store';
-import { MembersStore } from '../application/members-store';
+import { MembersStore, type AccountNotice } from '../application/members-store';
 import { ApiKeysPage } from './api-keys-page';
 import { MembersPage } from './members-page';
 
@@ -24,6 +24,7 @@ function member(overrides: Partial<Member> = {}): Member {
     displayName: 'Alice',
     role: 'READER',
     disabled: false,
+    mustChangePassword: false,
     createdAt: new Date('2026-08-01T09:00:00Z'),
     lastSignedInAt: null,
     ...overrides,
@@ -64,13 +65,22 @@ function renderMembers(
     added?: Member | null;
     changing?: readonly string[];
     roleErrors?: Record<string, ConcordatError>;
+    acting?: readonly string[];
+    accountErrors?: Record<string, ConcordatError>;
+    notice?: AccountNotice | null;
+    scopes?: readonly Scope[];
+    actor?: string;
   } = {},
 ) {
   const add = vi.fn();
   const changeRole = vi.fn();
+  const resetPassword = vi.fn();
+  const setDisabled = vi.fn();
   const added = signal(state.added ?? null);
   const roleErrors = signal(state.roleErrors ?? {});
   const members = signal(state.members ?? [member()]);
+  const notice = signal(state.notice ?? null);
+  const accountErrors = signal(state.accountErrors ?? {});
 
   TestBed.configureTestingModule({
     providers: [provideRouter([]), provideConcordatConfig({ defaultEnvironment: 'dev' })],
@@ -89,15 +99,24 @@ function renderMembers(
             added,
             changing: signal(state.changing ?? []),
             roleErrors,
+            acting: signal(state.acting ?? []),
+            accountErrors,
+            notice,
             load: () => {},
             add,
             changeRole,
+            resetPassword,
+            setDisabled,
           },
         },
       ],
     },
   });
-  TestBed.inject(SessionStore).signIn({ credential: 'c', actor: 'a', scopes: ['org:admin'] });
+  TestBed.inject(SessionStore).signIn({
+    credential: 'c',
+    actor: state.actor ?? 'a',
+    scopes: state.scopes ?? ['org:admin'],
+  });
 
   const fixture = TestBed.createComponent(MembersPage);
   fixture.detectChanges();
@@ -107,8 +126,13 @@ function renderMembers(
     host: fixture.nativeElement as HTMLElement,
     add,
     changeRole,
+    resetPassword,
+    setDisabled,
     added,
+    members,
     roleErrors,
+    accountErrors,
+    notice,
   };
 }
 
@@ -310,6 +334,307 @@ describe('MembersPage', () => {
       fixture.detectChanges();
 
       expect(host.textContent).toContain('plus members and API keys');
+    });
+  });
+
+  describe('account actions (ADR-048)', () => {
+    const bob = () => member({ userId: 'u2', email: 'bob@example.com', displayName: 'Bob' });
+
+    function click(host: HTMLElement, text: string, fixture: { detectChanges(): void }): void {
+      const target = button(host, text);
+      expect(target, `a button called "${text}"`).toBeDefined();
+      target!.click();
+      fixture.detectChanges();
+    }
+
+    it('marks a member who has not replaced a temporary password, which is who an administrator is waiting on', () => {
+      const { host } = renderMembers({ members: [member({ mustChangePassword: true })] });
+
+      expect(host.textContent).toContain('MUST CHANGE PASSWORD');
+    });
+
+    it('marks nobody who has not been reset', () => {
+      expect(renderMembers().host.textContent).not.toContain('MUST CHANGE PASSWORD');
+    });
+
+    it('offers a reset and a disabling on somebody else’s row, and an enabling on a disabled one', () => {
+      const { host } = renderMembers({
+        members: [bob(), member({ disabled: true })],
+      });
+
+      const rows = [...host.querySelectorAll('li')].filter((li) => li.textContent?.includes('@'));
+      const bobsRow = rows.find((li) => li.textContent?.includes('bob@example.com'))!;
+      const aliceRow = rows.find((li) => li.textContent?.includes('alice@example.com'))!;
+
+      expect(button(bobsRow as HTMLElement, 'Reset password…')).toBeDefined();
+      expect(button(bobsRow as HTMLElement, 'Disable…')).toBeDefined();
+      expect(button(bobsRow as HTMLElement, 'Enable…')).toBeUndefined();
+
+      expect(button(aliceRow as HTMLElement, 'Reset password…')).toBeDefined();
+      expect(button(aliceRow as HTMLElement, 'Enable…')).toBeDefined();
+      expect(button(aliceRow as HTMLElement, 'Disable…')).toBeUndefined();
+    });
+
+    it('offers neither on your own row, and points at the account screen instead', () => {
+      // The registry refuses both for the account the request is made with (`own_account`).
+      const { host } = renderMembers({
+        members: [member({ email: 'ops@example.com' })],
+        actor: 'ops@example.com',
+      });
+
+      expect(button(host, 'Reset password…')).toBeUndefined();
+      expect(button(host, 'Disable…')).toBeUndefined();
+      expect(host.textContent).toContain('This is you');
+      expect(host.querySelector('a[href="/settings/account"]')).not.toBeNull();
+    });
+
+    it('compares the signed-in actor to the email the way the registry stores it, lowercased', () => {
+      const { host } = renderMembers({
+        members: [member({ email: 'ops@example.com' })],
+        actor: 'Ops@Example.com',
+      });
+
+      expect(button(host, 'Disable…')).toBeUndefined();
+    });
+
+    it('draws none of it for a session that does not hold org:admin, rather than drawing it disabled', () => {
+      // ADR-018: absent, not disabled. The screen is org:admin end to end, and the controls say so
+      // themselves rather than being right by accident of where they are placed.
+      const { host } = renderMembers({ members: [bob()], scopes: ['subject:read'] });
+
+      expect(button(host, 'Reset password…')).toBeUndefined();
+      expect(button(host, 'Disable…')).toBeUndefined();
+      expect(host.querySelector('cd-member-actions')?.textContent?.trim() ?? '').toBe('');
+    });
+
+    it('asks twice before disabling: the first click only says what it will do', () => {
+      const { fixture, host, setDisabled } = renderMembers({ members: [bob()] });
+
+      click(host, 'Disable…', fixture);
+
+      expect(setDisabled).not.toHaveBeenCalled();
+      expect(host.textContent).toContain('Disable bob@example.com?');
+      expect(host.textContent).toContain('MEMBER_DISABLED');
+
+      click(host, 'Yes, disable them', fixture);
+
+      expect(setDisabled).toHaveBeenCalledWith({ userId: 'u2', disabled: true });
+    });
+
+    it('goes back from a disabling without sending anything', () => {
+      const { fixture, host, setDisabled } = renderMembers({ members: [bob()] });
+
+      click(host, 'Disable…', fixture);
+      click(host, 'Keep them enabled', fixture);
+
+      expect(setDisabled).not.toHaveBeenCalled();
+      expect(button(host, 'Disable…')).toBeDefined();
+    });
+
+    it('asks twice before enabling, and says nothing comes back', () => {
+      const { fixture, host, setDisabled } = renderMembers({
+        members: [member({ userId: 'u2', email: 'bob@example.com', disabled: true })],
+      });
+
+      click(host, 'Enable…', fixture);
+
+      expect(setDisabled).not.toHaveBeenCalled();
+      expect(host.textContent).toContain('Enable bob@example.com?');
+      expect(host.textContent).toContain('Nothing that was revoked');
+
+      click(host, 'Yes, enable them', fixture);
+
+      expect(setDisabled).toHaveBeenCalledWith({ userId: 'u2', disabled: false });
+    });
+
+    it('tells an administrator about the last-owner refusal only on an owner', () => {
+      const owner = renderMembers({ members: [member({ userId: 'u2', role: 'OWNER' })] });
+      click(owner.host, 'Disable…', owner.fixture);
+      expect(owner.host.textContent).toContain('last owner who can sign in');
+
+      TestBed.resetTestingModule();
+
+      const reader = renderMembers({ members: [bob()] });
+      click(reader.host, 'Disable…', reader.fixture);
+      expect(reader.host.textContent).not.toContain('last owner who can sign in');
+    });
+
+    it('closes a disabling confirmation once the registry has disabled the member', () => {
+      // Otherwise it would turn into an enabling confirmation on the same row, one click from a
+      // thing it has not asked about.
+      const { fixture, host, members, setDisabled } = renderMembers({ members: [bob()] });
+
+      click(host, 'Disable…', fixture);
+      members.set([{ ...bob(), disabled: true }]);
+      fixture.detectChanges();
+
+      expect(host.textContent).not.toContain('Yes, enable them');
+      expect(host.textContent).not.toContain('Yes, disable them');
+      expect(setDisabled).not.toHaveBeenCalled();
+    });
+
+    it('disables the row’s buttons while the registry has not answered', () => {
+      const { host } = renderMembers({ members: [bob()], acting: ['u2'] });
+
+      expect((button(host, 'Disable…') as HTMLButtonElement).disabled).toBe(true);
+      expect((button(host, 'Reset password…') as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('shows the registry’s refusal on the row it concerns', () => {
+      const { host } = renderMembers({
+        members: [bob(), member()],
+        accountErrors: {
+          u2: new ConcordatError({
+            status: 409,
+            code: 'last_owner',
+            detail: 'That would leave this instance with no owner who can sign in.',
+          }),
+        },
+      });
+
+      const rows = [...host.querySelectorAll('li')].filter((li) => li.textContent?.includes('@'));
+      const bobsRow = rows.find((li) => li.textContent?.includes('bob@example.com'))!;
+      const aliceRow = rows.find((li) => li.textContent?.includes('alice@example.com'))!;
+
+      expect(bobsRow.textContent).toContain('The registry refused this change');
+      expect(bobsRow.textContent).toContain('no owner who can sign in');
+      expect(aliceRow.textContent).not.toContain('The registry refused this change');
+    });
+
+    describe('resetting a password', () => {
+      function openReset(state: Parameters<typeof renderMembers>[0] = { members: [bob()] }) {
+        const context = renderMembers(state);
+        click(context.host, 'Reset password…', context.fixture);
+        return context;
+      }
+
+      const typeInto = (host: HTMLElement, fixture: { detectChanges(): void }, value: string) => {
+        fill(host, 'reset-u2', value);
+        fixture.detectChanges();
+      };
+
+      it('asks for a temporary password in a field a password manager will not fill', () => {
+        const { host } = openReset();
+        const field = host.querySelector('#reset-u2') as HTMLInputElement;
+
+        expect(field.type).toBe('password');
+        expect(field.getAttribute('autocomplete')).toBe('new-password');
+        expect(host.querySelector('label[for="reset-u2"]')?.textContent).toContain(
+          'bob@example.com',
+        );
+      });
+
+      it('sends nothing for a password under twelve characters, and says why beside the field', () => {
+        const { fixture, host, resetPassword } = openReset();
+
+        typeInto(host, fixture, 'too short');
+
+        expect((button(host, 'Review change') as HTMLButtonElement).disabled).toBe(true);
+        expect(host.textContent).toContain('at least 12 characters');
+        expect(resetPassword).not.toHaveBeenCalled();
+      });
+
+      it('asks twice: the review says what it will do, and only the second click sends', () => {
+        const { fixture, host, resetPassword } = openReset();
+
+        typeInto(host, fixture, 'a temporary one!');
+        click(host, 'Review change', fixture);
+
+        expect(resetPassword).not.toHaveBeenCalled();
+        expect(host.textContent).toContain('Reset the password for bob@example.com?');
+        expect(host.textContent).toContain('MEMBER_PASSWORD_RESET');
+        expect(host.textContent).toContain('their session can do nothing but change it');
+        expect(host.textContent).toContain('API keys are not touched');
+        expect(host.textContent).toContain('does not send it');
+
+        click(host, 'Yes, reset it', fixture);
+
+        expect(resetPassword).toHaveBeenCalledWith({
+          userId: 'u2',
+          password: 'a temporary one!',
+        });
+      });
+
+      it('clears the password the moment it is sent, so it does not sit in the field', () => {
+        const { fixture, host } = openReset();
+
+        typeInto(host, fixture, 'a temporary one!');
+        click(host, 'Review change', fixture);
+        click(host, 'Yes, reset it', fixture);
+
+        // The form is closed and its field gone; opening it again finds it empty.
+        expect(host.querySelector('#reset-u2')).toBeNull();
+        click(host, 'Reset password…', fixture);
+        expect((host.querySelector('#reset-u2') as HTMLInputElement).value).toBe('');
+      });
+
+      it('goes back to the field from the review with what was typed', () => {
+        const { fixture, host, resetPassword } = openReset();
+
+        typeInto(host, fixture, 'a temporary one!');
+        click(host, 'Review change', fixture);
+        click(host, 'Keep editing', fixture);
+
+        expect((host.querySelector('#reset-u2') as HTMLInputElement).value).toBe(
+          'a temporary one!',
+        );
+        expect(resetPassword).not.toHaveBeenCalled();
+      });
+
+      it('cancels without sending anything, and forgets what was typed', () => {
+        const { fixture, host, resetPassword } = openReset();
+
+        typeInto(host, fixture, 'a temporary one!');
+        click(host, 'Cancel', fixture);
+        click(host, 'Reset password…', fixture);
+
+        expect((host.querySelector('#reset-u2') as HTMLInputElement).value).toBe('');
+        expect(resetPassword).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('what the last action did', () => {
+      it('says how many sessions a reset ended, and what the member must do next', () => {
+        const { host } = renderMembers({
+          notice: { kind: 'reset', email: 'bob@example.com', count: 2 },
+        });
+
+        const status = host.querySelector('[role="status"]')!.textContent!;
+
+        expect(status).toContain('Reset the password for');
+        expect(status).toContain('bob@example.com');
+        expect(status).toContain('2 sessions were signed out');
+        expect(status).toContain('choose a new password');
+      });
+
+      it('says how many credentials a disabling revoked, in the singular for one', () => {
+        const one = renderMembers({
+          notice: { kind: 'disabled', email: 'bob@example.com', count: 1 },
+        });
+        expect(one.host.querySelector('[role="status"]')!.textContent).toContain(
+          '1 credential was revoked',
+        );
+
+        TestBed.resetTestingModule();
+
+        const many = renderMembers({
+          notice: { kind: 'disabled', email: 'bob@example.com', count: 3 },
+        });
+        expect(many.host.querySelector('[role="status"]')!.textContent).toContain(
+          '3 credentials were revoked',
+        );
+      });
+
+      it('says an enabling let them sign in again, and claims nothing came back', () => {
+        const { host } = renderMembers({
+          notice: { kind: 'enabled', email: 'bob@example.com', count: 0 },
+        });
+
+        const status = host.querySelector('[role="status"]')!.textContent!;
+
+        expect(status).toContain('Enabled');
+        expect(status).toContain('They can sign in again');
+      });
     });
   });
 });

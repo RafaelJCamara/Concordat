@@ -61,6 +61,58 @@ describe('SessionApi', () => {
         });
     }));
 
+  it('says so when the session it recovered must change its password (ADR-048)', () =>
+    new Promise<void>((done) => {
+      api.resume().subscribe((session) => {
+        expect(session?.mustChangePassword).toBe(true);
+        expect(session?.scopes).toEqual([]);
+        done();
+      });
+
+      http
+        .expectOne((r) => r.url.endsWith('/auth/resume'))
+        .flush({ credential: 'cdt_x', actor: 'alice', scopes: [], mustChangePassword: true });
+    }));
+
+  it('does not invent an obligation a registry did not state', () =>
+    new Promise<void>((done) => {
+      // An older registry says nothing, and nothing is the answer "no".
+      api.resume().subscribe((session) => {
+        expect(session?.mustChangePassword).toBe(false);
+        done();
+      });
+
+      http
+        .expectOne((r) => r.url.endsWith('/auth/resume'))
+        .flush({ credential: 'cdt_x', actor: 'alice', scopes: ['subject:read'] });
+    }));
+
+  it('reads what the registry now says the credential holds', () =>
+    new Promise<void>((done) => {
+      // After a password is replaced the same credential holds its scopes again, and this is how
+      // the app learns which: from the registry, and never from a guess about the role.
+      api.status().subscribe((status) => {
+        expect(status).toEqual({
+          claimed: true,
+          authenticated: true,
+          actor: 'alice@example.com',
+          scopes: ['subject:read'],
+          mustChangePassword: false,
+        });
+        done();
+      });
+
+      http
+        .expectOne((r) => r.url.endsWith('/auth/status'))
+        .flush({
+          claimed: true,
+          authenticated: true,
+          actor: 'alice@example.com',
+          scopes: ['subject:read', 'subject:teleport'],
+          mustChangePassword: false,
+        });
+    }));
+
   it('treats a 204 as "no session" rather than a failure', () =>
     new Promise<void>((done) => {
       // The app must probe on every startup -- it cannot read an httpOnly cookie to find out

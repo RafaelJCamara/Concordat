@@ -343,6 +343,11 @@ public class AccountLifecycleApiTests(AuthApiFactory factory) : IClassFixture<Au
 
         Assert.False((await MemberAsync(member.UserId)).MustChangePassword);
         Assert.False((await SignInAsync(member.Email, NewPassword)).MustChangePassword);
+
+        // The temporary password, known to the administrator who typed it, is no longer a password.
+        var temporary = await Anonymous().PostAsJsonAsync(
+            "/v1/auth/signin", new SignInRequest(member.Email, Temporary), ApiFactory.Json);
+        Assert.Equal(HttpStatusCode.Unauthorized, temporary.StatusCode);
     }
 
     [Fact]

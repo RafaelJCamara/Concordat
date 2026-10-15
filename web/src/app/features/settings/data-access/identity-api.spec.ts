@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import { provideConcordatConfig } from '../../../core/config/app-config';
+import { REFUSAL_IS_NOT_EXPIRY } from '../../../core/http/auth-interceptor';
 import type { ApiKey, IssuedApiKey, Member } from '../../../domain/identity/member';
 import { IdentityApi } from './identity-api';
 import { toApiKey, toMember, type ApiKeyDto, type MemberDto } from './identity-dtos';
@@ -16,6 +17,7 @@ const member: MemberDto = {
   displayName: 'Alice',
   role: 'ADMIN',
   disabled: false,
+  mustChangePassword: false,
   createdAt: '2026-08-01T09:00:00+00:00',
   lastSignedInAt: '2026-08-13T09:00:00+00:00',
 };
@@ -108,6 +110,116 @@ describe('IdentityApi', () => {
         .flush({ userId: member.userId, role: 'SUPERUSER' });
 
       expect(String((failed as Error).message ?? failed)).toContain('SUPERUSER');
+    });
+
+    it('reads whether a member still has to change a password an administrator set', () => {
+      let members: readonly Member[] = [];
+      const { api, backend } = setUp();
+      api.listMembers().subscribe((value) => (members = value));
+
+      backend.expectOne('/v1/members').flush([{ ...member, mustChangePassword: true }]);
+
+      expect(members[0]?.mustChangePassword).toBe(true);
+    });
+
+    it('resets a password with a put to the member’s password route, sending only the password', () => {
+      let reset: { userId: string; mustChangePassword: boolean; sessionsSignedOut: number } | null =
+        null;
+      const { api, backend } = setUp();
+      api.resetPassword(member.userId, 'temporary 12345').subscribe((value) => (reset = value));
+
+      const request = backend.expectOne(`/v1/members/${member.userId}/password`);
+
+      expect(request.request.method).toBe('PUT');
+      expect(request.request.body).toEqual({ password: 'temporary 12345' });
+
+      request.flush({ userId: member.userId, mustChangePassword: true, sessionsSignedOut: 2 });
+
+      expect(reset).toEqual({
+        userId: member.userId,
+        mustChangePassword: true,
+        sessionsSignedOut: 2,
+      });
+    });
+
+    it('disables with a put to the member’s disabled route, and says which way it was asked', () => {
+      let result: { userId: string; disabled: boolean; credentialsRevoked: number } | null = null;
+      const { api, backend } = setUp();
+      api.setDisabled(member.userId, true).subscribe((value) => (result = value));
+
+      const request = backend.expectOne(`/v1/members/${member.userId}/disabled`);
+
+      expect(request.request.method).toBe('PUT');
+      expect(request.request.body).toEqual({ disabled: true });
+
+      request.flush({ userId: member.userId, disabled: true, credentialsRevoked: 3 });
+
+      expect(result).toEqual({ userId: member.userId, disabled: true, credentialsRevoked: 3 });
+    });
+
+    it('enables with the same route and a false, which is never left off the body', () => {
+      // A body without it would be refused, and one that read as "enable" by default would enable
+      // the member a misspelt field was meant to disable. Sent explicitly, both ways.
+      const { api, backend } = setUp();
+      api.setDisabled(member.userId, false).subscribe();
+
+      const request = backend.expectOne(`/v1/members/${member.userId}/disabled`);
+
+      expect(request.request.body).toEqual({ disabled: false });
+    });
+  });
+
+  describe('your own password', () => {
+    it('is changed with a post to the password route, carrying both passwords and nothing else', () => {
+      let changed: { otherSessionsSignedOut: number } | null = null;
+      const { api, backend } = setUp();
+      api.changePassword('the old one', 'a brand new one').subscribe((value) => (changed = value));
+
+      const request = backend.expectOne('/v1/auth/password');
+
+      expect(request.request.method).toBe('POST');
+      expect(request.request.body).toEqual({
+        currentPassword: 'the old one',
+        newPassword: 'a brand new one',
+      });
+
+      request.flush({ otherSessionsSignedOut: 1 });
+
+      expect(changed).toEqual({ otherSessionsSignedOut: 1 });
+    });
+
+    it('is marked so that a wrong current password is not read as an expired session', () => {
+      // The registry answers it 401, as it answers sign-in. See `REFUSAL_IS_NOT_EXPIRY`.
+      const { api, backend } = setUp();
+      api.changePassword('the old one', 'a brand new one').subscribe();
+
+      const request = backend.expectOne('/v1/auth/password').request;
+
+      expect(request.context.get(REFUSAL_IS_NOT_EXPIRY)).toBe(true);
+    });
+
+    it('does not mark any other request so', () => {
+      const { api, backend } = setUp();
+      api.setDisabled(member.userId, true).subscribe();
+
+      expect(
+        backend
+          .expectOne(`/v1/members/${member.userId}/disabled`)
+          .request.context.get(REFUSAL_IS_NOT_EXPIRY),
+      ).toBe(false);
+    });
+
+    it('never answers with a password, and the request is the only place one goes', () => {
+      let answer = '';
+      const { api, backend } = setUp();
+      api
+        .changePassword('the old one', 'a brand new one')
+        .subscribe((value) => (answer = JSON.stringify(value)));
+
+      backend.expectOne('/v1/auth/password').flush({ otherSessionsSignedOut: 0 });
+
+      expect(answer).not.toContain('the old one');
+      expect(answer).not.toContain('a brand new one');
     });
   });
 

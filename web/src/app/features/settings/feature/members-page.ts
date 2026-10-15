@@ -3,11 +3,13 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmSkeleton } from '@spartan-ng/helm/skeleton';
+import { SessionStore } from '../../../core/auth/session-store';
 import { ActiveEnvironmentStore } from '../../../core/config/active-environment-store';
 import { ROLE_MEANING, ROLES, type Member, type Role } from '../../../domain/identity/member';
 import { RelativeTimePipe } from '../../../shared/pipes/relative-time-pipe';
 import { StatusBadge } from '../../../shared/ui/status-badge/status-badge';
 import { MembersStore } from '../application/members-store';
+import { MemberActions } from './member-actions';
 import { SettingsNav } from './settings-nav';
 
 const INPUT =
@@ -31,8 +33,13 @@ const MIN_PASSWORD = 12;
  * characters, said in one place that cannot drift from the other.
  *
  * <b>A role change is applied from the registry's answer.</b> Whether it is allowed is the
- * registry's to say: an owner cannot demote themselves, because an instance whose last owner is
- * a reader cannot be administered by anybody.
+ * registry's to say: the last owner who can sign in cannot be demoted, because an instance whose
+ * last owner is a reader cannot be administered by anybody.
+ *
+ * <b>Each row also carries what an administrator may do to the account</b> (ADR-048): reset the
+ * password and disable or enable it, in `cd-member-actions`, each behind a confirmation whose every
+ * sentence was measured against the registry. What those did is applied from the registry's answer,
+ * with the registry's own count of what it ended, and a refusal stays with the row it concerns.
  */
 @Component({
   selector: 'cd-members-page',
@@ -43,6 +50,7 @@ const MIN_PASSWORD = 12;
     HlmAlertImports,
     HlmButton,
     HlmSkeleton,
+    MemberActions,
     RelativeTimePipe,
     SettingsNav,
     StatusBadge,
@@ -58,12 +66,34 @@ const MIN_PASSWORD = 12;
 
       <cd-settings-nav />
 
-      <div role="status" aria-live="polite">
+      <div role="status" aria-live="polite" class="space-y-2">
         @if (store.added(); as added) {
           <div hlmAlert>
             <p hlmAlertDescription>
               Added <span class="font-mono">{{ added.email }}</span> as {{ added.role }}. They can
               sign in now.
+            </p>
+          </div>
+        }
+        @if (store.notice(); as notice) {
+          <div hlmAlert>
+            <p hlmAlertDescription>
+              @switch (notice.kind) {
+                @case ('reset') {
+                  Reset the password for <span class="font-mono">{{ notice.email }}</span
+                  >. {{ notice.count }} {{ notice.count === 1 ? 'session was' : 'sessions were' }}
+                  signed out, and they must choose a new password when they next sign in.
+                }
+                @case ('disabled') {
+                  Disabled <span class="font-mono">{{ notice.email }}</span
+                  >. {{ notice.count }}
+                  {{ notice.count === 1 ? 'credential was' : 'credentials were' }} revoked.
+                }
+                @case ('enabled') {
+                  Enabled <span class="font-mono">{{ notice.email }}</span
+                  >. They can sign in again.
+                }
+              }
             </p>
           </div>
         }
@@ -105,6 +135,9 @@ const MIN_PASSWORD = 12;
                 @if (member.disabled) {
                   <cd-status-badge tone="destructive">DISABLED</cd-status-badge>
                 }
+                @if (member.mustChangePassword) {
+                  <cd-status-badge tone="warning">MUST CHANGE PASSWORD</cd-status-badge>
+                }
 
                 <div class="ms-auto flex items-center gap-2">
                   <label class="sr-only" [for]="'role-' + member.userId">
@@ -129,6 +162,16 @@ const MIN_PASSWORD = 12;
                   <p hlmAlertDescription>{{ error.detail }}</p>
                 </div>
               }
+
+              <cd-member-actions
+                class="border-border mt-3 border-t pt-3"
+                [member]="member"
+                [self]="isSelf(member)"
+                [busy]="store.acting().includes(member.userId)"
+                [error]="store.accountErrors()[member.userId]?.detail ?? null"
+                (resetConfirmed)="store.resetPassword({ userId: member.userId, password: $event })"
+                (disabledConfirmed)="store.setDisabled({ userId: member.userId, disabled: $event })"
+              />
             </li>
           }
         </ul>
@@ -208,6 +251,7 @@ const MIN_PASSWORD = 12;
 export class MembersPage {
   protected readonly store = inject(MembersStore);
   protected readonly environments = inject(ActiveEnvironmentStore);
+  private readonly session = inject(SessionStore);
 
   protected readonly input = INPUT;
   protected readonly roles = ROLES;
@@ -252,6 +296,15 @@ export class MembersPage {
 
   protected meaning(role: Role): string {
     return ROLE_MEANING[role];
+  }
+
+  /**
+   * Whether a row is the signed-in person's own. A session's actor is the account's email, which is
+   * how the registry names a person in the audit trail, so the two are compared as the registry
+   * stores them: lowercased.
+   */
+  protected isSelf(member: Member): boolean {
+    return member.email === this.session.actor()?.toLowerCase();
   }
 
   protected pick(member: Member, event: Event): void {

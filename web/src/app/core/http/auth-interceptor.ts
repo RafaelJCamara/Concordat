@@ -1,10 +1,22 @@
 import { DOCUMENT, inject } from '@angular/core';
-import type { HttpInterceptorFn } from '@angular/common/http';
+import { HttpContextToken, type HttpInterceptorFn } from '@angular/common/http';
 import { tap } from 'rxjs';
 import { SessionStore } from '../auth/session-store';
 import { CONCORDAT_CONFIG } from '../config/app-config';
 import { isApiUrl } from './api-url';
 import { isConcordatError } from './problem-details';
+
+/**
+ * Set on a request whose `401` means "that password was wrong" and not "your credential is dead"
+ * (ADR-048).
+ *
+ * Changing a password answers a wrong current password the way sign-in does, as `401
+ * unauthenticated`, and it is made with a credential that is perfectly good. Without this the
+ * interceptor below would read it as an expiry and sign the person out for a typo. It is opt-in per
+ * request and nothing else sets it, so a `401` anywhere else still ends the session; the caller
+ * that sets it is responsible for asking the registry whether the credential really died.
+ */
+export const REFUSAL_IS_NOT_EXPIRY = new HttpContextToken<boolean>(() => false);
 
 /**
  * Attaches the session credential to Concordat API requests, and only to those.
@@ -39,7 +51,11 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         // of failures. 403 is left alone: that credential is valid, the caller simply lacks
         // the scope, and signing them out would hide the read surface they are entitled to
         // (ADR-018).
-        if (isConcordatError(error) && error.status === 401) {
+        if (
+          isConcordatError(error) &&
+          error.status === 401 &&
+          !req.context.get(REFUSAL_IS_NOT_EXPIRY)
+        ) {
           session.expire();
         }
       },

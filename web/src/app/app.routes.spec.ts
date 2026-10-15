@@ -1,7 +1,7 @@
 import type { Route } from '@angular/router';
 import { describe, expect, it } from 'vitest';
 import { routes } from './app.routes';
-import { schemaWriteGuard, signedInGuard } from './core/auth/scope-guard';
+import { accountGuard, schemaWriteGuard, signedInGuard } from './core/auth/scope-guard';
 
 /**
  * Structural tests over the route table.
@@ -14,6 +14,9 @@ import { schemaWriteGuard, signedInGuard } from './core/auth/scope-guard';
 
 /** Route paths that write, and must therefore be guarded. */
 const WRITE_ROUTE_MARKERS = ['/new', '/new-subject', '/edit'];
+
+/** The one read route that is not guarded by `signedInGuard`, and why is in the test that names it. */
+const ACCOUNT_ROUTE = 'settings/account';
 
 function paths(table: readonly Route[]): readonly string[] {
   return table.map((route) => route.path ?? '');
@@ -97,12 +100,22 @@ describe('the route table', () => {
     const unnamed = routes.filter(
       (route) =>
         route.path !== 'sign-in' &&
+        route.path !== ACCOUNT_ROUTE &&
         route.loadComponent !== undefined &&
         !WRITE_ROUTE_MARKERS.some((marker) => (route.path ?? '').endsWith(marker)) &&
         !(route.canActivate ?? []).includes(signedInGuard),
     );
 
     expect(unnamed.map((route) => route.path)).toEqual([]);
+  });
+
+  it('guards the account screen with accountGuard, and not with signedInGuard', () => {
+    // ADR-048. `signedInGuard` sends a session that must replace a password an administrator set to
+    // this very screen, so on this route it would be a redirect to itself. The account guard is the
+    // one that lets that session in, and it asks for no scope because everybody owns their password.
+    const account = routes.find((route) => route.path === ACCOUNT_ROUTE);
+
+    expect(account?.canActivate).toEqual([accountGuard]);
   });
 
   it('keeps the wildcard last', () => {

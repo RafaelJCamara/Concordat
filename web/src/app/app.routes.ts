@@ -1,5 +1,10 @@
 import type { Routes } from '@angular/router';
-import { orgAdminGuard, schemaWriteGuard, signedInGuard } from './core/auth/scope-guard';
+import {
+  accountGuard,
+  orgAdminGuard,
+  schemaWriteGuard,
+  signedInGuard,
+} from './core/auth/scope-guard';
 
 /**
  * The route table.
@@ -184,6 +189,16 @@ export const routes: Routes = [
     canActivate: [signedInGuard],
     loadComponent: () =>
       import('./features/settings/feature/notifications-page').then((m) => m.NotificationsPage),
+  },
+  {
+    // Anybody who is signed in, with no scope: everybody owns their own password. The one route that
+    // also admits a session that must replace a password an administrator set (ADR-048), which is why
+    // it has its own guard and not `signedInGuard`, which sends that session here.
+    path: 'settings/account',
+    title: 'Account · Concordat',
+    canActivate: [accountGuard],
+    loadComponent: () =>
+      import('./features/settings/feature/account-page').then((m) => m.AccountPage),
   },
   {
     // The landing screen, on `/` rather than `/dashboard`. An overview is what the root of

@@ -756,11 +756,18 @@ describe('SettingsNav', () => {
       'Members',
       'API keys',
       'Notifications',
+      'Account',
     ]);
   });
 
   it('omits members and API keys for everyone else, since the server refuses them even to read', () => {
-    expect(labels(render(['subject:read']))).toEqual(['Environment', 'Brokers', 'Notifications']);
+    // But not Account, which every signed-in person owns: a reader changes their own password.
+    expect(labels(render(['subject:read']))).toEqual([
+      'Environment',
+      'Brokers',
+      'Notifications',
+      'Account',
+    ]);
   });
 
   it('labels the navigation, so it is not confused with the main one', () => {

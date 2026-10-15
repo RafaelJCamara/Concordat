@@ -4,7 +4,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { provideConcordatConfig } from '../../../core/config/app-config';
 import { ConcordatError } from '../../../core/http/problem-details';
 import type { ApiKey, IssuedApiKey, Member, Role } from '../../../domain/identity/member';
-import { IdentityApi, type NewApiKey, type NewMember } from '../data-access/identity-api';
+import {
+  IdentityApi,
+  type MemberDisabled,
+  type MemberPasswordReset,
+  type NewApiKey,
+  type NewMember,
+} from '../data-access/identity-api';
 import { ApiKeysStore } from './api-keys-store';
 import { MembersStore } from './members-store';
 
@@ -15,6 +21,7 @@ function member(email: string, role: Role = 'READER', id = email): Member {
     displayName: email,
     role,
     disabled: false,
+    mustChangePassword: false,
     createdAt: new Date('2026-08-01T09:00:00Z'),
     lastSignedInAt: null,
   };
@@ -50,6 +57,10 @@ function fakeApi() {
     addMember: (m: NewMember) => call<Member>('addMember', m),
     changeRole: (id: string, role: Role) =>
       call<{ userId: string; role: Role }>('changeRole', id, role),
+    resetPassword: (id: string, password: string) =>
+      call<MemberPasswordReset>('resetPassword', id, password),
+    setDisabled: (id: string, disabled: boolean) =>
+      call<MemberDisabled>('setDisabled', id, disabled),
     listApiKeys: () => call<readonly ApiKey[]>('listApiKeys'),
     issueApiKey: (k: NewApiKey) => call<IssuedApiKey>('issueApiKey', k),
     revokeApiKey: (id: string) => call<ApiKey>('revokeApiKey', id),
@@ -225,6 +236,159 @@ describe('MembersStore', () => {
       store.changeRole({ userId: 'u2', role: 'READER' });
 
       expect(store.roleErrors()['u2']).toBeUndefined();
+    });
+  });
+
+  describe('resetting a password (ADR-048)', () => {
+    beforeEach(() => {
+      store.load();
+      api
+        .ofKind('listMembers')[0]!
+        .stream.next([member('amy@x.y', 'READER', 'u1'), member('bo@x.y', 'ADMIN', 'u2')]);
+    });
+
+    it('marks the member from the registry’s answer, not ahead of it', () => {
+      store.resetPassword({ userId: 'u1', password: 'a temporary one' });
+
+      expect(store.members()[0]?.mustChangePassword).toBe(false);
+      expect(store.acting()).toEqual(['u1']);
+
+      api
+        .ofKind('resetPassword')[0]!
+        .stream.next({ userId: 'u1', mustChangePassword: true, sessionsSignedOut: 2 });
+
+      expect(store.members()[0]?.mustChangePassword).toBe(true);
+      expect(store.members()[1]?.mustChangePassword).toBe(false);
+      expect(store.acting()).toEqual([]);
+    });
+
+    it('says what it did, from the registry’s count of the sessions it ended', () => {
+      store.resetPassword({ userId: 'u1', password: 'a temporary one' });
+      api
+        .ofKind('resetPassword')[0]!
+        .stream.next({ userId: 'u1', mustChangePassword: true, sessionsSignedOut: 2 });
+
+      expect(store.notice()).toEqual({ kind: 'reset', email: 'amy@x.y', count: 2 });
+    });
+
+    it('sends the password to the registry and keeps it nowhere', () => {
+      store.resetPassword({ userId: 'u1', password: 'a temporary one' });
+      api
+        .ofKind('resetPassword')[0]!
+        .stream.next({ userId: 'u1', mustChangePassword: true, sessionsSignedOut: 0 });
+
+      expect(api.ofKind('resetPassword')[0]?.args).toEqual(['u1', 'a temporary one']);
+      expect(JSON.stringify(store.members())).not.toContain('a temporary one');
+      expect(JSON.stringify(store.notice())).not.toContain('a temporary one');
+      expect(JSON.stringify(store.accountErrors())).not.toContain('a temporary one');
+    });
+
+    it('ignores a second request for the same member while one is in flight', () => {
+      store.resetPassword({ userId: 'u1', password: 'a temporary one' });
+      store.resetPassword({ userId: 'u1', password: 'another temporary' });
+
+      expect(api.ofKind('resetPassword')).toHaveLength(1);
+    });
+
+    it('keeps a refusal on the member it concerns, and leaves the member alone', () => {
+      store.resetPassword({ userId: 'u2', password: 'a temporary one' });
+      api
+        .ofKind('resetPassword')[0]!
+        .stream.error(
+          new ConcordatError({ status: 409, code: 'own_account', detail: 'That is you.' }),
+        );
+
+      expect(store.accountErrors()['u2']?.detail).toBe('That is you.');
+      expect(store.members()[1]?.mustChangePassword).toBe(false);
+      expect(store.acting()).toEqual([]);
+      expect(store.notice()).toBeNull();
+    });
+
+    it('clears the member’s refusal and the last notice when asked again', () => {
+      store.resetPassword({ userId: 'u2', password: 'a temporary one' });
+      api.ofKind('resetPassword')[0]!.stream.error(new Error('offline'));
+      store.resetPassword({ userId: 'u2', password: 'a temporary one' });
+
+      expect(store.accountErrors()['u2']).toBeUndefined();
+    });
+  });
+
+  describe('disabling and enabling (ADR-048)', () => {
+    beforeEach(() => {
+      store.load();
+      api
+        .ofKind('listMembers')[0]!
+        .stream.next([member('amy@x.y', 'READER', 'u1'), member('bo@x.y', 'ADMIN', 'u2')]);
+    });
+
+    it('applies the flag from the registry’s answer, not ahead of it', () => {
+      store.setDisabled({ userId: 'u1', disabled: true });
+
+      expect(store.members()[0]?.disabled).toBe(false);
+      expect(store.acting()).toEqual(['u1']);
+
+      api
+        .ofKind('setDisabled')[0]!
+        .stream.next({ userId: 'u1', disabled: true, credentialsRevoked: 3 });
+
+      expect(store.members()[0]?.disabled).toBe(true);
+      expect(store.members()[1]?.disabled).toBe(false);
+      expect(store.acting()).toEqual([]);
+    });
+
+    it('asks for what was clicked, and says what the registry answered', () => {
+      store.setDisabled({ userId: 'u1', disabled: true });
+      api
+        .ofKind('setDisabled')[0]!
+        .stream.next({ userId: 'u1', disabled: true, credentialsRevoked: 3 });
+
+      expect(api.ofKind('setDisabled')[0]?.args).toEqual(['u1', true]);
+      expect(store.notice()).toEqual({ kind: 'disabled', email: 'amy@x.y', count: 3 });
+    });
+
+    it('says an enabling restored nothing, since the registry revokes nothing and brings nothing back', () => {
+      store.setDisabled({ userId: 'u1', disabled: false });
+      api
+        .ofKind('setDisabled')[0]!
+        .stream.next({ userId: 'u1', disabled: false, credentialsRevoked: 0 });
+
+      expect(store.notice()).toEqual({ kind: 'enabled', email: 'amy@x.y', count: 0 });
+    });
+
+    it('shows what the registry says even when it differs from what was asked', () => {
+      // A repeat of a request that already went through answers the state as it is.
+      store.setDisabled({ userId: 'u1', disabled: true });
+      api
+        .ofKind('setDisabled')[0]!
+        .stream.next({ userId: 'u1', disabled: true, credentialsRevoked: 0 });
+      store.setDisabled({ userId: 'u1', disabled: true });
+      api
+        .ofKind('setDisabled')[1]!
+        .stream.next({ userId: 'u1', disabled: true, credentialsRevoked: 0 });
+
+      expect(store.members()[0]?.disabled).toBe(true);
+    });
+
+    it('keeps a refusal on the member it concerns, and leaves them as they were', () => {
+      store.setDisabled({ userId: 'u2', disabled: true });
+      api
+        .ofKind('setDisabled')[0]!
+        .stream.error(
+          new ConcordatError({ status: 409, code: 'last_owner', detail: 'The last owner.' }),
+        );
+
+      expect(store.accountErrors()['u2']?.code).toBe('last_owner');
+      expect(store.members()[1]?.disabled).toBe(false);
+      expect(store.acting()).toEqual([]);
+    });
+
+    it('lets different members be acted on at once, and one at a time each', () => {
+      store.setDisabled({ userId: 'u1', disabled: true });
+      store.resetPassword({ userId: 'u1', password: 'a temporary one' });
+      store.setDisabled({ userId: 'u2', disabled: true });
+
+      expect(api.ofKind('setDisabled')).toHaveLength(2);
+      expect(api.ofKind('resetPassword')).toHaveLength(0);
     });
   });
 });
