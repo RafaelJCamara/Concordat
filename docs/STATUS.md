@@ -1,6 +1,7 @@
 # What is missing
 
-**As of 2026-08-15**, except [ADR-039's two test gaps, 2026-10-14](#adr-039s-two-test-gaps-closed-2026-10-14),
+**As of 2026-08-15**, except [the approval queue, 2026-10-15](#the-approval-queue-is-answered-by-the-registry-2026-10-15),
+[ADR-039's two test gaps, 2026-10-14](#adr-039s-two-test-gaps-closed-2026-10-14),
 [a pattern that is not a regular expression, 2026-10-14](#a-pattern-that-is-not-a-regular-expression-is-named-as-the-schemas-fault-and-warned-about-2026-10-14),
 [a change already awaiting approval is not proposed again, 2026-10-14](#a-change-that-is-already-awaiting-approval-is-not-proposed-again-2026-10-14),
 [a document that is not a valid schema is refused, 2026-10-14](#a-document-that-is-not-a-valid-schema-is-refused-unless-the-registry-already-holds-it-2026-10-14),
@@ -31,6 +32,25 @@ Everything under "verified locally" below was run on this machine today, against
 container image and a real PostgreSQL. Everything else is claimed on the strength of tests.
 
 ---
+
+## The approval queue is answered by the registry, 2026-10-15
+
+The row recorded on 2026-10-14 is closed ([ADR-042](adr/042-the-approval-queue-is-answered-by-the-registry.md)). The Approvals page
+built its queue by fetching every subject with every version and keeping the held ones, which under-counts the day the subject list
+is paged. `GET /v1/environments/{env}/approvals` now answers one page, **oldest proposal first**, with `total` (the whole queue)
+beside it, and each item carries the `baseline` ordinal it would replace. `limit` (default 50, at most 200) and `offset` are clamped,
+never refused. The page says *"Showing the N oldest of M waiting"* with a **Show more** button when the queue is longer than what it
+has read; **a decision removes its row at once and then reads the queue again** (as many as are on screen), because approving moves
+`latest` and the registry is the one that knows what every other row now replaces.
+
+**Verified:** the new .NET tests (15 handler, 19 reader and HTTP against real PostgreSQL) and the whole web unit suite (1,723, from
+1,693), lint, prettier, `codes:check` and `ng build`; `e2e/approvals.spec.ts` (12 tests, two of them new) against a private registry
+run as Development (:5101), its own PostgreSQL (:55402) and `ng serve` (:4311), taken once with the shared pair held and once with
+four held so both outcomes of the paging test were exercised. **Mutation-checked:** the reader (status filter, order, tie-break, skip,
+total) and the store (the re-read, the stale-page guard, the overlap de-duplication, the re-read size, the empty rule, the decrement,
+the failed re-read, the page offset), five and eight mutants, each caught. The page was looked at in dark mode at 1280 and 390 px with
+no horizontal overflow. **Not verified:** light mode (a forced theme switch left existing controls mid-transition, so the screenshot
+was not trusted), the production image, CI, a queue of thousands.
 
 ## ADR-039's two test gaps, closed, 2026-10-14
 
@@ -220,37 +240,7 @@ KiB, 65 ms for 344 KiB (76 ms with a defect), 17 ms for 458 KiB holding a 60,000
 whole dry-run request: 370 ms valid, 328 ms refused. **Red first:** the format-level, handler and evaluator tests against a checker and
 a gate that did nothing (behaviour failures, not compile errors); the HTTP tests were written beside the implementation and are
 mutation-checked instead. **Mutation-checked, each caught by the tests named for it:** the metaschema pass, the reference pass, the
-inner-`$id` skip, data read as schema, the `~` escape guard, the leading-zero index, the `#` guard, the `# What is missing
-
-**As of 2026-08-15**, except [the compatibility explanations, 2026-10-14](#compatibility-explanations-visible-text-and-a-disclosure-not-a-tooltip-2026-10-14),
-[a tolerant audit read, 2026-10-14](#the-audit-read-returns-an-action-its-build-does-not-know-as-stored-2026-10-14),
-[subject prefix search, 2026-10-14](#subjects-are-searched-by-the-start-of-their-name-2026-10-14),
-[the dashboard answered by the registry, 2026-10-14](#the-dashboard-is-answered-by-the-registry-2026-10-14),
-[contract bindings that can be changed and removed, 2026-10-14](#a-contracts-bindings-can-be-changed-and-removed-2026-10-14),
-[the policy-change notification, 2026-10-14](#a-policy-change-notifies-subscribers-and-every-subscription-with-no-event-filter-is-one-2026-10-14),
-[inheriting and the audited policy change, 2026-10-13](#a-subject-with-no-policy-of-its-own-follows-its-environments-default-and-a-policy-change-is-audited-2026-10-13),
-[the subject settings, 2026-10-13](#a-subjects-owner-and-policy-are-editable-and-the-registry-did-three-things-nobody-had-written-down-2026-10-13),
-[the create-subject screen, 2026-10-13](#the-create-subject-screen-and-a-500-that-was-not-what-it-looked-like-2026-10-13),
-[the schema editor and the web container, 2026-10-13](#the-schema-editor-and-the-web-container-2026-10-13),
-[the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
-[Security hardening, 2026-08-16](#security-hardening-2026-08-16)
-below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the pending-proposal dedupe and the pattern warning, ADR-040 and ADR-041): 2,155 .NET,
-1,693 Angular, 269 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
-the prose that had gone stale against shipped code — four places where this file claimed
-something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
-aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
-[PLAN.md](PLAN.md), which records what was built, and
-[DECISIONS-PENDING.md](DECISIONS-PENDING.md), which records what has not been decided. This
-file records what is **not there**, so the gaps are in one place rather than distributed across
-ten milestone files as unchecked boxes.
-
-Everything under "verified locally" below was run on this machine today, against the real
-container image and a real PostgreSQL. Everything else is claimed on the strength of tests.
-
----
-
--to-`\z` anchor, hashed
+inner-`$id` skip, data read as schema, the `~` escape guard, the leading-zero index, the `#` guard, the `$`-to-`\z` anchor, hashed
 `uniqueItems`, the integer reading of a number, `$defs` verification, the anyOf explanation, the exemption (removed; global rather than
 tenant; the shortcut for a valid document), each of the two gate calls, the evaluator refusing for itself (which turns the promotion
 test red), the "more" count and the trailing full stop, on the HTTP tests too for the exemption, the dry-run call and the evaluator; and
@@ -1385,7 +1375,7 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~A contract's bindings cannot be edited or removed~~ | **Closed 2026-10-14** ([ADR-035](adr/035-contract-bindings-have-an-identity.md)): every binding has an id, and `PUT`/`DELETE` on `…/publishes/{id}` and `…/consumes/{id}` change its subjects and precedence or remove it, with the overlap rule run again for an edit. A binding added without a precedence can now be given one, and the overlapping binding that was refused is then accepted. What it was: there was an `add` endpoint for each kind and nothing else, so a binding added without a precedence could never be separated from a later overlapping one, and the registry's own refusal says to "give the two bindings different precedence values". Found by the web app's first real overlap test (2026-10-13). |
 | ~~Dependency advisories are live, and an audit finding is an error~~ | **Closed 2026-10-14 for detection, not for repair.** Found the same day: NuGet audit runs at restore and `TreatWarningsAsErrors` makes a finding fatal, so an advisory published against any package, transitive ones included, breaks the next fresh restore with no change to the repository, as five against `System.Security.Cryptography.Pkcs`/`.Xml` did (pinned forward, `82656ca`). [`dependency-audit.yml`](../.github/workflows/dependency-audit.yml) now restores the solution every day at 05:41 UTC, with nothing cached, and opens a GitHub issue (or comments on the open one) naming the NU19xx codes and the packages. **It detects; it does not fix.** A human still has to pin the package forward, and an advisory published at 05:42 still waits up to a day for the report, so a push can still be the first thing to find it. **Not verified: the workflow itself has never run on GitHub** (nothing is pushed); the script that does the work was run here against a real restore, the issue sequence only against a fake `gh`. Scheduled workflows are switched off by GitHub after 60 days without repository activity. A lock file is still not an option (`RestorePackagesWithLockFile` breaks solution restore on SDK 10.0.301). |
 | ~~The audit read throws on an action its build does not know~~ | **Closed 2026-10-14** by [ADR-036](adr/036-the-audit-read-tolerates-an-action-its-build-does-not-know.md): `AuditEntry` holds the stored token, `Action` is a nullable view of it, and `GET /v1/audit` returns a row it cannot name as stored (measured: 500 before, 200 after, on the real registry with `A_FUTURE_ACTION` inserted by SQL). Pinned by `ARowWhoseActionThisBuildWasNeverTaughtIsReadAsReceivedAndTheRestUnchanged` (real PostgreSQL). **It protects a rollback to a build that contains it**; rolling back to `612f7c8` or earlier keeps the old behaviour (ADR-033 and ADR-035 carry dated amendments). Filtering by an unknown action is still refused, by decision. |
-| **The Approvals page still derives its queue from the subject list** | Found 2026-10-14 while closing the Dashboard (ADR-037). `pending-approvals-store.ts` reads every subject and filters their versions in the browser, which is the defect the Dashboard had: it under-counts the day the list is paginated. The summary carries only the five newest held versions, so it cannot feed the queue; it needs an endpoint of its own. |
+| ~~The Approvals page still derives its queue from the subject list~~ | **Closed 2026-10-15** ([ADR-042](adr/042-the-approval-queue-is-answered-by-the-registry.md)): `GET …/approvals`, a page at a time, oldest first, with the length of the whole queue. The page no longer requests the subject list (asserted in `e2e/approvals.spec.ts`). What it was: `pending-approvals-store.ts` read every subject and filtered their versions in the browser, which is the defect the Dashboard had. |
 | **The dashboard's version counts are linear in the environment's versions** | Found 2026-10-14 (ADR-037). About 100-125 ms at 200,000 versions in the environment, nearly all of the route. Replace with a counter maintained when a version's status changes, or a cached summary, when it is measured to hurt. |
 | ~~No screen creates a subject~~ | **Closed 2026-10-13** by `/subjects/new-subject` ([ADR-030](adr/030-create-subject-screen.md)): M4's exit criterion had been recorded as met when its first step was not, and the list's "New subject" was a button with no handler. What is left of it is the next row. |
 | ~~No screen edits a subject afterwards~~ | **Closed 2026-10-13** by the panels on a subject's page ([ADR-032](adr/032-subject-settings.md)): Change owner (`subject:write` or `subject:admin`) and Change policy (`subject:admin`), each two clicks, each saying only what the registry was measured to do. Name, format and content model remain permanent (probed: `PATCH` ignores them and answers 200). **Deprecating and retiring are left out on purpose**: neither can be undone, and deprecating notifies every subscriber. The CLI still edits neither. |

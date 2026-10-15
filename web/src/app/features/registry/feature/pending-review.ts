@@ -4,7 +4,7 @@ import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmSkeleton } from '@spartan-ng/helm/skeleton';
 import { DiffStore } from '../application/diff-store';
 import { ImpactStore } from '../application/impact-store';
-import type { PendingApproval } from '../application/pending-approvals-store';
+import type { PendingApproval } from '../../../domain/registry/approval-queue';
 import { ConsumerImpactList } from '../ui/consumer-impact-list';
 import { DivergenceList } from '../ui/divergence-list';
 
@@ -43,11 +43,11 @@ import { DivergenceList } from '../ui/divergence-list';
       @if (result.divergences.length > 0) {
         <cd-divergence-list
           [divergences]="result.divergences"
-          [heading]="'Changes from v' + item.baseline.ordinal"
+          [heading]="'Changes from v' + item.baseline"
         />
       } @else {
         <p class="text-muted-foreground text-sm">
-          No compatibility rule reports a difference from v{{ item.baseline.ordinal }}.
+          No compatibility rule reports a difference from v{{ item.baseline }}.
         </p>
       }
     } @else if (diff.error(); as error) {
@@ -88,16 +88,16 @@ import { DivergenceList } from '../ui/divergence-list';
 
     <p class="text-muted-foreground text-xs">
       The full
-      @if (item.baseline) {
+      @if (item.baseline !== null) {
         <a
           class="hover:text-foreground underline"
           [routerLink]="[
             '/subjects',
             item.subject,
             'versions',
-            item.baseline.ordinal,
+            item.baseline,
             'diff',
-            item.version.ordinal,
+            item.ordinal,
           ]"
           >comparison</a
         >
@@ -105,7 +105,7 @@ import { DivergenceList } from '../ui/divergence-list';
       }
       <a
         class="hover:text-foreground underline"
-        [routerLink]="['/subjects', item.subject, 'versions', item.version.ordinal, 'impact']"
+        [routerLink]="['/subjects', item.subject, 'versions', item.ordinal, 'impact']"
         >impact analysis</a
       >
       are on their own screens.
@@ -125,12 +125,12 @@ export class PendingReview {
       if (item.baseline !== null) {
         this.diff.load({
           subject: item.subject,
-          from: String(item.baseline.ordinal),
-          to: String(item.version.ordinal),
+          from: String(item.baseline),
+          to: String(item.ordinal),
         });
       }
 
-      this.impact.load({ subject: item.subject, ordinal: String(item.version.ordinal) });
+      this.impact.load({ subject: item.subject, ordinal: String(item.ordinal) });
     });
   }
 }

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { READER_STORAGE_STATE } from './global-setup';
-import { ensureHeldVersion, ownerCredential } from './registry';
+import { ensureHeldVersion, ownerCredential, readApprovalQueue } from './registry';
 
 /**
  * The approval queue, against versions the compatibility engine really held.
@@ -18,6 +18,23 @@ const SHARED_HELD = 'acme.e2e.PaymentTaken';
 
 function card(page: Page, subject: string) {
   return page.getByRole('listitem').filter({ has: page.getByRole('link', { name: subject }) });
+}
+
+/**
+ * Pages in until the subject's row is on screen.
+ *
+ * The queue is the registry's, a page at a time and oldest first (ADR-042), so a version proposed
+ * this run is the newest and is on page one only while dev holds fewer than a page of older
+ * ones. Nothing here deletes a held version, and a suite that fails when the queue grows past
+ * fifty would be a red run about nothing the screen is for.
+ */
+async function reveal(page: Page, subject: string): Promise<void> {
+  const more = page.getByRole('button', { name: 'Show more' });
+
+  while ((await card(page, subject).count()) === 0 && (await more.count()) > 0) {
+    await more.click();
+    await expect(page.getByRole('button', { name: 'Loading…' })).toHaveCount(0);
+  }
 }
 
 test.describe('the approval queue', () => {
@@ -101,6 +118,65 @@ test.describe('the approval queue', () => {
     await expect(page.getByText('AWAITING_APPROVAL')).toBeVisible();
   });
 
+  test('asks the registry for the queue, and never for the subject list', async ({ page }) => {
+    // The queue used to be built here from every subject with every version. A request for the
+    // list on this page means it is being derived again, and the day that list is paged a held
+    // version on its second page is missing from the one screen that exists to show them.
+    const requests: string[] = [];
+    page.on('request', (request) => {
+      if (request.url().includes('/v1/')) {
+        requests.push(new URL(request.url()).pathname);
+      }
+    });
+
+    await page.goto('/approvals');
+    await expect(card(page, SHARED_HELD)).toBeVisible();
+
+    expect(requests.filter((path) => path === '/v1/environments/dev/approvals')).toHaveLength(1);
+    expect(requests.filter((path) => path === '/v1/environments/dev/subjects')).toEqual([]);
+  });
+
+  test('says how much of a long queue it is showing, and shows more when asked', async ({
+    page,
+  }) => {
+    // A page of one, so the queue the shared fixtures make (two held, and more on a database that
+    // has been used) is longer than the screen has read. The registry still answers: only the
+    // page size the screen asks for is changed, in the request.
+    const credential = await ownerCredential();
+    const whole = await readApprovalQueue(credential, 'dev');
+    expect(whole.total).toBeGreaterThanOrEqual(2);
+
+    await page.route('**/v1/environments/dev/approvals*', async (route) => {
+      const url = new URL(route.request().url());
+      url.searchParams.set('limit', '1');
+      await route.continue({ url: url.toString() });
+    });
+
+    await page.goto('/approvals');
+
+    const extent = page.getByTestId('queue-extent');
+    await expect(page.getByRole('listitem').filter({ has: page.getByRole('link') })).toHaveCount(1);
+    await expect(extent).toContainText(`Showing the 1 oldest of ${whole.total} waiting`);
+
+    // Oldest first: what is on screen is what the registry says is first.
+    await expect(card(page, whole.items[0]!.subject)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Show more' }).click();
+
+    await expect(page.getByRole('listitem').filter({ has: page.getByRole('link') })).toHaveCount(2);
+    await expect(card(page, whole.items[1]!.subject)).toBeVisible();
+
+    // Both outcomes are the screen keeping its word. A database that has only the shared pair
+    // held has now been read in full, and says nothing more about extent; a used one still has a
+    // remainder to account for.
+    if (whole.total > 2) {
+      await expect(extent).toContainText(`Showing the 2 oldest of ${whole.total} waiting`);
+    } else {
+      await expect(extent).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Show more' })).toHaveCount(0);
+    }
+  });
+
   test('reports no console errors', async ({ page }) => {
     const errors: string[] = [];
     page.on('console', (message) => {
@@ -126,6 +202,7 @@ test.describe('deciding', () => {
     await ensureHeldVersion(await ownerCredential(), 'dev', subject);
 
     await page.goto('/approvals');
+    await reveal(page, subject);
 
     const row = card(page, subject);
     await row.getByRole('button', { name: 'Approve' }).click();
@@ -146,6 +223,7 @@ test.describe('deciding', () => {
     await ensureHeldVersion(await ownerCredential(), 'dev', subject);
 
     await page.goto('/approvals');
+    await reveal(page, subject);
 
     const row = card(page, subject);
     await row.getByRole('button', { name: 'Reject' }).click();

@@ -4,28 +4,14 @@ import { provideRouter } from '@angular/router';
 import { describe, expect, it, vi } from 'vitest';
 import { ConcordatError } from '../../../core/http/problem-details';
 import type { VersionDiff } from '../../../domain/registry/diff';
+import type { PendingApproval } from '../../../domain/registry/approval-queue';
 import type { ImpactReport } from '../../../domain/registry/impact';
-import type { SchemaVersion } from '../../../domain/registry/subject';
 import { DiffStore } from '../application/diff-store';
 import { ImpactStore } from '../application/impact-store';
-import type { PendingApproval } from '../application/pending-approvals-store';
 import { PendingReview } from './pending-review';
 
 // The point of this component is that it joins two stores' answers for one version. What is
 // worth proving is which requests it makes, and what it says when there is nothing to say.
-
-function version(ordinal: number): SchemaVersion {
-  return {
-    ordinal,
-    schemaId: `schema-${ordinal}`,
-    semanticVersion: null,
-    status: ordinal === 1 ? 'ACTIVE' : 'AWAITING_APPROVAL',
-    changelog: null,
-    registeredAt: new Date('2026-08-13T09:00:00Z'),
-    registeredBy: 'ci',
-    deprecated: false,
-  };
-}
 
 const diff: VersionDiff = {
   from: 1,
@@ -123,8 +109,12 @@ function render(
 
 const withBaseline: PendingApproval = {
   subject: 'orders.created',
-  version: version(2),
-  baseline: version(1),
+  ordinal: 2,
+  semanticVersion: null,
+  changelog: null,
+  registeredAt: new Date('2026-08-13T09:00:00Z'),
+  registeredBy: 'ci',
+  baseline: 1,
 };
 
 describe('PendingReview', () => {

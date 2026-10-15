@@ -495,6 +495,35 @@ export async function readSubject(
   return (await response.json()) as SubjectView;
 }
 
+/** One version in the approval queue, as the registry words it. */
+export interface QueuedVersion {
+  readonly subject: string;
+  readonly ordinal: number;
+  readonly baseline: number | null;
+}
+
+/**
+ * A page of an environment's approval queue (ADR-042), straight from the registry, so a spec can
+ * say what the screen should be showing without counting rows on the screen.
+ */
+export async function readApprovalQueue(
+  ownerCredential: string,
+  environment: string,
+  query = '',
+): Promise<{ readonly total: number; readonly items: readonly QueuedVersion[] }> {
+  const response = await call(`/v1/environments/${environment}/approvals${query}`, {
+    headers: { authorization: `Bearer ${ownerCredential}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Reading the approval queue of '${environment}' failed with ${response.status}.`,
+    );
+  }
+
+  return (await response.json()) as { total: number; items: QueuedVersion[] };
+}
+
 /** The registered text of a schema, by id, exactly as the registry serves it. */
 export async function readSchemaText(ownerCredential: string, schemaId: string): Promise<string> {
   const response = await call(`/v1/schemas/${schemaId}`, {

@@ -80,6 +80,18 @@ import { PendingReview } from './pending-review';
         }
       </div>
 
+      @if (store.refreshFailed()) {
+        <div hlmAlert variant="destructive">
+          <h2 hlmAlertTitle>The queue could not be refreshed</h2>
+          <p hlmAlertDescription>
+            What is shown was read before your last decision and may be out of date.
+          </p>
+          <button hlmBtn hlmAlertAction variant="outline" size="sm" (click)="store.refresh()">
+            Try again
+          </button>
+        </div>
+      }
+
       @if (store.loading() && !store.loaded()) {
         <div class="space-y-3" aria-busy="true" aria-live="polite">
           <div hlmSkeleton class="h-28 w-full rounded-xl"></div>
@@ -103,8 +115,8 @@ import { PendingReview } from './pending-review';
         </div>
       } @else {
         <ul class="space-y-4">
-          @for (item of store.pending(); track key(item.subject, item.version.ordinal)) {
-            @let id = key(item.subject, item.version.ordinal);
+          @for (item of store.pending(); track key(item.subject, item.ordinal)) {
+            @let id = key(item.subject, item.ordinal);
             @let state = store.decisions()[id];
             <li class="border-border bg-card rounded-xl border p-5">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -117,27 +129,27 @@ import { PendingReview } from './pending-review';
                     >
                     <a
                       class="hover:text-primary ms-1 transition-colors"
-                      [routerLink]="['/subjects', item.subject, 'versions', item.version.ordinal]"
-                      >v{{ item.version.ordinal }}</a
+                      [routerLink]="['/subjects', item.subject, 'versions', item.ordinal]"
+                      >v{{ item.ordinal }}</a
                     >
-                    @if (item.version.semanticVersion) {
+                    @if (item.semanticVersion) {
                       <span class="text-muted-foreground text-sm font-normal">
-                        · {{ item.version.semanticVersion }}
+                        · {{ item.semanticVersion }}
                       </span>
                     }
                   </h2>
                   <p class="text-muted-foreground mt-1 text-sm">
-                    Registered by {{ item.version.registeredBy }}
-                    <span [title]="item.version.registeredAt.toISOString()">
-                      {{ item.version.registeredAt | cdRelativeTime }}
+                    Registered by {{ item.registeredBy }}
+                    <span [title]="item.registeredAt.toISOString()">
+                      {{ item.registeredAt | cdRelativeTime }}
                     </span>
-                    @if (item.baseline) {
-                      · replaces <span class="font-mono">v{{ item.baseline.ordinal }}</span>
+                    @if (item.baseline !== null) {
+                      · replaces <span class="font-mono">v{{ item.baseline }}</span>
                     }
                   </p>
-                  @if (item.version.changelog) {
+                  @if (item.changelog) {
                     <p class="text-foreground mt-2 text-sm whitespace-pre-wrap">
-                      {{ item.version.changelog }}
+                      {{ item.changelog }}
                     </p>
                   }
                 </div>
@@ -166,8 +178,8 @@ import { PendingReview } from './pending-review';
                     <span class="text-foreground text-sm">
                       {{
                         confirming() === id + ':approve'
-                          ? 'Approve v' + item.version.ordinal + ' and make it latest?'
-                          : 'Reject v' + item.version.ordinal + '? This cannot be undone.'
+                          ? 'Approve v' + item.ordinal + ' and make it latest?'
+                          : 'Reject v' + item.ordinal + '? This cannot be undone.'
                       }}
                     </span>
                     <button
@@ -176,7 +188,7 @@ import { PendingReview } from './pending-review';
                       size="sm"
                       [variant]="confirming() === id + ':reject' ? 'destructive' : 'default'"
                       [disabled]="state?.state === 'deciding'"
-                      (click)="confirm(item.subject, item.version.ordinal)"
+                      (click)="confirm(item.subject, item.ordinal)"
                     >
                       Confirm
                     </button>
@@ -224,6 +236,34 @@ import { PendingReview } from './pending-review';
             </li>
           }
         </ul>
+
+        @if (store.unread() > 0) {
+          <div
+            class="border-border bg-card flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <p class="text-muted-foreground text-sm" data-testid="queue-extent">
+              Showing the {{ store.pending().length }} oldest of {{ store.total() }} waiting.
+              {{ store.unread() }} more {{ store.unread() === 1 ? 'is' : 'are' }} not shown yet.
+            </p>
+            <button
+              type="button"
+              hlmBtn
+              variant="outline"
+              size="sm"
+              [disabled]="store.loadingMore()"
+              (click)="store.loadMore()"
+            >
+              {{ store.loadingMore() ? 'Loading…' : 'Show more' }}
+            </button>
+          </div>
+        }
+
+        @if (store.moreError(); as error) {
+          <div hlmAlert variant="destructive">
+            <h2 hlmAlertTitle>Could not load more</h2>
+            <p hlmAlertDescription>{{ error.detail }}</p>
+          </div>
+        }
       }
     </section>
   `,

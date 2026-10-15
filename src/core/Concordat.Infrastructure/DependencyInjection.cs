@@ -61,6 +61,7 @@ public static class DependencyInjection
         services.AddScoped<IDeploymentLog, DeploymentLog>();
         services.AddScoped<IViolationRepository, ViolationRepository>();
         services.AddScoped<IEnvironmentSummaryReader, EnvironmentSummaryReader>();
+        services.AddScoped<IPendingApprovalReader, PendingApprovalReader>();
         services.AddScoped<IOutbox, Outbox>();
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         services.AddScoped<IUserRepository, UserRepository>();

@@ -151,6 +151,9 @@ public static class DependencyInjection
         services.AddScoped<
             IQueryHandler<GetEnvironmentSummaryQuery, EnvironmentSummary>,
             GetEnvironmentSummaryHandler>();
+        services.AddScoped<
+            IQueryHandler<ListPendingApprovalsQuery, PendingApprovals>,
+            ListPendingApprovalsHandler>();
 
         // M7.4 governance.
         services.AddScoped<

@@ -253,6 +253,7 @@ app.MapIdentityEndpoints();
 app.MapBillingEndpoints();
 app.MapSubjectEndpoints();
 app.MapSummaryEndpoints();
+app.MapApprovalQueueEndpoints();
 app.MapSchemaEndpoints();
 app.MapBootstrapEndpoint();
 

@@ -193,6 +193,66 @@
         ]
       }
     },
+    "/v1/environments/{env}/approvals": {
+      "get": {
+        "tags": [
+          "Approvals"
+        ],
+        "summary": "The versions waiting on an approval decision",
+        "description": "Every version held at the approval gate in one environment, oldest proposal first, so the longest wait leads. `total` is the length of the whole queue and `items` is one page of it: `limit` (default 50, at most 200; out-of-range values are clamped) and `offset` (default 0) choose the page. Each item names the ordinal consumers resolve as latest today (`baseline`, null when nothing has been approved), which is what approving the item would replace. Reading the queue needs only `subject:read`; deciding is `subject:admin`. An environment nothing has been written to answers an empty queue rather than 404.\n\nRequires scope: `subject:read`.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingApprovalsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
     "/v1/environments/{env}/bootstrap": {
       "post": {
         "tags": [
@@ -5529,6 +5589,93 @@
         },
         "description": "How much the outbox is holding."
       },
+      "PendingApprovalResponse": {
+        "required": [
+          "subject",
+          "ordinal",
+          "semanticVersion",
+          "changelog",
+          "registeredAt",
+          "registeredBy",
+          "baseline"
+        ],
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "The subject it belongs to."
+          },
+          "ordinal": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Its ordinal within the subject.",
+            "format": "int32"
+          },
+          "semanticVersion": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The verified label, when it carried one."
+          },
+          "changelog": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "What the proposer said changed, when they said."
+          },
+          "registeredAt": {
+            "type": "string",
+            "description": "When it was proposed, UTC.",
+            "format": "date-time"
+          },
+          "registeredBy": {
+            "type": "string",
+            "description": "Who proposed it."
+          },
+          "baseline": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The ordinal consumers resolve as latest today, or `null` when none is approved.",
+            "format": "int32"
+          }
+        },
+        "description": "One version waiting on a decision."
+      },
+      "PendingApprovalsResponse": {
+        "required": [
+          "total",
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Every version awaiting approval, not only this page.",
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingApprovalResponse"
+            },
+            "description": "This page, oldest proposal first."
+          }
+        },
+        "description": "A page of the approval queue."
+      },
       "PolicyResponse": {
         "required": [
           "mode",
@@ -7078,6 +7225,9 @@
     },
     {
       "name": "Summary"
+    },
+    {
+      "name": "Approvals"
     },
     {
       "name": "Bootstrap"

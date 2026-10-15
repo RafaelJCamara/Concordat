@@ -6,12 +6,11 @@ import { SessionStore } from '../../../core/auth/session-store';
 import { provideConcordatConfig } from '../../../core/config/app-config';
 import { ConcordatError } from '../../../core/http/problem-details';
 import type { Scope } from '../../../domain/identity/scope';
-import type { SchemaVersion } from '../../../domain/registry/subject';
+import type { PendingApproval } from '../../../domain/registry/approval-queue';
 import {
   keyOf,
   type Decision,
   type DecisionState,
-  type PendingApproval,
   PendingApprovalsStore,
 } from '../application/pending-approvals-store';
 import { DiffStore } from '../application/diff-store';
@@ -23,40 +22,45 @@ import { PendingReview } from './pending-review';
 // that deciding takes two clicks and says what it does, and that a row leaving the queue is
 // announced rather than just gone.
 
-function version(ordinal: number): SchemaVersion {
-  return {
-    ordinal,
-    schemaId: `schema-${ordinal}`,
-    semanticVersion: '2.0.0',
-    status: ordinal === 1 ? 'ACTIVE' : 'AWAITING_APPROVAL',
-    changelog: 'drops customerId',
-    registeredAt: new Date('2026-08-13T09:00:00Z'),
-    registeredBy: 'alice@example.com',
-    deprecated: false,
-  };
-}
-
 const held: PendingApproval = {
   subject: 'orders.created',
-  version: version(2),
-  baseline: version(1),
+  ordinal: 2,
+  semanticVersion: '2.0.0',
+  changelog: 'drops customerId',
+  registeredAt: new Date('2026-08-13T09:00:00Z'),
+  registeredBy: 'alice@example.com',
+  baseline: 1,
 };
-
 function storeIn(state: {
   pending?: readonly PendingApproval[];
   loading?: boolean;
   loaded?: boolean;
   isEmpty?: boolean;
+  total?: number;
+  loadingMore?: boolean;
+  moreError?: ConcordatError | null;
+  refreshFailed?: boolean;
   error?: ConcordatError | null;
   decisions?: Record<string, DecisionState>;
   lastDecided?: Decision | null;
 }) {
   const decide = vi.fn();
+  const loadMore = vi.fn();
+  const refresh = vi.fn();
+  const pending = state.pending ?? [];
+  const total = state.total ?? pending.length;
 
   return {
     decide,
+    loadMore,
+    refresh,
     store: {
-      pending: signal(state.pending ?? []),
+      pending: signal(pending),
+      total: signal(total),
+      unread: signal(Math.max(total - pending.length, 0)),
+      loadingMore: signal(state.loadingMore ?? false),
+      moreError: signal(state.moreError ?? null),
+      refreshFailed: signal(state.refreshFailed ?? false),
       loading: signal(state.loading ?? false),
       loaded: signal(state.loaded ?? true),
       isEmpty: signal(state.isEmpty ?? false),
@@ -64,6 +68,8 @@ function storeIn(state: {
       decisions: signal(state.decisions ?? {}),
       lastDecided: signal(state.lastDecided ?? null),
       load: () => {},
+      loadMore,
+      refresh,
       decide,
     } as unknown as InstanceType<typeof PendingApprovalsStore>,
   };
@@ -86,8 +92,10 @@ function render(
   fixture: ComponentFixture<ApprovalsPage>;
   host: HTMLElement;
   decide: ReturnType<typeof vi.fn>;
+  loadMore: ReturnType<typeof vi.fn>;
+  refresh: ReturnType<typeof vi.fn>;
 } {
-  const { store, decide } = storeIn(state);
+  const { store, decide, loadMore, refresh } = storeIn(state);
 
   TestBed.configureTestingModule({
     providers: [provideRouter([]), provideConcordatConfig({ defaultEnvironment: 'dev' })],
@@ -115,7 +123,7 @@ function render(
   const fixture = TestBed.createComponent(ApprovalsPage);
   fixture.detectChanges();
 
-  return { fixture, host: fixture.nativeElement as HTMLElement, decide };
+  return { fixture, host: fixture.nativeElement as HTMLElement, decide, loadMore, refresh };
 }
 
 function button(host: HTMLElement, text: string): HTMLButtonElement | undefined {
@@ -325,6 +333,80 @@ describe('ApprovalsPage', () => {
       fixture.detectChanges();
 
       expect(host.querySelector('cd-pending-review')).toBeNull();
+    });
+  });
+
+  describe('a queue longer than the screen has read', () => {
+    it('says how much of it is shown, and offers the rest', () => {
+      const { host } = render({ pending: [held], total: 120 });
+
+      const extent = host.querySelector('[data-testid="queue-extent"]');
+
+      expect(extent?.textContent).toContain('Showing the 1 oldest of 120 waiting');
+      expect(extent?.textContent).toContain('119 more are not shown yet');
+      expect(button(host, 'Show more')).toBeDefined();
+    });
+
+    it('says "is" for the last one left', () => {
+      const { host } = render({ pending: [held], total: 2 });
+
+      expect(host.textContent).toContain('1 more is not shown yet');
+    });
+
+    it('asks the store for the next page when asked', () => {
+      const { host, loadMore } = render({ pending: [held], total: 120 });
+
+      button(host, 'Show more')!.click();
+
+      expect(loadMore).toHaveBeenCalledTimes(1);
+    });
+
+    it('says nothing about extent when the whole queue is on screen', () => {
+      const { host } = render({ pending: [held], total: 1 });
+
+      expect(host.querySelector('[data-testid="queue-extent"]')).toBeNull();
+      expect(button(host, 'Show more')).toBeUndefined();
+    });
+
+    it('disables the button while a page is on its way', () => {
+      const { host } = render({ pending: [held], total: 120, loadingMore: true });
+
+      expect(button(host, 'Loading…')!.disabled).toBe(true);
+    });
+
+    it('reports a page that could not be read, and keeps the ones that were', () => {
+      const { host } = render({
+        pending: [held],
+        total: 120,
+        moreError: new ConcordatError({ status: 500, code: 'x', detail: 'page two is down' }),
+      });
+
+      expect(host.textContent).toContain('Could not load more');
+      expect(host.textContent).toContain('page two is down');
+      expect(host.querySelector('a[href="/subjects/orders.created"]')).not.toBeNull();
+    });
+  });
+
+  describe('after a decision, when the queue could not be read again', () => {
+    it('warns that what is shown may be out of date, and keeps showing it', () => {
+      const { host } = render({ pending: [held], refreshFailed: true });
+
+      expect(host.textContent).toContain('The queue could not be refreshed');
+      expect(host.querySelector('a[href="/subjects/orders.created"]')).not.toBeNull();
+    });
+
+    it('offers to try again', () => {
+      const { host, refresh } = render({ pending: [held], refreshFailed: true });
+
+      button(host, 'Try again')!.click();
+
+      expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('says nothing when the refresh worked', () => {
+      const { host } = render({ pending: [held] });
+
+      expect(host.textContent).not.toContain('could not be refreshed');
     });
   });
 });
