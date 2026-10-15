@@ -258,6 +258,16 @@ public class AuthorizationTests(AuthApiFactory factory)
 
             ("list members", reader.GetAsync("/v1/members")),
 
+            ("reset a member's password", reader.PutAsJsonAsync(
+                $"/v1/members/{Guid.NewGuid()}/password",
+                new ResetPasswordRequest("a temporary password"),
+                ApiFactory.Json)),
+
+            ("disable a member", reader.PutAsJsonAsync(
+                $"/v1/members/{Guid.NewGuid()}/disabled",
+                new SetDisabledRequest(true),
+                ApiFactory.Json)),
+
             ("issue an API key", reader.PostAsJsonAsync(
                 "/v1/api-keys",
                 new IssueApiKeyRequest("mine", [Scope.SubjectAdmin]),

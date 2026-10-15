@@ -78,6 +78,24 @@ public static class IdentityEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .ProducesProblem(StatusCodes.Status401Unauthorized);
 
+        auth.MapPost("/password", ChangePassword)
+            .WithSummary("Change your own password")
+            .WithDescription(
+                "Any signed-in person may, a Reader included, and it is the one thing a person whose " +
+                "password an administrator reset may do before they have changed it. The current " +
+                "password is required and is checked before the new one is judged; a wrong one is " +
+                "refused as 401 'unauthenticated', as a wrong sign-in is, and counts against the same " +
+                "limit. The new one must be at least 12 characters, with no other rule, and must differ " +
+                "from the current one. Every OTHER session of yours is signed out and the one you are " +
+                "using is kept; your API keys are not touched. Recorded in the audit trail as " +
+                "PASSWORD_CHANGED. Neither password is ever logged, audited or returned.")
+            .Produces<PasswordChangedResponse>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            .RequireAuthenticated()
+            .RequireRateLimiting("auth-attempt");
+
         auth.MapPost("/signout", SignOut)
             .WithSummary("Clear the session cookie")
             .WithDescription(
@@ -104,6 +122,41 @@ public static class IdentityEndpoints
             .Produces<MemberRoleResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound);
+
+        members.MapPut("/{userId:guid}/password", ResetPassword)
+            .WithSummary("Set a member's password to a temporary one")
+            .WithDescription(
+                "The administrator types a temporary password (at least 12 characters), and the member " +
+                "must replace it: their credentials can do nothing but change the password until " +
+                "they have, answering 403 'password_change_required'. Every session the member has " +
+                "is signed out; their API keys are not touched. Not for your own account " +
+                "(409 'own_account': change it instead, which asks for the current one), and not " +
+                "for a member who holds authority your credential does not (403 " +
+                "'member_outranks_caller'). Recorded as MEMBER_PASSWORD_RESET. The password is never " +
+                "logged, audited or returned.")
+            .Produces<MemberPasswordResetResponse>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        members.MapPut("/{userId:guid}/disabled", SetDisabled)
+            .WithSummary("Disable or enable a member")
+            .WithDescription(
+                "A disabled member cannot sign in, and every session and API key they hold is revoked " +
+                "in the same step, so their credentials stop working at once. Revocation is " +
+                "permanent: enabling lets them sign in again and restores nothing, so anything they " +
+                "issued is issued again on purpose. The member and the audit entry (MEMBER_DISABLED " +
+                "or MEMBER_ENABLED) are written together; a request that changes nothing writes " +
+                "nothing. Refused: yourself (409 'own_account'), the last owner who can sign in " +
+                "(409 'last_owner'), and a member who holds authority your credential does not " +
+                "(403 'member_outranks_caller'). The 'disabled' member is required, so a body that " +
+                "forgot it is refused and does not enable anybody.")
+            .Produces<MemberDisabledResponse>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
 
         var keys = app.MapGroup("/v1/api-keys").WithTags("Identity")
             .RequireScope(Scope.OrgAdmin);
@@ -143,7 +196,8 @@ public static class IdentityEndpoints
             claimed,
             current.IsAuthenticated,
             current.IsAuthenticated ? current.Actor.Value : null,
-            current.Scopes.Granted));
+            current.Scopes.Granted,
+            current.MustChangePassword));
     }
 
     private static async Task<IResult> Bootstrap(
@@ -241,11 +295,16 @@ public static class IdentityEndpoints
 
         SessionCookie.Issue(http, session.Value.Secret, session.Value.Key.ExpiresAt!.Value);
 
+        // What the session can do now, which is nothing until a temporary password is replaced
+        // (ADR-048). The key is stored with the role's scopes and limited on every request, so the
+        // same session holds them all the moment the password is changed; the answer says what is
+        // true now and says why, so a client sends the person to the one thing they can do.
         return TypedResults.Ok(new SignInResponse(
             session.Value.Secret,
             caller.Actor.Value,
-            caller.Scopes.Granted,
-            session.Value.Key.ExpiresAt!.Value));
+            caller.MustChangePassword ? [] : caller.Scopes.Granted,
+            session.Value.Key.ExpiresAt!.Value,
+            caller.MustChangePassword));
     }
 
     /// <summary>
@@ -303,7 +362,22 @@ public static class IdentityEndpoints
             credential,
             caller.Actor.Value,
             caller.Scopes.Granted,
-            clock.GetUtcNow()));
+            clock.GetUtcNow(),
+            caller.MustChangePassword));
+    }
+
+    private static async Task<IResult> ChangePassword(
+        ChangePasswordRequest request, IDispatcher dispatcher, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var result = await dispatcher.SendAsync(
+            new ChangeOwnPasswordCommand(request.CurrentPassword, request.NewPassword),
+            cancellationToken).ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(new PasswordChangedResponse(result.Value.SessionsEnded));
     }
 
     private static NoContent SignOut(HttpContext http)
@@ -364,6 +438,55 @@ public static class IdentityEndpoints
             ? ProblemDetailsMapping.From(result.Error!)
             : TypedResults.Ok(new MemberRoleResponse(
                 result.Value.UserId.Value, Roles.For(result.Value.Role)));
+    }
+
+    private static async Task<IResult> ResetPassword(
+        Guid userId,
+        ResetPasswordRequest request,
+        IDispatcher dispatcher,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var result = await dispatcher.SendAsync(
+            new ResetMemberPasswordCommand(userId, request.Password), cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(new MemberPasswordResetResponse(
+                result.Value.User.Id.Value,
+                result.Value.User.MustChangePassword,
+                result.Value.CredentialsEnded));
+    }
+
+    private static async Task<IResult> SetDisabled(
+        Guid userId,
+        SetDisabledRequest request,
+        IDispatcher dispatcher,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        // A missing member would read as false, which is "enable", so a body that misspelt the field
+        // would enable the member it was meant to disable. Required, like every other rule setter.
+        if (request.Disabled is not { } disabled)
+        {
+            return ProblemDetailsMapping.From(new DomainError(
+                "invalid_request",
+                "'disabled' is required: true to disable the member, false to enable them."));
+        }
+
+        var result = await dispatcher.SendAsync(
+            new SetMemberDisabledCommand(userId, disabled), cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(new MemberDisabledResponse(
+                result.Value.User.Id.Value,
+                result.Value.User.Disabled,
+                result.Value.CredentialsEnded));
     }
 
     private static async Task<IResult> ListKeys(
@@ -463,6 +586,21 @@ public sealed record CreateMemberRequest(
 /// <param name="Role">The new role.</param>
 public sealed record ChangeRoleRequest(string Role);
 
+/// <summary>Request to change the caller's own password (ADR-048).</summary>
+/// <param name="CurrentPassword">The password in force.</param>
+/// <param name="NewPassword">At least 12 characters, and not the current one.</param>
+public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+
+/// <summary>Request to set a member's password to a temporary one (ADR-048).</summary>
+/// <param name="Password">At least 12 characters. The member must replace it before doing anything else.</param>
+public sealed record ResetPasswordRequest(string Password);
+
+/// <summary>Request to disable or enable a member (ADR-048).</summary>
+/// <param name="Disabled">
+/// True to disable, false to enable. Required: a body that forgot it must not be read as "enable".
+/// </param>
+public sealed record SetDisabledRequest(bool? Disabled);
+
 /// <summary>Request to issue an API key.</summary>
 /// <param name="Label">What it is for. Required — an unlabelled key is one nobody dares revoke.</param>
 /// <param name="Scopes">What it may do. Never more than the issuer holds.</param>
@@ -477,25 +615,65 @@ public sealed record IssueApiKeyRequest(
 /// <param name="Authenticated">Whether this request carried a credential that verified.</param>
 /// <param name="Actor">Who the caller is, when there is one.</param>
 /// <param name="Scopes">What the caller may do.</param>
+/// <param name="MustChangePassword">
+/// Whether the caller's password was set by an administrator and has to be replaced. While it is true
+/// <paramref name="Scopes"/> is empty and every route but this one and the password change answers 403
+/// <c>password_change_required</c> (ADR-048).
+/// </param>
 public sealed record AuthStatusResponse(
-    bool Claimed, bool Authenticated, string? Actor, IReadOnlyList<string> Scopes);
+    bool Claimed,
+    bool Authenticated,
+    string? Actor,
+    IReadOnlyList<string> Scopes,
+    bool MustChangePassword = false);
 
 /// <summary>A credential and what it grants.</summary>
 /// <param name="Credential">Send this as <c>Authorization: Bearer</c>. Hold it in memory only.</param>
 /// <param name="Actor">Who you are, as the audit trail will record it.</param>
-/// <param name="Scopes">What you may do.</param>
+/// <param name="Scopes">What you may do. Empty while <paramref name="MustChangePassword"/> is true.</param>
 /// <param name="ExpiresAt">When the credential stops working.</param>
+/// <param name="MustChangePassword">
+/// Whether the password in force was set by an administrator, so this credential can change it and do
+/// nothing else until it has (ADR-048).
+/// </param>
 public sealed record SignInResponse(
-    string Credential, string Actor, IReadOnlyList<string> Scopes, DateTimeOffset ExpiresAt);
+    string Credential,
+    string Actor,
+    IReadOnlyList<string> Scopes,
+    DateTimeOffset ExpiresAt,
+    bool MustChangePassword = false);
+
+/// <summary>What a password change did.</summary>
+/// <param name="OtherSessionsSignedOut">How many of the caller's other sessions were signed out.</param>
+public sealed record PasswordChangedResponse(int OtherSessionsSignedOut);
+
+/// <summary>What resetting a member's password did.</summary>
+/// <param name="UserId">The member.</param>
+/// <param name="MustChangePassword">Always true: the member must replace the temporary password.</param>
+/// <param name="SessionsSignedOut">How many of the member's sessions were signed out.</param>
+public sealed record MemberPasswordResetResponse(
+    Guid UserId, bool MustChangePassword, int SessionsSignedOut);
+
+/// <summary>What disabling or enabling a member did.</summary>
+/// <param name="UserId">The member.</param>
+/// <param name="Disabled">Whether they are disabled now.</param>
+/// <param name="CredentialsRevoked">
+/// How many sessions and API keys were revoked by this request. Zero for an enabling, and for a
+/// request that found the member already as asked.
+/// </param>
+public sealed record MemberDisabledResponse(Guid UserId, bool Disabled, int CredentialsRevoked);
 
 /// <summary>A member.</summary>
 /// <param name="UserId">Their identity.</param>
 /// <param name="Email">Their login.</param>
 /// <param name="DisplayName">What to show.</param>
 /// <param name="Role">Their role.</param>
-/// <param name="Disabled">Whether they may sign in.</param>
+/// <param name="Disabled">Whether they may NOT sign in.</param>
 /// <param name="CreatedAt">When the account was created.</param>
 /// <param name="LastSignedInAt">When they last signed in.</param>
+/// <param name="MustChangePassword">
+/// Whether an administrator reset their password and they have not yet replaced it (ADR-048).
+/// </param>
 public sealed record MemberResponse(
     Guid UserId,
     string Email,
@@ -503,7 +681,8 @@ public sealed record MemberResponse(
     string Role,
     bool Disabled,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? LastSignedInAt)
+    DateTimeOffset? LastSignedInAt,
+    bool MustChangePassword = false)
 {
     /// <summary>Projects a member. <b>Never the password hash.</b></summary>
     /// <param name="user">The account.</param>
@@ -520,7 +699,8 @@ public sealed record MemberResponse(
             Roles.For(role),
             user.Disabled,
             user.CreatedAt,
-            user.LastSignedInAt);
+            user.LastSignedInAt,
+            user.MustChangePassword);
     }
 }
 

@@ -205,6 +205,50 @@ public class RoleTests
     [Fact]
     public void EveryRoleResolvesToSomething() =>
         Assert.All(Enum.GetValues<Role>(), r => Assert.NotEmpty(Roles.ScopesFor(r)));
+
+    [Fact]
+    public void AnOwnerMayManageEveryRole() =>
+        Assert.All(
+            Enum.GetValues<Role>(),
+            role => Assert.True(Roles.MayManage(Roles.SetFor(Role.Owner), role)));
+
+    [Fact]
+    public void ACredentialMayManageNobodyWhoHoldsMoreThanItDoes()
+    {
+        // The rule key delegation already follows (a key may not grant what its issuer lacks),
+        // applied to acting on an account: taking over, or locking out, somebody whose authority
+        // you do not hold is a way to acquire it.
+        var admin = Roles.SetFor(Role.Admin);
+
+        Assert.True(Roles.MayManage(admin, Role.Reader));
+        Assert.True(Roles.MayManage(admin, Role.Admin));
+        Assert.False(Roles.MayManage(admin, Role.Owner));
+
+        var reader = Roles.SetFor(Role.Reader);
+
+        Assert.True(Roles.MayManage(reader, Role.Reader));
+        Assert.False(Roles.MayManage(reader, Role.Admin));
+        Assert.False(Roles.MayManage(reader, Role.Owner));
+    }
+
+    [Fact]
+    public void AKeyHoldingOnlyOrgAdminMayManageNobody()
+    {
+        // org:admin implies nothing (Scope.cs), so a key issued with only that scope holds none
+        // of what a Reader holds, let alone an Owner. It can administer the organisation and may
+        // not act on any account that can do more than administer it.
+        var narrow = ScopeSet.Of([Scope.OrgAdmin]);
+
+        Assert.All(
+            Enum.GetValues<Role>(),
+            role => Assert.False(Roles.MayManage(narrow, role)));
+    }
+
+    [Fact]
+    public void NoCredentialMayManageAnAccountWhenItHoldsNothing() =>
+        Assert.All(
+            Enum.GetValues<Role>(),
+            role => Assert.False(Roles.MayManage(ScopeSet.None, role)));
 }
 
 /// <summary>M8.1's API keys — issuing, presenting, verifying and revoking.</summary>
@@ -486,6 +530,74 @@ public class UserTests
 
         Assert.True(user.Disabled);
         Assert.Equal("alice@example.com", user.Email.Value);
+    }
+
+    [Fact]
+    public void AnAccountCanBeEnabledAgainAndKeepsEverythingItHad()
+    {
+        var user = New();
+        user.SetDisabled(true);
+
+        user.SetDisabled(false);
+
+        Assert.False(user.Disabled);
+        Assert.Equal("alice@example.com", user.Email.Value);
+    }
+
+    [Fact]
+    public void ANewAccountDoesNotHaveToChangeItsPassword() =>
+        Assert.False(New().MustChangePassword);
+
+    [Fact]
+    public void ChangingAPasswordReplacesTheHashAndClearsTheObligation()
+    {
+        var user = New();
+        user.ResetPassword("temporary");
+
+        user.ChangePassword("chosen by the person");
+
+        Assert.Equal("chosen by the person", user.PasswordHash);
+        Assert.False(user.MustChangePassword);
+    }
+
+    [Fact]
+    public void ResettingAPasswordReplacesTheHashAndRequiresTheAccountHolderToChangeIt()
+    {
+        // The temporary password is known to whoever typed it, so it is good for one thing: the
+        // way to a password only its owner knows.
+        var user = New();
+
+        user.ResetPassword("temporary");
+
+        Assert.Equal("temporary", user.PasswordHash);
+        Assert.True(user.MustChangePassword);
+    }
+
+    [Fact]
+    public void UpgradingAHashAtSignInDoesNotClearTheObligation()
+    {
+        // Signing in with a temporary password rehashes it under today's parameters. That is the
+        // same password, not a new one, so it must not count as the change.
+        var user = New();
+        user.ResetPassword("temporary");
+
+        user.SetPasswordHash("temporary, stronger");
+
+        Assert.Equal("temporary, stronger", user.PasswordHash);
+        Assert.True(user.MustChangePassword);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void NeitherPathAcceptsAnEmptyHash(string? hash)
+    {
+        var user = New();
+
+        Assert.ThrowsAny<ArgumentException>(() => user.ChangePassword(hash!));
+        Assert.ThrowsAny<ArgumentException>(() => user.ResetPassword(hash!));
+        Assert.Equal("hashed", user.PasswordHash);
     }
 
     [Fact]

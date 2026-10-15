@@ -37,6 +37,41 @@ public sealed record CreateMemberCommand(
 /// <param name="Role">The new role.</param>
 public sealed record ChangeMemberRoleCommand(Guid UserId, string? Role) : ICommand<Membership>;
 
+/// <summary>Changes the caller's own password (ADR-048).</summary>
+/// <param name="CurrentPassword">The password in force, which must be known to change it.</param>
+/// <param name="NewPassword">The replacement, held to the same rule as the one the instance was claimed with.</param>
+/// <remarks>
+/// <b>Neither password is ever kept, audited, logged or returned.</b> They are arguments to one
+/// handler call and nothing downstream is handed either.
+/// </remarks>
+public sealed record ChangeOwnPasswordCommand(string? CurrentPassword, string? NewPassword)
+    : ICommand<PasswordChange>;
+
+/// <summary>What a password change did besides change the password.</summary>
+/// <param name="SessionsEnded">How many other sessions of the same person were signed out.</param>
+public sealed record PasswordChange(int SessionsEnded);
+
+/// <summary>Sets a member's password to a temporary one they must replace (ADR-048).</summary>
+/// <param name="UserId">Which member.</param>
+/// <param name="NewPassword">The temporary password.</param>
+public sealed record ResetMemberPasswordCommand(Guid UserId, string? NewPassword)
+    : ICommand<MemberAccountChange>;
+
+/// <summary>Stops a member signing in, or lets them sign in again (ADR-048).</summary>
+/// <param name="UserId">Which member.</param>
+/// <param name="Disabled">Whether to disable (true) or enable (false).</param>
+public sealed record SetMemberDisabledCommand(Guid UserId, bool Disabled)
+    : ICommand<MemberAccountChange>;
+
+/// <summary>A member as an account change left them.</summary>
+/// <param name="User">The account.</param>
+/// <param name="Role">Their role in this tenant.</param>
+/// <param name="CredentialsEnded">
+/// How many credentials the change revoked: their sessions for a reset, every session and key for
+/// a disabling, and zero for anything that changed nothing.
+/// </param>
+public sealed record MemberAccountChange(User User, Role Role, int CredentialsEnded);
+
 /// <summary>A member and what they may do.</summary>
 /// <param name="User">The account.</param>
 /// <param name="Role">Their role in this tenant.</param>
@@ -304,17 +339,16 @@ public sealed class ChangeMemberRoleHandler(
                 ConcordatCodes.UserNotFound, "No such member in this tenant.");
         }
 
-        // An owner cannot demote themselves. Not paternalism: an instance whose last owner is a
-        // Reader has nobody who can grant the role back, and the only fix is a database edit.
+        // The last enabled owner cannot be demoted, by anyone. Not paternalism: an instance whose last
+        // owner is a Reader has nobody who can grant the role back, and the only fix is a database
+        // edit. It counts owners who can sign in (ADR-048): a disabled owner is one nobody can be, and
+        // counting them let the one remaining owner demote themselves.
         if (membership.Role is Role.Owner &&
             role is not Role.Owner &&
-            caller.Current.UserId == userId &&
-            !await AnotherOwnerExistsAsync(tenantId, userId, cancellationToken).ConfigureAwait(false))
+            !await Owners.AnotherEnabledOwnerExistsAsync(users, tenantId, userId, cancellationToken)
+                .ConfigureAwait(false))
         {
-            return Result<Membership>.Failure(
-                ConcordatCodes.RoleInvalid,
-                "You are the only owner. Promote someone else first, or this instance would " +
-                "have nobody who can manage it.");
+            return Result<Membership>.Failure(ConcordatCodes.LastOwner, Owners.LastOwnerMessage);
         }
 
         membership.ChangeRole(role);
@@ -331,14 +365,338 @@ public sealed class ChangeMemberRoleHandler(
 
         return Result<Membership>.Success(membership);
     }
+}
 
-    private async Task<bool> AnotherOwnerExistsAsync(
-        TenantId tenantId, UserId excluding, CancellationToken cancellationToken)
+/// <summary>Handles <see cref="ChangeOwnPasswordCommand"/>.</summary>
+public sealed class ChangeOwnPasswordHandler(
+    IUserRepository users,
+    IApiKeyRepository apiKeys,
+    IPasswordHasher passwords,
+    IAuditLog audit,
+    IUnitOfWork unitOfWork,
+    ICallerContext caller,
+    TimeProvider clock)
+    : ICommandHandler<ChangeOwnPasswordCommand, PasswordChange>
+{
+    /// <inheritdoc />
+    public async Task<Result<PasswordChange>> HandleAsync(
+        ChangeOwnPasswordCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var current = caller.Current;
+
+        // A credential that is not a person's (a key issued while the instance was open) has no
+        // password to change. Nothing about a refusal here depends on whether any account exists.
+        var user = current.UserId is { } id
+            ? await users.FindAsync(id, cancellationToken).ConfigureAwait(false)
+            : null;
+
+        if (user is null)
+        {
+            return Result<PasswordChange>.Failure(
+                ConcordatCodes.UserNotFound,
+                "This credential is not tied to an account, so there is no password to change.");
+        }
+
+        // The current password first, and before the new one is judged: somebody who holds a
+        // credential and not the password (a session left open on a shared screen) learns nothing
+        // from this endpoint, not even that the new password was too short. It is the same refusal
+        // sign-in gives for a password that does not match, and it counts against the same limit.
+        if (string.IsNullOrEmpty(command.CurrentPassword) ||
+            !passwords.Verify(user.PasswordHash, command.CurrentPassword).Verified)
+        {
+            return Result<PasswordChange>.Failure(
+                ConcordatCodes.Unauthenticated, "That is not your current password.");
+        }
+
+        var rule = User.CheckPassword(command.NewPassword);
+        if (rule.IsFailure)
+        {
+            return Result<PasswordChange>.Failure(rule.Error!);
+        }
+
+        // Not one of the rules the claim is held to, and not a composition rule: it is what makes
+        // "replace the temporary password" mean something. Without it the replacement could be the
+        // temporary password again.
+        if (string.Equals(command.CurrentPassword, command.NewPassword, StringComparison.Ordinal))
+        {
+            return Result<PasswordChange>.Failure(
+                ConcordatCodes.PasswordInvalid,
+                "The new password is the one you already have. Choose a different one.");
+        }
+
+        var now = clock.GetUtcNow();
+
+        user.ChangePassword(passwords.Hash(command.NewPassword!));
+
+        // Somebody who changes their password usually does so because someone else might have it,
+        // and a session is the thing that someone would be using. The one the request is made with is
+        // kept, or the person would be signed out by their own change; every other session of theirs
+        // is revoked. Standing API keys are not: a key is a credential of its own, 256 bits from a
+        // CSPRNG and not derived from the password, and a pipeline that stopped on a password change
+        // would punish the one act that is meant to be encouraged.
+        var ended = Credentials.Revoke(
+            (await apiKeys.ListForUserAsync(user.Id, cancellationToken).ConfigureAwait(false))
+                .Where(k => k.Kind is ApiKeyKind.Session && k.KeyId != current.ApiKeyId),
+            now);
+
+        audit.Append(AuditEntry.Record(
+            null,
+            AuditAction.PasswordChanged,
+            current.Actor,
+            user.Email.Value,
+            now,
+            $"{ended} other {(ended is 1 ? "session" : "sessions")} signed out"));
+
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return Result<PasswordChange>.Success(new PasswordChange(ended));
+    }
+}
+
+/// <summary>Handles <see cref="ResetMemberPasswordCommand"/>.</summary>
+public sealed class ResetMemberPasswordHandler(
+    IUserRepository users,
+    IApiKeyRepository apiKeys,
+    IPasswordHasher passwords,
+    IAuditLog audit,
+    IUnitOfWork unitOfWork,
+    ICallerContext caller,
+    TimeProvider clock)
+    : ICommandHandler<ResetMemberPasswordCommand, MemberAccountChange>
+{
+    /// <inheritdoc />
+    public async Task<Result<MemberAccountChange>> HandleAsync(
+        ResetMemberPasswordCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var current = caller.Current;
+        var userId = new UserId(command.UserId);
+
+        var target = await Members.FindAsync(users, current.TenantId, userId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (target is null)
+        {
+            return Members.NotFound<MemberAccountChange>();
+        }
+
+        // Not your own: it would set a password without proving the current one is known, which is
+        // the proof a change exists to ask for, and a stolen session could use it to lock the real
+        // owner out. Use change-password.
+        if (current.UserId == userId)
+        {
+            return Result<MemberAccountChange>.Failure(
+                ConcordatCodes.OwnAccount,
+                "You cannot reset your own password. Change it instead, which asks for the " +
+                "current one.");
+        }
+
+        if (!Roles.MayManage(current.Scopes, target.Role))
+        {
+            return Members.Outranks<MemberAccountChange>();
+        }
+
+        var rule = User.CheckPassword(command.NewPassword);
+        if (rule.IsFailure)
+        {
+            return Result<MemberAccountChange>.Failure(rule.Error!);
+        }
+
+        var now = clock.GetUtcNow();
+
+        target.User.ResetPassword(passwords.Hash(command.NewPassword!));
+
+        // Whoever held the old password may be holding a session: every one of the member's sessions
+        // ends, and with it every browser tab still open on the old password. Their API keys do not
+        // (see ChangeOwnPasswordHandler); an administrator who wants those gone revokes them, or
+        // disables the account.
+        var ended = Credentials.Revoke(
+            (await apiKeys.ListForUserAsync(userId, cancellationToken).ConfigureAwait(false))
+                .Where(k => k.Kind is ApiKeyKind.Session),
+            now);
+
+        audit.Append(AuditEntry.Record(
+            null,
+            AuditAction.MemberPasswordReset,
+            current.Actor,
+            target.User.Email.Value,
+            now,
+            $"temporary password set; must be changed at next sign-in; {ended} " +
+            $"{(ended is 1 ? "session" : "sessions")} signed out"));
+
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return Result<MemberAccountChange>.Success(
+            new MemberAccountChange(target.User, target.Role, ended));
+    }
+}
+
+/// <summary>Handles <see cref="SetMemberDisabledCommand"/>.</summary>
+public sealed class SetMemberDisabledHandler(
+    IUserRepository users,
+    IApiKeyRepository apiKeys,
+    IAuditLog audit,
+    IUnitOfWork unitOfWork,
+    ICallerContext caller,
+    TimeProvider clock)
+    : ICommandHandler<SetMemberDisabledCommand, MemberAccountChange>
+{
+    /// <inheritdoc />
+    public async Task<Result<MemberAccountChange>> HandleAsync(
+        SetMemberDisabledCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var current = caller.Current;
+        var userId = new UserId(command.UserId);
+
+        var target = await Members.FindAsync(users, current.TenantId, userId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (target is null)
+        {
+            return Members.NotFound<MemberAccountChange>();
+        }
+
+        if (command.Disabled && current.UserId == userId)
+        {
+            return Result<MemberAccountChange>.Failure(
+                ConcordatCodes.OwnAccount,
+                "You cannot disable your own account. Ask another owner to, if it has to be done.");
+        }
+
+        if (!Roles.MayManage(current.Scopes, target.Role))
+        {
+            return Members.Outranks<MemberAccountChange>();
+        }
+
+        if (command.Disabled &&
+            target.Role is Role.Owner &&
+            !target.User.Disabled &&
+            !await Owners.AnotherEnabledOwnerExistsAsync(
+                users, current.TenantId, userId, cancellationToken).ConfigureAwait(false))
+        {
+            return Result<MemberAccountChange>.Failure(
+                ConcordatCodes.LastOwner, Owners.LastOwnerMessage);
+        }
+
+        // Already as asked: an answer, not a change, so nothing is written and nothing is audited. A
+        // repeat of a request that went through (a double click, a retry after a timeout) must not
+        // leave a second entry for a change that happened once.
+        if (target.User.Disabled == command.Disabled)
+        {
+            return Result<MemberAccountChange>.Success(
+                new MemberAccountChange(target.User, target.Role, 0));
+        }
+
+        var now = clock.GetUtcNow();
+
+        target.User.SetDisabled(command.Disabled);
+
+        // Disabling is what ends the person's access, and a credential is how access outlives a
+        // sign-in refusal: their sessions are good for their lifetime and their API keys carry their
+        // authority and do not expire. Every one is revoked, in the same unit of work, and revocation
+        // is terminal: enabling the account lets the person sign in again and brings nothing back.
+        // Whatever they issued is re-issued deliberately, which is the safe direction to be wrong in.
+        var ended = command.Disabled
+            ? Credentials.Revoke(
+                await apiKeys.ListForUserAsync(userId, cancellationToken).ConfigureAwait(false),
+                now)
+            : 0;
+
+        audit.Append(AuditEntry.Record(
+            null,
+            command.Disabled ? AuditAction.MemberDisabled : AuditAction.MemberEnabled,
+            current.Actor,
+            target.User.Email.Value,
+            now,
+            command.Disabled
+                ? $"{ended} {(ended is 1 ? "credential" : "credentials")} revoked"
+                : "may sign in again; revoked credentials stay revoked"));
+
+        await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return Result<MemberAccountChange>.Success(
+            new MemberAccountChange(target.User, target.Role, ended));
+    }
+}
+
+/// <summary>Finding a member of the caller's organisation, and the two refusals about them.</summary>
+internal static class Members
+{
+    /// <summary>Finds an account and its role in a tenant, or nothing when it is not a member of it.</summary>
+    public static async Task<Member?> FindAsync(
+        IUserRepository users, TenantId tenantId, UserId userId, CancellationToken cancellationToken)
+    {
+        var membership = await users.FindMembershipAsync(tenantId, userId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (membership is null)
+        {
+            return null;
+        }
+
+        var user = await users.FindAsync(userId, cancellationToken).ConfigureAwait(false);
+
+        return user is null ? null : new Member(user, membership.Role);
+    }
+
+    public static Result<T> NotFound<T>()
+        where T : notnull =>
+        Result<T>.Failure(ConcordatCodes.UserNotFound, "No such member in this tenant.");
+
+    public static Result<T> Outranks<T>()
+        where T : notnull =>
+        Result<T>.Failure(
+            ConcordatCodes.MemberOutranksCaller,
+            "That member holds authority your credential does not, so you cannot act on their " +
+            "account. A credential may only act on accounts that hold no more than it does.");
+}
+
+/// <summary>The rule that an organisation keeps an owner who can sign in.</summary>
+internal static class Owners
+{
+    public const string LastOwnerMessage =
+        "That would leave this instance with no owner who can sign in, and nobody who can manage " +
+        "members. Make someone else an owner first.";
+
+    /// <summary>Whether an owner other than this one could still sign in.</summary>
+    public static async Task<bool> AnotherEnabledOwnerExistsAsync(
+        IUserRepository users,
+        TenantId tenantId,
+        UserId excluding,
+        CancellationToken cancellationToken)
     {
         var members = await users.ListMembersAsync(tenantId, cancellationToken)
             .ConfigureAwait(false);
 
-        return members.Any(m => m.Membership.Role is Role.Owner && m.User.Id != excluding);
+        return members.Any(m =>
+            m.Membership.Role is Role.Owner && m.User.Id != excluding && !m.User.Disabled);
+    }
+}
+
+/// <summary>Ending credentials.</summary>
+internal static class Credentials
+{
+    /// <summary>Revokes the keys that could still authenticate, and says how many that was.</summary>
+    /// <remarks>
+    /// Only a key that is usable now: one that has expired or been revoked already could not have
+    /// worked, and rewriting it would inflate the count the audit entry reports.
+    /// </remarks>
+    public static int Revoke(IEnumerable<ApiKey> keys, DateTimeOffset now)
+    {
+        var ended = 0;
+
+        foreach (var key in keys.Where(k => k.IsUsable(now)))
+        {
+            key.Revoke(now);
+            ended++;
+        }
+
+        return ended;
     }
 }
 

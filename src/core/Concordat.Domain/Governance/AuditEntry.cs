@@ -109,6 +109,18 @@ public enum AuditAction
     /// <summary>A member's role changed.</summary>
     MemberRoleChanged,
 
+    /// <summary>A member was stopped from signing in, and every credential they held was revoked (ADR-048).</summary>
+    MemberDisabled,
+
+    /// <summary>A disabled member was allowed to sign in again (ADR-048).</summary>
+    MemberEnabled,
+
+    /// <summary>An administrator set a temporary password the member must replace (ADR-048).</summary>
+    MemberPasswordReset,
+
+    /// <summary>A member chose a new password for their own account (ADR-048).</summary>
+    PasswordChanged,
+
     /// <summary>An API key was issued.</summary>
     ApiKeyIssued,
 
@@ -314,6 +326,10 @@ public static class AuditTokens
         [AuditAction.ServiceRegistered] = "SERVICE_REGISTERED",
         [AuditAction.MemberAdded] = "MEMBER_ADDED",
         [AuditAction.MemberRoleChanged] = "MEMBER_ROLE_CHANGED",
+        [AuditAction.MemberDisabled] = "MEMBER_DISABLED",
+        [AuditAction.MemberEnabled] = "MEMBER_ENABLED",
+        [AuditAction.MemberPasswordReset] = "MEMBER_PASSWORD_RESET",
+        [AuditAction.PasswordChanged] = "PASSWORD_CHANGED",
         [AuditAction.ApiKeyIssued] = "API_KEY_ISSUED",
         [AuditAction.ApiKeyRevoked] = "API_KEY_REVOKED",
     };

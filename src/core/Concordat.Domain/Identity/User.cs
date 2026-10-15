@@ -206,12 +206,54 @@ public sealed class User
                 "predictable substitutions, and length buys more.")
             : Result.Success();
 
-    /// <summary>Replaces the stored hash.</summary>
+    /// <summary>Replaces the stored hash with the same password, hashed under newer parameters.</summary>
     /// <param name="passwordHash">An already-hashed password.</param>
+    /// <remarks>
+    /// <b>Not a password change, and it leaves <see cref="MustChangePassword"/> alone.</b> Signing in
+    /// upgrades a hash made under out-of-date parameters, and a person signing in with a temporary
+    /// password must still be made to replace it: use <see cref="ChangePassword"/> or
+    /// <see cref="ResetPassword"/> for a new password.
+    /// </remarks>
     public void SetPasswordHash(string passwordHash)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(passwordHash);
         PasswordHash = passwordHash;
+    }
+
+    /// <summary>Whether the password in force is one somebody else set, so its owner must replace it.</summary>
+    /// <remarks>
+    /// <para>
+    /// Set by <see cref="ResetPassword"/> and cleared only by <see cref="ChangePassword"/>. The
+    /// administrator who typed a temporary password knows it, so until the account's owner has
+    /// replaced it the account is only as private as that administrator is trustworthy; the flag is
+    /// what makes that window as short as the owner's next sign-in.
+    /// </para>
+    /// <para>
+    /// <b>It limits the session, not the sign-in.</b> The account signs in, and a session for it can do
+    /// exactly one thing until the password is changed. API keys the person issued are not sessions and
+    /// are not limited (ADR-048).
+    /// </para>
+    /// </remarks>
+    public bool MustChangePassword { get; private set; }
+
+    /// <summary>The account's owner chose a new password.</summary>
+    /// <param name="passwordHash">An already-hashed password.</param>
+    public void ChangePassword(string passwordHash)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(passwordHash);
+
+        PasswordHash = passwordHash;
+        MustChangePassword = false;
+    }
+
+    /// <summary>Somebody else set a temporary password, which its owner must replace.</summary>
+    /// <param name="temporaryPasswordHash">An already-hashed password.</param>
+    public void ResetPassword(string temporaryPasswordHash)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(temporaryPasswordHash);
+
+        PasswordHash = temporaryPasswordHash;
+        MustChangePassword = true;
     }
 
     /// <summary>Changes the display name.</summary>

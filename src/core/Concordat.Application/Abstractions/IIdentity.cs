@@ -137,6 +137,17 @@ public interface IApiKeyRepository
     /// <returns>The keys. <b>Never their secrets.</b></returns>
     Task<IReadOnlyList<ApiKey>> ListAsync(TenantId tenantId, CancellationToken cancellationToken);
 
+    /// <summary>Lists every key a person holds, in every tenant, revoked ones included.</summary>
+    /// <param name="userId">The person.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The keys, tracked, so a handler can revoke them in its own unit of work.</returns>
+    /// <remarks>
+    /// <b>Across tenants, on purpose.</b> A password and the right to sign in belong to the account
+    /// (<see cref="User"/> is not tenant-scoped), so ending a person's sessions or credentials is not
+    /// something one organisation's view of them should limit.
+    /// </remarks>
+    Task<IReadOnlyList<ApiKey>> ListForUserAsync(UserId userId, CancellationToken cancellationToken);
+
     /// <summary>Finds one key by identity within a tenant.</summary>
     /// <param name="tenantId">The tenant.</param>
     /// <param name="id">The key's identity.</param>

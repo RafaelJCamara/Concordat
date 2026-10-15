@@ -80,8 +80,11 @@ public sealed class ScopeSecurityOperationTransformer : IOpenApiOperationTransfo
             [new OpenApiSecuritySchemeReference(BearerSecuritySchemeTransformer.SchemeId, context.Document, null)] = [],
         });
 
-        var scopes = string.Join(" or ", required.Scopes);
-        var note = $"Requires scope: `{scopes}`.";
+        // An empty list is a route about one's own account (RequireAuthenticated): it asks who the
+        // caller is and holds no scope against them.
+        var note = required.Scopes.Count is 0
+            ? "Requires a credential, and no particular scope."
+            : $"Requires scope: `{string.Join(" or ", required.Scopes)}`.";
 
         operation.Description = string.IsNullOrEmpty(operation.Description)
             ? note

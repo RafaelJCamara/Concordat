@@ -191,6 +191,13 @@ public sealed class RequireScopeFilter(string[] scopes) : IEndpointFilter
                 "cdt_...', or sign in."));
         }
 
+        // Before the scope comparison, whose answer would be true and no help: this caller holds no
+        // scopes, and none would help until the password is replaced (ADR-048).
+        if (caller.MustChangePassword)
+        {
+            return PasswordChangeRequired.Refusal();
+        }
+
         if (!caller.Scopes.AllowsAny(scopes))
         {
             return ProblemDetailsMapping.From(new DomainError(
@@ -203,9 +210,69 @@ public sealed class RequireScopeFilter(string[] scopes) : IEndpointFilter
     }
 }
 
+/// <summary>
+/// Refuses a request that needs only that the caller is somebody (ADR-048).
+/// </summary>
+/// <remarks>
+/// For the routes about one's own account: any signed-in person may change their own password, a Reader
+/// included, so no scope is the right requirement, and a caller who must change their password is
+/// <i>exactly</i> who is let through, because it is the one thing they may do. Declared like a scope
+/// requirement (with an empty list) so the routes that carry it stay visible to the tests that
+/// enumerate every route and to the OpenAPI document.
+/// </remarks>
+public sealed class RequireAuthenticatedFilter : IEndpointFilter
+{
+    /// <inheritdoc />
+    public async ValueTask<object?> InvokeAsync(
+        EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(next);
+
+        var caller = context.HttpContext.RequestServices
+            .GetRequiredService<ICallerContext>().Current;
+
+        if (!caller.IsAuthenticated)
+        {
+            return ProblemDetailsMapping.From(new DomainError(
+                ConcordatCodes.Unauthenticated,
+                "This endpoint needs a credential. Send one as 'Authorization: Bearer " +
+                "cdt_...', or sign in."));
+        }
+
+        return await next(context).ConfigureAwait(false);
+    }
+}
+
+/// <summary>The refusal a limited credential gets from every route that needs a scope.</summary>
+public static class PasswordChangeRequired
+{
+    /// <summary>Builds the 403.</summary>
+    /// <returns>The response.</returns>
+    public static IResult Refusal() => ProblemDetailsMapping.From(new DomainError(
+        ConcordatCodes.PasswordChangeRequired,
+        "Your password was set by an administrator and has to be replaced before anything else " +
+        "works. Change it at POST /v1/auth/password, or in the web app."));
+}
+
 /// <summary>Declares what a route requires.</summary>
 public static class ScopeRequirements
 {
+    /// <summary>Requires the caller to be authenticated, and nothing more.</summary>
+    /// <typeparam name="TBuilder">The builder type.</typeparam>
+    /// <param name="builder">The route or group.</param>
+    /// <returns>The same builder, for chaining.</returns>
+    public static TBuilder RequireAuthenticated<TBuilder>(this TBuilder builder)
+        where TBuilder : IEndpointConventionBuilder
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.AddEndpointFilter(new RequireAuthenticatedFilter());
+        builder.WithMetadata(new RequiredScopes([]));
+
+        return builder;
+    }
+
     /// <summary>Requires the caller to hold one of these scopes.</summary>
     /// <typeparam name="TBuilder">The builder type.</typeparam>
     /// <param name="builder">The route or group.</param>

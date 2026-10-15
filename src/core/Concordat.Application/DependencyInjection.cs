@@ -202,6 +202,14 @@ public static class DependencyInjection
         services.AddScoped<
             ICommandHandler<ChangeMemberRoleCommand, Membership>, ChangeMemberRoleHandler>();
         services.AddScoped<
+            ICommandHandler<ChangeOwnPasswordCommand, PasswordChange>, ChangeOwnPasswordHandler>();
+        services.AddScoped<
+            ICommandHandler<ResetMemberPasswordCommand, MemberAccountChange>,
+            ResetMemberPasswordHandler>();
+        services.AddScoped<
+            ICommandHandler<SetMemberDisabledCommand, MemberAccountChange>,
+            SetMemberDisabledHandler>();
+        services.AddScoped<
             IQueryHandler<ListMembersQuery, IReadOnlyList<Member>>, ListMembersHandler>();
         services.AddScoped<
             ICommandHandler<IssueApiKeyCommand, IssuedApiKey>, IssueApiKeyHandler>();

@@ -49,6 +49,10 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .IsRequired();
 
         builder.Property(u => u.Disabled).HasColumnName("disabled");
+
+        // False for every account that exists when this column is added, which is what they all are:
+        // nobody has been told to change a password that nobody could reset until now (ADR-048).
+        builder.Property(u => u.MustChangePassword).HasColumnName("must_change_password");
         builder.Property(u => u.CreatedAt).HasColumnName("created_at");
         builder.Property(u => u.LastSignedInAt).HasColumnName("last_signed_in_at");
 

@@ -45,13 +45,19 @@ public interface ICallerContext
 /// <param name="Actor">How the audit trail names them.</param>
 /// <param name="UserId">The signed-in user, when there is one.</param>
 /// <param name="ApiKeyId">The key's public id, when a key was used.</param>
+/// <param name="MustChangePassword">
+/// Whether the account's password is one somebody else set (ADR-048). <b>A caller for whom this is true
+/// holds no scopes</b>: it is authenticated, so it can be told who it is and can replace the password, and
+/// it can do nothing else until it has.
+/// </param>
 public sealed record Caller(
     CredentialKind Kind,
     TenantId TenantId,
     ScopeSet Scopes,
     ActorId Actor,
     UserId? UserId = null,
-    string? ApiKeyId = null)
+    string? ApiKeyId = null,
+    bool MustChangePassword = false)
 {
     /// <summary>Nobody, holding nothing.</summary>
     public static Caller Anonymous { get; } = new(

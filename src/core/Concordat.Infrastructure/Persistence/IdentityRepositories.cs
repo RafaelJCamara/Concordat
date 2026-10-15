@@ -89,6 +89,18 @@ internal sealed class ApiKeyRepository(ConcordatDbContext context) : IApiKeyRepo
             .ConfigureAwait(false);
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Tracked, so the handler's revocation is written by the same <c>SaveChanges</c> as everything
+    /// else it did.
+    /// </remarks>
+    public async Task<IReadOnlyList<ApiKey>> ListForUserAsync(
+        UserId userId, CancellationToken cancellationToken) =>
+        await context.ApiKeys
+            .Where(k => k.UserId == userId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
     public Task<ApiKey?> FindAsync(
         TenantId tenantId, Guid id, CancellationToken cancellationToken) =>
         context.ApiKeys.SingleOrDefaultAsync(

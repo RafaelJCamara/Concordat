@@ -235,6 +235,40 @@ public static class ConcordatCodes
     /// </remarks>
     public const string SignupRefused = "signup_refused";
 
+    /// <summary>
+    /// The change would leave the organisation with no enabled owner (ADR-048).
+    /// </summary>
+    /// <remarks>
+    /// An instance with nobody who can manage members has no way back through the product: the only
+    /// repair is a database edit. A disabled owner counts for nothing here, because a disabled
+    /// owner cannot sign in to do what an owner is for.
+    /// </remarks>
+    public const string LastOwner = "last_owner";
+
+    /// <summary>
+    /// The request would act on the caller's own account in a way that is refused (ADR-048).
+    /// </summary>
+    /// <remarks>
+    /// Disabling yourself locks yourself out, and an administrator resetting their own password
+    /// would change it without proving they know the current one, which is the proof a password
+    /// change exists to ask for.
+    /// </remarks>
+    public const string OwnAccount = "own_account";
+
+    /// <summary>
+    /// The account belongs to someone whose authority the caller does not hold (ADR-048).
+    /// </summary>
+    public const string MemberOutranksCaller = "member_outranks_caller";
+
+    /// <summary>
+    /// The credential is good for one thing: replacing a password somebody else set (ADR-048).
+    /// </summary>
+    /// <remarks>
+    /// Its own code, and a 403 rather than <see cref="InsufficientScope"/>, because "you lack a
+    /// scope" is advice nobody can act on here: no scope helps until the password is changed.
+    /// </remarks>
+    public const string PasswordChangeRequired = "password_change_required";
+
     /// <summary>No API key with the given id exists.</summary>
     public const string ApiKeyNotFound = "api_key_not_found";
 

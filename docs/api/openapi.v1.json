@@ -2722,6 +2722,72 @@
         }
       }
     },
+    "/v1/auth/password": {
+      "post": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Change your own password",
+        "description": "Any signed-in person may, a Reader included, and it is the one thing a person whose password an administrator reset may do before they have changed it. The current password is required and is checked before the new one is judged; a wrong one is refused as 401 'unauthenticated', as a wrong sign-in is, and counts against the same limit. The new one must be at least 12 characters, with no other rule, and must differ from the current one. Every OTHER session of yours is signed out and the one you are using is kept; your API keys are not touched. Recorded in the audit trail as PASSWORD_CHANGED. Neither password is ever logged, audited or returned.\n\nRequires a credential, and no particular scope.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordChangedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
     "/v1/auth/signout": {
       "post": {
         "tags": [
@@ -2870,6 +2936,180 @@
           },
           "404": {
             "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/v1/members/{userId}/password": {
+      "put": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Set a member's password to a temporary one",
+        "description": "The administrator types a temporary password (at least 12 characters), and the member must replace it: their credentials can do nothing but change the password until they have, answering 403 'password_change_required'. Every session the member has is signed out; their API keys are not touched. Not for your own account (409 'own_account': change it instead, which asks for the current one), and not for a member who holds authority your credential does not (403 'member_outranks_caller'). Recorded as MEMBER_PASSWORD_RESET. The password is never logged, audited or returned.\n\nRequires scope: `org:admin`.",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberPasswordResetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
+    "/v1/members/{userId}/disabled": {
+      "put": {
+        "tags": [
+          "Identity"
+        ],
+        "summary": "Disable or enable a member",
+        "description": "A disabled member cannot sign in, and every session and API key they hold is revoked in the same step, so their credentials stop working at once. Revocation is permanent: enabling lets them sign in again and restores nothing, so anything they issued is issued again on purpose. The member and the audit entry (MEMBER_DISABLED or MEMBER_ENABLED) are written together; a request that changes nothing writes nothing. Refused: yourself (409 'own_account'), the last owner who can sign in (409 'last_owner'), and a member who holds authority your credential does not (403 'member_outranks_caller'). The 'disabled' member is required, so a body that forgot it is refused and does not enable anybody.\n\nRequires scope: `org:admin`.",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetDisabledRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberDisabledResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4580,6 +4820,11 @@
               "type": "string"
             },
             "description": "What the caller may do."
+          },
+          "mustChangePassword": {
+            "type": "boolean",
+            "description": "Whether the caller's password was set by an administrator and has to be replaced. While it is true\nScopes is empty and every route but this one and the password change answers 403\n`password_change_required` (ADR-048).",
+            "default": false
           }
         },
         "description": "Whether this instance has been claimed, and who the caller is."
@@ -4819,6 +5064,24 @@
           }
         },
         "description": "A self-contained schema."
+      },
+      "ChangePasswordRequest": {
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ],
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "description": "The password in force."
+          },
+          "newPassword": {
+            "type": "string",
+            "description": "At least 12 characters, and not the current one."
+          }
+        },
+        "description": "Request to change the caller's own password (ADR-048)."
       },
       "ChangeRoleRequest": {
         "required": [
@@ -5663,6 +5926,64 @@
         },
         "description": "The answer to a schema lookup."
       },
+      "MemberDisabledResponse": {
+        "required": [
+          "userId",
+          "disabled",
+          "credentialsRevoked"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "The member.",
+            "format": "uuid"
+          },
+          "disabled": {
+            "type": "boolean",
+            "description": "Whether they are disabled now."
+          },
+          "credentialsRevoked": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many sessions and API keys were revoked by this request. Zero for an enabling, and for a\nrequest that found the member already as asked.",
+            "format": "int32"
+          }
+        },
+        "description": "What disabling or enabling a member did."
+      },
+      "MemberPasswordResetResponse": {
+        "required": [
+          "userId",
+          "mustChangePassword",
+          "sessionsSignedOut"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "The member.",
+            "format": "uuid"
+          },
+          "mustChangePassword": {
+            "type": "boolean",
+            "description": "Always true: the member must replace the temporary password."
+          },
+          "sessionsSignedOut": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many of the member's sessions were signed out.",
+            "format": "int32"
+          }
+        },
+        "description": "What resetting a member's password did."
+      },
       "MemberResponse": {
         "required": [
           "userId",
@@ -5694,7 +6015,7 @@
           },
           "disabled": {
             "type": "boolean",
-            "description": "Whether they may sign in."
+            "description": "Whether they may NOT sign in."
           },
           "createdAt": {
             "type": "string",
@@ -5708,6 +6029,11 @@
             ],
             "description": "When they last signed in.",
             "format": "date-time"
+          },
+          "mustChangePassword": {
+            "type": "boolean",
+            "description": "Whether an administrator reset their password and they have not yet replaced it (ADR-048).",
+            "default": false
           }
         },
         "description": "A member."
@@ -5852,6 +6178,24 @@
           }
         },
         "description": "How much the outbox is holding."
+      },
+      "PasswordChangedResponse": {
+        "required": [
+          "otherSessionsSignedOut"
+        ],
+        "type": "object",
+        "properties": {
+          "otherSessionsSignedOut": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many of the caller's other sessions were signed out.",
+            "format": "int32"
+          }
+        },
+        "description": "What a password change did."
       },
       "PendingApprovalResponse": {
         "required": [
@@ -6491,6 +6835,19 @@
         },
         "description": "A batch of violation reports."
       },
+      "ResetPasswordRequest": {
+        "required": [
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "password": {
+            "type": "string",
+            "description": "At least 12 characters. The member must replace it before doing anything else."
+          }
+        },
+        "description": "Request to set a member's password to a temporary one (ADR-048)."
+      },
       "ResolveContractsRequest": {
         "type": "object",
         "properties": {
@@ -6727,6 +7084,22 @@
         },
         "description": "Request to change a subject's compatibility policy."
       },
+      "SetDisabledRequest": {
+        "required": [
+          "disabled"
+        ],
+        "type": "object",
+        "properties": {
+          "disabled": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "True to disable, false to enable. Required: a body that forgot it must not be read as \"enable\"."
+          }
+        },
+        "description": "Request to disable or enable a member (ADR-048)."
+      },
       "SetEnforcementRequest": {
         "required": [
           "enforcement"
@@ -6880,12 +7253,17 @@
             "items": {
               "type": "string"
             },
-            "description": "What you may do."
+            "description": "What you may do. Empty while MustChangePassword is true."
           },
           "expiresAt": {
             "type": "string",
             "description": "When the credential stops working.",
             "format": "date-time"
+          },
+          "mustChangePassword": {
+            "type": "boolean",
+            "description": "Whether the password in force was set by an administrator, so this credential can change it and do\nnothing else until it has (ADR-048).",
+            "default": false
           }
         },
         "description": "A credential and what it grants."

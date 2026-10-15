@@ -61,6 +61,17 @@ public static class ProblemDetailsMapping
         // fine. A rule about this subject says someone else decides it (ADR-043).
         ConcordatCodes.NotAReviewer => StatusCodes.Status403Forbidden,
 
+        // The credential is good and the member exists; what refuses is who they are (ADR-048). 403, as
+        // above, and not the 401 that would send a client round a sign-in it cannot win. The limited
+        // credential is the same: it is a real credential, and no scope would help it.
+        ConcordatCodes.MemberOutranksCaller => StatusCodes.Status403Forbidden,
+        ConcordatCodes.PasswordChangeRequired => StatusCodes.Status403Forbidden,
+
+        // The request is well formed and allowed in general; the organisation's state is what refuses
+        // it, or the caller's own account (ADR-048).
+        ConcordatCodes.LastOwner => StatusCodes.Status409Conflict,
+        ConcordatCodes.OwnAccount => StatusCodes.Status409Conflict,
+
         // 402, not 403. The caller has the right to do this and their plan does not stretch to
         // it — a distinction a client can act on by upgrading rather than by asking an admin
         // for a scope they already have.

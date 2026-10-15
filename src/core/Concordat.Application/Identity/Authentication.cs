@@ -50,6 +50,41 @@ public sealed class Authenticator(
             return Caller.Anonymous;
         }
 
+        // A key is the authority of the person it belongs to, so it is only as good as that person's
+        // account (ADR-048). Disabling an account revokes what the person held, and this is what makes
+        // "stops working immediately" true whatever that write missed: a sign-in in flight when the
+        // account was disabled, a key issued a moment before. It fails closed, and as everything else
+        // here does: a missing account and a disabled one are the same answer as a wrong secret.
+        //
+        // Before the use is recorded, so a credential that must not be here leaves no trace of having
+        // worked. Keys that belong to nobody (issued while an instance was open) have no account to ask.
+        var scopes = key.ScopeSet();
+        var mustChangePassword = false;
+
+        if (key.UserId is { } owner)
+        {
+            var user = await users.FindAsync(owner, cancellationToken).ConfigureAwait(false);
+
+            if (user is null || user.Disabled)
+            {
+                return Caller.Anonymous;
+            }
+
+            // The password in force is one somebody else typed, so a SESSION is good for proving who it
+            // is and replacing the password, which is what an endpoint with no scope asks, and for
+            // nothing else. Applied on the way in rather than by cutting the key's scopes, so the same
+            // session holds everything again the moment the password is changed.
+            //
+            // Only a session. A standing key is not made with the password and does not depend on it, a
+            // reset leaves it alone by design, and limiting it would freeze a pipeline that cannot
+            // change anybody's password and has no way to say why it stopped.
+            if (user.MustChangePassword && key.Kind is ApiKeyKind.Session)
+            {
+                scopes = ScopeSet.None;
+                mustChangePassword = true;
+            }
+        }
+
         // Recorded so an operator can answer "is this key still needed?", which is the question
         // that has to be answered before anyone will revoke anything. Written at most once a
         // minute rather than on every request: this sits on the SDK's hot path, and a row
@@ -63,10 +98,11 @@ public sealed class Authenticator(
         return new Caller(
             CredentialKind.ApiKey,
             key.TenantId,
-            key.ScopeSet(),
+            scopes,
             key.Actor,
             key.UserId,
-            key.KeyId);
+            key.KeyId,
+            mustChangePassword);
     }
 
     /// <summary>Resolves an email and password.</summary>
@@ -130,12 +166,18 @@ public sealed class Authenticator(
 
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        // The scopes here are what the account holds once its password is its own, and
+        // MustChangePassword says it does not yet. Sign-in is the only consumer: it mints a session
+        // with these scopes and says in its answer that the session can do nothing until the change.
+        // Every request made with that session is limited by FromApiKeyAsync, which is where the
+        // limit is enforced.
         return new Caller(
             CredentialKind.User,
             membership.TenantId,
             Roles.SetFor(membership.Role),
             user.Actor(),
-            user.Id);
+            user.Id,
+            MustChangePassword: user.MustChangePassword);
     }
 
     /// <summary>Works out which organisation a verified user is signing in to.</summary>
