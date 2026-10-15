@@ -382,6 +382,25 @@ describe('MembersStore', () => {
       expect(store.acting()).toEqual([]);
     });
 
+    it('applies what the registry answered, which is what it now says about the member', () => {
+      // Asked to disable; the answer says they are not (somebody enabled them in between). The row
+      // shows the answer, never the ask.
+      store.setDisabled({ userId: 'u1', disabled: true });
+      api
+        .ofKind('setDisabled')[0]!
+        .stream.next({ userId: 'u1', disabled: false, credentialsRevoked: 0 });
+
+      expect(store.members()[0]?.disabled).toBe(false);
+      expect(store.notice()?.kind).toBe('enabled');
+    });
+
+    it('ignores a second request for the same member while one is in flight', () => {
+      store.setDisabled({ userId: 'u1', disabled: true });
+      store.setDisabled({ userId: 'u1', disabled: false });
+
+      expect(api.ofKind('setDisabled')).toHaveLength(1);
+    });
+
     it('lets different members be acted on at once, and one at a time each', () => {
       store.setDisabled({ userId: 'u1', disabled: true });
       store.resetPassword({ userId: 'u1', password: 'a temporary one' });

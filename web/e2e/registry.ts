@@ -186,6 +186,104 @@ export async function ensureReader(ownerCredential: string): Promise<void> {
   }
 }
 
+/** A member as the registry lists one. */
+export interface MemberRow {
+  readonly userId: string;
+  readonly email: string;
+  readonly role: string;
+  readonly disabled: boolean;
+  readonly mustChangePassword: boolean;
+}
+
+/** Adds a member through the API, and says who was made. */
+export async function createMemberRaw(
+  credential: string,
+  email: string,
+  password: string,
+  role: 'READER' | 'ADMIN',
+): Promise<MemberRow> {
+  const created = await call('/v1/members', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${credential}` },
+    body: JSON.stringify({ email, password, role }),
+  });
+
+  if (!created.ok) {
+    throw new Error(`Creating ${email} failed with ${created.status}: ${await created.text()}`);
+  }
+
+  return (await created.json()) as MemberRow;
+}
+
+/** One member, as the registry lists them. */
+export async function readMember(credential: string, email: string): Promise<MemberRow> {
+  const listed = await call('/v1/members', { headers: { authorization: `Bearer ${credential}` } });
+
+  if (!listed.ok) {
+    throw new Error(`Listing members failed with ${listed.status}.`);
+  }
+
+  const member = ((await listed.json()) as MemberRow[]).find((m) => m.email === email);
+
+  if (member === undefined) {
+    throw new Error(`The registry lists no member ${email}.`);
+  }
+
+  return member;
+}
+
+/** Disables or enables a member through the API. Used to clean up, and to arrange a stale page. */
+export async function setDisabledRaw(
+  credential: string,
+  userId: string,
+  disabled: boolean,
+): Promise<{ readonly disabled: boolean; readonly credentialsRevoked: number }> {
+  const response = await call(`/v1/members/${userId}/disabled`, {
+    method: 'PUT',
+    headers: { authorization: `Bearer ${credential}` },
+    body: JSON.stringify({ disabled }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Setting disabled=${disabled} failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as { disabled: boolean; credentialsRevoked: number };
+}
+
+/** What the registry says a credential is, or an anonymous answer for a dead one. Not rate limited. */
+export async function statusOf(
+  secret: string,
+): Promise<{ authenticated: boolean; scopes: string[]; mustChangePassword: boolean }> {
+  const response = await call('/v1/auth/status', {
+    headers: { authorization: `Bearer ${secret}` },
+  });
+
+  return (await response.json()) as {
+    authenticated: boolean;
+    scopes: string[];
+    mustChangePassword: boolean;
+  };
+}
+
+/** Entries of the audit trail for one action and target, in any environment, newest first. */
+export async function readAccountAudit(
+  credential: string,
+  action: string,
+  target: string,
+): Promise<readonly AuditRow[]> {
+  const response = await call(
+    `/v1/audit?action=${action}&target=${encodeURIComponent(target)}&limit=200`,
+    { headers: { authorization: `Bearer ${credential}` } },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Reading the audit trail failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as AuditRow[];
+}
+
 /** Makes sure an environment exists, so the subject list has somewhere to read from. */
 export async function ensureEnvironment(ownerCredential: string, name: string): Promise<void> {
   const created = await call('/v1/environments', {

@@ -166,6 +166,39 @@ the step. Six calls, each yours to confirm:
 > findings were advice before and are advice now ([ADR-028](adr/028-schema-editor.md)); a browser test holds them to agreeing
 > with the registry on the ordinary cases, and would need its expectations flipped.
 
+### 47. An account can change its password, be reset, and be disabled
+
+**Implemented** ([ADR-048](adr/048-an-account-can-change-its-password-be-reset-and-be-disabled.md)). Closes the gap that a forgotten owner password was
+a database edit and a departing member's web login kept working. Seven calls, each yours to confirm; the first two were the ones you flagged:
+
+- **A reset forces the member to replace the temporary password.** The administrator who typed it knows it, so the safer default is to make that
+  window as short as the member's next sign-in: their session can do nothing but change the password until they have (`403
+  password_change_required` everywhere else), enforced for the CLI and curl as much as for the web app. *If you would rather a reset
+  just set a password*, delete the flag's use in the authenticator and the route filter; the column can stay. **Creating a member
+  with an initial password is not forced to change** and I did not touch it; the same argument applies to it, and it is yours to decide.
+- **The administrator types the temporary password; the registry never generates or returns one.** Consistent with how a member is created and
+  with "a password is never returned". *If you want generated ones*, it needs a one-time-secret path in the response.
+- **Disabling revokes every session and API key the member holds, for good, and enabling restores nothing.** A key an owner issued that a
+  pipeline uses stops with the member: the safe direction to be wrong in, and the one to weigh first if somebody disables a person whose
+  key was running CI. The alternative (suspend and revive) fails open.
+- **A password change ends the person's *other* sessions and keeps the one in use; API keys are untouched. A reset ends the member's
+  sessions and leaves their keys.** A key is not made from the password.
+- **A wrong current password is `401 unauthenticated`, the refusal sign-in gives**, as you asked. The web app's interceptor signs a person out
+  on every `401`, so the change request opts out of that and the account store asks the registry before treating it as an expiry. *`403`
+  with its own code would avoid the exception and would not tell an API client its credential is bad when it is not*; it is a one-line
+  mapping and a few deletions.
+- **The new password must differ from the current one**, which the brief's "same rule as the claim, no other rules" did not say. Without it
+  "replace the temporary password" could be satisfied by typing it again.
+- **"Outranks" is asked of scopes, not of the role number** (`member_outranks_caller`). For a signed-in person it can never fire (only an owner
+  holds `org:admin`); it exists for, and is tested on, an API key that holds `org:admin` and nothing else. Also: the last-owner guard on a
+  *demotion* now counts only owners who can sign in and applies to anyone, and its code changed from `role_invalid` to `last_owner` (409).
+
+**Found and not fixed:** an API key holding only `org:admin` can create an owner or promote a member to owner (measured: `201`), and a role
+change does not end the member's existing sessions. Both are listed in `SECURITY.md`.
+
+> **If you overturn it**, [ADR-048](adr/048-an-account-can-change-its-password-be-reset-and-be-disabled.md) ends with what to delete for each
+> call. The one migration (`app_user.must_change_password`, false for everyone) can stay.
+
 ### 46. A new instance is closed until it is claimed
 
 **Implemented** ([ADR-047](adr/047-a-new-instance-is-closed-until-it-is-claimed.md)), at your request before the v1 release. Reverses #27's default. Three calls, each

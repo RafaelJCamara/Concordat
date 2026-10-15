@@ -23,6 +23,10 @@ at rest with explicit scopes (`subject:read|write|admin`, `contract:*`, `env:*`,
 > with one more step: a new instance answers nobody until its first owner is created, on the web app's setup screen or with one
 > request. The no-account evaluation is an opt-in.
 
+> **Amended 2026-10-15 ([ADR-048](048-an-account-can-change-its-password-be-reset-and-be-disabled.md)).** Accounts have a lifecycle: a
+> person changes their own password, an owner resets one and disables or enables a member, and disabling ends every credential the
+> member holds. "Concordat owns password storage and session handling" (below) now includes these.
+
 ## Alternatives considered
 
 - **Require OIDC.** Rejected: blocks first-run evaluation and forces infrastructure on

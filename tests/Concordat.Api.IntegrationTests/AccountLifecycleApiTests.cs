@@ -730,6 +730,24 @@ public class AccountLifecycleApiTests(AuthApiFactory factory) : IClassFixture<Au
     }
 
     [Fact]
+    public async Task NoAccountChangeNotifiesAnybody()
+    {
+        // The confirmations say "Nobody is notified", and the outbox is where a notification would be
+        // staged. The test host runs no pump, so nothing drains it behind this test's back.
+        var member = await CreateMemberAsync("READER");
+        var session = await SignInAsync(member.Email, MemberPassword);
+        var owner = await OwnerAsync();
+        var before = await owner.GetStringAsync("/v1/notifications/outbox");
+
+        await ChangePasswordAsync(With(session.Credential), MemberPassword, NewPassword);
+        await ResetAsync(owner, member.UserId);
+        await SetDisabledAsync(owner, member.UserId, true);
+        await SetDisabledAsync(owner, member.UserId, false);
+
+        Assert.Equal(before, await owner.GetStringAsync("/v1/notifications/outbox"));
+    }
+
+    [Fact]
     public async Task NoResponseCarriesAPasswordHashOrAPassword()
     {
         var member = await CreateMemberAsync("READER");

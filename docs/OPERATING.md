@@ -18,7 +18,8 @@ registry: it never sees message traffic ([BROKER-PERMISSIONS.md](BROKER-PERMISSI
 2. **Open the web app and create the owner** (the token goes in the *Setup token* box), or `POST /v1/auth/bootstrap`
    with `{"email","password","token"}`. The password is at least 12 characters. This happens once.
 3. **Put TLS in front** (below), **change the database password**, and decide who else is a member: *Settings → Members*
-   (roles: reader, admin, owner), and *Settings → API keys* for pipelines.
+   (roles: reader, admin, owner), and *Settings → API keys* for pipelines. **Make a second owner**: a lost owner password is only
+   a button for somebody else who is an owner ([below](#accounts-and-a-lost-owner-password)).
 4. **Do not enable `AllowAnonymousUntilClaimed`** on anything but a machine only you can reach.
 
 ## Configuration
@@ -49,6 +50,53 @@ not meant to be changed.
 | `CONCORDAT_DEFAULT_ENVIRONMENT` | The environment selected on a cold start. | `dev` |
 
 A value the image will not use stops the container with one sentence naming it ([ADR-029](adr/029-web-container.md)).
+
+## Accounts, and a lost owner password
+
+([ADR-048](adr/048-an-account-can-change-its-password-be-reset-and-be-disabled.md).) Every change below is in the audit log as the
+person who made it, and none of them ever records or shows a password.
+
+- **Change your own password:** *Settings → Account*, for anybody signed in. It asks for the current one, ends your **other** sessions
+  and keeps the one you are using, and leaves your API keys working.
+- **Reset a member's password:** *Settings → Members → Reset password…* (owners). You type a temporary password and tell the member
+  yourself; the registry sends it nowhere. Their sessions end, and their next session can do nothing but change the password.
+  Their API keys keep working: revoke them under *API keys* if you need them gone.
+- **Disable a member:** *Settings → Members → Disable…* (owners). They cannot sign in, and **every session and API key they hold is
+  revoked at once and for good**. *Enable…* lets them sign in again and brings nothing back. You cannot disable yourself, and the last
+  owner who can sign in can be neither disabled nor demoted.
+- **Anything an owner can do to an account, the registry refuses for a credential that holds less than the account does** (an API key
+  with only `org:admin` cannot reset an owner's password).
+
+### If the owner's password is lost
+
+There is no "forgot my password" link and no emailed reset: the registry stores only a hash, has no way to send mail to a person, and
+nobody, including you, can read a password back. What is possible depends on who else is left. Take a backup first
+([Backups](#backups)); the SQL below is for `psql` against the registry's database, was run against a real instance, and uses the
+tables as they are (`app_user`, `membership`, `api_key`).
+
+1. **Another owner exists:** they open *Settings → Members → Reset password…* on the lost account and tell its owner the temporary
+   password. That is all, and it needs no database access.
+2. **No other owner, but there is an admin you trust:** promote them in the database, and have them sign in **again** (a session keeps the scopes it was
+   issued with, so a session they already have will not hold `org:admin`), then do step 1 for the owner.
+
+   ```sql
+   UPDATE membership SET role = 'OWNER'
+   WHERE user_id = (SELECT user_id FROM app_user WHERE email = 'admin@example.com');
+   ```
+3. **Nobody is left who can manage members:** delete the accounts, which makes the instance unclaimed again, and claim it again on the
+   setup screen (with your setup token, if you set one). Subjects, schemas, contracts, environments and the audit trail are kept; **every
+   account, session and API key is gone**, so members have to be added again and pipelines need new keys.
+
+   ```sql
+   BEGIN;
+   DELETE FROM api_key;
+   DELETE FROM membership;
+   DELETE FROM app_user;
+   COMMIT;
+   ```
+
+**Not possible:** recovering the old password, or setting one without the application (a hash cannot be computed from SQL); and
+resetting an owner's password from the command line (there is no command for it). If the database is also lost, restore the backup.
 
 ## TLS and the network
 

@@ -27,14 +27,22 @@ The first release. Self-hosted only; the hosted Cloud edition and SDKs for langu
 - **Governance:** impact analysis, environment promotion, an audit trail of every change (as the authenticated
   caller), and notifications by webhook or email, with editable event filters.
 - **Identity:** local accounts, roles, scoped API keys, sessions; read as well as write needs a credential.
+- **Account lifecycle** ([ADR-048](docs/adr/048-an-account-can-change-its-password-be-reset-and-be-disabled.md)): a person
+  changes their own password (`POST /v1/auth/password`; the other sessions end, API keys are untouched); an owner resets a
+  member's to a temporary one they must replace, and **disables or enables** a member, which revokes every session and key
+  they hold at once. The last owner who can sign in cannot be disabled or demoted, nobody disables or resets themselves, and a
+  credential cannot act on an account that holds scopes it does not. Four new audit actions. **A forgotten owner password has a
+  documented recovery** ([OPERATING.md](docs/OPERATING.md#accounts-and-a-lost-owner-password)). The refusal for the last owner
+  on a demotion is now `409 last_owner` (it was `400 role_invalid`).
 - **A new instance answers nobody until it is claimed** ([ADR-047](docs/adr/047-a-new-instance-is-closed-until-it-is-claimed.md)).
   Set `CONCORDAT_BOOTSTRAP_TOKEN` on any host that is not your own machine.
 
 ### The web app
 
 Dashboard, subjects (search, paging, create, retire, delete), versions, diff, impact analysis, approvals, contracts,
-audit log and settings (environments, brokers, members, API keys, notifications), with a schema editor that
-validates in a worker and a first-run setup screen.
+audit log and settings (environments, brokers, members, API keys, notifications, and your own account's password),
+with members that can be reset, disabled and enabled, a schema editor that validates in a worker and a first-run
+setup screen.
 
 ### The .NET SDK
 

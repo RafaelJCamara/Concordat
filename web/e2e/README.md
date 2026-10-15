@@ -236,6 +236,21 @@ only ever compared to the registry's own answer for `dev`, never to a number. Th
 empty panels depend on that. The first test asserts the page asks for the summary once and for the subject list never, which is the
 claim that nothing is derived in the browser.
 
+**Account changes are tried on one throwaway member per run, who is never an owner, and is disabled at the end.**
+`account-lifecycle.spec.ts` ([ADR-048](../../docs/adr/048-an-account-can-change-its-password-be-reset-and-be-disabled.md)) creates **one ADMIN
+member per run** (`e2e-account-<timestamp>@concordat.test`) and takes it through the whole story: an owner resets its password on the
+members screen, it signs in with the temporary one and is held on the account screen until it chooses a new one, changes it again by
+choice, is disabled (its session stops at once) and is enabled. **Nothing here touches the
+shared owner or reader**: changing, resetting or disabling either would break every spec after. **The member is never an OWNER**, and that
+is load-bearing: a second enabled owner would let `identity.spec.ts`'s "will not let an owner demote themselves" demote the shared owner for
+real. Members cannot be deleted, so an `afterAll` disables the member (it leaves no working credential), and a run adds one more disabled
+row to Settings → Members. It also holds a reader to the Account tab (and a refused password change that must not sign them out). Every
+sentence in the confirmations is asserted against the registry after the click; that a change ends the member's *other* sessions, that a
+reset ends their sessions, that a disabled member is refused at sign-in, and that keys survive a change and a reset and die with a
+disabling, is the .NET HTTP suite's, which can arrange a second session and a key for free. **It spends two of the sign-in limiter's
+attempts** (the forced sign-in through the form, and the reader's refused password change). The first version spent six, and the last two
+tests of `session.spec.ts` failed with `429`; the second spent four, which left no room for CI's one retry.
+
 **Match the account control, not the account's email.** A subject the browser creates is owned by
 the signed-in account, so its email now appears in a table cell on the list as well as in the
 sidebar, and `getByText(email)` stopped being unique the first time `new-subject.spec.ts` ran. The
@@ -250,7 +265,9 @@ signing in must not sign in.** The default browser is already the owner; a spec 
 reader is offered uses `test.use({ storageState: READER_STORAGE_STATE })`; and arranging data
 through the API uses `ownerCredential()`, which reads what global setup saved. When this suite
 went over ninety tests it overran the budget by one and failed an unrelated sign-in near the end
-— a red run that said nothing about the screen under test, and would have been red in CI too.
+— a red run that said nothing about the screen under test, and would have been red in CI too. **The figure of thirteen is stale:** with six more, the run failed, and with four it passed, so
+the rest of the suite spends 15 or 16. `account-lifecycle.spec.ts` adds two (see above), which leaves **two or three**, so the next
+spec that signs in must find a way not to.
 
 Two runs inside five minutes will still exceed it. Restarting the registry resets the limiter
 (it is in-memory); CI runs once.

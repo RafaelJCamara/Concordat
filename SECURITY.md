@@ -26,7 +26,11 @@ So that a report starts from what is already known ([docs/STATUS.md](docs/STATUS
 - Passwords are hashed with PBKDF2-HMAC-SHA512 and API keys by SHA-256, never stored; webhooks are signed; the web
   app holds its credential in memory only, with an `httpOnly`, `SameSite=Strict` cookie that does nothing but hand it
   back after a reload ([ADR-006](docs/adr/006-angular-port-strategy.md) records the decision).
-- Sign-in and sign-up attempts are rate limited.
+- Sign-in, sign-up and password-change attempts are rate limited, by address, from one shared budget.
+- **A departing member's access ends at once** ([ADR-048](docs/adr/048-an-account-can-change-its-password-be-reset-and-be-disabled.md)):
+  disabling an account revokes every session and API key it holds, and a key whose account is disabled is refused whatever else
+  happened. A password change ends the person's other sessions; an administrator's reset leaves the member's session able to do
+  nothing but replace the temporary password. The last owner who can sign in cannot be disabled or demoted.
 - Tenant isolation is enforced by a query filter on every tenant-owned table, tested through real HTTP against
   PostgreSQL in the multi-tenant profile.
 - Dependencies are audited nightly ([`dependency-audit.yml`](.github/workflows/dependency-audit.yml)), and
@@ -36,5 +40,9 @@ So that a report starts from what is already known ([docs/STATUS.md](docs/STATUS
 
 Listed so that nobody has to find them: the registry never sees message traffic, so "coverage" is what contracts
 declare and not proof that a service does it; the bootstrap claim is open until it happens; the rate limit covers
-sign-in and sign-up attempts only and is not configurable; and the compose file's Postgres and RabbitMQ credentials are the well-known
-development ones and are safe only because compose binds them to `127.0.0.1`.
+sign-in, sign-up and password-change attempts only and is not configurable; **there is no emailed password reset** (a lost
+owner password is recovered by another owner, or in the database: [OPERATING.md](docs/OPERATING.md#accounts-and-a-lost-owner-password));
+**an API key holding only `org:admin` can still create an owner or promote a member to one** (it can administer members, and the
+rule that stops it resetting or disabling an owner does not cover creating one); a role change does not end the member's existing
+sessions, which keep the scopes they were issued with until they expire (twelve hours by default); and the compose file's Postgres
+and RabbitMQ credentials are the well-known development ones and are safe only because compose binds them to `127.0.0.1`.

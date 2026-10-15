@@ -1,6 +1,7 @@
 # What is missing
 
-**As of 2026-08-15**, except [release engineering, 2026-10-15](#release-engineering-the-sdk-has-packages-and-a-tag-has-a-release-2026-10-15),
+**As of 2026-08-15**, except [the account lifecycle, 2026-10-15](#an-account-can-change-its-password-be-reset-and-be-disabled-2026-10-15),
+[release engineering, 2026-10-15](#release-engineering-the-sdk-has-packages-and-a-tag-has-a-release-2026-10-15),
 [a new instance is closed until it is claimed, 2026-10-15](#a-new-instance-is-closed-until-it-is-claimed-2026-10-15),
 [hard delete, 2026-10-15](#a-retired-subject-can-be-deleted-for-good-by-an-administrator-through-the-api-2026-10-15),
 [the subject list is paged, 2026-10-15](#the-subject-list-is-paged-by-the-registry-and-says-how-much-it-is-not-showing-2026-10-15),
@@ -26,8 +27,8 @@
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-15 (after the lifecycle controls): 2,486 .NET,
-1,904 Angular, 299 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-15 (after the account lifecycle): 2,602 .NET,
+2,011 Angular, 312 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
 aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
@@ -40,6 +41,63 @@ Everything under "verified locally" below was run on this machine today, against
 container image and a real PostgreSQL. Everything else is claimed on the strength of tests.
 
 ---
+
+## An account can change its password, be reset, and be disabled, 2026-10-15
+
+Closes the gap that a forgotten owner password was a database edit and a departing member's web login kept working
+([ADR-048](adr/048-an-account-can-change-its-password-be-reset-and-be-disabled.md), decision 47). **Three actions**, each audited as the
+caller in the same unit of work, none ever touching a password in a log, an entry or a response: **`POST /v1/auth/password`** (anybody
+signed in; the current password is judged first and a wrong one is sign-in's `401`, shares sign-in's limiter; the person's *other*
+sessions end and API keys are untouched), **`PUT /v1/members/{id}/password`** (owner; a temporary password the member must replace, enforced
+as a session that holds no scopes and answers `403 password_change_required` until it has) and **`PUT /v1/members/{id}/disabled`** (owner;
+revokes every session and key the member holds, for good). Guards: the last owner **who can sign in** cannot be disabled or demoted, nobody
+disables or resets themselves, and a credential cannot act on an account that holds scopes it does not. On screen: *Settings → Account*, and
+*Reset password…* / *Disable…* / *Enable…* on each member row (absent without `org:admin`, and on your own row).
+
+**What reading the code found before building (the reason this was not a one-line change).** Disabling would have stopped the login form
+and nothing else: API-key authentication never looked at the user, so a disabled account's sessions (twelve hours) and keys (no expiry)
+kept working. The authenticator now refuses a key whose account is disabled, and disabling revokes them besides. And the last-owner guard
+counted disabled owners, so with disabling possible the one remaining owner could demote themselves.
+
+**What measuring found.** *A reset limited the member's standing API keys too*, and the HTTP test for "a reset leaves keys alone" failed on
+real PostgreSQL: a pipeline cannot change anybody's password. Only sessions are limited now. *The browser suite failed its last two tests
+with `429`* (`session.spec.ts`): the new spec had spent six of the sign-in limiter's twenty. The README's "thirteen" was stale; the
+rest of the suite spends 15 or 16, and the spec now spends two. *A wrong current password signed the person out*, since the interceptor
+signs out on any `401`; the request opts out and the account store asks the registry before treating it as an expiry. *A narrow key*
+holding only `org:admin` creates an owner today (`201`): found, not fixed, in `SECURITY.md`.
+
+**Verified, on this machine against PostgreSQL 17 in Docker:** `dotnet format --verify-no-changes` clean; **.NET 2,602** (from 2,486): the
+domain tests, application tests with hand-written fakes for the three handlers, the role guard and the authenticator
+(`AccountLifecycleHandlerTests`, `AuthenticatorAccountTests`), and HTTP tests against real PostgreSQL (`AccountLifecycleApiTests`,
+`LastOwnerApiTests`, `PasswordChangeRateLimitTests`) including "the disabled member's old credential gets `401`" for a session and for a
+key, the rate limit as a real `429` after the shared budget, `last_owner` over a real set of owners, and "no account change touches the
+outbox"; **Angular 2,011** (from 1,904), lint, prettier and `codes:check` (98 codes, from 94) clean, `ng build`; the **browser suite, 312
+tests** (from 299) against a private registry run as Production on :5101, its own PostgreSQL (:55402) and `ng serve` (:4311), **after
+migrating a database that already held accounts** (`must_change_password` false for every one). `e2e/account-lifecycle.spec.ts` drives the
+real screens: a reset, the forced screen (every route sends the session there, a reload resumes it there, the registry reports it
+authenticated and holding nothing), replacing the temporary password and landing in the app on the same session, a second change by
+choice, a disabling that stops the live session, and an enabling; and a reader's refused password change that does not sign them out.
+Looked at in dark mode at 1280 px; no horizontal overflow at 390 px, asserted. **The lost-owner-password recoveries in `OPERATING.md` were
+run, not described:** a promote-by-SQL on a scratch database (the promoted admin's existing session did not hold `org:admin` until a
+fresh sign-in, which is why the page says so), and the delete-every-account reclaim (environments and the audit trail kept; every
+account gone).
+
+**Mutation-checked.** 53 mutants of the rules in the .NET code, 51 caught by a named test and 2 abandoned (one did not compile, one was
+equivalent against the fake hasher), in three passes: the first pass's survivors were a wrong mutant (it landed in a constructor) and a real
+gap (nothing showed that *enabling* revokes nothing, because after a disabling there was nothing left to revoke), now a test; the API
+layer by removing the rate limit, the `403` for a limited credential, the required `disabled` member, the key lookup and each status
+mapping. On the web, 43 mutants (the store, the guards, the interceptor's opt-out, the password rules, the account store's probe and its
+read of the scopes, the actions' absence without `org:admin` and on your own row, the confirmation's close on a change of state): three
+survived at first, each a real gap (the sign-in store forwarding the flag, a second disabling of the same member in flight, the store
+applying the registry's answer and not the ask), now tests; one is caught by the compiler, because the notice's `@switch` is type-checked.
+**A first web pass was thrown away**: the restore ran `git checkout` from `web/` with repo-relative paths, so it silently did nothing and the
+mutants stacked; it was stopped, the sources restored from git, and the pass re-run.
+**Not verified:** CI (see the commit); light mode (not looked at); the production web image and
+`smoke-web-image.sh`; a screen reader on the new forms; the full flow against a registry started with a bootstrap token; **a session that
+was held across the upgrade** (a registry upgraded in place with live sessions: nothing in them changes, and the new account check only
+adds a lookup); two owners disabling each other in the same instant (check-then-write, not a lock, ADR-048 says so); an account that
+belongs to two organisations (no route makes one; the actions act on the account, and ADR-048 says what to do the day one can). **Not
+done, on purpose:** forcing a change on a member created with an initial password; any CLI command; any email.
 
 ## Release engineering: the SDK has packages, and a tag has a release, 2026-10-15
 
