@@ -158,3 +158,7 @@ registry action is spelt that way; the point of "as received" is that it must no
   `AuditQueryHandlerTests`, `AuditResponseTests`, and in `GovernanceApiTests`
   `ARowWhoseActionThisBuildWasNeverTaughtIsReadAsReceivedAndTheRestUnchanged` (real PostgreSQL), and the audit
   table and page specs.
+
+> **Amended 2026-10-15.** The two siblings this ADR recorded as found and not fixed, `DeploymentEvent.Action` and `EnforcementViolation.Side`,
+> use the same arrangement now: the stored text (`ActionToken`, `SideToken`) with the enum as a nullable view. STATUS.md has the section and
+> what was measured.

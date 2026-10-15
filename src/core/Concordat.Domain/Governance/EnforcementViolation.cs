@@ -50,7 +50,7 @@ public sealed class EnforcementViolation
     private EnforcementViolation(
         Guid id,
         EnvironmentId environmentId,
-        ViolationSide side,
+        string sideToken,
         string route,
         string? subject,
         string code,
@@ -58,11 +58,12 @@ public sealed class EnforcementViolation
         string reportedBy,
         DateTimeOffset firstSeenAt,
         DateTimeOffset lastSeenAt,
-        long occurrences)
+        long occurrences,
+        string fingerprint)
     {
         Id = id;
         EnvironmentId = environmentId;
-        Side = side;
+        SideToken = sideToken;
         Route = route;
         Subject = subject;
         Code = code;
@@ -73,8 +74,9 @@ public sealed class EnforcementViolation
         Occurrences = occurrences;
 
         // Stored, not computed. It is the lookup key on the hot path of a report, and a computed
-        // one would mean a table scan per fingerprint per reporting window per service.
-        Fingerprint = Compose(environmentId, side, Route, Subject, Code);
+        // one would mean a table scan per fingerprint per reporting window per service. Passed in
+        // rather than composed here, because a row may hold a side this build cannot compose one for.
+        Fingerprint = fingerprint;
     }
 
     /// <summary>The row's identity.</summary>
@@ -83,8 +85,20 @@ public sealed class EnforcementViolation
     /// <summary>Which environment the reporting service belongs to.</summary>
     public EnvironmentId EnvironmentId { get; }
 
-    /// <summary>Publish or consume.</summary>
-    public ViolationSide Side { get; }
+    /// <summary>
+    /// Publish or consume, as the token that is stored: the wire spelling of <see cref="Side"/> when this
+    /// build knows it, and otherwise exactly what the row holds.
+    /// </summary>
+    /// <remarks>
+    /// The same arrangement as <see cref="AuditEntry.ActionToken"/> (ADR-036), for the same reason: a
+    /// converter that parsed the column into <see cref="ViolationSide"/> had to throw for a token it was not
+    /// taught, and one row written by a newer build then failed every read of the violation list for as
+    /// long as it existed. The column is read as the text it is, and the enum is a view of it.
+    /// </remarks>
+    public string SideToken { get; }
+
+    /// <summary>Publish or consume, or null when this build was not taught the side the row holds.</summary>
+    public ViolationSide? Side => ViolationTokens.TryResolve(SideToken);
 
     /// <summary>The exchange and routing key, or the queue.</summary>
     public string Route { get; private set; } = null!;
@@ -182,20 +196,25 @@ public sealed class EnforcementViolation
 
         var moment = at.ToUniversalTime();
 
+        var clampedRoute = Clamp(trimmedRoute, MaxRouteLength);
+        var cleanSubject = string.IsNullOrWhiteSpace(subject) ? null : subject.Trim();
+        var clampedCode = Clamp(trimmedCode, 64);
+
         return Result<EnforcementViolation>.Success(new EnforcementViolation(
             Guid.CreateVersion7(),
             environmentId,
-            side,
-            Clamp(trimmedRoute, MaxRouteLength),
-            string.IsNullOrWhiteSpace(subject) ? null : subject.Trim(),
-            Clamp(trimmedCode, 64),
+            ViolationTokens.For(side),
+            clampedRoute,
+            cleanSubject,
+            clampedCode,
             Clamp(detail?.Trim() ?? string.Empty, MaxDetailLength),
             Clamp(
                 string.IsNullOrWhiteSpace(reportedBy) ? "unknown" : reportedBy.Trim(),
                 MaxReportedByLength),
             moment,
             moment,
-            occurrences));
+            occurrences,
+            Compose(environmentId, side, clampedRoute, cleanSubject, clampedCode)));
     }
 
     /// <summary>Records further sightings of a violation already known.</summary>
@@ -249,6 +268,17 @@ public static class ViolationTokens
         ViolationSide.Consume => "CONSUME",
         _ => throw new ArgumentOutOfRangeException(
             nameof(side), side, $"Unknown violation side '{side}'."),
+    };
+
+    /// <summary>The side a stored token names, or null for one this build was not taught.</summary>
+    /// <param name="token">The stored token.</param>
+    /// <returns>The side, or null.</returns>
+    /// <remarks>Exact, unlike <see cref="Parse"/>: what is stored was written by a registry, not typed.</remarks>
+    public static ViolationSide? TryResolve(string? token) => token switch
+    {
+        "PUBLISH" => ViolationSide.Publish,
+        "CONSUME" => ViolationSide.Consume,
+        _ => null,
     };
 
     /// <summary>Parses a side token.</summary>

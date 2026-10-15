@@ -151,11 +151,14 @@ internal sealed class DeploymentEventConfiguration : IEntityTypeConfiguration<De
 
         builder.Property(e => e.Id).HasColumnName("deployment_event_id").ValueGeneratedNever();
 
-        builder.Property(e => e.Action)
+        // Read as the text it is, with no converter (ADR-036): a converter had to throw for an action this
+        // build was not taught, and one such row would fail every read of the trail.
+        builder.Property(e => e.ActionToken)
             .HasColumnName("action")
-            .HasConversion(action => DeploymentTokens.For(action), token => Parse(token))
             .HasMaxLength(64)
             .IsRequired();
+
+        builder.Ignore(e => e.Action);
 
         builder.Property(e => e.Actor)
             .HasColumnName("actor")
@@ -182,13 +185,6 @@ internal sealed class DeploymentEventConfiguration : IEntityTypeConfiguration<De
             .HasDatabaseName("ix_deployment_event_at");
     }
 
-    private static DeploymentAction Parse(string token) => token switch
-    {
-        "ORGANISATION_CREATED" => DeploymentAction.OrganisationCreated,
-        "INSTANCE_CLAIMED" => DeploymentAction.InstanceClaimed,
-        _ => throw new InvalidOperationException(
-            $"'{token}' is not a deployment action this build knows."),
-    };
 }
 
 /// <summary>
@@ -217,11 +213,13 @@ internal sealed class EnforcementViolationConfiguration
             .HasColumnName("environment_id")
             .HasConversion(id => id.Value, value => new EnvironmentId(value));
 
-        builder.Property(v => v.Side)
+        // Read as the text it is, with no converter (ADR-036): see EnforcementViolation.SideToken.
+        builder.Property(v => v.SideToken)
             .HasColumnName("side")
-            .HasConversion(side => ViolationTokens.For(side), token => ParseSide(token))
             .HasMaxLength(16)
             .IsRequired();
+
+        builder.Ignore(v => v.Side);
 
         builder.Property(v => v.Route)
             .HasColumnName("route")
@@ -267,15 +265,5 @@ internal sealed class EnforcementViolationConfiguration
                 nameof(EnforcementViolation.LastSeenAt))
             .IsDescending(false, false, true)
             .HasDatabaseName("ix_violation_tenant_environment_last_seen");
-    }
-
-    private static ViolationSide ParseSide(string token)
-    {
-        if (ViolationTokens.Parse(token, out var side).IsFailure)
-        {
-            throw new InvalidOperationException($"'{token}' is not a violation side.");
-        }
-
-        return side;
     }
 }

@@ -532,7 +532,7 @@ public sealed record ViolationResponse(
         ArgumentNullException.ThrowIfNull(violation);
 
         return new ViolationResponse(
-            ViolationTokens.For(violation.Side),
+            violation.SideToken,
             violation.Route,
             violation.Subject,
             violation.Code,

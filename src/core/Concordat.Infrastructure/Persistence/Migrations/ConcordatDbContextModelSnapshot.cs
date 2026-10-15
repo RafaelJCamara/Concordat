@@ -178,7 +178,7 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("deployment_event_id");
 
-                    b.Property<string>("Action")
+                    b.Property<string>("ActionToken")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
@@ -265,7 +265,7 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("route");
 
-                    b.Property<string>("Side")
+                    b.Property<string>("SideToken")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")

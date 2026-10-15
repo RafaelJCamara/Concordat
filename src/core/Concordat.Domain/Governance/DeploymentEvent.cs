@@ -60,14 +60,14 @@ public sealed class DeploymentEvent
     private DeploymentEvent(
         Guid id,
         DateTimeOffset occurredAt,
-        DeploymentAction action,
+        string actionToken,
         string actor,
         TenantId? tenantId,
         string detail)
     {
         Id = id;
         OccurredAt = occurredAt;
-        Action = action;
+        ActionToken = actionToken;
         Actor = actor;
         TenantId = tenantId;
         Detail = detail;
@@ -79,8 +79,14 @@ public sealed class DeploymentEvent
     /// <summary>When it happened.</summary>
     public DateTimeOffset OccurredAt { get; }
 
-    /// <summary>What happened.</summary>
-    public DeploymentAction Action { get; }
+    /// <summary>
+    /// What happened, as the token that is stored: the wire spelling of <see cref="Action"/> when this build
+    /// knows it, and otherwise exactly what the row holds (the arrangement of ADR-036 for the audit trail).
+    /// </summary>
+    public string ActionToken { get; }
+
+    /// <summary>What happened, or null when this build was not taught the action the row holds.</summary>
+    public DeploymentAction? Action => DeploymentTokens.TryResolve(ActionToken);
 
     /// <summary>
     /// Who did it, as they identified themselves. An email at signup, since no account exists yet.
@@ -119,7 +125,7 @@ public sealed class DeploymentEvent
         new(
             Guid.CreateVersion7(),
             at.ToUniversalTime(),
-            action,
+            DeploymentTokens.For(action),
             Trim(actor, MaxActorLength, "unknown"),
             tenantId,
             Trim(detail, MaxDetailLength, string.Empty));
@@ -144,6 +150,16 @@ public sealed class DeploymentEvent
 /// </remarks>
 public static class DeploymentTokens
 {
+    /// <summary>The action a stored token names, or null for one this build was not taught.</summary>
+    /// <param name="token">The stored token.</param>
+    /// <returns>The action, or null.</returns>
+    public static DeploymentAction? TryResolve(string? token) => token switch
+    {
+        "ORGANISATION_CREATED" => DeploymentAction.OrganisationCreated,
+        "INSTANCE_CLAIMED" => DeploymentAction.InstanceClaimed,
+        _ => null,
+    };
+
     /// <summary>The token for an action.</summary>
     /// <param name="action">The action.</param>
     /// <returns>The stable token.</returns>

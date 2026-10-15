@@ -1,6 +1,7 @@
 # What is missing
 
-**As of 2026-08-15**, except [a subscription's events, 2026-10-15](#a-subscriptions-events-can-be-changed-2026-10-15),
+**As of 2026-08-15**, except [the two other stored-token converters, 2026-10-15](#the-two-other-stored-token-converters-no-longer-throw-2026-10-15),
+[a subscription's events, 2026-10-15](#a-subscriptions-events-can-be-changed-2026-10-15),
 [subject reviewers, 2026-10-15](#a-subject-can-name-who-may-decide-its-held-versions-2026-10-15),
 [the approval queue, 2026-10-15](#the-approval-queue-is-answered-by-the-registry-2026-10-15),
 [ADR-039's two test gaps, 2026-10-14](#adr-039s-two-test-gaps-closed-2026-10-14),
@@ -35,6 +36,21 @@ container image and a real PostgreSQL. Everything else is claimed on the strengt
 
 ---
 
+## The two other stored-token converters no longer throw, 2026-10-15
+
+[ADR-036](adr/036-the-audit-read-tolerates-an-action-its-build-does-not-know.md) closed the audit read and recorded two siblings as "found, not
+fixed": `DeploymentEvent.Action` and `EnforcementViolation.Side` were parsed from their columns by a converter that threw for a token the build
+was not taught, so **one row written by a newer build failed every read of its table for as long as it existed**. Both now hold the stored text
+(`ActionToken`, `SideToken`; no conversion, no setter) and expose the enum as a nullable view (`Action`, `Side`), as `AuditEntry` does. The
+violation list answers the row as stored, in the existing response shape (`side` is the token); the dashboard's violation counts were never exposed
+(they count rows and read no side). **No migration and no wire change for a token this build knows**: the columns are the same, and the model snapshot
+changes two property names.
+
+**Measured, red first:** with the converter that throws put back for each table, the tolerance tests fail (the violation list answers `500`, and so
+does reporting a violation again, which loads a row to upsert; the deployment log's read throws); with the change they pass, and the known rows are
+**byte for byte what they were without the unknown one**. **Not done, on purpose:** nothing reads `deployment_event` over HTTP (there is no operator
+role to gate a route with), so that half is proved through the log's own read; and, as ADR-036 says, **it protects a rollback to a build that contains
+it**, not one to an earlier build.
 ## A subscription's events can be changed, 2026-10-15
 
 The row recorded with [ADR-034](adr/034-a-policy-change-notifies-subscribers.md) is closed: *"A subscription's events cannot be edited. There
