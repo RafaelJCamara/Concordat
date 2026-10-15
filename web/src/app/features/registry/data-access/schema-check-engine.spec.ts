@@ -50,6 +50,54 @@ describe('checkSchema — the schema', () => {
     }
   });
 
+  it('flags a pattern that is not a regular expression, which the registry refuses when no engine accepts it', () => {
+    // pattern_unparseable (ADR-044). Advice all the same: ajv compiles with the u flag, which is stricter
+    // than the registry's rule, so what it finds is what ajv found.
+    const result = check('{"type":"string","pattern":"("}');
+
+    expect(result.advice).toHaveLength(1);
+    expect(result.advice[0]).toMatchObject({ code: 'ajv_pattern', pointer: '' });
+    expect(result.advice[0]!.message).toContain('not a regular expression');
+  });
+
+  it('flags a pattern under patternProperties and under a nested schema as well', () => {
+    for (const schema of [
+      '{"type":"object","patternProperties":{"(":{"type":"string"}}}',
+      '{"properties":{"a":{"items":{"type":"string","pattern":"a{3,2}"}}}}',
+      '{"pattern":"[z-a]"}',
+      '{"pattern":"*abc"}',
+    ]) {
+      expect(
+        check(schema).advice.map((a) => a.code),
+        schema,
+      ).toEqual(['ajv_pattern']);
+    }
+  });
+
+  it('does not flag a pattern ajv compiles, including the ones another engine would not', () => {
+    // '[^]' is the class of everything in ECMA-262, which the registry warns about for .NET and ajv
+    // accepts; a lookahead and a \uXXXX escape are valid here and only RE2 refuses them.
+    for (const schema of [
+      '{"pattern":"[^]"}',
+      '{"pattern":"^(?=.*[A-Z]).+$"}',
+      '{"pattern":"^[\\u4e00-\\u9fff]+$"}',
+      '{"pattern":"^[a-z0-9_.]+$"}',
+    ]) {
+      expect(check(schema).advice, schema).toEqual([]);
+    }
+  });
+
+  it('says what is wrong with the schema before it says anything about a pattern', () => {
+    const result = check('{"type":"bogus","pattern":"("}');
+
+    expect(result.advice.map((a) => a.code)).toEqual(['ajv_metaschema']);
+  });
+
+  it('prefers a reference to a pattern, because the reference is what stops compilation first', () => {
+    const result = check('{"$ref":"#/$defs/nope","pattern":"("}');
+
+    expect(result.advice.map((a) => a.code)).toEqual(['ajv_reference']);
+  });
   it('says what is wrong with the schema before it says anything about a reference', () => {
     // A document that is not a schema has no references worth speaking of, and the metaschema
     // finding is the one to fix first.

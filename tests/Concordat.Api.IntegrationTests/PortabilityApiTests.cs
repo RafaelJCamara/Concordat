@@ -94,18 +94,19 @@ public class PortabilityApiTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task APatternThatIsNotARegularExpressionRegistersAndIsWarnedAbout()
+    public async Task APatternOnlySomeEngineRefusesRegistersAndIsWarnedAbout()
     {
+        // '[^]' is the class of everything in ECMA-262 and an unterminated class to .NET and RE2 (ADR-041,
+        // ADR-044). Registered, not refused, because a JavaScript consumer compiles it; the warning is the one
+        // place the author is told the .NET SDK will quarantine every message that reaches it.
         var client = factory.CreateClient();
         var subject = await NewSubjectAsync(client);
 
         var response = await RegisterAsync(
             client,
             subject,
-            """{"type":"object","properties":{"code":{"type":"string","pattern":"("}}}""");
+            """{"type":"object","properties":{"code":{"type":"string","pattern":"[^]"}}}""");
 
-        // Registered, not refused: format-like keywords are not asserted (ADR-039), and which
-        // syntax would decide is not settled (ADR-041).
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var body = await ApiFactory.ReadAsync<RegisterVersionResponse>(response);
@@ -116,6 +117,40 @@ public class PortabilityApiTests(ApiFactory factory)
         Assert.Equal("#/properties/code/pattern", finding.Path);
     }
 
+    [Fact]
+    public async Task APatternNoEngineAcceptsIsRefused_AndNeverReachesTheWarning()
+    {
+        // ADR-044. '(' was the example of a warning; it is the example of a refusal now.
+        var client = factory.CreateClient();
+        var subject = await NewSubjectAsync(client);
+
+        var response = await RegisterAsync(
+            client,
+            subject,
+            """{"type":"object","properties":{"code":{"type":"string","pattern":"("}}}""");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var problem = await ApiFactory.ReadProblemAsync(response);
+        Assert.Equal("schema_invalid", problem.ConcordatCode);
+        Assert.Contains("#/properties/code/pattern", problem.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnRe2OnlyConstructIsWarnedAboutAndRegisters()
+    {
+        var client = factory.CreateClient();
+        var subject = await NewSubjectAsync(client);
+
+        var response = await RegisterAsync(
+            client, subject, """{"type":"string","pattern":"^[\\u4e00-\\u9fff]+$"}""");
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var finding = Assert.Single((await ApiFactory.ReadAsync<RegisterVersionResponse>(response)).Portability);
+        Assert.Equal("regex_not_portable", finding.Kind);
+        Assert.Contains("\\uXXXX", finding.Message, StringComparison.Ordinal);
+    }
     [Fact]
     public async Task AnUnsupportedDialectIsRefused()
     {

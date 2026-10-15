@@ -15,6 +15,17 @@ public static class SchemaDefectKinds
     /// A <c>$ref</c> into this same document (<c>#/$defs/Missing</c>) whose target is not there.
     /// </summary>
     public const string ReferenceUnresolved = "reference_unresolved";
+
+    /// <summary>
+    /// A <c>pattern</c> (or a <c>patternProperties</c> key) that no regular-expression engine would accept:
+    /// <c>(</c>, <c>a{3,2}</c>, <c>[z-a]</c>, <c>*a</c> (ADR-044).
+    /// </summary>
+    /// <remarks>
+    /// Narrower than "not a regular expression" on purpose. ECMA-262, RE2, .NET and Python disagree about
+    /// what one is, so only a syntax error every one of them reports is a defect; the rest is a warning
+    /// from the portability checker.
+    /// </remarks>
+    public const string PatternUnparseable = "pattern_unparseable";
 }
 
 /// <summary>One reason a document is not a schema of its declared format.</summary>

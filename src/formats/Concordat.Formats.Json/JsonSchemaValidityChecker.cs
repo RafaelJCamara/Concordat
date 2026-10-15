@@ -10,7 +10,7 @@ namespace Concordat.Formats.Json;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Two kinds of defect, chosen because each is something no validator can accept and neither
+/// Three kinds of defect, chosen because each is something no validator can accept and none
 /// needs a judgement call:
 /// </para>
 /// <list type="number">
@@ -26,11 +26,16 @@ namespace Concordat.Formats.Json;
 ///     the shape of a reference, not whether it leads anywhere), and it is the commonest way a
 ///     schema that passes the first check still cannot be compiled.
 ///   </description></item>
+///   <item><description>
+///     <b>A <c>pattern</c> no regular-expression engine accepts</b> (ADR-044): <c>(</c>,
+///     <c>a{3,2}</c>, <c>[z-a]</c>. Narrower than "not a regular expression" on purpose, because the
+///     engines disagree about that; see <see cref="RegexSyntax"/>.
+///   </description></item>
 /// </list>
 /// <para>
 /// <b>What it deliberately does not do</b>, because each would refuse a schema somebody was
-/// entitled to register: it does not assert <c>format</c> (so a <c>pattern</c> that is not a
-/// regular expression is not a defect; ADR-039 records this as a gap and not an oversight), it
+/// entitled to register: it does not assert <c>format</c> (so a <c>pattern</c> that only some engine refuses is a
+/// warning from the portability checker and not a defect, ADR-041), it
 /// does not refuse an unknown keyword or vocabulary, it does not follow a reference to another
 /// document, and it does not say where a <c>$ref</c> points once any resource inside the
 /// document declares its own <c>$id</c>.
@@ -69,11 +74,12 @@ public sealed class JsonSchemaValidityChecker : ISchemaValidityChecker
                 found.Add(new SchemaDefect(path, SchemaDefectKinds.MetaschemaViolation, message));
             }
 
-            // A document that is not a schema has no schema positions to look for references in,
-            // and reading one as if it had would report a $ref the author put in a list of numbers.
+            // A document that is not a schema has no schema positions to look for references or
+            // patterns in, and reading one as if it had would report a $ref or a pattern the author put
+            // in a list of numbers.
             if (found.Count == 0)
             {
-                FindUnresolvedReferences(document.RootElement, found);
+                WalkSchemas(document.RootElement, found);
             }
 
             return [.. found
@@ -84,17 +90,20 @@ public sealed class JsonSchemaValidityChecker : ISchemaValidityChecker
 
     // ---------------------------------------------------------------- references
 
-    private static void FindUnresolvedReferences(JsonElement root, List<SchemaDefect> found)
+    private static void WalkSchemas(JsonElement root, List<SchemaDefect> found)
     {
-        if (root.ValueKind is not JsonValueKind.Object || DeclaresInnerResource(root, isRoot: true))
+        if (root.ValueKind is not JsonValueKind.Object)
         {
-            // With another resource inside the document, '#/...' in its subschemas is relative to
-            // that resource, and saying where it points means resolving the whole identifier
-            // graph. Refusing a schema on a guess about that is worse than not looking.
             return;
         }
 
-        WalkSchema(root, root, "#", found);
+        // With another resource inside the document, '#/...' in its subschemas is relative to that
+        // resource, and saying where it points means resolving the whole identifier graph. Refusing a
+        // schema on a guess about that is worse than not looking, so references are left alone then;
+        // a pattern does not depend on where anything resolves, so those are still read.
+        var resolveReferences = !DeclaresInnerResource(root, isRoot: true);
+
+        WalkSchema(root, root, "#", found, resolveReferences);
     }
 
     /// <summary>Whether any object below the root has a string-valued <c>$id</c>.</summary>
@@ -134,7 +143,12 @@ public sealed class JsonSchemaValidityChecker : ISchemaValidityChecker
     /// Visits the places a schema may sit, and only those: a <c>$ref</c> inside <c>const</c>,
     /// <c>enum</c>, <c>default</c> or <c>examples</c> is data that happens to look like one.
     /// </summary>
-    private static void WalkSchema(JsonElement node, JsonElement root, string path, List<SchemaDefect> found)
+    private static void WalkSchema(
+        JsonElement node,
+        JsonElement root,
+        string path,
+        List<SchemaDefect> found,
+        bool resolveReferences)
     {
         if (node.ValueKind is not JsonValueKind.Object)
         {
@@ -147,7 +161,7 @@ public sealed class JsonSchemaValidityChecker : ISchemaValidityChecker
 
             if (property.Name == "$ref" && property.Value.ValueKind is JsonValueKind.String)
             {
-                var problem = Unresolved(root, property.Value.GetString()!);
+                var problem = resolveReferences ? Unresolved(root, property.Value.GetString()!) : null;
                 if (problem is not null)
                 {
                     found.Add(new SchemaDefect(here, SchemaDefectKinds.ReferenceUnresolved, problem));
@@ -156,16 +170,31 @@ public sealed class JsonSchemaValidityChecker : ISchemaValidityChecker
                 continue;
             }
 
+            if (property.Name == "pattern" && property.Value.ValueKind is JsonValueKind.String)
+            {
+                CheckPattern(property.Value.GetString()!, here, found);
+                continue;
+            }
+
+            if (property.Name == "patternProperties" && property.Value.ValueKind is JsonValueKind.Object)
+            {
+                // The keys are expressions, and the values are schemas to walk like any other map.
+                foreach (var key in property.Value.EnumerateObject())
+                {
+                    CheckPattern(key.Name, $"{here}/{Escape(key.Name)}", found);
+                }
+            }
+
             if (Draft202012Corrections.SchemaValued.Contains(property.Name))
             {
-                WalkSchema(property.Value, root, here, found);
+                WalkSchema(property.Value, root, here, found, resolveReferences);
             }
             else if (Draft202012Corrections.SchemaMapValued.Contains(property.Name) &&
                      property.Value.ValueKind is JsonValueKind.Object)
             {
                 foreach (var member in property.Value.EnumerateObject())
                 {
-                    WalkSchema(member.Value, root, $"{here}/{Escape(member.Name)}", found);
+                    WalkSchema(member.Value, root, $"{here}/{Escape(member.Name)}", found, resolveReferences);
                 }
             }
             else if (Draft202012Corrections.SchemaArrayValued.Contains(property.Name) &&
@@ -174,10 +203,24 @@ public sealed class JsonSchemaValidityChecker : ISchemaValidityChecker
                 var index = 0;
                 foreach (var member in property.Value.EnumerateArray())
                 {
-                    WalkSchema(member, root, $"{here}/{index.ToString(CultureInfo.InvariantCulture)}", found);
+                    WalkSchema(member, root, $"{here}/{index.ToString(CultureInfo.InvariantCulture)}", found, resolveReferences);
                     index++;
                 }
             }
+        }
+    }
+
+    private static void CheckPattern(string pattern, string path, List<SchemaDefect> found)
+    {
+        var why = RegexSyntax.NoEngineAccepts(pattern);
+
+        if (why is not null)
+        {
+            found.Add(new SchemaDefect(
+                path,
+                SchemaDefectKinds.PatternUnparseable,
+                $"The pattern {Quote(pattern)} is not a regular expression in any dialect: {why}. A validator " +
+                "cannot be built from it, whichever engine it runs on."));
         }
     }
 

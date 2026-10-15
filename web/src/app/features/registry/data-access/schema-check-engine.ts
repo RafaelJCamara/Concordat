@@ -142,6 +142,20 @@ function adviseOnLocalReference(ajv: Ajv2020, schema: unknown): readonly Advisor
         },
       ];
     }
+
+    // A `pattern` that is not a regular expression: `ajv` compiles it as one, with the `u` flag, and
+    // the engine says why. The registry refuses the ones no engine accepts (`pattern_unparseable`,
+    // ADR-044), and `ajv` is stricter than that (ECMA-262 with `u` refuses `a++` and `\1` with no
+    // group, which other engines accept), so this is advice about what `ajv` found and never a veto.
+    if (error instanceof SyntaxError && /regular expression/i.test(error.message)) {
+      return [
+        {
+          code: 'ajv_pattern',
+          pointer: '',
+          message: `A pattern in this schema is not a regular expression: ${error.message}`,
+        },
+      ];
+    }
   }
 
   return [];

@@ -157,6 +157,13 @@ test.describe('Validate', () => {
       { text: '{"$defs":{"a":{}},"$ref":"#/$defs/a"}', refused: false },
       { text: '{"$ref":"concordat://dev/acme.Nope/1"}', refused: false },
       { text: '{"$ref":"https://example.com/other.json"}', refused: false },
+      // ADR-044: a pattern no engine accepts is refused, and the editor says so. The two that differ by
+      // design are not here: ajv (ECMA-262 with u) also refuses 'a++', which the registry accepts.
+      { text: '{"type":"string","pattern":"("}', refused: true },
+      { text: '{"type":"string","pattern":"a{3,2}"}', refused: true },
+      { text: '{"patternProperties":{"[z-a]":{}}}', refused: true },
+      { text: '{"type":"string","pattern":"[^]"}', refused: false },
+      { text: '{"type":"string","pattern":"^(?=.*[A-Z]).+$"}', refused: false },
     ];
 
     await open(page);

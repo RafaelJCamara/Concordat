@@ -177,11 +177,19 @@ const JSON_CASES: readonly Case[] = [
   ),
   ok('an unknown keyword', '{"x-owner":"payments"}'),
   {
-    label: 'a regular expression that does not compile',
+    label: 'a regular expression no engine accepts',
     text: '{"type":"string","pattern":"(["}',
     mirrored: false,
-    why: 'the registry accepts it; the pattern is only compiled when a message is validated',
+    why:
+      'the registry refuses it as schema_invalid (pattern_unparseable, ADR-044) because every engine ' +
+      'measured refuses it, and the editor says so as advice, which never blocks: ajv is a different ' +
+      'engine, and the two are held to agreeing in schema-validate.spec.ts',
   },
+  ok(
+    'a regular expression only some engine refuses (the empty class)',
+    '{"type":"string","pattern":"[^]"}',
+  ),
+  ok('a possessive quantifier, which Python and Java accept', '{"type":"string","pattern":"a++"}'),
   {
     label: 'a reference to a subject that does not exist',
     text: '{"$ref":"concordat://dev/acme.Nope/1"}',

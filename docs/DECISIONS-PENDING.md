@@ -166,6 +166,24 @@ the step. Six calls, each yours to confirm:
 > findings were advice before and are advice now ([ADR-028](adr/028-schema-editor.md)); a browser test holds them to agreeing
 > with the registry on the ordinary cases, and would need its expectations flipped.
 
+### 43. A pattern is refused when no engine accepts it, and warned about when some engine does not
+
+**Implemented** ([ADR-044](adr/044-a-pattern-no-engine-accepts-is-refused.md)). Resolves the open question in decision 40 ("refusing it is the
+largest thing still open") with a rule whose line is *measured*. Four calls, each yours to confirm:
+
+- **The line is "no engine", not "whose syntax".** Seven classes of .NET parse error, each refused by every measured engine (.NET,
+  ECMA-262 with and without `u`, RE2, Python) in every corpus instance. The alternative, choosing one dialect, turns away valid schemas in
+  one direction or the other (ADR-041's table). *If you would rather refuse by the standard's own dialect*, it is a different rule and a
+  bigger behaviour change, and the corpus would need a second column of expectations.
+- **The behaviour change to look at first:** a schema with a pattern such as `(`, `a{3,2}`, `[z-a]` or `*a`, which registered until now,
+  is refused. Nothing stored changes, and a document the registry holds keeps registering. It is deleting one walk to reverse.
+- **Possessive quantifiers (`a++`) are deliberately accepted**, because Python and Java compile them and ECMA-262 does not. The web editor
+  advises on them (it is `ajv`, ECMA-262 with `u`); the registry warns.
+- **Java is unmeasured.** The classes are errors in its documented grammar; a measurement is one more engine in `scripts/regex-oracle`.
+  The corpus is not in CI on purpose: an engine upgrade on a runner would turn a gate red for a reason that is not a registry defect.
+
+> **If you overturn it**, delete the `pattern` walk in `JsonSchemaValidityChecker` and `RegexSyntax.NoEngineAccepts`; the portability
+> warning is untouched and the scan stays useful on its own.
 ### 41. The approval queue is paged by offset, oldest first, and includes retired subjects
 
 **Implemented** ([ADR-042](adr/042-the-approval-queue-is-answered-by-the-registry.md)). Three small calls, each yours to confirm:

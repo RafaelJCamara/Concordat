@@ -80,15 +80,6 @@ public sealed class JsonSchemaPortabilityChecker : ISchemaPortabilityChecker
         ["$dynamicAnchor"] = "dynamic references",
     };
 
-    /// <summary>Regex constructs RE2 cannot compile.</summary>
-    private static readonly (string Token, string Name)[] UnportableRegex =
-    [
-        ("(?=", "lookahead"),
-        ("(?!", "negative lookahead"),
-        ("(?<=", "lookbehind"),
-        ("(?<!", "negative lookbehind"),
-    ];
-
     /// <inheritdoc />
     public SchemaFormat Format => SchemaFormat.Json;
 
@@ -250,38 +241,20 @@ public sealed class JsonSchemaPortabilityChecker : ISchemaPortabilityChecker
                 return;
             }
 
-            foreach (var (token, name) in UnportableRegex)
-            {
-                if (!expression.Contains(token, StringComparison.Ordinal))
-                {
-                    continue;
-                }
+            var construct = RegexSyntax.Re2Cannot(expression);
 
-                found.Add(new PortabilityFinding(
-                    path,
-                    PortabilityKinds.RegexNotPortable,
-                    PortabilitySeverity.Warning,
-                    $"This pattern uses {name}, which Go's RE2 engine cannot compile at all. " +
-                    "A Go consumer will fail to build the validator rather than disagree with " +
-                    "it, so the payload check is lost entirely on that SDK."));
-
-                return;
-            }
-
-            if (expression.Contains("\\1", StringComparison.Ordinal) ||
-                expression.Contains("\\2", StringComparison.Ordinal))
+            if (construct is not null)
             {
                 found.Add(new PortabilityFinding(
                     path,
                     PortabilityKinds.RegexNotPortable,
                     PortabilitySeverity.Warning,
-                    "This pattern uses a backreference, which Go's RE2 engine cannot compile. " +
+                    $"This pattern uses {construct}, which Go's RE2 engine cannot compile at all. " +
                     "A Go consumer will fail to build the validator rather than disagree with " +
                     "it, so the payload check is lost entirely on that SDK."));
             }
         }
     }
-
     // RFC 6901: '~' becomes '~0' and '/' becomes '~1'.
     private static string Escape(string token) =>
         token.Replace("~", "~0", StringComparison.Ordinal)

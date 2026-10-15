@@ -1,0 +1,1157 @@
+{
+ "engines": {
+  "go": "go1.26.2",
+  "node": "v24.19.0",
+  "python": "Python 3.14.7"
+ },
+ "patterns": [
+  {
+   "pattern": "(",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(a",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(?:a",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "a(b|c",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "((a)",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(?<n>a",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(?i:a",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "x(?=a",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(a|b",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": ")",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "a)",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(a))",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "a|b)",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": ")(",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "*",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "+",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "?",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "*a",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "+a",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "?a",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(*a)",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(|*)",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "a|*",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(?:*a)",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "a(*)",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "|+",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "[z-a]",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "[9-0]",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "a[b-a]c",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "[A-Za-z0-9_.-][z-a]",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "a{3,2}",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "a{10,1}",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(ab){5,2}",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "[a-z]{4,3}",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "\\",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "a\\",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "[a]\\",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "ab|cd\\",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "[",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "[a",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "[a-",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "a[b",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(a[b)",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "[^",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "[a-z",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "x[",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "[]",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "[^]",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "a[]b",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "[]]",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "[^]]",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "a**",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "a++",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": true
+  },
+  {
+   "pattern": "a*+",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": true
+  },
+  {
+   "pattern": "a?+",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": true
+  },
+  {
+   "pattern": "a{2}{3}",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "\\1",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\2",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\8",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\c",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\q",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\N",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\h",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\R",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\X",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\C",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\Q.\\E",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\p{Letter}",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\p{Foo}",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\P{Greek}",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\p{Greek}",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\u{1F600}",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\u12",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\x4",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\x{41}",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "[a-\\d]",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "(?P<n>a)",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": true
+  },
+  {
+   "pattern": "(?<n",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(?",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(?x",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(?z)a",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(?U)a",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(?<1a>x)",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(?<>x)",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(?#c",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(?(1)a|b)",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "\\u00e9",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\u0041",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "[\\u4e00-\\u9fff]",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\cA",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\e",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\Z",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\G",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "[\\b]",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "(a)\\1",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "(?<n>a)\\k<n>",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "(?#c)a",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": true
+  },
+  {
+   "pattern": "(?>a)",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": true
+  },
+  {
+   "pattern": "(?(a)b|c)",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": false
+  },
+  {
+   "pattern": "(?=a)",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "(?!a)",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "(?<=a)",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "(?<!a)",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "x{1001}",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "a{100000}",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "a{1,100000}",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "[[:foo:]]",
+   "re2": false,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "a{1000}",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "a{0,1000}",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\\\u00e9",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\\\1",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\\\Z",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\(?=a",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "[(?=a]",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "[(?<=]",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\\\(?=a)",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "[\\\\1]",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\\\cA",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "[\\\\b]",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\(?>a",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\(?#c",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "[(?#c)]",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "a\\{2000\\}",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\[\\b\\]",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": ".",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "a.b",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "^[a-z]+$",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\d{3}-\\d{4}",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "[\\p{L}]",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\p{L}",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "(?i:a)",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "(?-i:a)",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "(?i)a",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": true
+  },
+  {
+   "pattern": "(?s).",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": true
+  },
+  {
+   "pattern": "(?m)^",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": true
+  },
+  {
+   "pattern": "\\A",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\z",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\b",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\B",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "^[a-z0-9_.]+$",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "^(?:[a-z]+)$",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "(a|b)+",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "a{2,5}",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "a{,3}",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "[\\d-z]",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "\\x41",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\0",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\01",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "[[:alpha:]]",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "[a-z&&[^b]]",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "(?<n>a)",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "^\\+?[0-9]{7,15}$",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "^[A-Z]{2}[0-9]{2}[A-Za-z0-9]{1,30}$",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "^\\S+@\\S+\\.\\S+$",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "^[\\w.+-]+@[\\w-]+\\.[\\w.-]+$",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "(?i)^[a-f0-9-]{36}$",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": false,
+   "python": true
+  },
+  {
+   "pattern": "^(?!x)",
+   "re2": false,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\p{Han}",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": false
+  },
+  {
+   "pattern": "[^\\x00-\\x7F]",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\t\\n\\r\\f\\v",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\/",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\-",
+   "re2": true,
+   "ecmaU": false,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\.",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  },
+  {
+   "pattern": "\\$",
+   "re2": true,
+   "ecmaU": true,
+   "ecmaLegacy": true,
+   "python": true
+  }
+ ]
+}

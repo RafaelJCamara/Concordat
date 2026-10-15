@@ -197,3 +197,5 @@ structured `errors` member in v1; the pointer is in the text. **400, not 422**, 
   `src/core/Concordat.Application/Registry/SchemaValidityGate.cs`
 - JSON Schema draft 2020-12, [Core §8.1](https://json-schema.org/draft/2020-12/json-schema-core) and
   [Validation](https://json-schema.org/draft/2020-12/json-schema-validation)
+
+> **Amended 2026-10-15.** The pattern gap this ADR recorded is narrowed by [ADR-044](044-a-pattern-no-engine-accepts-is-refused.md): a `pattern` that no engine accepts (`(`, `a{3,2}`, `[z-a]`) is refused as `schema_invalid` now. A pattern only some engine refuses still registers.

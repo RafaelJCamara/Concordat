@@ -73,10 +73,26 @@ public class SchemaValidityTests
     [InlineData("""{"properties":{"type":{"type":"string"},"minimum":{"type":"number"},"$ref":{"type":"string"}}}""")]
     [InlineData("""{"properties":{"required":{"type":"boolean"}},"required":["required"]}""")]
     // format is an annotation: the metaschema says uri and regex, and the specification does not
-    // make a validator assert it by default. A pattern that is not a regular expression is a real
-    // defect and is deliberately not this check's (ADR-039 says what it costs).
-    [InlineData("""{"format":"not-a-known-format","pattern":"("}""")]
-    [InlineData("""{"patternProperties":{"([":{"type":"string"}}}""")]
+    // make a validator assert it by default.
+    [InlineData("""{"format":"not-a-known-format"}""")]
+    [InlineData("""{"format":"regex","type":"string"}""")]
+    // A pattern that only SOME engine refuses is not a defect (ADR-044): refusing it would turn away a
+    // schema another SDK compiles. '[^]' and '[]' are the empty class in ECMA-262; 'a++' is a possessive
+    // quantifier in Python and Java; '\p{Letter}' is ECMA-262's with the u flag; '\1' with no group is an
+    // octal escape without it; '(?i)' is inline flags everywhere but ECMA-262. The portability checker warns.
+    [InlineData("""{"pattern":"[^]"}""")]
+    [InlineData("""{"pattern":"[]"}""")]
+    [InlineData("""{"pattern":"a++"}""")]
+    [InlineData("""{"pattern":"\\p{Letter}"}""")]
+    [InlineData("""{"pattern":"\\1"}""")]
+    [InlineData("""{"pattern":"(?i)abc"}""")]
+    [InlineData("""{"patternProperties":{"[^]":{"type":"string"}}}""")]
+    [InlineData("""{"pattern":"^(?=.*[A-Z]).+$"}""")]
+    // Data is not a pattern: the same text under a keyword that holds instances, and a property that
+    // happens to be called "pattern", none of which is read as one.
+    [InlineData("""{"default":{"pattern":"("},"examples":[{"pattern":"[z-a]"}],"const":{"patternProperties":{"(":{}}}}""")]
+    [InlineData("""{"enum":[{"pattern":"("}]}""")]
+    [InlineData("""{"properties":{"pattern":{"type":"string"},"patternProperties":{"type":"string"}}}""")]
     [InlineData("""{"$ref":"not a uri reference at all"}""")]
     // A number is an integer when its fractional part is zero, however it is written.
     [InlineData("""{"minLength":1.0,"maxLength":1e1,"minItems":0,"maxItems":1E+2,"minProperties":10e-1}""")]
@@ -120,6 +136,72 @@ public class SchemaValidityTests
     }
 
     // ------------------------------------------------------------------ refused
+
+    // -------------------------------------------------- a pattern no engine accepts (ADR-044)
+
+    [Theory]
+    [InlineData("""{"type":"string","pattern":"("}""", "#/pattern", "never closed")]
+    [InlineData("""{"pattern":"a)"}""", "#/pattern", "never opened")]
+    [InlineData("""{"pattern":"*abc"}""", "#/pattern", "nothing before it")]
+    [InlineData("""{"pattern":"[z-a]"}""", "#/pattern", "backwards")]
+    [InlineData("""{"pattern":"a{3,2}"}""", "#/pattern", "wrong way round")]
+    [InlineData("""{"pattern":"abc\\"}""", "#/pattern", "lone backslash")]
+    [InlineData("""{"pattern":"[a-"}""", "#/pattern", "never closed")]
+    [InlineData("""{"properties":{"code":{"type":"string","pattern":"(["}}}""", "#/properties/code/pattern", "never closed")]
+    [InlineData("""{"patternProperties":{"(":{"type":"string"}}}""", "#/patternProperties/(", "never closed")]
+    [InlineData("""{"items":{"allOf":[{"pattern":"["}]}}""", "#/items/allOf/0/pattern", "never closed")]
+    public void APatternNoEngineAccepts_IsADefectAtThePatternAndSaysWhy(string body, string path, string why)
+    {
+        var defect = Assert.Single(Check(body));
+
+        Assert.Equal(SchemaDefectKinds.PatternUnparseable, defect.Kind);
+        Assert.Equal(path, defect.Path);
+        Assert.Contains(why, defect.Message, StringComparison.Ordinal);
+        Assert.Contains("any dialect", defect.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EveryBrokenPatternIsReported_NotOnlyTheFirst()
+    {
+        var defects = Check("""{"properties":{"a":{"pattern":"("},"b":{"pattern":"a{3,2}"}},"patternProperties":{"[z-a]":{}}}""");
+
+        Assert.Equal(
+            ["#/patternProperties/[z-a]", "#/properties/a/pattern", "#/properties/b/pattern"],
+            defects.Select(d => d.Path));
+        Assert.All(defects, d => Assert.Equal(SchemaDefectKinds.PatternUnparseable, d.Kind));
+    }
+
+    [Fact]
+    public void ABrokenPatternIsStillFoundWhenAnotherResourceDeclaresItsOwnId()
+    {
+        // The reference check steps back there because '#/...' is relative to the inner resource. A pattern
+        // does not depend on where anything resolves, so it is still read.
+        var defects = Check("""{"$defs":{"a":{"$id":"https://example.com/a","pattern":"("}}}""");
+
+        Assert.Equal("#/$defs/a/pattern", Assert.Single(defects).Path);
+    }
+
+    [Fact]
+    public void ADocumentThatIsNotASchema_HasNoPatternsToRead()
+    {
+        // The metaschema's defect is the one reported; a 'pattern' the author put where a schema should be
+        // is not read as a schema's.
+        var defects = Check("""{"properties":{"a":{"pattern":"("},"b":5}}""");
+
+        Assert.DoesNotContain(defects, d => d.Kind == SchemaDefectKinds.PatternUnparseable);
+        Assert.Contains(defects, d => d.Kind == SchemaDefectKinds.MetaschemaViolation);
+    }
+
+    [Fact]
+    public void ThePatternIsQuotedInTheMessageButBoundedAndEscaped()
+    {
+        var pattern = "(" + new string('a', 500);
+        var defect = Assert.Single(Check($$"""{"pattern":"{{pattern}}"}"""));
+
+        Assert.True(defect.Message.Length < 400, "a long pattern must not put itself back into the response");
+        // Cut at 80 characters and JSON-escaped, which writes the ellipsis as \u2026.
+        Assert.Contains("\\u2026", defect.Message, StringComparison.Ordinal);
+    }
 
     [Theory]
     // The case that opened this: a type no validator has.

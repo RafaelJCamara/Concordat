@@ -58,3 +58,4 @@ it; write a new one and mark the old **Superseded by**.
 | [041](041-a-pattern-that-is-not-a-regular-expression-is-warned-about.md) | A pattern that is not a regular expression is warned about, not refused, and is named as the schema's fault | Accepted |
 | [042](042-the-approval-queue-is-answered-by-the-registry.md) | The approval queue is answered by the registry, a page at a time | Accepted |
 | [043](043-a-subject-names-who-may-decide-its-held-versions.md) | A subject can name who may decide its held versions | Accepted |
+| [044](044-a-pattern-no-engine-accepts-is-refused.md) | A pattern no engine accepts is refused; the rest is a warning | Accepted |

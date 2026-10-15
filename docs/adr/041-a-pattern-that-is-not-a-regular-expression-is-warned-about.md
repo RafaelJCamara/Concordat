@@ -78,3 +78,5 @@ reported as lookahead or a backreference.
 - **Negative:** the .NET validator still reports a bad pattern only for a message that reaches it, so a message that does not is
   accepted.
 - **Neutral:** `regex_invalid` is a new published kind, documented with the others in `docs/plan/M6-sdks.md`.
+
+> **Amended 2026-10-15.** Both open points are settled by [ADR-044](044-a-pattern-no-engine-accepts-is-refused.md): the registry refuses a pattern that every measured engine (.NET, ECMA-262 with and without `u`, RE2, Python) refuses and warns about the rest, and the RE2 list is a scan that was held to Go on a corpus, so `\uXXXX`, `\cX`, `\e`, `\Z` and `[\b]` now warn.
