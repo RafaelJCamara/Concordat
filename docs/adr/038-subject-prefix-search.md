@@ -107,6 +107,9 @@ change.
 - **An index now**, to be safe. See the measurement.
 - **Adding `--prefix` to `concordat export` in the same change.** The CLI is the only other caller and wants a filter, but a
   flag and its semantics are the CLI's to design; the endpoint is ready for it.
+  > **Amended 2026-10-15.** `concordat export --prefix <text>` exists now: the registry does the filtering (the CLI sends the text
+  > percent-encoded and judges nothing), so it is ordinal, case-sensitive and a literal, and text no name could begin with exports
+  > nothing and is not an error. An absent or empty flag is every subject, as before.
 
 ## Consequences
 

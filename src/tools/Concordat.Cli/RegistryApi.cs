@@ -321,11 +321,21 @@ public sealed class RegistryApi(HttpClient http, string environment)
     }
 
     /// <summary>Lists subjects in the environment.</summary>
+    /// <param name="prefix">
+    /// Only subjects whose name begins with this, or null for all of them. The registry does the
+    /// filtering (ADR-038): ordinal, case-sensitive, and a literal and not a pattern. The prefix is sent as
+    /// given, percent-encoded, and not judged here: text that no name could begin with is answered with an
+    /// empty list, which is the same answer a prefix nothing matches gets.
+    /// </param>
     /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>The subjects.</returns>
-    public async Task<IReadOnlyList<SubjectSummary>> ListSubjectsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SubjectSummary>> ListSubjectsAsync(
+        string? prefix, CancellationToken cancellationToken)
     {
-        using var response = await SendAsync(HttpMethod.Get, $"{Root}/subjects", null, cancellationToken)
+        var query = string.IsNullOrEmpty(prefix) ? string.Empty : $"?prefix={Uri.EscapeDataString(prefix)}";
+
+        using var response = await SendAsync(
+            HttpMethod.Get, $"{Root}/subjects{query}", null, cancellationToken)
             .ConfigureAwait(false);
 
         return await ReadAsync(response, RegistryJson.Default.ListSubjectSummary, cancellationToken)

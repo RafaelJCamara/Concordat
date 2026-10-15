@@ -287,7 +287,7 @@ public class CliTests(ApiFactory api) : IDisposable
 
         using var exportCapture = new Capture();
         var exportCode = await InspectCommands.ExportAsync(
-            Api(environment), exportCapture.Output(), exported, default);
+            Api(environment), exportCapture.Output(), exported, prefix: null, default);
 
         Assert.Equal(ExitCodes.Success, exportCode);
         Assert.True(File.Exists(Path.Combine(exported, $"{subject}.json")));
@@ -299,6 +299,124 @@ public class CliTests(ApiFactory api) : IDisposable
         Assert.Equal(ExitCodes.Success, checkCode);
     }
 
+    // ---------------------------------------------------------------- export --prefix (ADR-038)
+
+    private async Task<(string Environment, string Stem)> PushThreeAsync()
+    {
+        var stem = $"cli.Pfx{Guid.NewGuid():N}"[..20];
+        var environment = $"cli-pfx-{Guid.NewGuid():N}";
+
+        using var capture = new Capture();
+        await PushCommand.RunAsync(
+            Api(environment),
+            capture.Output(),
+            NewDirectory(($"{stem}.orders.Created", Original), ($"{stem}.orders.Shipped", Original), ($"{stem}.billing.Paid", Original)),
+            "team",
+            "test",
+            dryRun: false,
+            default);
+
+        return (environment, stem);
+    }
+
+    private string NewExportDirectory()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"concordat-export-{Guid.NewGuid():N}");
+        _directories.Add(path);
+
+        return path;
+    }
+
+    [Fact]
+    public async Task ExportWithAPrefixWritesOnlyTheSubjectsThatBeginWithIt()
+    {
+        var (environment, stem) = await PushThreeAsync();
+        var directory = NewExportDirectory();
+
+        using var capture = new Capture();
+        var code = await InspectCommands.ExportAsync(
+            Api(environment), capture.Output(), directory, $"{stem}.orders.", default);
+
+        Assert.Equal(ExitCodes.Success, code);
+        Assert.Equal(
+            [$"{stem}.orders.Created.json", $"{stem}.orders.Shipped.json"],
+            Directory.GetFiles(directory).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        Assert.Contains("2 contract(s) written", capture.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExportWithNoPrefixStillWritesEverything()
+    {
+        var (environment, stem) = await PushThreeAsync();
+        var directory = NewExportDirectory();
+
+        using var capture = new Capture();
+        await InspectCommands.ExportAsync(Api(environment), capture.Output(), directory, null, default);
+
+        Assert.Equal(3, Directory.GetFiles(directory, $"{stem}*").Length);
+    }
+
+    [Fact]
+    public async Task AnEmptyPrefixIsNoPrefix()
+    {
+        // A flag given as "" must not become a request for subjects named "", which no name is.
+        var (environment, stem) = await PushThreeAsync();
+        var directory = NewExportDirectory();
+
+        using var capture = new Capture();
+        await InspectCommands.ExportAsync(Api(environment), capture.Output(), directory, string.Empty, default);
+
+        Assert.Equal(3, Directory.GetFiles(directory, $"{stem}*").Length);
+    }
+
+    [Fact]
+    public async Task ThePrefixIsCaseSensitive_BecauseSubjectNamesAre()
+    {
+        var (environment, stem) = await PushThreeAsync();
+        var directory = NewExportDirectory();
+
+        using var capture = new Capture();
+        await InspectCommands.ExportAsync(
+            Api(environment), capture.Output(), directory, $"{stem}.ORDERS.", default);
+
+        Assert.Empty(Directory.GetFiles(directory));
+        Assert.Contains("0 contract(s) written", capture.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task APrefixIsPercentEncoded_SoAnAmpersandCannotBecomeASecondParameter()
+    {
+        // Sent raw, "<stem>.orders.&x=1" would reach the registry as the prefix "<stem>.orders." plus a
+        // parameter x, and export the two subjects that begin with it. Encoded, it is one text that no
+        // name begins with.
+        var (environment, stem) = await PushThreeAsync();
+        var directory = NewExportDirectory();
+
+        using var capture = new Capture();
+        await InspectCommands.ExportAsync(
+            Api(environment), capture.Output(), directory, $"{stem}.orders.&x=1", default);
+
+        Assert.Empty(Directory.GetFiles(directory));
+    }
+    [Theory]
+    [InlineData("%")]
+    [InlineData("acme-")]
+    [InlineData("a b")]
+    [InlineData("orders&x=1")]
+    public async Task APrefixNoNameCouldBeginWith_IsAnEmptyExportAndNotAnError(string prefix)
+    {
+        // The registry answers 200 and an empty list (ADR-038), and the percent-encoding is what
+        // keeps "&x=1" from becoming a second parameter.
+        var (environment, _) = await PushThreeAsync();
+        var directory = NewExportDirectory();
+
+        using var capture = new Capture();
+        var code = await InspectCommands.ExportAsync(
+            Api(environment), capture.Output(), directory, prefix, default);
+
+        Assert.Equal(ExitCodes.Success, code);
+        Assert.Empty(Directory.GetFiles(directory));
+    }
     [Fact]
     public async Task PromotionPreservesTheSchemaId()
     {

@@ -195,10 +195,17 @@ impact.SetAction((parse, token) => Run(parse, (api, output) =>
         token)));
 
 // ---- export ----
+var prefixOption = new Option<string?>("--prefix")
+{
+    Description = "Only subjects whose name begins with this: case-sensitive, a literal and not a pattern, filtered by the registry.",
+};
+
 var export = new Command("export", "Write an environment's contracts to disk.");
 export.Add(directoryOption);
+export.Add(prefixOption);
 export.SetAction((parse, token) => Run(parse, (api, output) =>
-    InspectCommands.ExportAsync(api, output, parse.GetValue(directoryOption)!, token)));
+    InspectCommands.ExportAsync(
+        api, output, parse.GetValue(directoryOption)!, parse.GetValue(prefixOption), token)));
 
 // ---- infer ----
 var samplesOption = new Option<string?>("--samples")

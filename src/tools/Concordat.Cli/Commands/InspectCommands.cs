@@ -68,6 +68,7 @@ public static class InspectCommands
     /// <param name="api">The registry.</param>
     /// <param name="output">Where results go.</param>
     /// <param name="directory">Where to write.</param>
+    /// <param name="prefix">Only subjects whose name begins with this, or null for every subject.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>An <see cref="ExitCodes"/> value.</returns>
     /// <remarks>
@@ -83,12 +84,16 @@ public static class InspectCommands
     /// </para>
     /// </remarks>
     public static async Task<int> ExportAsync(
-        RegistryApi api, Output output, string directory, CancellationToken cancellationToken)
+        RegistryApi api,
+        Output output,
+        string directory,
+        string? prefix,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(api);
         ArgumentNullException.ThrowIfNull(output);
 
-        var subjects = await api.ListSubjectsAsync(cancellationToken).ConfigureAwait(false);
+        var subjects = await api.ListSubjectsAsync(prefix, cancellationToken).ConfigureAwait(false);
 
         Directory.CreateDirectory(directory);
 
