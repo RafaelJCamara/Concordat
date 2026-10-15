@@ -44,6 +44,35 @@ internal sealed class SubjectRepository(ConcordatDbContext context) : ISubjectRe
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<Subject>> ListPageAsync(
+        EnvironmentId environmentId,
+        SubjectNamePrefix? prefix,
+        SubjectPaging paging,
+        CancellationToken cancellationToken) =>
+        await Matching(environmentId, prefix)
+            .OrderBy(s => s.Name)
+            .Skip(paging.Offset)
+            .Take(paging.Limit)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<int> CountAsync(
+        EnvironmentId environmentId, SubjectNamePrefix? prefix, CancellationToken cancellationToken) =>
+        // A count over the same predicate and nothing else: no subject is materialised, so the version
+        // rows the aggregate auto-includes are never read for this.
+        await Matching(environmentId, prefix)
+            .CountAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+    private IQueryable<Subject> Matching(EnvironmentId environmentId, SubjectNamePrefix? prefix) =>
+        prefix is null
+            ? context.Subjects.Where(s => s.EnvironmentId == environmentId)
+            : context.Subjects.Where(s => s.EnvironmentId == environmentId
+                && ConcordatDbFunctions.StartsWith(
+                    EF.Property<string>(s, nameof(Subject.Name)), prefix.Value));
+
+    /// <inheritdoc />
     public void Add(Subject subject) => context.Subjects.Add(subject);
 }
 

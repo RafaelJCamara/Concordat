@@ -120,6 +120,9 @@ change.
   both of which it did. This is a loss of function the brief asked for and the maintainer may want to give back as separate
   features. The list endpoint is still unpaginated: a broad prefix returns many subjects with their histories. A prefix
   beyond about 8 KB is refused with `414` by Kestrel before the route is reached (the web box stops at 512).
+  > **Amended 2026-10-15.** The route pages now, opt-in, and the box pages with it: [ADR-045](045-the-subject-list-is-paged-by-the-registry.md).
+  > A prefix and a page compose (the page is of the matches), and the next page continues the prefix the rows on screen answer.
+  > An unpaged request is still every match.
 - **Neutral:** `GET /subjects` without a prefix is exactly what it was. A rollback to a build without the parameter ignores
   it and returns the whole list: the web app would then show every subject under a box that says it filtered, so the box and
   the registry must be rolled back together.

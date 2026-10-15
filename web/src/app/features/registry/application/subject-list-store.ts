@@ -1,7 +1,7 @@
 import { computed, inject, untracked } from '@angular/core';
 import { patchState, signalStore, withComputed, withMethods, withState } from '@ngrx/signals';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
-import { catchError, debounce, of, pipe, switchMap, tap, timer } from 'rxjs';
+import { catchError, debounce, exhaustMap, of, pipe, switchMap, tap, timer } from 'rxjs';
 import { ActiveEnvironmentStore } from '../../../core/config/active-environment-store';
 import { toConcordatError, type ConcordatError } from '../../../core/http/problem-details';
 import { trimRegistryText } from '../../../domain/registry/registry-text';
@@ -16,8 +16,18 @@ import { SubjectsApi } from '../data-access/subjects-api';
  */
 export const SEARCH_DEBOUNCE_MS = 250;
 
+/** How many subjects the screen asks for at a time (ADR-045). */
+export const PAGE_SIZE = 50;
+
 interface SubjectListState {
+  /** The subjects read so far, in name order: the first page and any that were asked for after it. */
   readonly subjects: readonly Subject[];
+  /** How many subjects the registry says match, which can exceed `subjects` (ADR-045). */
+  readonly total: number;
+  /** Whether a page after the first is being read. */
+  readonly loadingMore: boolean;
+  /** A page after the first failed: what is shown is true, and there is more it could not read. */
+  readonly moreError: ConcordatError | null;
   readonly loading: boolean;
   readonly error: ConcordatError | null;
   /** Whether a load has finished at least once, successfully or not. */
@@ -40,6 +50,9 @@ interface SubjectListState {
 
 const INITIAL: SubjectListState = {
   subjects: [],
+  total: 0,
+  loadingMore: false,
+  moreError: null,
   loading: false,
   error: null,
   loaded: false,
@@ -72,7 +85,10 @@ interface Ask {
  */
 export const SubjectListStore = signalStore(
   withState<SubjectListState>(INITIAL),
-  withComputed(({ subjects, loading, loaded, shown, error }) => ({
+  withComputed(({ subjects, total, loading, loaded, shown, error }) => ({
+    /** How many matching subjects the registry has that the screen has not read yet. */
+    unread: computed(() => Math.max(total() - subjects().length, 0)),
+
     /**
      * True only once a load has completed and returned nothing for *no prefix* — never while
      * loading. An empty answer to a prefix is {@link noMatches}, and is not this: "this
@@ -96,6 +112,10 @@ export const SubjectListStore = signalStore(
     const api = inject(SubjectsApi);
     const environments = inject(ActiveEnvironmentStore);
 
+    // Bumped whenever the list is replaced, so a page that was asked for before the replacement and
+    // answered after it is dropped and not appended to a list for another prefix or environment.
+    let epoch = 0;
+
     /**
      * The one pipeline both a load and a search go through.
      *
@@ -114,17 +134,25 @@ export const SubjectListStore = signalStore(
     const ask = rxMethod<Ask>(
       pipe(
         debounce(({ immediate }) => (immediate ? of(0) : timer(SEARCH_DEBOUNCE_MS))),
-        tap(({ immediate }) =>
-          patchState(store, { loading: true, searching: !immediate, error: null }),
-        ),
+        tap(({ immediate }) => {
+          epoch += 1;
+          patchState(store, {
+            loading: true,
+            searching: !immediate,
+            error: null,
+            moreError: null,
+            loadingMore: false,
+          });
+        }),
         switchMap(() => {
           // Read now, not when the keystroke arrived: see above.
           const prefix = untracked(store.prefix);
 
-          return api.listSubjects(environments.name(), prefix).pipe(
-            tap((subjects) =>
+          return api.listSubjects(environments.name(), { prefix, limit: PAGE_SIZE }).pipe(
+            tap((page) =>
               patchState(store, {
-                subjects,
+                subjects: page.items,
+                total: page.total,
                 shown: prefix,
                 loading: false,
                 searching: false,
@@ -134,6 +162,7 @@ export const SubjectListStore = signalStore(
             catchError((error: unknown) => {
               patchState(store, {
                 subjects: [],
+                total: 0,
                 shown: prefix,
                 loading: false,
                 searching: false,
@@ -150,7 +179,60 @@ export const SubjectListStore = signalStore(
       ),
     );
 
+    /**
+     * Reads the next page, after what is on screen, for the prefix those rows answer.
+     *
+     * <b>The prefix is `shown`, not what has been typed since</b>: between a keystroke and the end of its
+     * pause the box says one thing and the rows another, and a next page of the box's prefix would be
+     * appended to rows for a different one. `exhaustMap` so that a second click while a page is on its way
+     * asks for nothing, and the epoch drops a page whose list was replaced while it was in flight.
+     */
+    const more = rxMethod<void>(
+      pipe(
+        exhaustMap(() => {
+          if (!store.loaded() || store.loading() || store.unread() === 0) {
+            return of(null);
+          }
+
+          const asked = epoch;
+          const prefix = store.shown();
+          patchState(store, { loadingMore: true, moreError: null });
+
+          return api
+            .listSubjects(environments.name(), {
+              prefix,
+              limit: PAGE_SIZE,
+              offset: store.subjects().length,
+            })
+            .pipe(
+              tap((page) => {
+                if (asked !== epoch) {
+                  patchState(store, { loadingMore: false });
+                  return;
+                }
+
+                const known = new Set(store.subjects().map((s) => s.name));
+
+                patchState(store, {
+                  subjects: [...store.subjects(), ...page.items.filter((s) => !known.has(s.name))],
+                  total: page.total,
+                  loadingMore: false,
+                });
+              }),
+              catchError((error: unknown) => {
+                patchState(store, { loadingMore: false, moreError: toConcordatError(error) });
+                return of(null);
+              }),
+            );
+        }),
+      ),
+    );
     return {
+      /** Reads the next page of the list, when the registry has more than is on screen. */
+      loadMore: (): void => {
+        more();
+      },
+
       /**
        * Loads the subjects for the active environment, for whatever has been typed so far, and
        * does not wait: an environment switch or a retry is not a keystroke.

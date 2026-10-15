@@ -345,9 +345,12 @@ public class CloudTenancyTests(CloudApiFactory factory)
         using var scope = factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ConcordatDbContext>();
 
+        // By the stored token: `Action` is a view of it that a build can fail to resolve (ADR-036), and
+        // a view is not something the database can be asked about.
+        var token = DeploymentTokens.For(DeploymentAction.OrganisationCreated);
         var events = await context.DeploymentEvents
             .AsNoTracking()
-            .Where(e => e.Action == DeploymentAction.OrganisationCreated)
+            .Where(e => e.ActionToken == token)
             .ToListAsync();
 
         var recorded = Assert.Single(events, e => e.Detail.Contains(slug, StringComparison.Ordinal));

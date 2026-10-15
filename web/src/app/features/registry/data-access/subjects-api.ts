@@ -7,7 +7,7 @@ import type { CompatibilityPolicy } from '../../../domain/registry/compatibility
 import type { VersionDiff } from '../../../domain/registry/diff';
 import type { NewSubject } from '../../../domain/registry/new-subject';
 import type { RegistrationOutcome } from '../../../domain/registry/registration';
-import type { Subject } from '../../../domain/registry/subject';
+import type { Subject, SubjectPage } from '../../../domain/registry/subject';
 import {
   toCreateSubjectDto,
   toPolicy,
@@ -23,6 +23,13 @@ import {
   type SetReviewersDto,
   type SubjectDto,
 } from './subject-dtos';
+
+/** What to list: a prefix, and one page of the answer (all optional). */
+export interface SubjectListOptions {
+  readonly prefix?: string;
+  readonly limit?: number;
+  readonly offset?: number;
+}
 
 /**
  * The registry's subject endpoints.
@@ -42,26 +49,52 @@ export class SubjectsApi {
   private readonly config = inject(CONCORDAT_CONFIG);
 
   /**
-   * The subjects in an environment, retired ones included.
+   * The subjects in an environment, retired ones included, as a page and the length of the whole list.
    *
-   * With a `prefix`, only those whose name begins with it, and **the registry does the
-   * filtering** (ADR-038): ordinal and case-sensitive, because names are, and a literal, so `_`
-   * matches only an underscore. A caller that filtered this list itself would be wrong the moment
-   * it is paged, and would be answering a different question than the registry (the box used to
-   * match anywhere in a name, ignoring case).
+   * With a `prefix`, only those whose name begins with it, and **the registry does the filtering**
+   * (ADR-038): ordinal and case-sensitive, because names are, and a literal, so `_` matches only an
+   * underscore. A caller that filtered this list itself would be wrong the moment it is paged, and would
+   * be answering a different question than the registry (the box used to match anywhere in a name,
+   * ignoring case).
    *
-   * The prefix is sent as given. The registry trims it and answers an empty list for text no name
-   * could start with, so nothing is validated here; an empty or absent prefix sends no parameter
-   * at all, which is the request this method has always made.
+   * With a `limit` and/or an `offset`, one page of the list in name order (ADR-045); without either, every
+   * subject, as before. The registry sends how many match in `X-Total-Count`, which is what `total` is: a
+   * registry that predates the header answers every subject and no count, and `total` is then the length
+   * of the list it sent.
+   *
+   * The prefix is sent as given. The registry trims it and answers an empty list for text no name could
+   * start with, so nothing is validated here; an empty or absent prefix sends no parameter at all, which
+   * is the request this method has always made.
    */
-  listSubjects(environment: string, prefix?: string): Observable<readonly Subject[]> {
-    const params = prefix ? { prefix } : undefined;
+  listSubjects(environment: string, options: SubjectListOptions = {}): Observable<SubjectPage> {
+    const params: Record<string, string | number> = {};
+
+    if (options.prefix) {
+      params['prefix'] = options.prefix;
+    }
+
+    if (options.limit !== undefined) {
+      params['limit'] = options.limit;
+    }
+
+    if (options.offset !== undefined) {
+      params['offset'] = options.offset;
+    }
 
     return this.http
-      .get<readonly SubjectDto[]>(`${this.root(environment)}/subjects`, { params })
-      .pipe(map((dtos) => dtos.map(toSubject)));
-  }
+      .get<readonly SubjectDto[]>(`${this.root(environment)}/subjects`, {
+        params,
+        observe: 'response',
+      })
+      .pipe(
+        map((response) => {
+          const items = (response.body ?? []).map(toSubject);
+          const header = Number.parseInt(response.headers.get('X-Total-Count') ?? '', 10);
 
+          return { items, total: Number.isFinite(header) ? header : items.length };
+        }),
+      );
+  }
   /**
    * Creates a subject, and answers with the subject as the registry stored it.
    *

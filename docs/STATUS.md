@@ -1,6 +1,7 @@
 # What is missing
 
-**As of 2026-08-15**, except [patterns no engine accepts, 2026-10-15](#a-pattern-no-engine-accepts-is-refused-and-the-re2-list-is-complete-2026-10-15),
+**As of 2026-08-15**, except [the subject list is paged, 2026-10-15](#the-subject-list-is-paged-by-the-registry-and-says-how-much-it-is-not-showing-2026-10-15),
+[patterns no engine accepts, 2026-10-15](#a-pattern-no-engine-accepts-is-refused-and-the-re2-list-is-complete-2026-10-15),
 [the two other stored-token converters, 2026-10-15](#the-two-other-stored-token-converters-no-longer-throw-2026-10-15),
 [a subscription's events, 2026-10-15](#a-subscriptions-events-can-be-changed-2026-10-15),
 [subject reviewers, 2026-10-15](#a-subject-can-name-who-may-decide-its-held-versions-2026-10-15),
@@ -22,8 +23,8 @@
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-14 (again, after the pending-proposal dedupe and the pattern warning, ADR-040 and ADR-041): 2,155 .NET,
-1,693 Angular, 269 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-15 (after the subject list was paged, ADR-045): 2,429 .NET,
+1,848 Angular, 286 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
 aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
@@ -34,6 +35,29 @@ ten milestone files as unchecked boxes.
 
 Everything under "verified locally" below was run on this machine today, against the real
 container image and a real PostgreSQL. Everything else is claimed on the strength of tests.
+
+---
+
+## The subject list is paged by the registry, and says how much it is not showing, 2026-10-15
+
+The one thing ADR-038 left open is closed ([ADR-045](adr/045-the-subject-list-is-paged-by-the-registry.md)). **`GET …/subjects?limit=&offset=`**
+returns one page ordered by name (`limit` clamped to 1-500, never refused; an offset alone pages with 50) and **`X-Total-Count`** carries how
+many subjects match, the prefix included. **Without either parameter nothing changes**: every subject, a bare array, because `concordat export`
+wants them all. The count is a second query asked only when a page was, a `COUNT(*)` over the same predicate that loads no subject.
+The screen reads 50 and says *"Showing the first 50 of 213 starting with `acme.`. 163 more are not shown yet."* beside **Show more**; the next
+page continues **the prefix the rows on screen answer**, not what was typed since, and a reload, a new search or a new environment discards the
+pages, with a late answer to the old list dropped. A later page that fails keeps the earlier ones and says so.
+
+**Verified:** handler tests with hand-written fakes, repository tests and HTTP tests against real PostgreSQL (the page, the offset past the end,
+the clamps, the prefix composed with a page, the total on every answer, the unpaged route unchanged, text no name could begin with), the web
+store, page and API specs, and a new browser test (`subject-search.spec.ts`) that cuts the page to two on the wire so the registry's real total
+and offset do the work: it reads 2, then 4, then 5 of this run's five subjects, names in the registry's order and none twice, with the
+requests `offset` absent, 2 and 4. The full browser suite (**286**) passed against a private registry on :5101. **Re-measured at the end of
+the day: 2,429 .NET, 1,848 Angular, 286 browser.** **Not verified:** a count over a very large environment (there is no index on the name, on
+ADR-038's measurement), light mode, the production image, CI.
+
+**Found on the way:** the full run caught `CloudTenancyTests` still asking the database for `DeploymentEvent.Action`, which became an unmapped
+view in the stored-token change earlier today (ADR-036's arrangement). It failed to translate the query. It asks for the stored token now.
 
 ---
 
@@ -1418,7 +1442,7 @@ conflict".
 
 **Done 2026-08-15:** the design-system port — the prototype's tokens, a light theme, self-hosted
 fonts ([ADR-026](adr/026-self-hosted-web-fonts.md)), the sidebar shell, the icon set and the
-cards — and the Playwright suite that now pins it. The E2E suite stands at **269 tests across twenty-two
+cards — and the Playwright suite that now pins it. The E2E suite stands at **286 tests across twenty-three
 specs** as of 2026-10-14, up from the 11 it launched with; `design-system.spec.ts` asserts the palette, both
 themes, the typography and the shell as **computed styles rather than pixel screenshots**, which
 are exact and identical on Windows and on CI's Linux. It exists because the placeholder palette
@@ -1502,11 +1526,12 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~A subscription's events cannot be edited~~ | **Closed 2026-10-15**: `PUT …/notifications/{id}/events` and **Change events** on each row, keeping the subscription's identity and its signing secret; see the section at the top. What it was: | There is `POST`, `PUT …/enabled` and `DELETE`, and nothing else, so keeping an existing "all events" subscription out of a newly added event (as `SUBJECT_POLICY_CHANGED`, ADR-034) means muting it or deleting it and creating it again, which issues **a new webhook signing secret** the receiver must be given. Found 2026-10-14. |
 | ~~A failing `notifications.spec.ts` leaves its subscriptions behind~~ | **Closed 2026-10-14**: a `test.afterAll` deletes the block's subscriptions by endpoint (`deleteSubscriptionsAt`, `web/e2e/registry.ts`). Verified by failing a test mid-block on purpose: `dev` held no subscription afterwards, and with the `afterAll` removed the same failure left the unfiltered email and both webhooks live. It cannot run if the process is killed. What it was: | The block is serial and its deletes are its last tests, so a red test skips them: the email subscription (no event filter) and the webhook stay live in `dev`, and the registry delivers to them for the rest of the run, and after it. Found 2026-10-14 when the new spec was run red on purpose (they were deleted by hand). A `test.afterAll` that deletes by endpoint would close it; not done here. |
 | **Hard delete does not exist** | Soft delete is all there is. The full rule — no registered consumers, force flag, audit entry — is an outstanding commitment. |
-| ~~Subject prefix search is not implemented~~ | **Closed 2026-10-14** ([ADR-038](adr/038-subject-prefix-search.md)): `GET …/subjects?prefix=`, ordinal and case-sensitive, a literal and not a pattern, through a mapped `starts_with` and with neither the `ComplexProperty` mapping nor the shadow column the note proposed (so no migration). No index, on measurement (65,000 rows: 1.2 ms against 4.7 ms for the whole list; the DDL for the day an environment holds tens of thousands is in the ADR). The web box is the filter. **It no longer matches the owner or the middle of a name, which it did** (the maintainer's call). Still open: the list is unpaginated. **The CLI has `concordat export --prefix` since 2026-10-15** (the registry filters; encoded, empty means all). |
+| ~~The subject list is unpaginated~~ | **Closed 2026-10-15** ([ADR-045](adr/045-the-subject-list-is-paged-by-the-registry.md)): `GET …/subjects?limit=&offset=` pages it, ordered by name, with `X-Total-Count` on the answer; without either the route is every subject as before, because `concordat export` wants them all. The screen reads 50, says *"Showing the first 50 of N"*, and has **Show more**. What it was: one response of every subject and its whole history, parsed and rendered in full, and a search box that was correct only because nothing was paged. Not measured: a count over a very large environment (no index on the name prefix, on ADR-038's measurement). |
+| ~~Subject prefix search is not implemented~~ | **Closed 2026-10-14** ([ADR-038](adr/038-subject-prefix-search.md)): `GET …/subjects?prefix=`, ordinal and case-sensitive, a literal and not a pattern, through a mapped `starts_with` and with neither the `ComplexProperty` mapping nor the shadow column the note proposed (so no migration). No index, on measurement (65,000 rows: 1.2 ms against 4.7 ms for the whole list; the DDL for the day an environment holds tens of thousands is in the ADR). The web box is the filter. **It no longer matches the owner or the middle of a name, which it did** (the maintainer's call). The list is paged since 2026-10-15 ([ADR-045](adr/045-the-subject-list-is-paged-by-the-registry.md)). **The CLI has `concordat export --prefix` since 2026-10-15** (the registry filters; encoded, empty means all). |
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | ~~A page reload signs you out~~ | **Closed 2026-08-14** by decision 26 — an httpOnly `SameSite=Strict` cookie and a `/auth/resume` route that is the only thing accepting it. The credential still never touches `localStorage`. |
 | ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Still on, and now audible** (decision 27). The API logs a warning naming both ways to close it and repeats hourly until claimed; the web app shows a banner. Verified against a real container. |
-| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 269 tests today across twenty-two specs, up from the 11 it launched with, and run against the production image as well as the dev server. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
+| ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 286 tests today across twenty-three specs, up from the 11 it launched with, and run against the production image as well as the dev server. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
 | ~~`Tenant` is not an aggregate~~ | **Closed by M9.1**, recorded here 2026-09-24 — `Tenant.Create` carries the name and slug invariants, signup writes a row per organisation, bootstrap writes the self-hosted one, and `CloudTenancyTests` drives two organisations through the real host. Self-hosted still holds exactly one row, `TenantId.SelfHosted`: the profiles differ in how many rows there are, not in whether the table means anything. |
 | ~~The derived-environment-id decision is unmade~~ | **Closed 2026-08-14.** Adopted, by creating rows that carry the derived id. No migration, and no orphaned subjects. |
 
@@ -1530,20 +1555,20 @@ Nothing here can be done from inside the repository.
 
 ## What the tests actually cover
 
-Six kinds, not one. Worth knowing which, because "2,155 tests" says nothing about what would
+Six kinds, not one. Worth knowing which, because "2,429 tests" says nothing about what would
 survive being wrong.
 
 | Kind | Where | Tests | What it proves |
 |---|---|---|---|
-| Domain unit | `Domain.Tests`, three `Formats.*` | ~1,179 | Invariants in isolation. No I/O |
-| Application handler | `Application.Tests` | 270 | Handler refusals and **ordering**, with hand-written fakes |
-| HTTP integration | `Api.IntegrationTests` | 411 | Real HTTP against real PostgreSQL, via Testcontainers |
+| Domain unit | `Domain.Tests`, three `Formats.*` | ~1,295 | Invariants in isolation. No I/O |
+| Application handler | `Application.Tests` | 332 | Handler refusals and **ordering**, with hand-written fakes |
+| HTTP integration | `Api.IntegrationTests` | 498 | Real HTTP against real PostgreSQL, via Testcontainers |
 | Conformance corpus | `Conformance` | 104, over 103 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 64 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
-| Browser end-to-end | `web/e2e` | 269 | A real Chromium against the real stack, design system included — and against the production image |
+| Browser end-to-end | `web/e2e` | 286 | A real Chromium against the real stack, design system included — and against the production image |
 
-Plus 1,693 Angular unit tests. *(Counts above re-measured 2026-10-14; the unit rows are approximate because
+Plus 1,848 Angular unit tests. *(Counts above re-measured 2026-10-15; the unit rows are approximate because
 the assemblies that do not fit a row — the client, the CLI and the contract testing — are not in them.)*
 
 **No mocking framework, deliberately.** No Moq, NSubstitute, FluentAssertions or AutoFixture —

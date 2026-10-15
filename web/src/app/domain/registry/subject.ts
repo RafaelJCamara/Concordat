@@ -40,6 +40,17 @@ export interface Subject {
   readonly versions: readonly SchemaVersion[];
 }
 
+/** One page of an environment's subjects, and how many there are in all (ADR-045). */
+export interface SubjectPage {
+  readonly items: readonly Subject[];
+  /**
+   * How many subjects match, whatever page this is: the registry's own count (a prefix included), so a
+   * screen can say how much of the list it is not showing. Equal to `items.length` when the registry
+   * sent no count, which is what an older registry that cannot page answers.
+   */
+  readonly total: number;
+}
+
 /** The version the `latest` pointer resolves to, or null when the subject has none. */
 export function latestVersion(subject: Subject): SchemaVersion | null {
   if (subject.latest === null) {

@@ -240,6 +240,52 @@ test.describe('searching subjects by the start of their name', () => {
     await expect(box).toHaveValue(fast);
   });
 
+  test('says how many more there are, and reads them on request, in name order (ADR-045)', async ({
+    page,
+  }) => {
+    // The screen asks for fifty, and this run has five. Cutting the page to two on the way out makes
+    // the registry's real total and real offset do the work, which a stubbed answer would not test.
+    const limits: string[] = [];
+    const offsets: string[] = [];
+
+    await page.route(
+      (url) => url.searchParams.get('prefix') === PREFIX && /\/subjects$/.test(url.pathname),
+      async (route) => {
+        const url = new URL(route.request().url());
+        limits.push(url.searchParams.get('limit') ?? '');
+        offsets.push(url.searchParams.get('offset') ?? '');
+        url.searchParams.set('limit', '2');
+        await route.continue({ url: url.toString() });
+      },
+    );
+
+    await searchBox(page).fill(PREFIX);
+
+    await expect(rowNames(page)).toHaveCount(2);
+    const extent = page.getByTestId('list-extent');
+    await expect(extent).toContainText(`Showing the first 2 of ${ALL.length}`);
+    await expect(extent).toContainText(`${ALL.length - 2} more are not shown yet`);
+
+    await page.getByRole('button', { name: 'Show more' }).click();
+    await expect(rowNames(page)).toHaveCount(4);
+    await expect(extent).toContainText(`Showing the first 4 of ${ALL.length}`);
+    await expect(extent).toContainText('1 more is not shown yet');
+
+    await page.getByRole('button', { name: 'Show more' }).click();
+    await expect(rowNames(page)).toHaveCount(ALL.length);
+    // Everything is on screen, so the screen stops saying it is not.
+    await expect(extent).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Show more' })).toHaveCount(0);
+
+    // The names are the registry's order, each once, with no row repeated across the pages.
+    const names = await rowNames(page).allInnerTexts();
+    expect(names.map((n) => n.trim())).toEqual([...ALL].sort((a, b) => (a < b ? -1 : 1)));
+
+    // The page asked for fifty and continued from what it held.
+    expect(new Set(limits)).toEqual(new Set(['50']));
+    expect(offsets).toEqual(['', '2', '4']);
+  });
+
   test('does not scroll sideways on a phone', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/subjects');

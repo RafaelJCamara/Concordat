@@ -40,7 +40,12 @@ public static class SubjectEndpoints
                 "with nothing after it, or none, lists every subject. A prefix no subject name " +
                 "could begin with (a hyphen, two dots in a row, a wildcard, text that is not " +
                 "well-formed) is not an error: it lists nothing. A prefix does not have to end at a " +
-                "dot, so `acme.ord` finds `acme.orders.OrderCreated`.")
+                "dot, so `acme.ord` finds `acme.orders.OrderCreated`. With `limit` and/or `offset`, " +
+                "one page of the list, ordered by name (ordinally): `limit` is clamped to 1-500 and " +
+                "defaults to 50 when only an offset is given, and a negative offset is read as none. " +
+                "Without either the whole list is returned, as before. Either way the `X-Total-Count` " +
+                "response header carries how many subjects match (the prefix included), so a client can " +
+                "say how much of the list it is not showing.")
             .Produces<IReadOnlyList<SubjectResponse>>()
             .RequireScope(Scope.SubjectRead);
 
@@ -212,20 +217,50 @@ public static class SubjectEndpoints
                 SubjectResponse.From(result.Value));
     }
 
+    /// <summary>The header carrying how many subjects match, whatever page was returned.</summary>
+    public const string TotalCountHeader = "X-Total-Count";
+
     private static async Task<IResult> ListSubjects(
         string env,
         string? prefix,
+        int? limit,
+        int? offset,
         IDispatcher dispatcher,
         IEnvironmentResolver environments,
+        HttpResponse response,
         CancellationToken cancellationToken)
     {
+        var environment = environments.Resolve(env);
+
         var result = await dispatcher.QueryAsync(
-            new ListSubjectsQuery(environments.Resolve(env), prefix), cancellationToken)
+            new ListSubjectsQuery(environment, prefix, limit, offset), cancellationToken)
             .ConfigureAwait(false);
 
-        return result.IsFailure
-            ? ProblemDetailsMapping.From(result.Error!)
-            : TypedResults.Ok(result.Value.Select(SubjectResponse.From).ToList());
+        if (result.IsFailure)
+        {
+            return ProblemDetailsMapping.From(result.Error!);
+        }
+
+        // The count is asked only when a page was, so the unpaged answer costs what it always did. It is
+        // a header and not a wrapper around the array: the body is the list every client already reads.
+        var total = result.Value.Count;
+
+        if (limit is not null || offset is not null)
+        {
+            var counted = await dispatcher.QueryAsync(
+                new CountSubjectsQuery(environment, prefix), cancellationToken).ConfigureAwait(false);
+
+            if (counted.IsFailure)
+            {
+                return ProblemDetailsMapping.From(counted.Error!);
+            }
+
+            total = counted.Value;
+        }
+
+        response.Headers[TotalCountHeader] = total.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        return TypedResults.Ok(result.Value.Select(SubjectResponse.From).ToList());
     }
 
     private static async Task<IResult> GetSubject(

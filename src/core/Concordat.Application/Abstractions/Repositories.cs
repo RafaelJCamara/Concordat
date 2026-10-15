@@ -36,10 +36,41 @@ public interface ISubjectRepository
     Task<IReadOnlyList<Subject>> ListByPrefixAsync(
         EnvironmentId environmentId, SubjectNamePrefix prefix, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Lists one page of an environment's subjects, optionally only those whose name begins with a prefix,
+    /// ordered by name (ordinally, as every other listing is).
+    /// </summary>
+    /// <param name="environmentId">The environment.</param>
+    /// <param name="prefix">A prefix, or null for every subject. Same rules as <see cref="ListByPrefixAsync"/>.</param>
+    /// <param name="paging">Which rows.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>The page, which may be shorter than asked for at the end of the list.</returns>
+    Task<IReadOnlyList<Subject>> ListPageAsync(
+        EnvironmentId environmentId,
+        SubjectNamePrefix? prefix,
+        SubjectPaging paging,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Counts an environment's subjects, optionally only those whose name begins with a prefix, without
+    /// loading any of them.
+    /// </summary>
+    /// <param name="environmentId">The environment.</param>
+    /// <param name="prefix">A prefix, or null for every subject.</param>
+    /// <param name="cancellationToken">Cancellation.</param>
+    /// <returns>How many.</returns>
+    Task<int> CountAsync(
+        EnvironmentId environmentId, SubjectNamePrefix? prefix, CancellationToken cancellationToken);
+
     /// <summary>Stages a new subject for insert.</summary>
     /// <param name="subject">The subject.</param>
     void Add(Subject subject);
 }
+
+/// <summary>Which rows of an ordered listing to read.</summary>
+/// <param name="Limit">The most rows.</param>
+/// <param name="Offset">How many of the first rows to skip.</param>
+public readonly record struct SubjectPaging(int Limit, int Offset);
 
 /// <summary>Reads and writes the global schema store.</summary>
 /// <remarks>

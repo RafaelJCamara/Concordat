@@ -66,21 +66,21 @@ describe('SubjectsApi', () => {
         request.urlWithParams === url;
 
       it('asks the registry to filter, with the prefix as a query parameter', () => {
-        context.api.listSubjects('dev', 'acme.orders.').subscribe();
+        context.api.listSubjects('dev', { prefix: 'acme.orders.' }).subscribe();
 
         context.backend.expectOne(withQuery('/v1/environments/dev/subjects?prefix=acme.orders.'));
       });
 
       it('sends no parameter for no prefix, so the unfiltered request is the one it always was', () => {
-        context.api.listSubjects('dev', '').subscribe();
-        context.api.listSubjects('dev', undefined).subscribe();
+        context.api.listSubjects('dev', { prefix: '' }).subscribe();
+        context.api.listSubjects('dev', { prefix: undefined }).subscribe();
 
         const calls = context.backend.match('/v1/environments/dev/subjects');
         expect(calls).toHaveLength(2);
       });
 
       it('keeps the case, because names are case-sensitive', () => {
-        context.api.listSubjects('dev', 'Acme.OrderCreated').subscribe();
+        context.api.listSubjects('dev', { prefix: 'Acme.OrderCreated' }).subscribe();
 
         context.backend.expectOne(
           withQuery('/v1/environments/dev/subjects?prefix=Acme.OrderCreated'),
@@ -88,7 +88,7 @@ describe('SubjectsApi', () => {
       });
 
       it('sends an underscore as an underscore: it is a name character, not a wildcard', () => {
-        context.api.listSubjects('dev', 'acme.a_').subscribe();
+        context.api.listSubjects('dev', { prefix: 'acme.a_' }).subscribe();
 
         context.backend.expectOne(withQuery('/v1/environments/dev/subjects?prefix=acme.a_'));
       });
@@ -98,7 +98,7 @@ describe('SubjectsApi', () => {
         // arrive as one parameter's value and cannot add a parameter or end the URL: a `&`
         // unencoded would become a second parameter, and a `#` would drop the rest. (Angular
         // leaves a `=` inside a value alone, which is legal and read as part of the value.)
-        context.api.listSubjects('dev', 'a%b&c=d#e f').subscribe();
+        context.api.listSubjects('dev', { prefix: 'a%b&c=d#e f' }).subscribe();
 
         context.backend.expectOne(
           withQuery('/v1/environments/dev/subjects?prefix=a%25b%26c=d%23e%20f'),
@@ -107,7 +107,9 @@ describe('SubjectsApi', () => {
 
       it('returns the same domain types as the unfiltered list', () => {
         let subjects: readonly Subject[] = [];
-        context.api.listSubjects('dev', 'orders.').subscribe((value) => (subjects = value));
+        context.api
+          .listSubjects('dev', { prefix: 'orders.' })
+          .subscribe((value) => (subjects = value.items));
 
         context.backend
           .expectOne(withQuery('/v1/environments/dev/subjects?prefix=orders.'))
@@ -118,11 +120,76 @@ describe('SubjectsApi', () => {
       });
     });
 
+    describe('a page (ADR-045)', () => {
+      const withQuery = (url: string) => (request: { urlWithParams: string }) =>
+        request.urlWithParams === url;
+
+      it('sends a limit and an offset when asked for a page', () => {
+        context.api.listSubjects('dev', { limit: 50, offset: 100 }).subscribe();
+
+        context.backend.expectOne(withQuery('/v1/environments/dev/subjects?limit=50&offset=100'));
+      });
+
+      it('sends an offset of zero, which is a page and not an absent one', () => {
+        context.api.listSubjects('dev', { offset: 0 }).subscribe();
+
+        context.backend.expectOne(withQuery('/v1/environments/dev/subjects?offset=0'));
+      });
+
+      it('sends a prefix and a page together', () => {
+        context.api.listSubjects('dev', { prefix: 'acme.', limit: 50 }).subscribe();
+
+        context.backend.expectOne(withQuery('/v1/environments/dev/subjects?prefix=acme.&limit=50'));
+      });
+
+      it('reads the registry’s total from X-Total-Count', () => {
+        let total = -1;
+        context.api.listSubjects('dev', { limit: 1 }).subscribe((page) => (total = page.total));
+
+        context.backend
+          .expectOne(withQuery('/v1/environments/dev/subjects?limit=1'))
+          .flush([dto], { headers: { 'X-Total-Count': '120' } });
+
+        expect(total).toBe(120);
+      });
+
+      it('takes the length of the list as the total when the registry sent none', () => {
+        // A registry that predates the header answers every subject and no count.
+        let total = -1;
+        context.api.listSubjects('dev').subscribe((page) => (total = page.total));
+
+        context.backend.expectOne('/v1/environments/dev/subjects').flush([dto, dto]);
+
+        expect(total).toBe(2);
+      });
+
+      it('takes the length of the list as the total when the header is not a number', () => {
+        let total = -1;
+        context.api.listSubjects('dev').subscribe((page) => (total = page.total));
+
+        context.backend
+          .expectOne('/v1/environments/dev/subjects')
+          .flush([dto], { headers: { 'X-Total-Count': 'many' } });
+
+        expect(total).toBe(1);
+      });
+
+      it('hands back domain types, as an unpaged list does', () => {
+        let items: readonly Subject[] = [];
+        context.api.listSubjects('dev', { limit: 1 }).subscribe((page) => (items = page.items));
+
+        context.backend
+          .expectOne(withQuery('/v1/environments/dev/subjects?limit=1'))
+          .flush([dto], { headers: { 'X-Total-Count': '1' } });
+
+        expect(items[0]?.versions[0]?.registeredAt).toBeInstanceOf(Date);
+      });
+    });
     it('returns domain types, with timestamps already parsed', () => {
       // A caller handed a raw DTO will eventually reach into a wire field, and the string
       // `registeredAt` would then be sorted and compared as text.
       let subjects: readonly Subject[] = [];
-      context.api.listSubjects('dev').subscribe((value) => (subjects = value));
+      context.api.listSubjects('dev').subscribe((value) => (subjects = value.items));
 
       context.backend.expectOne('/v1/environments/dev/subjects').flush([dto]);
 

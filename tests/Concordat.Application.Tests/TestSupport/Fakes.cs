@@ -67,6 +67,43 @@ internal sealed class FakeSubjects : ISubjectRepository
                 .OrderBy(s => s.Name.Value, StringComparer.Ordinal)]);
     }
 
+    /// <summary>The pages asked for, in order.</summary>
+    public List<SubjectPaging> PagesAsked { get; } = [];
+
+    /// <summary>How many times a handler counted.</summary>
+    public int Counts { get; private set; }
+
+    public Task<IReadOnlyList<Subject>> ListPageAsync(
+        EnvironmentId environmentId,
+        SubjectNamePrefix? prefix,
+        SubjectPaging paging,
+        CancellationToken cancellationToken)
+    {
+        PagesAsked.Add(paging);
+
+        if (prefix is not null)
+        {
+            PrefixesAsked.Add(prefix.Value);
+        }
+
+        return Task.FromResult<IReadOnlyList<Subject>>(
+            [.. Matching(environmentId, prefix).Skip(paging.Offset).Take(paging.Limit)]);
+    }
+
+    public Task<int> CountAsync(
+        EnvironmentId environmentId, SubjectNamePrefix? prefix, CancellationToken cancellationToken)
+    {
+        Counts++;
+
+        return Task.FromResult(Matching(environmentId, prefix).Count());
+    }
+
+    private IEnumerable<Subject> Matching(EnvironmentId environmentId, SubjectNamePrefix? prefix) =>
+        _subjects
+            .Where(s => s.EnvironmentId == environmentId
+                && (prefix is null || s.Name.Value.StartsWith(prefix.Value, StringComparison.Ordinal)))
+            .OrderBy(s => s.Name.Value, StringComparer.Ordinal);
+
     public void Add(Subject subject)
     {
         Added.Add(subject);

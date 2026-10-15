@@ -166,6 +166,22 @@ the step. Six calls, each yours to confirm:
 > findings were advice before and are advice now ([ADR-028](adr/028-schema-editor.md)); a browser test holds them to agreeing
 > with the registry on the ordinary cases, and would need its expectations flipped.
 
+### 44. The subject list is paged by offset, in an opt-in way, and the whole length is a header
+
+**Implemented** ([ADR-045](adr/045-the-subject-list-is-paged-by-the-registry.md)). Four calls, each yours to confirm:
+
+- **Opt-in.** `limit` and/or `offset` page the route; without either it is the bare array of every subject it always was, because the
+  CLI's `export` wants them all and nothing a client sends today should change. *If you would rather page it always*, it is a
+  breaking change to the one other caller, and a default page size is a new thing for it to know.
+- **`X-Total-Count` is a header, not a wrapper.** The body stays the array every client reads; the cost is a header the client must
+  know about (the web store does; a script that wants it has to read headers). A paged envelope (`{items, total}`) is what the
+  approval queue uses and is tidier, but it would make this one route answer two shapes depending on a parameter.
+- **`limit` is clamped to 1-500 and never refused**, as ADR-042 clamps the queue's and the audit read clamps its own. The screen asks for 50.
+- **The count is a scan.** There is no index on the prefix (ADR-038 measured one and declined it), so a count over a large
+  environment reads its subjects' names. Not measured at 100,000 subjects; said so in the ADR.
+
+> **If you overturn the offset**, `offset` becomes a cursor and the store's `loadMore` sends it; the header and the opt-in stay.
+
 ### 43. A pattern is refused when no engine accepts it, and warned about when some engine does not
 
 **Implemented** ([ADR-044](adr/044-a-pattern-no-engine-accepts-is-refused.md)). Resolves the open question in decision 40 ("refusing it is the

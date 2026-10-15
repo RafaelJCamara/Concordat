@@ -183,6 +183,43 @@ import { SubjectTable } from '../ui/subject-table';
         >
           <cd-subject-table [subjects]="store.subjects()" />
         </div>
+
+        @if (store.unread() > 0) {
+          <!--
+            Said, because a list that stopped at fifty without a word is the dashboard's old defect
+            with a larger constant: the registry knows how many there are and the screen would be
+            showing fewer as though it were all of them (ADR-045).
+          -->
+          <div
+            class="border-border bg-card flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <p class="text-muted-foreground text-sm" data-testid="list-extent">
+              Showing the first {{ store.subjects().length }} of {{ store.total() }}
+              @if (store.shown() !== '') {
+                starting with
+                <span class="text-foreground font-mono break-all">{{ store.shown() }}</span>
+              }
+              . {{ store.unread() }} more {{ store.unread() === 1 ? 'is' : 'are' }} not shown yet.
+            </p>
+            <button
+              type="button"
+              hlmBtn
+              variant="outline"
+              size="sm"
+              [disabled]="store.loadingMore()"
+              (click)="store.loadMore()"
+            >
+              {{ store.loadingMore() ? 'Loading…' : 'Show more' }}
+            </button>
+          </div>
+        }
+
+        @if (store.moreError(); as error) {
+          <div hlmAlert variant="destructive">
+            <h2 hlmAlertTitle>Could not load more</h2>
+            <p hlmAlertDescription>{{ error.detail }}</p>
+          </div>
+        }
       }
     </section>
   `,
@@ -214,9 +251,9 @@ export class SubjectListPage {
    */
   protected readonly showSearch = computed(() => this.store.loaded() && !this.store.isEmpty());
 
-  /** "3 subjects", for the line under the box. */
+  /** "3 subjects", for the line under the box: how many the registry says there are, not how many are on screen. */
   protected readonly count = computed(() => {
-    const n = this.store.subjects().length;
+    const n = this.store.total();
 
     return n === 1 ? '1 subject' : `${n} subjects`;
   });

@@ -60,10 +60,18 @@ function stubStore(subjects: readonly Subject[] = SUBJECTS) {
     shown: signal(''),
     prefix: signal(''),
     searching: signal(false),
+    loadingMore: signal(false),
+    moreError: signal<ConcordatError | null>(null),
+    /** What the registry says there are, when a test wants it to differ from the rows held. */
+    totalOverride: signal<number | null>(null),
   };
+
+  const total = computed(() => state.totalOverride() ?? state.subjects().length);
 
   return {
     ...state,
+    total,
+    unread: computed(() => Math.max(total() - state.subjects().length, 0)),
     isEmpty: computed(
       () =>
         state.loaded() && !state.loading() && state.subjects().length === 0 && state.shown() === '',
@@ -76,6 +84,7 @@ function stubStore(subjects: readonly Subject[] = SUBJECTS) {
         state.shown() !== '',
     ),
     load: vi.fn(),
+    loadMore: vi.fn(),
     search: vi.fn(),
   };
 }
@@ -380,5 +389,97 @@ describe('SubjectListPage: creating a subject', () => {
 
     expect(host.textContent).toContain('No subjects yet');
     expect(links(host)).toEqual([]);
+  });
+});
+
+describe('SubjectListPage: a list longer than the screen has read (ADR-045)', () => {
+  const extent = (host: HTMLElement) =>
+    host.querySelector('[data-testid="list-extent"]')?.textContent?.replace(/\s+/g, ' ') ?? null;
+  const showMore = (host: HTMLElement) =>
+    [...host.querySelectorAll('button')].find((b) => b.textContent?.trim().startsWith('Show more'));
+
+  function open(store: Stub) {
+    const fixture = render(store);
+
+    return { fixture, host: fixture.nativeElement as HTMLElement };
+  }
+
+  it('says how much of the list it is showing, and offers the rest', () => {
+    const store = stubStore();
+    store.totalOverride.set(120);
+
+    const { host } = open(store);
+
+    expect(extent(host)).toContain('Showing the first 3 of 120');
+    expect(extent(host)).toContain('117 more are not shown yet');
+    expect(showMore(host)).toBeDefined();
+  });
+
+  it('says "is" for the one left', () => {
+    const store = stubStore();
+    store.totalOverride.set(4);
+
+    expect(extent(open(store).host)).toContain('1 more is not shown yet');
+  });
+
+  it('asks the store for the next page when asked', () => {
+    const store = stubStore();
+    store.totalOverride.set(120);
+    const { host } = open(store);
+
+    showMore(host)!.click();
+
+    expect(store.loadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('says nothing about extent when the whole list is on screen', () => {
+    const { host } = open(stubStore());
+
+    expect(extent(host)).toBeNull();
+    expect(showMore(host)).toBeUndefined();
+  });
+
+  it('names the prefix the rows answer, not the one that was typed since', () => {
+    const store = stubStore();
+    store.totalOverride.set(120);
+    store.shown.set('acme.orders.');
+    store.prefix.set('something-else');
+
+    expect(extent(open(store).host)).toContain('starting with acme.orders.');
+  });
+
+  it('counts the registry’s total under the box, not the rows it has read', () => {
+    const store = stubStore();
+    store.totalOverride.set(120);
+    store.shown.set('acme.');
+
+    expect(open(store).host.textContent).toContain('120 subjects starting with');
+  });
+
+  it('disables the button while a page is on its way', () => {
+    const store = stubStore();
+    store.totalOverride.set(120);
+    store.loadingMore.set(true);
+
+    const { host } = open(store);
+    const button = [...host.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Loading…',
+    );
+
+    expect(button).toBeDefined();
+    expect(button?.disabled).toBe(true);
+    expect(showMore(host)).toBeUndefined();
+  });
+
+  it('reports a page that could not be read, and keeps the rows that were', () => {
+    const store = stubStore();
+    store.totalOverride.set(120);
+    store.moreError.set(new ConcordatError({ status: 500, code: 'x', detail: 'page two is down' }));
+
+    const { host } = open(store);
+
+    expect(host.textContent).toContain('Could not load more');
+    expect(host.textContent).toContain('page two is down');
+    expect(host.textContent).toContain('acme.orders.OrderCreated');
   });
 });

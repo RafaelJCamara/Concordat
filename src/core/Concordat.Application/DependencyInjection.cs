@@ -139,6 +139,7 @@ public static class DependencyInjection
         services.AddScoped<IQueryHandler<GetSubjectQuery, Subject>, GetSubjectHandler>();
         services.AddScoped<
             IQueryHandler<ListSubjectsQuery, IReadOnlyList<Subject>>, ListSubjectsHandler>();
+        services.AddScoped<IQueryHandler<CountSubjectsQuery, int>, CountSubjectsHandler>();
         services.AddScoped<
             IQueryHandler<CheckCompatibilityQuery, CompatibilityCheckResult>, CheckCompatibilityHandler>();
         services.AddScoped<IQueryHandler<GetSchemaQuery, Schema>, GetSchemaHandler>();

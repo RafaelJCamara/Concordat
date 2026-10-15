@@ -169,8 +169,60 @@ public sealed class GetSubjectHandler(ISubjectRepository subjects)
 /// judged by <see cref="SubjectNamePrefix"/>: ordinal, case-sensitive, and a prefix no name could
 /// begin with lists nothing (ADR-038).
 /// </param>
-public sealed record ListSubjectsQuery(EnvironmentId EnvironmentId, string? Prefix = null)
-    : IQuery<IReadOnlyList<Subject>>;
+/// <param name="Limit">
+/// The most subjects to return, or <see langword="null"/> for no paging at all (every subject, as before).
+/// Clamped to <see cref="MaxLimit"/>; asking for an offset alone pages with <see cref="DefaultLimit"/>.
+/// </param>
+/// <param name="Offset">How many of the first subjects to skip. Negative is read as none.</param>
+public sealed record ListSubjectsQuery(
+    EnvironmentId EnvironmentId, string? Prefix = null, int? Limit = null, int? Offset = null)
+    : IQuery<IReadOnlyList<Subject>>
+{
+    /// <summary>The largest page a caller may ask for.</summary>
+    public const int MaxLimit = 500;
+
+    /// <summary>The page size when an offset is named and a limit is not.</summary>
+    public const int DefaultLimit = 50;
+
+    /// <summary>Whether the caller asked for a page and not for the whole list.</summary>
+    public bool IsPaged => Limit is not null || Offset is not null;
+}
+
+/// <summary>Counts the subjects in an environment, optionally only those whose name begins with a prefix.</summary>
+/// <param name="EnvironmentId">The environment.</param>
+/// <param name="Prefix">The raw text, judged as <see cref="ListSubjectsQuery.Prefix"/> is.</param>
+public sealed record CountSubjectsQuery(EnvironmentId EnvironmentId, string? Prefix = null)
+    : IQuery<int>;
+
+/// <summary>Handles <see cref="CountSubjectsQuery"/>.</summary>
+public sealed class CountSubjectsHandler(ISubjectRepository subjects)
+    : IQueryHandler<CountSubjectsQuery, int>
+{
+    /// <inheritdoc />
+    public async Task<Result<int>> HandleAsync(
+        CountSubjectsQuery query, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        SubjectNamePrefix? prefix = null;
+
+        if (!string.IsNullOrWhiteSpace(query.Prefix))
+        {
+            var parsed = SubjectNamePrefix.Create(query.Prefix);
+
+            // The same answer the list gives for text no name could begin with: none, and not an error.
+            if (parsed.IsFailure)
+            {
+                return Result<int>.Success(0);
+            }
+
+            prefix = parsed.Value;
+        }
+
+        return Result<int>.Success(
+            await subjects.CountAsync(query.EnvironmentId, prefix, cancellationToken).ConfigureAwait(false));
+    }
+}
 
 /// <summary>Handles <see cref="ListSubjectsQuery"/>.</summary>
 public sealed class ListSubjectsHandler(ISubjectRepository subjects)
@@ -181,6 +233,11 @@ public sealed class ListSubjectsHandler(ISubjectRepository subjects)
         ListSubjectsQuery query, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
+
+        if (query.IsPaged)
+        {
+            return await HandlePageAsync(query, cancellationToken).ConfigureAwait(false);
+        }
 
         if (string.IsNullOrWhiteSpace(query.Prefix))
         {
@@ -205,6 +262,36 @@ public sealed class ListSubjectsHandler(ISubjectRepository subjects)
             query.EnvironmentId, prefix.Value, cancellationToken).ConfigureAwait(false);
 
         return Result<IReadOnlyList<Subject>>.Success(found);
+    }
+
+    private async Task<Result<IReadOnlyList<Subject>>> HandlePageAsync(
+        ListSubjectsQuery query, CancellationToken cancellationToken)
+    {
+        SubjectNamePrefix? prefix = null;
+
+        if (!string.IsNullOrWhiteSpace(query.Prefix))
+        {
+            var parsed = SubjectNamePrefix.Create(query.Prefix);
+
+            if (parsed.IsFailure)
+            {
+                // As unpaged: text no name could begin with lists nothing, and the store is not asked.
+                return Result<IReadOnlyList<Subject>>.Success([]);
+            }
+
+            prefix = parsed.Value;
+        }
+
+        // Clamped and never refused, as the audit read and the approval queue clamp theirs: a page size is a
+        // preference and a bound on cost, and the nearest page is a better answer than an error.
+        var paging = new SubjectPaging(
+            Math.Clamp(query.Limit ?? ListSubjectsQuery.DefaultLimit, 1, ListSubjectsQuery.MaxLimit),
+            Math.Max(query.Offset ?? 0, 0));
+
+        var page = await subjects.ListPageAsync(query.EnvironmentId, prefix, paging, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Result<IReadOnlyList<Subject>>.Success(page);
     }
 }
 

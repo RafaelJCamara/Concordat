@@ -1,12 +1,12 @@
 import { TestBed } from '@angular/core/testing';
-import { Subject as ResponseStream, throwError } from 'rxjs';
+import { map, Subject as ResponseStream, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActiveEnvironmentStore } from '../../../core/config/active-environment-store';
 import { provideConcordatConfig } from '../../../core/config/app-config';
 import { ConcordatError } from '../../../core/http/problem-details';
-import type { Subject } from '../../../domain/registry/subject';
+import type { Subject, SubjectPage } from '../../../domain/registry/subject';
 import { SubjectsApi } from '../data-access/subjects-api';
-import { SEARCH_DEBOUNCE_MS, SubjectListStore } from './subject-list-store';
+import { PAGE_SIZE, SEARCH_DEBOUNCE_MS, SubjectListStore } from './subject-list-store';
 
 // This is the reference store shape for M4.3, so the properties pinned here are the ones
 // every feature store copied from it will inherit — including the two that are easy to get
@@ -29,29 +29,45 @@ function subject(name: string): Subject {
 
 /** A stand-in for `SubjectsApi` whose responses this file decides when to deliver. */
 function fakeApi() {
-  const streams: ResponseStream<readonly Subject[]>[] = [];
+  const streams: ResponseStream<readonly Subject[] | SubjectPage>[] = [];
   const asked: string[] = [];
   const prefixes: string[] = [];
+  const requests: { prefix: string; limit: number | undefined; offset: number | undefined }[] = [];
 
   return {
     asked,
     /** The prefix each request carried, '' for none, in the order asked. */
     prefixes,
+    /** Every request in full, to see the page each one asked for. */
+    requests,
     streams,
     /** The most recent in-flight response, so a test can complete it on its own terms. */
     latest() {
-      return streams[streams.length - 1]!;
+      return streams[streams.length - 1]! as unknown as ResponseStream<readonly Subject[]>;
     },
-    listSubjects(environment: string, prefix?: string) {
+    /** Answers the latest request with a page and the registry's own total. */
+    answer(items: readonly Subject[], total: number) {
+      (streams[streams.length - 1]! as ResponseStream<SubjectPage>).next({ items, total });
+    },
+    listSubjects(
+      environment: string,
+      options: { prefix?: string; limit?: number; offset?: number } = {},
+    ) {
       asked.push(environment);
-      prefixes.push(prefix ?? '');
-      const stream = new ResponseStream<readonly Subject[]>();
+      prefixes.push(options.prefix ?? '');
+      requests.push({ prefix: options.prefix ?? '', limit: options.limit, offset: options.offset });
+      const stream = new ResponseStream<readonly Subject[] | SubjectPage>();
       streams.push(stream);
-      return stream.asObservable();
+
+      // A bare list is a whole answer, so its total is its length; a page names its own.
+      return stream.pipe(
+        map((answer): SubjectPage =>
+          'items' in answer ? answer : { items: answer, total: answer.length },
+        ),
+      );
     },
   };
 }
-
 describe('SubjectListStore', () => {
   let api: ReturnType<typeof fakeApi>;
   let store: InstanceType<typeof SubjectListStore>;
@@ -542,6 +558,146 @@ describe('SubjectListStore', () => {
 
         expect(api.prefixes).toEqual(['', 'acme.', 'acme.']);
       });
+    });
+  });
+
+  describe('a list longer than one page (ADR-045)', () => {
+    // The prefix test waits out the search pause, so time is the test's to move.
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    const many = (from: number, count: number) =>
+      Array.from({ length: count }, (_, i) =>
+        subject(`acme.s${String(from + i).padStart(3, '0')}.Thing`),
+      );
+
+    it('asks for the first page, in the registry’s page size', () => {
+      store.load();
+
+      expect(api.requests[0]).toEqual({ prefix: '', limit: PAGE_SIZE, offset: undefined });
+    });
+
+    it('keeps the total the registry named, and knows how much it has not read', () => {
+      store.load();
+      api.answer(many(0, 50), 120);
+
+      expect(store.subjects()).toHaveLength(50);
+      expect(store.total()).toBe(120);
+      expect(store.unread()).toBe(70);
+    });
+
+    it('has nothing unread when the page is the whole list', () => {
+      store.load();
+      api.latest().next(many(0, 3));
+
+      expect(store.unread()).toBe(0);
+    });
+
+    it('reads the next page after what is on screen, and appends it', () => {
+      store.load();
+      api.answer(many(0, 50), 80);
+
+      store.loadMore();
+
+      expect(api.requests[1]).toEqual({ prefix: '', limit: PAGE_SIZE, offset: 50 });
+
+      api.answer(many(50, 30), 80);
+
+      expect(store.subjects()).toHaveLength(80);
+      expect(store.subjects()[79]?.name).toBe('acme.s079.Thing');
+      expect(store.unread()).toBe(0);
+      expect(store.loadingMore()).toBe(false);
+    });
+
+    it('asks for the prefix the rows answer, not the one typed since', () => {
+      store.load();
+      store.search('acme.');
+      vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS);
+      api.answer(many(0, 50), 80);
+
+      // Typing on, before the answer to the new text, must not make the next page that text's.
+      store.search('zzz');
+      store.loadMore();
+
+      expect(api.requests.at(-1)).toMatchObject({ prefix: 'acme.', offset: 50 });
+    });
+
+    it('does not ask when everything has been read, or before the first answer', () => {
+      store.loadMore();
+      expect(api.requests).toHaveLength(0);
+
+      store.load();
+      store.loadMore();
+      expect(api.requests).toHaveLength(1);
+
+      api.latest().next(many(0, 3));
+      store.loadMore();
+      expect(api.requests).toHaveLength(1);
+    });
+
+    it('ignores a second request while one is in flight', () => {
+      store.load();
+      api.answer(many(0, 50), 120);
+
+      store.loadMore();
+      store.loadMore();
+
+      expect(api.requests).toHaveLength(2);
+      expect(store.loadingMore()).toBe(true);
+    });
+
+    it('does not show the same subject twice when the pages overlap', () => {
+      // Somebody created a subject that sorts into the first page between the two reads.
+      store.load();
+      api.answer(many(0, 50), 100);
+      store.loadMore();
+
+      api.answer([...many(49, 1), ...many(50, 50)], 101);
+
+      expect(store.subjects()).toHaveLength(100);
+      expect(new Set(store.subjects().map((s) => s.name)).size).toBe(100);
+    });
+
+    it('keeps what was read when a later page fails, and says so', () => {
+      store.load();
+      api.answer(many(0, 50), 120);
+      store.loadMore();
+
+      api
+        .latest()
+        .error(new ConcordatError({ status: 500, code: 'x', detail: 'page two is down' }));
+
+      expect(store.subjects()).toHaveLength(50);
+      expect(store.moreError()?.detail).toBe('page two is down');
+      expect(store.error()).toBeNull();
+      expect(store.loadingMore()).toBe(false);
+    });
+
+    it('can ask again after a page failed', () => {
+      store.load();
+      api.answer(many(0, 50), 120);
+      store.loadMore();
+      api.latest().error(new Error('offline'));
+
+      store.loadMore();
+
+      expect(api.requests).toHaveLength(3);
+      expect(store.moreError()).toBeNull();
+    });
+
+    it('drops a page that was answered after the list was replaced', () => {
+      store.load();
+      api.answer(many(0, 50), 120);
+      store.loadMore();
+      const stale = api.streams[1] as unknown as ResponseStream<readonly Subject[]>;
+
+      // A reload replaces the list while page two is still on its way.
+      store.load();
+      api.answer(many(100, 5), 5);
+      stale.next(many(50, 50));
+
+      expect(store.subjects().map((s) => s.name)).toEqual(many(100, 5).map((s) => s.name));
+      expect(store.loadingMore()).toBe(false);
     });
   });
 });
