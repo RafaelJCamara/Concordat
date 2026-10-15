@@ -7,7 +7,7 @@ import type { CompatibilityPolicy } from '../../../domain/registry/compatibility
 import type { VersionDiff } from '../../../domain/registry/diff';
 import type { NewSubject } from '../../../domain/registry/new-subject';
 import type { RegistrationOutcome } from '../../../domain/registry/registration';
-import type { Subject, SubjectPage } from '../../../domain/registry/subject';
+import type { PurgedSubject, Subject, SubjectPage } from '../../../domain/registry/subject';
 import {
   toCreateSubjectDto,
   toPolicy,
@@ -165,6 +165,29 @@ export class SubjectsApi {
     return this.http
       .put<SubjectDto>(`${this.subjectUrl(environment, name)}/reviewers`, body)
       .pipe(map(toSubject));
+  }
+
+  /**
+   * Retires a subject: terminal, and it keeps its name and every version it has.
+   *
+   * Answers with the subject as the registry holds it afterwards, which is how the caller learns it
+   * is retired rather than assuming so. `subject:admin`.
+   */
+  retire(environment: string, name: string): Observable<Subject> {
+    return this.http.delete<SubjectDto>(this.subjectUrl(environment, name)).pipe(map(toSubject));
+  }
+
+  /**
+   * Deletes a retired subject, and every version it holds, for good (ADR-046).
+   *
+   * <b>`force=true` is sent on every call and is not an option</b>: the registry refuses without it, and
+   * a screen that offered a way to leave it out would be offering a request that cannot succeed. The
+   * answer is how many versions went, as the registry counted them.
+   */
+  purge(environment: string, name: string): Observable<PurgedSubject> {
+    return this.http.post<PurgedSubject>(`${this.subjectUrl(environment, name)}/purge`, null, {
+      params: { force: 'true' },
+    });
   }
 
   /** One subject and all of its versions. */

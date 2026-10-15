@@ -19,7 +19,7 @@ rather than read from its code (`PATCH` answers 200 and changes nothing for thes
 - **There is no delete**, and a retired subject keeps its name: creating it again answers 409.
   > **Amended 2026-10-15.** A retired subject can be deleted for good by an administrator, through the API only
   > ([ADR-046](046-a-retired-subject-can-be-deleted-for-good.md)), which frees the name. The confirmation says
-  > "a retired one keeps its name taken", not "for good"; no screen offers the deletion.
+  > "a retired one keeps its name taken", not "for good"; the subject's page offers the deletion to an administrator.
 - **Only the owner and the compatibility policy can change**, and only through the API — this app has
   no screen for either.
 

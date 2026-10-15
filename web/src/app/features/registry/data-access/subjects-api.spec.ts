@@ -649,6 +649,64 @@ describe('SubjectsApi', () => {
     });
   });
 
+  describe('retire', () => {
+    it('is a DELETE of the subject, and answers the subject as the registry holds it', () => {
+      const { api, backend } = setUp();
+      let retired: Subject | undefined;
+      api.retire('dev', 'orders.created').subscribe((s) => (retired = s));
+
+      const call = backend.expectOne('/v1/environments/dev/subjects/orders.created');
+      expect(call.request.method).toBe('DELETE');
+      call.flush({ ...dto, lifecycle: 'RETIRED' });
+
+      expect(retired?.lifecycle).toBe('RETIRED');
+    });
+  });
+
+  describe('purge', () => {
+    it('is a POST to the purge route with force=true, and no body', () => {
+      const { api, backend } = setUp();
+      api.purge('dev', 'orders.created').subscribe();
+
+      const call = backend.expectOne(
+        (r) => r.url === '/v1/environments/dev/subjects/orders.created/purge',
+      );
+
+      expect(call.request.method).toBe('POST');
+      expect(call.request.params.get('force')).toBe('true');
+      expect(call.request.body).toBeNull();
+    });
+
+    it('sends force on every call: there is no way to leave it out', () => {
+      const { api, backend } = setUp();
+      api.purge('dev', 'a.b').subscribe();
+      api.purge('dev', 'c.d').subscribe();
+
+      for (const call of backend.match((r) => r.url.endsWith('/purge'))) {
+        expect(call.request.params.get('force')).toBe('true');
+      }
+    });
+
+    it('answers what the registry says it removed', () => {
+      const { api, backend } = setUp();
+      let removed: unknown;
+      api.purge('dev', 'orders.created').subscribe((p) => (removed = p));
+
+      backend
+        .expectOne((r) => r.url.endsWith('/purge'))
+        .flush({ subject: 'orders.created', versionsRemoved: 4 });
+
+      expect(removed).toEqual({ subject: 'orders.created', versionsRemoved: 4 });
+    });
+
+    it('encodes a name that needs it', () => {
+      const { api, backend } = setUp();
+      api.purge('dev', 'orders/created').subscribe();
+
+      backend.expectOne((r) => r.url === '/v1/environments/dev/subjects/orders%2Fcreated/purge');
+    });
+  });
+
   it('addresses the configured registry rather than its own origin', () => {
     // The same bundle is served by every deployment. A Cloud deployment overrides
     // `apiBaseUrl` at bootstrap, and nothing about the API location is baked in.

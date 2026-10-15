@@ -68,9 +68,13 @@ require it, and it is the one thing here worth overturning if it gets in the way
 - **Check, then delete; not a lock.** A binding added between the checks and the commit would point at a subject that is no longer
   there. The window is one request, on a subject that is retired (it refuses versions) and that nobody is meant to be binding.
   Closing it needs a lock across two aggregates and is not built.
-- **No screen, and no CLI command.** The web app cannot retire a subject either, so a deletion screen would be the second half of
-  something that has no first half. The confirmation on the create-subject screen no longer says the name is lost "for good": it says
-  a retired subject keeps its name taken and that only an administrator can delete one, through the API.
+- **A screen, added the same day, and no CLI command.** The web app could not retire a subject either, so the subject's page
+  gained one panel for both steps, for `subject:admin` only and absent for everyone else (ADR-018): *Retire subject…* while it is
+  active or deprecated, *Delete for good…* once it is retired, each two clicks, the second asking for the subject's name typed out
+  exactly (case-sensitive). A deletion replaces the page with what the registry said it removed. A refusal is shown in the registry's own
+  words. The CLI is for CI and gets neither: deleting a contract from a pipeline is the wrong place to make that decision.
+  The confirmation on the create-subject screen no longer says the name is lost "for good": it says a retired subject keeps its name
+  taken and that an administrator can delete one from its page.
 - **No deletion of a single version.** DESIGN's sentence about a version "referenced by a contract, another schema, or a registered
   consumer" is honoured for the whole subject. Removing a version from the middle of a history would break the contiguous ordinals the
   aggregate guarantees and every reference pinned to one; nothing asks for it.

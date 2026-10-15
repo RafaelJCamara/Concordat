@@ -9,8 +9,8 @@ import { HlmButton } from '@spartan-ng/helm/button';
  * against the real registry rather than read off its code: `PATCH` ignores a new name, format or
  * content model and answers 200 with them unchanged; retiring is terminal;
  * and a retired name answers 409 when somebody tries to create it again, so the name stays taken
- * until a retired subject is deleted for good (ADR-046), which only an administrator can do, through
- * the API, and which no screen offers. What *can* change is the owner and the compatibility policy,
+ * until a retired subject is deleted for good (ADR-046), which an administrator can do from the
+ * subject's page. What *can* change is the owner and the compatibility policy,
  * and the subject's own
  * page has a control for each (ADR-032) — which is said only because it is true now: until that
  * page existed this line said "only through the API", since a confirmation that promised "you
@@ -42,9 +42,8 @@ import { HlmButton } from '@spartan-ng/helm/button';
       <ul class="text-muted-foreground list-disc space-y-1 ps-5 text-sm">
         <li>
           <span class="text-foreground">The name is permanent.</span>
-          A subject cannot be renamed, and a retired one keeps its name taken: only an administrator
-          can delete a retired subject for good, through the API, and the audit log keeps the
-          record.
+          A subject cannot be renamed, and a retired one keeps its name taken: an administrator can
+          delete a retired subject for good from its page, and the audit log keeps the record.
         </li>
         <li>
           <span class="text-foreground">So are its format and content model:</span>

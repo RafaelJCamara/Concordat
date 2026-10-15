@@ -12,7 +12,9 @@ import { SubjectDetailStore } from './subject-detail-store';
 export type SettingsOutcome =
   | { readonly kind: 'owner'; readonly subject: string; readonly owner: string }
   | { readonly kind: 'policy'; readonly subject: string; readonly policy: CompatibilityPolicy }
-  | { readonly kind: 'reviewers'; readonly subject: string; readonly reviewers: readonly string[] };
+  | { readonly kind: 'reviewers'; readonly subject: string; readonly reviewers: readonly string[] }
+  | { readonly kind: 'retired'; readonly subject: string }
+  | { readonly kind: 'purged'; readonly subject: string; readonly versionsRemoved: number };
 
 interface SubjectSettingsState {
   readonly ownerSaving: boolean;
@@ -21,6 +23,9 @@ interface SubjectSettingsState {
   readonly policyError: ConcordatError | null;
   readonly reviewersSaving: boolean;
   readonly reviewersError: ConcordatError | null;
+  /** A retirement or a permanent deletion is on its way, or was refused. */
+  readonly lifecycleSaving: boolean;
+  readonly lifecycleError: ConcordatError | null;
   /**
    * The registry's answer to the last write that landed, or null.
    *
@@ -39,6 +44,8 @@ const INITIAL: SubjectSettingsState = {
   policyError: null,
   reviewersSaving: false,
   reviewersError: null,
+  lifecycleSaving: false,
+  lifecycleError: null,
   outcome: null,
 };
 
@@ -146,12 +153,83 @@ export const SubjectSettingsStore = signalStore(
         ),
       ),
 
+      /**
+       * Retires a subject. Terminal, so the page asks twice before it gets here.
+       *
+       * The registry's answer is the subject as it holds it, and the page reads it again afterwards like
+       * every other change, so what shows is the registry's account and not this one.
+       */
+      retire: rxMethod<{ readonly subject: string }>(
+        pipe(
+          tap(() =>
+            patchState(store, { lifecycleSaving: true, lifecycleError: null, outcome: null }),
+          ),
+          exhaustMap(({ subject }) =>
+            api.retire(environments.name(), subject).pipe(
+              tap((retired) => {
+                patchState(store, {
+                  lifecycleSaving: false,
+                  outcome: { kind: 'retired', subject: retired.name },
+                });
+                detail.refresh(retired.name);
+              }),
+              catchError((error: unknown) => {
+                patchState(store, {
+                  lifecycleSaving: false,
+                  lifecycleError: toConcordatError(error),
+                });
+
+                return of(null);
+              }),
+            ),
+          ),
+        ),
+      ),
+
+      /**
+       * Deletes a retired subject for good (ADR-046).
+       *
+       * <b>No read afterwards:</b> the subject is gone, so a read would answer 404 and the page would
+       * report a failure for a success. The outcome carries what the registry said was removed, and the
+       * page replaces itself with it.
+       */
+      purge: rxMethod<{ readonly subject: string }>(
+        pipe(
+          tap(() =>
+            patchState(store, { lifecycleSaving: true, lifecycleError: null, outcome: null }),
+          ),
+          exhaustMap(({ subject }) =>
+            api.purge(environments.name(), subject).pipe(
+              tap((purged) =>
+                patchState(store, {
+                  lifecycleSaving: false,
+                  outcome: {
+                    kind: 'purged',
+                    subject: purged.subject,
+                    versionsRemoved: purged.versionsRemoved,
+                  },
+                }),
+              ),
+              catchError((error: unknown) => {
+                patchState(store, {
+                  lifecycleSaving: false,
+                  lifecycleError: toConcordatError(error),
+                });
+
+                return of(null);
+              }),
+            ),
+          ),
+        ),
+      ),
+
       /** Clears the last answer and any refusal, as an editor opens. */
       reset(): void {
         patchState(store, {
           ownerError: null,
           policyError: null,
           reviewersError: null,
+          lifecycleError: null,
           outcome: null,
         });
       },

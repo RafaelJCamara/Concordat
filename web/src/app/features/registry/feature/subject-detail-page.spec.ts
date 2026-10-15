@@ -83,11 +83,19 @@ function settingsStub(
   const owners: { subject: string; owner: string }[] = [];
   const policies: { subject: string; policy: unknown }[] = [];
   const reviewers: { subject: string; reviewers: readonly string[] }[] = [];
+  const retires: { subject: string }[] = [];
+  const purges: { subject: string }[] = [];
 
   return {
     owners,
     policies,
     reviewers,
+    retires,
+    purges,
+    lifecycleSaving: signal(false),
+    lifecycleError: signal(null),
+    retire: (request: { subject: string }) => retires.push(request),
+    purge: (request: { subject: string }) => purges.push(request),
     outcome: signal(state.outcome ?? null),
     ownerSaving: signal(state.ownerSaving ?? false),
     ownerError: signal(null),
@@ -566,6 +574,100 @@ describe('SubjectDetailPage', () => {
       expect(host.textContent).toContain('The change is in, but this page could not read it back');
       expect(host.textContent).toContain('The registry did not answer.');
       expect(host.textContent).not.toContain('Could not load');
+    });
+  });
+
+  describe('ending a subject (ADR-046)', () => {
+    it('offers retiring to an administrator of an active subject', () => {
+      const { host } = render({ subject: subject() }, ['subject:admin']);
+
+      const panel = host.querySelector('cd-subject-lifecycle-panel');
+      expect(panel).not.toBeNull();
+      expect(panel!.textContent).toContain('Retire this subject');
+    });
+
+    it('offers deleting, and not retiring, once the subject is retired', () => {
+      const { host } = render(
+        { subject: subject({ lifecycle: 'RETIRED', versions: [version(1), version(2)] }) },
+        ['subject:admin'],
+      );
+
+      const panel = host.querySelector('cd-subject-lifecycle-panel')!;
+      expect(panel.textContent).toContain('Delete this subject');
+      expect(panel.textContent).not.toContain('Retire this subject');
+    });
+
+    it('is absent, not disabled, for somebody who may write but not administer', () => {
+      // ADR-018: the registry asks subject:admin to retire and to delete, and answers 403 either way.
+      const { host } = render({ subject: subject() }, ['subject:write']);
+
+      expect(host.querySelector('cd-subject-lifecycle-panel')).toBeNull();
+      expect(host.textContent).not.toContain('Retire subject');
+    });
+
+    it('is absent for a reader', () => {
+      const { host } = render({ subject: subject() }, ['subject:read']);
+
+      expect(host.querySelector('cd-subject-lifecycle-panel')).toBeNull();
+    });
+
+    it('asks the store to retire, with the subject, when the panel is confirmed', () => {
+      const { host, fixture, settings } = render({ subject: subject() }, ['subject:admin']);
+
+      const buttons = () => [...host.querySelectorAll('cd-subject-lifecycle-panel button')];
+      const press = (name: RegExp) => {
+        (buttons().find((b) => name.test(b.textContent ?? '')) as HTMLButtonElement).click();
+        fixture.detectChanges();
+      };
+
+      press(/Retire subject/);
+      expect(settings.retires).toEqual([]);
+
+      press(/Yes, retire it/);
+      expect(settings.retires).toEqual([{ subject: 'orders.created' }]);
+      expect(settings.purges).toEqual([]);
+    });
+
+    it('replaces the page with what the registry removed once the subject is deleted', () => {
+      const { host } = render(
+        { subject: subject({ lifecycle: 'RETIRED' }) },
+        ['subject:admin'],
+        settingsStub({
+          outcome: { kind: 'purged', subject: 'orders.created', versionsRemoved: 3 },
+        }),
+      );
+
+      const text = (host.textContent ?? '').replace(/\s+/g, ' ');
+      expect(text).toContain('orders.created is deleted');
+      expect(text).toContain('removed it with 3 versions');
+      expect(host.querySelector('a[href="/subjects"]')).not.toBeNull();
+      // No subject left to show, and so nothing to edit or to delete a second time.
+      expect(host.querySelector('cd-subject-lifecycle-panel')).toBeNull();
+      expect(host.querySelector('cd-version-table')).toBeNull();
+    });
+
+    it('says one version in the singular', () => {
+      const { host } = render(
+        { subject: subject({ lifecycle: 'RETIRED' }) },
+        ['subject:admin'],
+        settingsStub({
+          outcome: { kind: 'purged', subject: 'orders.created', versionsRemoved: 1 },
+        }),
+      );
+
+      expect((host.textContent ?? '').replace(/\s+/g, ' ')).toContain('removed it with 1 version,');
+    });
+
+    it('says a retirement the way the registry answered it', () => {
+      const { host } = render(
+        { subject: subject({ lifecycle: 'RETIRED' }) },
+        ['subject:admin'],
+        settingsStub({ outcome: { kind: 'retired', subject: 'orders.created' } }),
+      );
+
+      expect(host.querySelector('[role="status"]')?.textContent).toContain(
+        'orders.created is retired',
+      );
     });
   });
 });

@@ -51,6 +51,12 @@ export interface SubjectPage {
   readonly total: number;
 }
 
+/** What deleting a retired subject for good removed (ADR-046), as the registry counted it. */
+export interface PurgedSubject {
+  readonly subject: string;
+  readonly versionsRemoved: number;
+}
+
 /** The version the `latest` pointer resolves to, or null when the subject has none. */
 export function latestVersion(subject: Subject): SchemaVersion | null {
   if (subject.latest === null) {

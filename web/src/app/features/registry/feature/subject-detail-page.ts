@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   effect,
   inject,
   input,
@@ -23,6 +24,7 @@ import { StatusBadge } from '../../../shared/ui/status-badge/status-badge';
 import { SubjectName } from '../../../shared/ui/subject-name/subject-name';
 import { SubjectDetailStore } from '../application/subject-detail-store';
 import { SubjectSettingsStore, type SettingsOutcome } from '../application/subject-settings-store';
+import { SubjectLifecyclePanel } from '../ui/subject-lifecycle-panel';
 import { SubjectOwnerEditor } from '../ui/subject-owner-editor';
 import { SubjectPolicyEditor } from '../ui/subject-policy-editor';
 import { SubjectReviewersEditor } from '../ui/subject-reviewers-editor';
@@ -54,6 +56,7 @@ import { VersionTable } from '../ui/version-table';
     Icon,
     IfScope,
     StatusBadge,
+    SubjectLifecyclePanel,
     SubjectName,
     SubjectOwnerEditor,
     SubjectPolicyEditor,
@@ -75,7 +78,23 @@ import { VersionTable } from '../ui/version-table';
         All subjects
       </a>
 
-      @if (store.error(); as error) {
+      @if (deleted(); as gone) {
+        <!--
+          Replaces the page, because there is no longer a subject to show: a read would answer 404 and
+          report a failure for a success. What the registry said it removed, and the way back.
+        -->
+        <div role="status" class="border-success/40 bg-success/5 space-y-2 rounded-xl border p-6">
+          <h1 class="text-foreground text-lg font-semibold">
+            <span class="font-mono break-words">{{ gone.subject }}</span> is deleted
+          </h1>
+          <p class="text-muted-foreground text-sm">
+            The registry removed it with {{ gone.versionsRemoved }}
+            {{ gone.versionsRemoved === 1 ? 'version' : 'versions' }}, and recorded it in the audit
+            log. The name is free again.
+          </p>
+          <a hlmBtn variant="outline" size="sm" routerLink="/subjects">Back to all subjects</a>
+        </div>
+      } @else if (store.error(); as error) {
         <div hlmAlert variant="destructive">
           <h2 hlmAlertTitle>Could not load {{ name() }}</h2>
           <p hlmAlertDescription>{{ error.detail }}</p>
@@ -321,6 +340,21 @@ import { VersionTable } from '../ui/version-table';
             [latest]="subject.latest"
           />
         }
+
+        <!--
+          Absent without subject:admin rather than disabled (ADR-018): the registry asks the same
+          scope to retire and to delete, and answers 403 either way.
+        -->
+        <cd-subject-lifecycle-panel
+          *cdIfScope="policyScopes"
+          [subject]="subject.name"
+          [lifecycle]="subject.lifecycle"
+          [versions]="subject.versions.length"
+          [error]="settings.lifecycleError()?.detail ?? null"
+          [saving]="settings.lifecycleSaving()"
+          (retire)="settings.retire({ subject: subject.name })"
+          (purge)="settings.purge({ subject: subject.name })"
+        />
       }
     </section>
   `,
@@ -342,6 +376,13 @@ export class SubjectDetailPage {
 
   /** The scopes that permit changing the compatibility policy, which the registry holds to `subject:admin`. */
   protected readonly policyScopes = POLICY_WRITE_SCOPES;
+
+  /** What a permanent deletion removed, once the registry has said so; the page is replaced by it. */
+  protected readonly deleted = computed(() => {
+    const outcome = this.settings.outcome();
+
+    return outcome?.kind === 'purged' ? outcome : null;
+  });
 
   /** Which editor is open. At most one: a person changing an owner is not also changing a policy. */
   protected readonly editing = signal<'owner' | 'policy' | 'reviewers' | null>(null);
@@ -391,6 +432,10 @@ export class SubjectDetailPage {
         return outcome.reviewers.length === 0
           ? `The reviewers of ${outcome.subject} are cleared. Any administrator may decide its held versions.`
           : `Only ${outcome.reviewers.join(', ')} may now decide the held versions of ${outcome.subject}, as the registry stored it.`;
+      case 'retired':
+        return `${outcome.subject} is retired, as the registry answered. It keeps its name and every version, and accepts no new one.`;
+      case 'purged':
+        return `${outcome.subject} is deleted.`;
     }
   }
 

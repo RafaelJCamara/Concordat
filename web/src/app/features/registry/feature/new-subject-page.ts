@@ -63,7 +63,7 @@ const INPUT =
  * not fire, so following the title never counts as editing. It is not Angular's own `touched`,
  * which means *blurred* and is what decides when a complaint becomes visible.
  *
- * <b>Creating takes two clicks</b>, because a subject cannot be renamed, and deleting one is for an administrator, through the API, and
+ * <b>Creating takes two clicks</b>, because a subject cannot be renamed, and deleting one is for an administrator, from its page, and
  * only once it is retired (ADR-046); the second click says so. The confirmation is a snapshot of what would be sent, so editing
  * anything that matters withdraws it; editing the title does not, since it is not sent.
  */

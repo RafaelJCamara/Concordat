@@ -13,7 +13,7 @@ import {
 /**
  * Deleting a retired subject for good, against the real registry (ADR-046).
  *
- * <b>There is no screen that deletes</b>, so this is not a test of a button. It is the part of the
+ * <b>This drives the API and looks at the pages</b>; the controls themselves are `subject-lifecycle.spec.ts`'s. It is the part of the
  * deletion a browser can show: the subject is gone from the list the page reads, the name is free again,
  * and the audit page names who removed it and how many versions went. Everything that decides whether the
  * deletion is allowed (the retired rule, contracts, services, references) is proved over real HTTP in the

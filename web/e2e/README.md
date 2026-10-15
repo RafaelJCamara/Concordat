@@ -218,7 +218,11 @@ red part-way leaves what it made. It signs in nowhere (the default browser is th
 `subject-purge.spec.ts` ([ADR-046](../../docs/adr/046-a-retired-subject-can-be-deleted-for-good.md)) makes **two subjects per run** in
 `dev` (`acme.e2e.purge.<timestamp>.Gone` and `.StillActive`), deletes both again (one in a test, both in `afterAll`, so a red run does
 not leave them), and so does not change the permanent-subject counts above. What it leaves is audit entries, named for the run. It has
-no screen to click, because none deletes: it purges through the API and asserts on what the pages then show.
+no controls to click (`subject-lifecycle.spec.ts` has those): it purges through the API and asserts on what the pages then show.
+
+**The lifecycle spec deletes its subjects too, and leaves one empty contract.** `subject-lifecycle.spec.ts` makes **four subjects per run** in `dev`
+(`acme.e2e.lifecycle.<timestamp>.Retired`, `.Deleted`, `.Bound` and `.Watched`), retires and deletes each by the end (an `afterAll` finishes the ones a
+red run left), and so leaves no subject. **It does leave `e2e-lifecycle-<timestamp>`, one contract with no bindings**, because nothing deletes a contract.
 
 **The dashboard is asserted against an environment of its own, and never by an absolute count of `dev`.**
 `dashboard.spec.ts` ([ADR-037](../../docs/adr/037-the-dashboard-is-answered-by-the-registry.md)) arranges **`e2e-dashboard`**, created

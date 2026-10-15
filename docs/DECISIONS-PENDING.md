@@ -198,8 +198,9 @@ the first two stricter than the design said:
   weigh first.*
 - **The name is free at once.** Nothing remembers the old subject but the audit trail. A tombstone table would keep the name taken; it is
   not built.
-- **API only: no screen and no CLI command.** The web app cannot retire a subject, so a deletion screen would be the second half of
-  something with no first half. Retire and delete are both a `curl`.
+- **A panel on the subject's page (`subject:admin`), and no CLI command.** *Retire subject…* then *Delete for good…*, each two clicks;
+  the second asks for the name typed out, case-sensitive. The CLI is for CI, and deleting a contract from a pipeline is the wrong
+  place to take that decision. *If you want the CLI to have it*, it is one command over the same route.
 
 > **If you overturn it**, delete the route and the handler; nothing was migrated and nothing persisted needs unpicking. The
 > `SUBJECT_PURGED` entries already written stay readable.
