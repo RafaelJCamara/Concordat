@@ -34,6 +34,14 @@ public sealed record CreatedSubscription(
 public sealed record SetSubscriptionEnabledCommand(
     string? EnvironmentName, Guid Id, bool Enabled) : ICommand<NotificationSubscription>;
 
+/// <summary>Replaces which events a subscription wants, without touching its endpoint or secret.</summary>
+/// <param name="EnvironmentName">Which environment.</param>
+/// <param name="Id">The subscription.</param>
+/// <param name="Events">Which events, or empty for all of them. Required: see the endpoint.</param>
+public sealed record SetSubscriptionEventsCommand(
+    string? EnvironmentName, Guid Id, IReadOnlyList<string> Events)
+    : ICommand<NotificationSubscription>;
+
 /// <summary>Deletes a subscription.</summary>
 /// <param name="EnvironmentName">Which environment.</param>
 /// <param name="Id">The subscription.</param>
@@ -74,25 +82,14 @@ public sealed class CreateSubscriptionHandler(
                 $"Unknown channel '{command.Channel}'. Expected EMAIL or WEBHOOK.");
         }
 
-        var events = new List<NotificationEvent>();
-
-        foreach (var token in command.Events ?? [])
+        var events = SubscriptionPolicies.ParseEvents(command.Events);
+        if (events.IsFailure)
         {
-            if (!NotificationTokens.TryParse(token, out var parsed))
-            {
-                // Refused rather than ignored. A typo would otherwise produce a subscription
-                // that is configured, enabled, and quietly delivers nothing it was meant to.
-                return Result<CreatedSubscription>.Failure(
-                    ConcordatCodes.SubscriptionInvalid,
-                    $"Unknown event '{token}'. Expected one of: " +
-                    $"{string.Join(", ", NotificationTokens.All)}.");
-            }
-
-            events.Add(parsed);
+            return Result<CreatedSubscription>.Failure(events.Error!);
         }
 
         var created = NotificationSubscription.Create(
-            environment.Value.Id, channel, command.Endpoint, events, clock.GetUtcNow());
+            environment.Value.Id, channel, command.Endpoint, events.Value, clock.GetUtcNow());
 
         if (created.IsFailure)
         {
@@ -147,6 +144,48 @@ public sealed class SetSubscriptionEnabledHandler(
 
         found.Value.SetEnabled(command.Enabled);
         await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return found;
+    }
+}
+
+/// <summary>Handles <see cref="SetSubscriptionEventsCommand"/>.</summary>
+/// <remarks>
+/// A set the subscription already has is answered as before and saves nothing. Not audited, like every
+/// other change to a subscription (create, mute, delete): the trail is of changes to the registry's
+/// contents, and who hears about them is configuration that is read back from the subscription.
+/// </remarks>
+public sealed class SetSubscriptionEventsHandler(
+    IEnvironmentRepository environments,
+    ISubscriptionRepository subscriptions,
+    IUnitOfWork unitOfWork)
+    : ICommandHandler<SetSubscriptionEventsCommand, NotificationSubscription>
+{
+    /// <inheritdoc />
+    public async Task<Result<NotificationSubscription>> HandleAsync(
+        SetSubscriptionEventsCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var found = await SubscriptionPolicies.RequireAsync(
+            environments, subscriptions, command.EnvironmentName, command.Id, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (found.IsFailure)
+        {
+            return found;
+        }
+
+        var events = SubscriptionPolicies.ParseEvents(command.Events);
+        if (events.IsFailure)
+        {
+            return Result<NotificationSubscription>.Failure(events.Error!);
+        }
+
+        if (found.Value.SetEvents(events.Value))
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         return found;
     }
@@ -212,6 +251,29 @@ public sealed class ListSubscriptionsHandler(
 /// <summary>Loading shared by the subscription handlers.</summary>
 internal static class SubscriptionPolicies
 {
+    /// <summary>Parses event tokens, refusing one it does not know.</summary>
+    public static Result<List<NotificationEvent>> ParseEvents(IReadOnlyList<string>? tokens)
+    {
+        var events = new List<NotificationEvent>();
+
+        foreach (var token in tokens ?? [])
+        {
+            if (!NotificationTokens.TryParse(token, out var parsed))
+            {
+                // Refused rather than ignored. A typo would otherwise produce a subscription
+                // that is configured, enabled, and quietly delivers nothing it was meant to.
+                return Result<List<NotificationEvent>>.Failure(
+                    ConcordatCodes.SubscriptionInvalid,
+                    $"Unknown event '{token}'. Expected one of: " +
+                    $"{string.Join(", ", NotificationTokens.All)}.");
+            }
+
+            events.Add(parsed);
+        }
+
+        return Result<List<NotificationEvent>>.Success(events);
+    }
+
     /// <summary>Loads a subscription, or fails with a code the API can map.</summary>
     public static async Task<Result<NotificationSubscription>> RequireAsync(
         IEnvironmentRepository environments,

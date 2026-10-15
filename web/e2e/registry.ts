@@ -525,6 +525,30 @@ export async function readApprovalQueue(
   return (await response.json()) as { total: number; items: QueuedVersion[] };
 }
 
+/** One notification subscription, as the registry lists it. */
+export interface SubscriptionView {
+  readonly id: string;
+  readonly channel: string;
+  readonly endpoint: string;
+  readonly events: readonly string[];
+  readonly enabled: boolean;
+}
+
+/** An environment's notification subscriptions, straight from the registry. */
+export async function listSubscriptions(
+  credential: string,
+  environment: string,
+): Promise<readonly SubscriptionView[]> {
+  const response = await call(`/v1/environments/${environment}/notifications`, {
+    headers: { authorization: `Bearer ${credential}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Listing subscriptions of '${environment}' failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as SubscriptionView[];
+}
 /** What the registry answered to a write, as a spec needs it: the status, and its code if it refused. */
 export interface RawAnswer {
   readonly status: number;

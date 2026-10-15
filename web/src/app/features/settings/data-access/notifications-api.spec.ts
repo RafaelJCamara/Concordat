@@ -95,6 +95,40 @@ describe('NotificationsApi', () => {
     expect(request.request.body).toEqual({ enabled: false });
   });
 
+  it('changes events with a PUT to the subscription’s events route, and nothing else in the body', () => {
+    // Not the endpoint and not a secret: the point is to keep both.
+    const { api, backend } = setUp();
+    api.setEvents('dev', dto.id, ['VERSION_PROMOTED', 'SUBJECT_DEPRECATED']).subscribe();
+
+    const request = backend.expectOne(`/v1/environments/dev/notifications/${dto.id}/events`);
+
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual({ events: ['VERSION_PROMOTED', 'SUBJECT_DEPRECATED'] });
+    expect(Object.keys(request.request.body as object)).toEqual(['events']);
+  });
+
+  it('sends an empty list as empty, because the registry refuses a body without the member', () => {
+    // An empty list is every event; an absent member is refused so a typo cannot widen who is told.
+    const { api, backend } = setUp();
+    api.setEvents('dev', dto.id, []).subscribe();
+
+    expect(
+      backend.expectOne(`/v1/environments/dev/notifications/${dto.id}/events`).request.body,
+    ).toEqual({ events: [] });
+  });
+
+  it('hands back the subscription the registry answered with, as a domain type', () => {
+    let changed: Subscription | null = null;
+    const { api, backend } = setUp();
+    api.setEvents('dev', dto.id, ['VERSION_PROMOTED']).subscribe((value) => (changed = value));
+
+    backend
+      .expectOne(`/v1/environments/dev/notifications/${dto.id}/events`)
+      .flush({ ...dto, events: ['VERSION_PROMOTED'] });
+
+    expect((changed as Subscription | null)?.events).toEqual(['VERSION_PROMOTED']);
+    expect((changed as Subscription | null)?.createdAt).toBeInstanceOf(Date);
+  });
   it('deletes, and a 204 with no body is a success', () => {
     let done = false;
     const { api, backend } = setUp();

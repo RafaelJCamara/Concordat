@@ -41,6 +41,8 @@ function fakeApi(outbox: () => ReturnType<NotificationsApi['outboxDepth']>) {
       call<CreatedSubscription>('create', s),
     setEnabled: (_env: string, id: string, enabled: boolean) =>
       call<Subscription>('enabled', id, enabled),
+    setEvents: (_env: string, id: string, events: readonly string[]) =>
+      call<Subscription>('events', id, events),
     deleteSubscription: (_env: string, id: string) => call<void>('delete', id),
   };
 }
@@ -76,6 +78,80 @@ describe('NotificationsStore', () => {
 
   beforeEach(() => setUp());
 
+  describe('changing a subscription’s events', () => {
+    it('asks the registry in the active environment, for that subscription, with exactly the events given', () => {
+      loaded();
+
+      store.setEvents({ id: 'a', events: ['VERSION_PROMOTED'] });
+
+      expect(api.ofKind('events')[0]?.args).toEqual(['a', ['VERSION_PROMOTED']]);
+      expect(store.busy()).toEqual(['a']);
+    });
+
+    it('sends an empty list as empty, which is every event', () => {
+      loaded([subscription('a', { events: ['VERSION_PROMOTED'] })]);
+
+      store.setEvents({ id: 'a', events: [] });
+
+      expect(api.ofKind('events')[0]?.args).toEqual(['a', []]);
+    });
+
+    it('shows what the registry answered, and no more than that row changes', () => {
+      loaded([subscription('a'), subscription('b')]);
+
+      store.setEvents({ id: 'a', events: ['VERSION_PROMOTED', 'VERSION_PROMOTED'] });
+      api.ofKind('events')[0]!.stream.next(subscription('a', { events: ['VERSION_PROMOTED'] }));
+
+      expect(store.subscriptions().map((s) => s.events)).toEqual([['VERSION_PROMOTED'], []]);
+      expect(store.busy()).toEqual([]);
+    });
+
+    it('keeps a refusal on the row, and the subscription as it was', () => {
+      loaded([subscription('a', { events: ['VERSION_PROMOTED'] })]);
+
+      store.setEvents({ id: 'a', events: ['NOT_AN_EVENT'] });
+      api.ofKind('events')[0]!.stream.error(
+        new ConcordatError({
+          status: 400,
+          code: 'subscription_invalid',
+          detail: 'Unknown event.',
+        }),
+      );
+
+      expect(store.rowErrors()['a']?.code).toBe('subscription_invalid');
+      expect(store.subscriptions()[0]?.events).toEqual(['VERSION_PROMOTED']);
+      expect(store.busy()).toEqual([]);
+    });
+
+    it('ignores a second change for a subscription already being changed', () => {
+      loaded();
+
+      store.setEvents({ id: 'a', events: ['VERSION_PROMOTED'] });
+      store.setEvents({ id: 'a', events: [] });
+
+      expect(api.ofKind('events')).toHaveLength(1);
+    });
+
+    it('lets two different subscriptions change at once', () => {
+      loaded([subscription('a'), subscription('b')]);
+
+      store.setEvents({ id: 'a', events: ['VERSION_PROMOTED'] });
+      store.setEvents({ id: 'b', events: [] });
+
+      expect(api.ofKind('events')).toHaveLength(2);
+    });
+
+    it('clears a row’s earlier refusal when it tries again', () => {
+      loaded();
+      store.setEvents({ id: 'a', events: ['X'] });
+      api.ofKind('events')[0]!.stream.error(new Error('offline'));
+      expect(store.rowErrors()['a']).toBeDefined();
+
+      store.setEvents({ id: 'a', events: [] });
+
+      expect(store.rowErrors()['a']).toBeUndefined();
+    });
+  });
   describe('loading', () => {
     it('shows subscriptions together with the outbox depth', () => {
       setUp(() => of({ pending: 3, parked: 2 }));

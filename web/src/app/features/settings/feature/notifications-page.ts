@@ -13,6 +13,7 @@ import {
   NOTIFICATION_EVENTS,
   type NotificationChannel,
   type NotificationEvent,
+  type Subscription,
 } from '../../../domain/notifications/subscription';
 import { RelativeTimePipe } from '../../../shared/pipes/relative-time-pipe';
 import { OneTimeSecret } from '../../../shared/ui/one-time-secret/one-time-secret';
@@ -159,6 +160,18 @@ const INPUT =
                     {{ subscription.enabled ? 'Mute' : 'Unmute' }}
                   </button>
 
+                  <button
+                    type="button"
+                    hlmBtn
+                    variant="outline"
+                    size="sm"
+                    [attr.aria-expanded]="editing()?.id === subscription.id"
+                    [disabled]="store.busy().includes(subscription.id)"
+                    (click)="editEvents(subscription)"
+                  >
+                    Change events
+                  </button>
+
                   @if (confirming() === subscription.id) {
                     <span class="text-foreground text-sm">
                       Delete this subscription? Its settings are lost; mute it to keep them.
@@ -194,6 +207,58 @@ const INPUT =
                     </button>
                   }
                 </div>
+
+                @if (editing(); as edit) {
+                  @if (edit.id === subscription.id) {
+                    <fieldset
+                      class="border-border mt-3 space-y-2 rounded-lg border p-3"
+                      [attr.aria-label]="'Events for ' + subscription.endpoint"
+                    >
+                      <legend class="px-1 text-sm font-medium">Events</legend>
+                      <p class="text-muted-foreground text-xs">
+                        Keeps this subscription, its address and its signing secret, and changes
+                        only what it is told about.
+                      </p>
+                      <div class="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
+                        @for (event of events; track event) {
+                          <label class="flex items-start gap-1.5 text-xs">
+                            <input
+                              type="checkbox"
+                              class="mt-0.5 size-3.5"
+                              [checked]="edit.chosen.has(event)"
+                              (change)="toggleEdit(event)"
+                            />
+                            <span>
+                              <span class="font-mono">{{ event }}</span>
+                              <span class="text-muted-foreground"> — {{ meaning(event) }}</span>
+                            </span>
+                          </label>
+                        }
+                      </div>
+                      <p class="text-muted-foreground text-xs">
+                        {{
+                          edit.chosen.size === 0
+                            ? 'None ticked means every event, including any added later.'
+                            : edit.chosen.size + ' of ' + events.length + ' events.'
+                        }}
+                      </p>
+                      <div class="flex items-center gap-2">
+                        <button type="button" hlmBtn size="sm" (click)="saveEvents(subscription)">
+                          Save events
+                        </button>
+                        <button
+                          type="button"
+                          hlmBtn
+                          variant="ghost"
+                          size="sm"
+                          (click)="editing.set(null)"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </fieldset>
+                  }
+                }
 
                 @if (store.rowErrors()[subscription.id]; as error) {
                   <div hlmAlert variant="destructive" class="mt-3">
@@ -302,6 +367,12 @@ export class NotificationsPage {
   protected readonly chosen = signal<ReadonlySet<NotificationEvent>>(new Set());
   protected readonly confirming = signal<string | null>(null);
 
+  /** The subscription whose events are being edited, and the events ticked so far. At most one. */
+  protected readonly editing = signal<{
+    readonly id: string;
+    readonly chosen: ReadonlySet<NotificationEvent>;
+  } | null>(null);
+
   protected readonly form = inject(FormBuilder).nonNullable.group({
     channel: ['EMAIL' as NotificationChannel],
     endpoint: ['', [Validators.required, Validators.pattern(/\S/)]],
@@ -349,6 +420,57 @@ export class NotificationsPage {
       endpoint: endpoint.trim(),
       // In the registry's own order, so the same choice always sends the same request.
       events: NOTIFICATION_EVENTS.filter((event) => this.chosen().has(event)),
+    });
+  }
+
+  /**
+   * Opens the events of one subscription, on what it holds now.
+   *
+   * <b>"All events" opens with nothing ticked</b>, which is what it is: the registry reads an empty
+   * list as every event, and ticking all of them would be a different subscription that stops hearing
+   * the next event added.
+   */
+  protected editEvents(subscription: Subscription): void {
+    if (this.editing()?.id === subscription.id) {
+      this.editing.set(null);
+      return;
+    }
+
+    this.confirming.set(null);
+    this.editing.set({
+      id: subscription.id,
+      chosen: new Set(NOTIFICATION_EVENTS.filter((event) => subscription.events.includes(event))),
+    });
+  }
+
+  protected toggleEdit(event: NotificationEvent): void {
+    const current = this.editing();
+
+    if (current === null) {
+      return;
+    }
+
+    const next = new Set(current.chosen);
+
+    if (!next.delete(event)) {
+      next.add(event);
+    }
+
+    this.editing.set({ id: current.id, chosen: next });
+  }
+
+  protected saveEvents(subscription: Subscription): void {
+    const current = this.editing();
+
+    if (current?.id !== subscription.id) {
+      return;
+    }
+
+    this.editing.set(null);
+    this.store.setEvents({
+      id: subscription.id,
+      // In the registry's own order, so the same choice always sends the same request.
+      events: NOTIFICATION_EVENTS.filter((event) => current.chosen.has(event)),
     });
   }
 

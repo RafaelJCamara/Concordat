@@ -99,6 +99,21 @@ export class NotificationsApi {
       .pipe(map(toSubscription));
   }
 
+  /**
+   * Changes which events a subscription wants, keeping its endpoint and its signing secret.
+   *
+   * <b>An empty list is sent as empty, and the member is always sent</b>: it means every event, and
+   * the registry refuses a body without it so that a missing member cannot widen who is told.
+   */
+  setEvents(environment: string, id: string, events: readonly string[]): Observable<Subscription> {
+    return this.http
+      .put<SubscriptionDto>(
+        `${this.root(environment)}/notifications/${encodeURIComponent(id)}/events`,
+        { events },
+      )
+      .pipe(map(toSubscription));
+  }
+
   deleteSubscription(environment: string, id: string): Observable<void> {
     return this.http
       .delete<void>(`${this.root(environment)}/notifications/${encodeURIComponent(id)}`)

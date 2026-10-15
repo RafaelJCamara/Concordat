@@ -44,6 +44,7 @@ function render(
 ) {
   const create = vi.fn();
   const setEnabled = vi.fn();
+  const setEvents = vi.fn();
   const remove = vi.fn();
   const dismiss = vi.fn();
   const created = signal(state.created ?? null);
@@ -71,6 +72,7 @@ function render(
             load: () => {},
             create,
             setEnabled,
+            setEvents,
             remove,
             dismiss,
           },
@@ -88,6 +90,7 @@ function render(
     host: fixture.nativeElement as HTMLElement,
     create,
     setEnabled,
+    setEvents,
     remove,
     dismiss,
     created,
@@ -407,6 +410,181 @@ describe('NotificationsPage', () => {
 
       expect(host.textContent).toContain('Could not change the subscription');
       expect(host.textContent).toContain('Already gone.');
+    });
+  });
+
+  describe('changing a subscription’s events', () => {
+    const editor = (host: HTMLElement) =>
+      host.querySelector<HTMLElement>('fieldset[aria-label^="Events for"]');
+
+    function tickIn(host: HTMLElement, event: string): void {
+      const box = [...editor(host)!.querySelectorAll('label')]
+        .find((l) => l.querySelector('.font-mono')?.textContent?.trim() === event)
+        ?.querySelector('input') as HTMLInputElement;
+      box.click();
+    }
+
+    const ticked = (host: HTMLElement) =>
+      [...editor(host)!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+        .filter((i) => i.checked)
+        .map((i) => i.closest('label')?.querySelector('.font-mono')?.textContent?.trim());
+
+    it('is offered with env:write, and absent without it, not disabled', () => {
+      expect(button(render().host, 'Change events')).toBeDefined();
+    });
+
+    it('renders nothing in its place for a reader', () => {
+      const { host } = render({}, ['env:read']);
+
+      expect(button(host, 'Change events')).toBeUndefined();
+      expect(host.textContent).not.toContain('Change events');
+    });
+
+    it('is closed until asked for', () => {
+      const { host } = render();
+
+      expect(editor(host)).toBeNull();
+      expect(button(host, 'Change events')!.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('opens on the events the subscription holds now', () => {
+      const { fixture, host } = render({
+        subscriptions: [subscription({ events: ['VERSION_PROMOTED', 'SUBJECT_DEPRECATED'] })],
+      });
+
+      button(host, 'Change events')!.click();
+      fixture.detectChanges();
+
+      expect(ticked(host).sort()).toEqual(['SUBJECT_DEPRECATED', 'VERSION_PROMOTED']);
+      expect(button(host, 'Change events')!.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('opens with nothing ticked for a subscription that hears every event, and says what that means', () => {
+      // Ticking all of them would be a different subscription: one that stops hearing the next
+      // event the registry adds.
+      const { fixture, host } = render({ subscriptions: [subscription({ events: [] })] });
+
+      button(host, 'Change events')!.click();
+      fixture.detectChanges();
+
+      expect(ticked(host)).toEqual([]);
+      expect(editor(host)!.textContent).toContain(
+        'None ticked means every event, including any added later.',
+      );
+    });
+
+    it('says it keeps the address and the signing secret', () => {
+      const { fixture, host } = render();
+
+      button(host, 'Change events')!.click();
+      fixture.detectChanges();
+
+      expect(editor(host)!.textContent).toContain(
+        'Keeps this subscription, its address and its signing secret',
+      );
+    });
+
+    it('saves the ticked events in the registry’s own order, and closes', () => {
+      const { fixture, host, setEvents } = render();
+
+      button(host, 'Change events')!.click();
+      fixture.detectChanges();
+      // Ticked in the reverse of the registry's order.
+      tickIn(host, 'SUBJECT_DEPRECATED');
+      tickIn(host, 'VERSION_PROMOTED');
+      fixture.detectChanges();
+      button(host, 'Save events')!.click();
+      fixture.detectChanges();
+
+      expect(setEvents).toHaveBeenCalledTimes(1);
+      expect(setEvents).toHaveBeenCalledWith({
+        id: 's1',
+        events: ['VERSION_PROMOTED', 'SUBJECT_DEPRECATED'],
+      });
+      expect(editor(host)).toBeNull();
+    });
+
+    it('saves an empty list when everything is unticked, which is every event', () => {
+      const { fixture, host, setEvents } = render({
+        subscriptions: [subscription({ events: ['VERSION_PROMOTED'] })],
+      });
+
+      button(host, 'Change events')!.click();
+      fixture.detectChanges();
+      tickIn(host, 'VERSION_PROMOTED');
+      fixture.detectChanges();
+      button(host, 'Save events')!.click();
+
+      expect(setEvents).toHaveBeenCalledWith({ id: 's1', events: [] });
+    });
+
+    it('sends nothing when cancelled', () => {
+      const { fixture, host, setEvents } = render();
+
+      button(host, 'Change events')!.click();
+      fixture.detectChanges();
+      tickIn(host, 'VERSION_PROMOTED');
+      button(host, 'Cancel')!.click();
+      fixture.detectChanges();
+
+      expect(setEvents).not.toHaveBeenCalled();
+      expect(editor(host)).toBeNull();
+    });
+
+    it('closes when the same button is pressed again', () => {
+      const { fixture, host } = render();
+
+      button(host, 'Change events')!.click();
+      fixture.detectChanges();
+      button(host, 'Change events')!.click();
+      fixture.detectChanges();
+
+      expect(editor(host)).toBeNull();
+    });
+
+    it('edits one subscription at a time, each on its own events', () => {
+      const { fixture, host } = render({
+        subscriptions: [
+          subscription({ id: 's1', events: ['VERSION_PROMOTED'] }),
+          subscription({ id: 's2', endpoint: 'https://hooks.example.com/y', events: [] }),
+        ],
+      });
+      const buttons = () =>
+        [...host.querySelectorAll('button')].filter(
+          (b) => b.textContent?.trim() === 'Change events',
+        );
+
+      buttons()[0]!.click();
+      fixture.detectChanges();
+      buttons()[1]!.click();
+      fixture.detectChanges();
+
+      expect(host.querySelectorAll('fieldset[aria-label^="Events for"]')).toHaveLength(1);
+      expect(editor(host)!.getAttribute('aria-label')).toBe(
+        'Events for https://hooks.example.com/y',
+      );
+      expect(ticked(host)).toEqual([]);
+    });
+
+    it('is disabled while a change to that subscription is in flight', () => {
+      const { host } = render({ busy: ['s1'] });
+
+      expect(button(host, 'Change events')!.disabled).toBe(true);
+    });
+
+    it('shows the registry’s refusal on the row', () => {
+      const { host } = render({
+        rowErrors: {
+          s1: new ConcordatError({
+            status: 400,
+            code: 'subscription_invalid',
+            detail: 'Unknown event.',
+          }),
+        },
+      });
+
+      expect(host.textContent).toContain('Could not change the subscription');
+      expect(host.textContent).toContain('Unknown event.');
     });
   });
 });

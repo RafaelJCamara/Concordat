@@ -176,6 +176,30 @@ export const NotificationsStore = signalStore(
         ),
       ),
 
+      setEvents: rxMethod<{ id: string; events: readonly string[] }>(
+        pipe(
+          mergeMap(({ id, events }) => {
+            if (!begin(id)) {
+              return of(null);
+            }
+
+            // Applied from the registry's answer: it drops a repeat, and the list shows what it holds.
+            return api.setEvents(environments.name(), id, events).pipe(
+              tap((updated) => {
+                patchState(store, {
+                  subscriptions: store.subscriptions().map((s) => (s.id === id ? updated : s)),
+                });
+                settle(id);
+              }),
+              catchError((error: unknown) => {
+                settle(id, error);
+                return of(null);
+              }),
+            );
+          }),
+        ),
+      ),
+
       remove: rxMethod<string>(
         pipe(
           mergeMap((id) => {

@@ -174,6 +174,35 @@ public sealed class NotificationSubscription
     /// </remarks>
     public void SetEnabled(bool enabled) => Enabled = enabled;
 
+    /// <summary>Replaces which events this subscription wants, keeping its endpoint and signing secret.</summary>
+    /// <param name="events">The events, or empty for all of them. A repeat is dropped.</param>
+    /// <returns>Whether the stored set changed.</returns>
+    /// <remarks>
+    /// <para>
+    /// Exists so that keeping a subscription out of an event added after it was created (an empty
+    /// filter means every event, including any added later: ADR-034) does not mean deleting it and
+    /// creating it again, which issues a new webhook signing secret the receiver must be given.
+    /// </para>
+    /// <para>
+    /// Compared as sets, because order carries no meaning here: the registry delivers an event or does
+    /// not. A set that is the one already held is not a change.
+    /// </para>
+    /// </remarks>
+    public bool SetEvents(IReadOnlyList<NotificationEvent> events)
+    {
+        ArgumentNullException.ThrowIfNull(events);
+
+        var distinct = events.Distinct().ToList();
+
+        if (distinct.Count == Events.Count && distinct.All(Events.Contains))
+        {
+            return false;
+        }
+
+        Events = distinct;
+        return true;
+    }
+
     private static Result<string> ValidateEndpoint(NotificationChannel channel, string? endpoint)
     {
         var trimmed = endpoint?.Trim();

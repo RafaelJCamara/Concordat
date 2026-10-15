@@ -87,6 +87,10 @@ promotion in its environment.
    (`PUT …/notifications/{id}/enabled`, which stops everything, not just this), or **delete it and create it again
    listing the events you want**. A recreated webhook is issued **a new signing secret**, which the receiver must
    be given; that is the cost of the second option and the reason to check the receiver first.
+   > **Amended 2026-10-15.** There is an edit endpoint now: `PUT …/notifications/{id}/events` replaces the list and keeps the
+   > subscription's address and its signing secret, so neither option above is needed (STATUS.md has the section; the
+   > `events` member is required, because an empty list means every event). A registry built before it still needs the
+   > workaround.
 3. A receiver that rejects an unknown event name with a non-2xx answer will have the message retried five times
    and then parked (`GET /v1/notifications/outbox` shows the parked count). It does not affect any other message.
 

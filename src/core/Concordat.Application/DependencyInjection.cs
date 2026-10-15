@@ -183,6 +183,9 @@ public static class DependencyInjection
             ICommandHandler<SetSubscriptionEnabledCommand, NotificationSubscription>,
             SetSubscriptionEnabledHandler>();
         services.AddScoped<
+            ICommandHandler<SetSubscriptionEventsCommand, NotificationSubscription>,
+            SetSubscriptionEventsHandler>();
+        services.AddScoped<
             ICommandHandler<DeleteSubscriptionCommand, bool>, DeleteSubscriptionHandler>();
         services.AddScoped<
             IQueryHandler<ListSubscriptionsQuery, IReadOnlyList<NotificationSubscription>>,

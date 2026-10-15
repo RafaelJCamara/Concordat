@@ -242,3 +242,96 @@ public class NotificationSubscriptionTests
     public void AnUnknownChannelTokenDoesNotParse() =>
         Assert.False(ChannelTokens.TryParse("SLACK", out _));
 }
+
+/// <summary>Changing which events a subscription wants, without recreating it.</summary>
+public class SubscriptionEventsTests
+{
+    private static readonly DateTimeOffset Now = new(2026, 8, 14, 12, 0, 0, TimeSpan.Zero);
+
+    private static NotificationSubscription Webhook(params NotificationEvent[] events)
+    {
+        var created = NotificationSubscription.Create(
+            EnvironmentId.New(), NotificationChannel.Webhook, "https://example.invalid/hook", events, Now);
+        Assert.True(created.IsSuccess, created.Error?.Message);
+        created.Value.SetSigningKeyRef("key-ref-1");
+
+        return created.Value;
+    }
+
+    [Fact]
+    public void ANewSetReplacesTheOldAndReportsTheChange()
+    {
+        var subscription = Webhook();
+
+        var changed = subscription.SetEvents(
+            [NotificationEvent.BreakingChangeSubmitted, NotificationEvent.VersionPromoted]);
+
+        Assert.True(changed);
+        Assert.Equal(
+            [NotificationEvent.BreakingChangeSubmitted, NotificationEvent.VersionPromoted],
+            subscription.Events);
+    }
+
+    [Fact]
+    public void TheEndpointTheSigningKeyTheIdentityAndTheMuteAreUntouched()
+    {
+        // The point of the operation: keeping a subscription out of an event must not mean deleting
+        // it, which issues a new signing secret the receiver has to be given.
+        var subscription = Webhook();
+        subscription.SetEnabled(false);
+        var id = subscription.Id;
+
+        subscription.SetEvents([NotificationEvent.VersionPromoted]);
+
+        Assert.Equal(id, subscription.Id);
+        Assert.Equal("https://example.invalid/hook", subscription.Endpoint);
+        Assert.Equal("key-ref-1", subscription.SigningKeyRef);
+        Assert.False(subscription.Enabled);
+    }
+
+    [Fact]
+    public void TheSameSetInAnyOrderIsNotAChange()
+    {
+        var subscription = Webhook(NotificationEvent.VersionPromoted, NotificationEvent.SubjectDeprecated);
+
+        var changed = subscription.SetEvents(
+            [NotificationEvent.SubjectDeprecated, NotificationEvent.VersionPromoted]);
+
+        Assert.False(changed);
+    }
+
+    [Fact]
+    public void ARepeatIsDropped()
+    {
+        var subscription = Webhook();
+
+        subscription.SetEvents(
+            [NotificationEvent.VersionPromoted, NotificationEvent.VersionPromoted]);
+
+        Assert.Equal([NotificationEvent.VersionPromoted], subscription.Events);
+    }
+
+    [Fact]
+    public void AnEmptySetMeansEveryEvent_AndIsAChangeFromANamedOne()
+    {
+        var subscription = Webhook(NotificationEvent.VersionPromoted);
+
+        var changed = subscription.SetEvents([]);
+
+        Assert.True(changed);
+        Assert.Empty(subscription.Events);
+        Assert.True(subscription.Wants(NotificationEvent.SubjectPolicyChanged));
+    }
+
+    [Fact]
+    public void ANamedSetStopsWantingWhatItDoesNotName()
+    {
+        var subscription = Webhook();
+        Assert.True(subscription.Wants(NotificationEvent.SubjectPolicyChanged));
+
+        subscription.SetEvents([NotificationEvent.VersionPromoted]);
+
+        Assert.False(subscription.Wants(NotificationEvent.SubjectPolicyChanged));
+        Assert.True(subscription.Wants(NotificationEvent.VersionPromoted));
+    }
+}

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { READER_STORAGE_STATE } from './global-setup';
-import { deleteSubscriptionsAt, ownerCredential } from './registry';
+import { deleteSubscriptionsAt, listSubscriptions, ownerCredential } from './registry';
 
 /**
  * Notification subscriptions, against a registry that validates the endpoint.
@@ -161,6 +161,54 @@ test.describe.serial('notifications', () => {
     );
   });
 
+  test('changes a webhook’s events without recreating it, so it keeps its identity and its secret', async ({
+    page,
+  }) => {
+    // The cost it removes: keeping a subscription out of an event added after it was made used to
+    // mean deleting it and creating it again, which issues a new signing secret the receiver must be
+    // given. Asserted as identity: the same subscription id, address and creation time afterwards,
+    // and no second secret panel.
+    const credential = await ownerCredential();
+    const before = (await listSubscriptions(credential, 'dev')).find((s) => s.endpoint === HOOK)!;
+    expect(before.events).toEqual(['BREAKING_CHANGE_SUBMITTED', 'ENFORCEMENT_VIOLATION']);
+
+    await page.goto('/settings/notifications');
+    const row = page.getByRole('listitem').filter({ hasText: HOOK });
+
+    await row.getByRole('button', { name: 'Change events' }).click();
+
+    // Opens on what it holds now.
+    await expect(row.getByLabel('BREAKING_CHANGE_SUBMITTED')).toBeChecked();
+    await expect(row.getByLabel('ENFORCEMENT_VIOLATION')).toBeChecked();
+    await expect(row.getByLabel('VERSION_PROMOTED')).not.toBeChecked();
+
+    await row.getByLabel('BREAKING_CHANGE_SUBMITTED').uncheck();
+    await row.getByLabel('ENFORCEMENT_VIOLATION').uncheck();
+    await row.getByLabel('VERSION_PROMOTED').check();
+    await row.getByRole('button', { name: 'Save events' }).click();
+
+    await expect(row).toContainText('VERSION_PROMOTED');
+    await expect(row).not.toContainText('BREAKING_CHANGE_SUBMITTED');
+    await expect(row.getByRole('button', { name: 'Save events' })).toHaveCount(0);
+    await expect(page.getByText(/will not be shown again/)).toHaveCount(0);
+
+    // The registry agrees, and it is the same subscription.
+    const after = (await listSubscriptions(credential, 'dev')).find((s) => s.endpoint === HOOK)!;
+    expect(after.id).toBe(before.id);
+    expect(after.events).toEqual(['VERSION_PROMOTED']);
+    expect(after.enabled).toBe(before.enabled);
+
+    // And back, so the next test sees what it expects: every box unticked is every event.
+    await row.getByRole('button', { name: 'Change events' }).click();
+    await row.getByLabel('VERSION_PROMOTED').uncheck();
+    await expect(row.getByText('None ticked means every event')).toBeVisible();
+    await row.getByRole('button', { name: 'Save events' }).click();
+
+    await expect(row).toContainText('Every event');
+    expect(
+      (await listSubscriptions(credential, 'dev')).find((s) => s.endpoint === HOOK)!.events,
+    ).toEqual([]);
+  });
   test('a reader sees the subscriptions and none of the controls', async ({ browser }) => {
     const context = await browser.newContext({ storageState: READER_STORAGE_STATE });
     const page = await context.newPage();

@@ -2,6 +2,7 @@ using Concordat.Application.Abstractions;
 using Concordat.Application.Governance;
 using Concordat.Domain.Governance;
 using Concordat.Domain.Identity;
+using Concordat.Domain.Results;
 
 namespace Concordat.Api;
 
@@ -42,6 +43,21 @@ public static class NotificationEndpoints
         group.MapPut("/{id:guid}/enabled", SetEnabled)
             .WithSummary("Mute or unmute a subscription without losing its settings")
             .Produces<SubscriptionResponse>()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .RequireScope(Scope.EnvWrite);
+
+        group.MapPut("/{id:guid}/events", SetEvents)
+            .WithSummary("Change which events a subscription wants")
+            .WithDescription(
+                "Replaces the subscription's event list and keeps its endpoint and its signing " +
+                "secret, so keeping an existing subscription out of an event added later does not " +
+                "mean deleting it and creating it again, which issues a new secret. An empty list " +
+                "means every event, including any added later, exactly as when creating one; the 'events' " +
+                "member is therefore required, so a body that forgot it is refused and does not widen " +
+                "who is told. An event the registry does not know is refused, as when creating. Sending " +
+                "the set the subscription already has changes nothing.")
+            .Produces<SubscriptionResponse>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .RequireScope(Scope.EnvWrite);
 
@@ -113,6 +129,31 @@ public static class NotificationEndpoints
             : TypedResults.Ok(SubscriptionResponse.From(result.Value));
     }
 
+    private static async Task<IResult> SetEvents(
+        string env,
+        Guid id,
+        SetSubscriptionEventsRequest request,
+        IDispatcher dispatcher,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request.Events is null)
+        {
+            return ProblemDetailsMapping.From(new DomainError(
+                ConcordatCodes.SubscriptionInvalid,
+                "'events' is required. Send an empty list for every event."));
+        }
+
+        var result = await dispatcher.SendAsync(
+            new SetSubscriptionEventsCommand(env, id, request.Events),
+            cancellationToken).ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(SubscriptionResponse.From(result.Value));
+    }
+
     private static async Task<IResult> Delete(
         string env, Guid id, IDispatcher dispatcher, CancellationToken cancellationToken)
     {
@@ -144,6 +185,13 @@ public sealed record CreateSubscriptionRequest(
 /// <summary>Request to mute or unmute a subscription.</summary>
 /// <param name="Enabled">Whether to deliver.</param>
 public sealed record SetSubscriptionEnabledRequest(bool Enabled);
+
+/// <summary>Request to change which events a subscription wants.</summary>
+/// <param name="Events">
+/// The events, or an empty list for every event. Required: an absent member is refused, so that a
+/// misspelt field cannot widen who is told.
+/// </param>
+public sealed record SetSubscriptionEventsRequest(IReadOnlyList<string>? Events);
 
 /// <summary>A notification subscription.</summary>
 /// <param name="Id">Its identity.</param>
