@@ -30,6 +30,8 @@ const held: PendingApproval = {
   registeredAt: new Date('2026-08-13T09:00:00Z'),
   registeredBy: 'alice@example.com',
   baseline: 1,
+  reviewers: [],
+  mayDecide: true,
 };
 function storeIn(state: {
   pending?: readonly PendingApproval[];
@@ -407,6 +409,71 @@ describe('ApprovalsPage', () => {
       const { host } = render({ pending: [held] });
 
       expect(host.textContent).not.toContain('could not be refreshed');
+    });
+  });
+
+  describe('a subject that names its reviewers (ADR-043)', () => {
+    const named: PendingApproval = {
+      ...held,
+      reviewers: ['alice@example.com', 'bob@example.com'],
+      mayDecide: true,
+    };
+    const notYours: PendingApproval = { ...named, mayDecide: false };
+
+    it('says who decides, to everyone who can read the queue', () => {
+      const { host } = render({ pending: [named] }, ['subject:read']);
+
+      expect(host.querySelector('[data-testid="queue-reviewers"]')?.textContent).toContain(
+        'alice@example.com, bob@example.com',
+      );
+    });
+
+    it('says nothing about reviewers for a subject that names none', () => {
+      const { host } = render({ pending: [held] });
+
+      expect(host.querySelector('[data-testid="queue-reviewers"]')).toBeNull();
+      expect(host.querySelector('[data-testid="not-a-reviewer"]')).toBeNull();
+    });
+
+    it('offers approve and reject to an admin who is one of them', () => {
+      const { host } = render({ pending: [named] }, ['subject:admin']);
+
+      expect(button(host, 'Approve')).toBeDefined();
+      expect(button(host, 'Reject')).toBeDefined();
+      expect(host.querySelector('[data-testid="not-a-reviewer"]')).toBeNull();
+    });
+
+    it('omits both from an admin who is not, and says why, rather than leaving them to look for a bug', () => {
+      const { host } = render({ pending: [notYours] }, ['subject:admin']);
+
+      expect(button(host, 'Approve')).toBeUndefined();
+      expect(button(host, 'Reject')).toBeUndefined();
+      expect(host.querySelector('[data-testid="not-a-reviewer"]')?.textContent).toContain(
+        'Only alice@example.com, bob@example.com may decide this.',
+      );
+    });
+
+    it('still lets that admin open the review, which is reading', () => {
+      const { host } = render({ pending: [notYours] }, ['subject:admin']);
+
+      expect(button(host, 'Review changes and impact')).toBeDefined();
+    });
+
+    it('does not tell a reader they may not decide, who was never going to be offered it', () => {
+      const { host } = render({ pending: [notYours] }, ['subject:read']);
+
+      expect(host.querySelector('[data-testid="not-a-reviewer"]')).toBeNull();
+      expect(button(host, 'Approve')).toBeUndefined();
+    });
+
+    it('judges each row by its own subject', () => {
+      const other: PendingApproval = { ...held, subject: 'payments.taken', mayDecide: true };
+      const { host } = render({ pending: [notYours, other] }, ['subject:admin']);
+
+      expect(host.querySelectorAll('[data-testid="not-a-reviewer"]')).toHaveLength(1);
+      expect(
+        [...host.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Approve'),
+      ).toHaveLength(1);
     });
   });
 });

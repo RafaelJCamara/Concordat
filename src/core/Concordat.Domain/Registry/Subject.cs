@@ -47,6 +47,13 @@ public sealed class Subject
     /// <summary>The longest permitted changelog, in characters.</summary>
     public const int MaxChangelogLength = 4000;
 
+    /// <summary>The most reviewers one subject may name (ADR-043).</summary>
+    /// <remarks>
+    /// Bounded because the set rides on every subject read and on every row of the approval queue,
+    /// and because a list nobody can read in one glance is not a statement about who decides.
+    /// </remarks>
+    public const int MaxReviewers = 20;
+
     private readonly List<SchemaVersion> _versions;
 
     private Subject(
@@ -73,6 +80,7 @@ public sealed class Subject
         _versions = versions;
         Latest = latest;
         Lifecycle = lifecycle;
+        Reviewers = [];
     }
 
     // Materialisation only. EF cannot bind an owned collection through a constructor, so it
@@ -83,6 +91,7 @@ public sealed class Subject
         _versions = [];
         Name = null!;
         Owner = null!;
+        Reviewers = [];
     }
 
     /// <summary>The surrogate identity.</summary>
@@ -99,6 +108,24 @@ public sealed class Subject
 
     /// <summary>Who owns this contract.</summary>
     public ActorId Owner { get; private set; }
+
+    /// <summary>
+    /// Who may approve or reject a version of this subject that is held at the gate, or empty for
+    /// anyone holding the scope to (ADR-043).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Empty is the default and means what it always meant</b>: every holder of
+    /// <c>subject:admin</c> may decide (ADR-018). Naming reviewers narrows that to the ones named,
+    /// so a subject can say who answers for it. It is a statement about <em>routing a decision</em>,
+    /// not a boundary against an administrator: the same scope edits the set, and the edit is audited.
+    /// </para>
+    /// <para>
+    /// Compared case-insensitively, because most actors are email addresses and an address typed in
+    /// another case is the same person; stored as written, so the page shows what was entered.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<ActorId> Reviewers { get; private set; }
 
     /// <summary>
     /// The compatibility policy, or <see langword="null"/> to inherit the environment default.
@@ -388,6 +415,12 @@ public sealed class Subject
     /// </remarks>
     public Result Approve(int ordinal, ActorId approvedBy, DateTimeOffset approvedAt)
     {
+        var allowed = RequireReviewer(approvedBy, "approve");
+        if (allowed.IsFailure)
+        {
+            return allowed;
+        }
+
         var pending = FindPending(ordinal);
         if (pending.IsFailure)
         {
@@ -413,6 +446,12 @@ public sealed class Subject
     /// <returns>Success, or the first failing rule.</returns>
     public Result Reject(int ordinal, ActorId rejectedBy, DateTimeOffset rejectedAt)
     {
+        var allowed = RequireReviewer(rejectedBy, "reject");
+        if (allowed.IsFailure)
+        {
+            return allowed;
+        }
+
         var pending = FindPending(ordinal);
         if (pending.IsFailure)
         {
@@ -439,6 +478,87 @@ public sealed class Subject
         Owner = owner;
         Touch();
         return Result.Success();
+    }
+
+    /// <summary>Whether an actor may approve or reject a held version of this subject (ADR-043).</summary>
+    /// <param name="actor">Who is asking.</param>
+    /// <returns>
+    /// True when no reviewers are named (the scope alone decides, as it always did) or when the
+    /// actor is one of them.
+    /// </returns>
+    /// <remarks>
+    /// This answers the subject's rule and nothing else. Whether the caller holds the scope to
+    /// decide at all is the endpoint's question and is asked first.
+    /// </remarks>
+    public bool MayDecide(ActorId actor)
+    {
+        ArgumentNullException.ThrowIfNull(actor);
+
+        return Allows([.. Reviewers.Select(r => r.Value)], actor);
+    }
+
+    /// <summary>
+    /// The rule behind <see cref="MayDecide"/>, for a caller that holds a subject's reviewers as text
+    /// (a read model) and must not keep a second copy of it (ADR-043).
+    /// </summary>
+    /// <param name="reviewers">The reviewers a subject names, or empty for anyone.</param>
+    /// <param name="actor">Who is asking.</param>
+    /// <returns>True when no reviewers are named, or the actor is one of them.</returns>
+    public static bool Allows(IReadOnlyCollection<string> reviewers, ActorId actor)
+    {
+        ArgumentNullException.ThrowIfNull(reviewers);
+        ArgumentNullException.ThrowIfNull(actor);
+
+        return reviewers.Count == 0 ||
+               reviewers.Any(r => string.Equals(r, actor.Value, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Replaces the reviewer set, or clears it so any administrator may decide (ADR-043).</summary>
+    /// <param name="reviewers">The new set. Order is kept; a repeat (in any case) is dropped.</param>
+    /// <returns>
+    /// Whether the stored set changed. Failure when the subject is retired, or the set is larger than
+    /// <see cref="MaxReviewers"/>.
+    /// </returns>
+    /// <remarks>
+    /// A set that is the one already held changes nothing, bumps nothing and is reported as
+    /// unchanged, so the caller can leave the trail alone, as a policy change to the same policy does.
+    /// </remarks>
+    public Result<bool> SetReviewers(IReadOnlyList<ActorId> reviewers)
+    {
+        ArgumentNullException.ThrowIfNull(reviewers);
+
+        if (Lifecycle is SubjectLifecycle.Retired)
+        {
+            return Result<bool>.Failure(
+                ConcordatCodes.LifecycleTransitionInvalid,
+                $"Subject '{Name}' is retired.");
+        }
+
+        var distinct = new List<ActorId>(reviewers.Count);
+        foreach (var reviewer in reviewers)
+        {
+            if (!distinct.Exists(
+                    d => string.Equals(d.Value, reviewer.Value, StringComparison.OrdinalIgnoreCase)))
+            {
+                distinct.Add(reviewer);
+            }
+        }
+
+        if (distinct.Count > MaxReviewers)
+        {
+            return Result<bool>.Failure(
+                ConcordatCodes.ReviewersInvalid,
+                $"A subject may name at most {MaxReviewers} reviewers; got {distinct.Count}.");
+        }
+
+        if (distinct.Select(d => d.Value).SequenceEqual(Reviewers.Select(r => r.Value)))
+        {
+            return Result<bool>.Success(false);
+        }
+
+        Reviewers = distinct;
+        Touch();
+        return Result<bool>.Success(true);
     }
 
     /// <summary>Marks the subject deprecated. Advisory: it still accepts versions.</summary>
@@ -544,6 +664,16 @@ public sealed class Subject
 
     private void MoveLatest(int ordinal, DateTimeOffset at, ActorId by) =>
         Latest = new LatestPointer(ordinal, at, by);
+
+    // Asked before anything about the version, so a caller who may not decide learns nothing about
+    // whether the version exists or is held.
+    private Result RequireReviewer(ActorId actor, string verb) =>
+        MayDecide(actor)
+            ? Result.Success()
+            : Result.Failure(
+                ConcordatCodes.NotAReviewer,
+                $"Subject '{Name}' names its reviewers, and '{actor.Value}' is not one of them, so " +
+                $"it may not {verb} a version of it.");
 
     private Result<SchemaVersion> FindPending(int ordinal)
     {

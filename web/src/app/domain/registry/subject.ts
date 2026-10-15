@@ -21,6 +21,11 @@ export interface Subject {
   readonly name: string;
   readonly format: SchemaFormat;
   readonly owner: string;
+  /**
+   * Who may approve or reject this subject's held versions, or empty for anyone holding the scope
+   * to (ADR-043). Compared by the registry without regard to case; shown as it was entered.
+   */
+  readonly reviewers: readonly string[];
   readonly lifecycle: SubjectLifecycle;
   readonly contentModel: ContentModel;
   readonly compatibilityPolicy: CompatibilityPolicy;

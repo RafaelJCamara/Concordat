@@ -16,6 +16,7 @@ const subject: SubjectDto = {
   name: 'orders.created',
   format: 'json',
   owner: 'orders-team',
+  reviewers: [],
   lifecycle: 'ACTIVE',
   contentModel: 'OPEN',
   compatibilityPolicy: { mode: 'BACKWARD', surface: 'WIRE_JSON' },
@@ -57,6 +58,19 @@ describe('toSubject', () => {
     expect(first?.registeredAt.toISOString()).toBe('2026-08-13T09:00:00.000Z');
   });
 
+  it('carries the reviewers the registry names, in the order and case it sent', () => {
+    expect(
+      toSubject({ ...subject, reviewers: ['Bob@Example.com', 'alice@example.com'] }).reviewers,
+    ).toEqual(['Bob@Example.com', 'alice@example.com']);
+  });
+
+  it('reads an absent reviewers member as none, which is what a registry without them means', () => {
+    // A registry that predates ADR-043 has no reviewers, so any administrator decides, and that is
+    // exactly what an empty list says.
+    const { reviewers: _omitted, ...without } = subject;
+
+    expect(toSubject(without as SubjectDto).reviewers).toEqual([]);
+  });
   it('refuses a token it does not recognise rather than guessing', () => {
     const unknown: SubjectDto = {
       ...subject,

@@ -781,6 +781,12 @@ namespace Concordat.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("owner");
 
+                    b.Property<string>("Reviewers")
+                        .IsRequired()
+                        .HasMaxLength(8192)
+                        .HasColumnType("character varying(8192)")
+                        .HasColumnName("reviewers");
+
                     b.Property<int>("Revision")
                         .HasColumnType("integer")
                         .HasColumnName("revision");

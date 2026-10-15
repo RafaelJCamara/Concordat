@@ -17,6 +17,8 @@ export interface PendingApprovalDto {
   readonly registeredAt: string;
   readonly registeredBy: string;
   readonly baseline: number | null;
+  readonly reviewers: readonly string[];
+  readonly mayDecide: boolean;
 }
 
 /** `PendingApprovalsResponse`. */
@@ -34,6 +36,8 @@ export function toPendingApproval(dto: PendingApprovalDto): PendingApproval {
     registeredAt: wireTimestamp(dto.registeredAt),
     registeredBy: dto.registeredBy,
     baseline: dto.baseline,
+    reviewers: dto.reviewers,
+    mayDecide: dto.mayDecide,
   };
 }
 

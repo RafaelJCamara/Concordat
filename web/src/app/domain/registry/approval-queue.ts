@@ -14,6 +14,15 @@ export interface PendingApproval {
    * defect the gate exists to prevent (see `Subject.latest`).
    */
   readonly baseline: number | null;
+  /** Who the subject names to decide this, or empty for any administrator (ADR-043). */
+  readonly reviewers: readonly string[];
+  /**
+   * Whether the signed-in caller satisfies the subject's reviewer rule, as the registry judged it.
+   *
+   * It does not say the caller holds the scope to decide: that is the screen's own gate, and a reader
+   * is told `true` for a subject that names nobody. Both must hold for a decision to be offered.
+   */
+  readonly mayDecide: boolean;
 }
 
 /** A page of the approval queue, oldest proposal first, and how long the whole queue is. */

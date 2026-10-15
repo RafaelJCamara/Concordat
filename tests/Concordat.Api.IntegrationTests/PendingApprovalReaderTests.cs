@@ -3,6 +3,7 @@ using Concordat.Domain.Registry;
 using Concordat.Formats.Abstractions;
 using Concordat.Formats.Json;
 using Concordat.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace Concordat.Api.IntegrationTests;
 
@@ -311,6 +312,67 @@ public class PendingApprovalReaderTests(PostgresFixture fixture)
         Assert.Equal(1, a.Total);
         Assert.Equal(1, b.Total);
         Assert.NotEqual(Assert.Single(a.Items).Subject, Assert.Single(b.Items).Subject);
+    }
+
+    [Fact]
+    public async Task ItCarriesTheReviewersTheSubjectNames_AsStored_AndNoneWhenItNamesNone()
+    {
+        var tenant = TenantId.New();
+        var environment = EnvironmentId.New();
+        var schemas = new List<Schema>();
+
+        var named = NewSubject(environment, $"acme.named.S{Unique()}");
+        var open = NewSubject(environment, $"acme.open.S{Unique()}");
+
+        foreach (var subject in new[] { named, open })
+        {
+            Register(subject, schemas, T0.AddHours(1));
+            Register(subject, schemas, T0.AddHours(2), breaking: true);
+        }
+
+        // An actor id can hold a comma and a quote; the column must give it back whole.
+        Assert.True(named.SetReviewers(
+            [Actor("Alice@Example.com"), Actor("ci, prod \"blue\"")]).IsSuccess);
+
+        await SaveAsync(tenant, schemas, named, open);
+
+        var page = await ReadAsync(tenant, environment);
+
+        Assert.Equal(
+            ["Alice@Example.com", "ci, prod \"blue\""],
+            page.Items.Single(i => i.Subject == named.Name.Value).Reviewers);
+        Assert.Empty(page.Items.Single(i => i.Subject == open.Name.Value).Reviewers);
+    }
+
+    [Fact]
+    public async Task TheReviewersSurviveASaveAndALoad_AndASecondEdit()
+    {
+        // An edit of an edit, through a freshly loaded aggregate: what is stored is what the second
+        // edit wrote, not the first. And a subject that is only loaded is not dirty, which is what the
+        // column's comparer is for (a converter without one compares the list by reference, and a
+        // loaded subject would be written back on every save).
+        var tenant = TenantId.New();
+        var environment = EnvironmentId.New();
+        var subject = NewSubject(environment, $"acme.edit.S{Unique()}");
+        Assert.True(subject.SetReviewers([Actor("a@example.com")]).IsSuccess);
+
+        await SaveAsync(tenant, [], subject);
+
+        await using (var context = fixture.NewContext(tenant))
+        {
+            var loaded = await context.Subjects.SingleAsync(s => s.Id == subject.Id);
+            Assert.Equal(["a@example.com"], loaded.Reviewers.Select(r => r.Value));
+            Assert.False(context.ChangeTracker.HasChanges());
+
+            Assert.True(loaded.SetReviewers([Actor("b@example.com"), Actor("c@example.com")]).IsSuccess);
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = fixture.NewContext(tenant))
+        {
+            var reloaded = await context.Subjects.AsNoTracking().SingleAsync(s => s.Id == subject.Id);
+            Assert.Equal(["b@example.com", "c@example.com"], reloaded.Reviewers.Select(r => r.Value));
+        }
     }
 
     [Fact]

@@ -50,6 +50,13 @@ public sealed record SetCompatibilityPolicyRequest(string? Mode, string? Surface
 /// <param name="Deprecate">Whether to mark the subject deprecated.</param>
 public sealed record UpdateSubjectRequest(string? Owner = null, bool Deprecate = false);
 
+/// <summary>Request to name who may approve or reject a subject's held versions (ADR-043).</summary>
+/// <param name="Reviewers">
+/// The actors, as typed. An empty list clears the set so any holder of the scope may decide; the member
+/// is required, so that a body that forgot it is refused and does not quietly loosen the rule.
+/// </param>
+public sealed record SetSubjectReviewersRequest(IReadOnlyList<string>? Reviewers);
+
 /// <summary>Request to look a schema up by its content.</summary>
 /// <param name="Format">One of <c>json</c>, <c>avro</c>, <c>protobuf</c>.</param>
 /// <param name="Schema">The schema document.</param>
@@ -113,6 +120,9 @@ public sealed record VersionResponse(
 /// <param name="Name">The subject name.</param>
 /// <param name="Format">The schema language.</param>
 /// <param name="Owner">Who owns the contract.</param>
+/// <param name="Reviewers">
+/// Who may approve or reject its held versions, or empty for anyone holding the scope (ADR-043).
+/// </param>
 /// <param name="Lifecycle"><c>ACTIVE</c>, <c>DEPRECATED</c> or <c>RETIRED</c>.</param>
 /// <param name="ContentModel"><c>OPEN</c> or <c>CLOSED</c>.</param>
 /// <param name="CompatibilityPolicy">The explicit policy, or nulls when inheriting.</param>
@@ -122,6 +132,7 @@ public sealed record SubjectResponse(
     string Name,
     string Format,
     string Owner,
+    IReadOnlyList<string> Reviewers,
     string Lifecycle,
     string ContentModel,
     PolicyResponse CompatibilityPolicy,
@@ -139,6 +150,7 @@ public sealed record SubjectResponse(
             subject.Name.Value,
             WireTokens.For(subject.Format),
             subject.Owner.Value,
+            [.. subject.Reviewers.Select(r => r.Value)],
             WireTokens.For(subject.Lifecycle),
             WireTokens.For(subject.ContentModel),
             PolicyResponse.From(subject.CompatibilityPolicy),

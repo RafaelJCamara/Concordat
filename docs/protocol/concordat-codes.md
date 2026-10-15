@@ -106,13 +106,15 @@ token and an operator can alert across a fleet.
 | `payload_invalid` | The payload did not validate against its declared schema. |
 | `version_not_awaiting_approval` | The version is not awaiting approval, so it cannot be approved or rejected. |
 | `changelog_too_long` | A changelog exceeded the permitted length. |
+| `not_a_reviewer` | The caller holds the scope to decide a held version, and the subject names reviewers the caller is not among (ADR-043). |
+| `reviewers_invalid` | A subject's reviewer set was not acceptable: too many, or an entry that is not an actor. |
 | `schema_unresolvable` | A client could not resolve a schema, so the operation could not be enforced. |
 | `warm_up_failed` | A client could not warm its cache at startup and `RequireWarmUp` is on, so it refused to start rather than run unenforced. |
 | `service_registration_failed` | A client could not declare its service registration at startup and `RequireServiceRegistration` is on, so it refused to start undeclared. |
 | `middleware_faulted` | Concordat's own middleware threw while handling a delivery, which is reported as an unenforced outcome rather than allowed to reach the application. |
 | `concurrent_write_conflict` | Two requests raced on the same row: a unique constraint or an optimistic-concurrency check caught it at the database rather than in application logic. |
 
-**88 codes.**
+**90 codes.**
 
 ## Rules for implementers
 

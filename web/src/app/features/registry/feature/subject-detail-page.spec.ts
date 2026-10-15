@@ -36,6 +36,7 @@ function subject(overrides: Partial<Subject> = {}): Subject {
     name: 'orders.created',
     format: 'json',
     owner: 'orders-team',
+    reviewers: [],
     lifecycle: 'ACTIVE',
     contentModel: 'OPEN',
     compatibilityPolicy: { mode: 'BACKWARD', surface: 'WIRE_JSON' },
@@ -81,15 +82,21 @@ function settingsStub(
 ) {
   const owners: { subject: string; owner: string }[] = [];
   const policies: { subject: string; policy: unknown }[] = [];
+  const reviewers: { subject: string; reviewers: readonly string[] }[] = [];
 
   return {
     owners,
     policies,
+    reviewers,
     outcome: signal(state.outcome ?? null),
     ownerSaving: signal(state.ownerSaving ?? false),
     ownerError: signal(null),
     policySaving: signal(state.policySaving ?? false),
     policyError: signal(null),
+    reviewersSaving: signal(false),
+    reviewersError: signal(null),
+    setReviewers: (request: { subject: string; reviewers: readonly string[] }) =>
+      reviewers.push(request),
     changeOwner: (request: { subject: string; owner: string }) => owners.push(request),
     setPolicy: (request: { subject: string; policy: unknown }) => policies.push(request),
     reset: () => {},
@@ -282,6 +289,141 @@ describe('SubjectDetailPage', () => {
     });
   });
 
+  describe('who decides held versions (ADR-043)', () => {
+    const buttons = (host: HTMLElement) =>
+      [...host.querySelectorAll('button')].map((b) => b.textContent?.trim());
+    const line = (host: HTMLElement) =>
+      host.querySelector('[data-testid="subject-reviewers"]')?.textContent?.replace(/\s+/g, ' ') ??
+      '';
+
+    it('says any administrator decides, for a subject that names nobody', () => {
+      const { host } = render({ subject: subject() }, ['subject:read']);
+
+      expect(line(host)).toContain('Held versions are decided by any administrator.');
+    });
+
+    it('names the reviewers, and says only they decide, for a subject that has some', () => {
+      const { host } = render(
+        { subject: subject({ reviewers: ['alice@example.com', 'bob@example.com'] }) },
+        ['subject:read'],
+      );
+
+      expect(line(host)).toContain('decided by alice@example.com, bob@example.com only');
+      expect(line(host)).not.toContain('any administrator');
+    });
+
+    it('offers to change them to an admin', () => {
+      expect(buttons(render({ subject: subject() }, ['subject:admin']).host)).toContain(
+        'Change reviewers',
+      );
+    });
+
+    it('renders nothing in its place for a writer, whom the registry would refuse with 403', () => {
+      // The registry holds this to subject:admin, as the policy; ADR-018: absent, not disabled.
+      const { host } = render({ subject: subject() }, ['subject:write']);
+
+      expect(buttons(host)).not.toContain('Change reviewers');
+      expect(host.textContent).not.toContain('Change reviewers');
+    });
+
+    it('offers it to nobody for a retired subject, which the registry refuses with 409', () => {
+      const { host } = render({ subject: subject({ lifecycle: 'RETIRED' }) }, ['subject:admin']);
+
+      expect(buttons(host)).not.toContain('Change reviewers');
+    });
+
+    it('opens the editor on the set the subject names, and closing it is the same button', () => {
+      const { fixture, host } = render({ subject: subject({ reviewers: ['alice@example.com'] }) }, [
+        'subject:admin',
+      ]);
+      const click = (label: string) => {
+        [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === label)!.click();
+        fixture.detectChanges();
+      };
+
+      click('Change reviewers');
+      expect(host.querySelector('cd-subject-reviewers-editor')).not.toBeNull();
+      expect(host.querySelector('textarea')?.value).toBe('alice@example.com');
+
+      click('Change reviewers');
+      expect(host.querySelector('cd-subject-reviewers-editor')).toBeNull();
+    });
+
+    it('opens one editor at a time', () => {
+      const { fixture, host } = render({ subject: subject() }, ['subject:admin']);
+      const click = (label: string) => {
+        [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === label)!.click();
+        fixture.detectChanges();
+      };
+
+      click('Change reviewers');
+      click('Change owner');
+
+      expect(host.querySelector('cd-subject-reviewers-editor')).toBeNull();
+      expect(host.querySelector('cd-subject-owner-editor')).not.toBeNull();
+    });
+
+    it('hands what was confirmed to the store, with the subject it is for', () => {
+      const { fixture, host, settings } = render({ subject: subject() }, ['subject:admin']);
+
+      [...host.querySelectorAll('button')]
+        .find((b) => b.textContent?.trim() === 'Change reviewers')!
+        .click();
+      fixture.detectChanges();
+
+      const editor = fixture.debugElement.query((d) => d.name === 'cd-subject-reviewers-editor');
+      (editor.componentInstance as { confirmed: { emit(v: string[]): void } }).confirmed.emit([
+        'alice@example.com',
+      ]);
+
+      expect(settings.reviewers).toEqual([
+        { subject: 'orders.created', reviewers: ['alice@example.com'] },
+      ]);
+    });
+
+    it('tells the editor who is signed in, so it can warn about locking oneself out', () => {
+      const { fixture, host } = render({ subject: subject() }, ['subject:admin']);
+
+      [...host.querySelectorAll('button')]
+        .find((b) => b.textContent?.trim() === 'Change reviewers')!
+        .click();
+      fixture.detectChanges();
+
+      const editor = fixture.debugElement.query((d) => d.name === 'cd-subject-reviewers-editor');
+
+      expect((editor.componentInstance as { actor(): string | null }).actor()).toBe('someone');
+    });
+
+    it('says what the registry stored, once a change has landed', () => {
+      const { host } = render(
+        { subject: subject() },
+        ['subject:admin'],
+        settingsStub({
+          outcome: {
+            kind: 'reviewers',
+            subject: 'orders.created',
+            reviewers: ['alice@example.com'],
+          },
+        }),
+      );
+
+      expect(host.querySelector('[role="status"]')?.textContent).toContain(
+        'Only alice@example.com may now decide the held versions of orders.created',
+      );
+    });
+
+    it('says a cleared set as any administrator, not as an empty list', () => {
+      const { host } = render(
+        { subject: subject() },
+        ['subject:admin'],
+        settingsStub({ outcome: { kind: 'reviewers', subject: 'orders.created', reviewers: [] } }),
+      );
+
+      expect(host.querySelector('[role="status"]')?.textContent).toContain(
+        'The reviewers of orders.created are cleared. Any administrator may decide its held versions.',
+      );
+    });
+  });
   describe('changing the owner and the policy', () => {
     const buttons = (host: HTMLElement) =>
       [...host.querySelectorAll('button')].map((b) => b.textContent?.trim());

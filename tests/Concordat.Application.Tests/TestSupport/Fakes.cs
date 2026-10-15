@@ -222,6 +222,9 @@ internal sealed class RecordingAuditLog : IAuditLog
 
     public void Append(AuditEntry entry) => _entries.Add(entry);
 
+    /// <summary>Forgets what was appended, so a test can arrange state and then look only at the act.</summary>
+    public void Clear() => _entries.Clear();
+
     public Task<IReadOnlyList<AuditEntry>> QueryAsync(
         AuditFilter filter, CancellationToken cancellationToken)
     {

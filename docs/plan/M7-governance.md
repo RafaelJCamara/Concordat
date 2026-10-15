@@ -167,10 +167,10 @@ there is load-bearing, not decoration.
 - [x] **Promotion** `dev → staging → prod`, re-checking compatibility in the target
 - [x] Audit log + `GET /v1/audit`
 - [x] **Auto-dismiss a pending approval when the change is reverted**
-- [ ] Approval **reviewers** — deferred to [M8](M8-identity.md). A reviewer set is a statement
-      about *who may approve*, and there is no `User`, `Membership` or `Role` to name until
-      identity exists. Approve/reject works today and records who decided; what is missing is
-      the rule about who is allowed to.
+- [x] Approval **reviewers** — deferred to [M8](M8-identity.md), which did not build them, and built
+      on 2026-10-15 ([ADR-043](../adr/043-a-subject-names-who-may-decide-its-held-versions.md)). A
+      reviewer set is a statement about *who may approve*: a subject may name the actors who decide
+      its held versions, empty meaning any holder of `subject:admin` as before. ~~There was no`n      `User`, `Membership` or `Role` to name~~ — there is now, and the set names actors, not roles.
 
 **Impact runs FORWARD, and getting the direction wrong would invert every answer.**
 Registration asks BACKWARD by default — can the new schema read what the old one wrote?

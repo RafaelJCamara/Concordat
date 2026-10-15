@@ -5,14 +5,15 @@ import {
   type CompatibilitySurface,
 } from './compatibility';
 import type { FindingSeverity } from './editor-finding';
-import { ownerLengthRefusal } from './new-subject';
+import { OWNER_MAX_LENGTH, ownerLengthRefusal } from './new-subject';
 import { trimRegistryText } from './registry-text';
 
-// What can be changed about a subject after it exists: its owner and its compatibility policy,
-// and nothing else (ADR-030 probed the rest; ADR-032 records these two).
+// What can be changed about a subject after it exists: its owner, its compatibility policy and who may
+// decide its held versions, and nothing else (ADR-030 probed the rest; ADR-032 records the first two and
+// ADR-043 the third).
 
 /** The fields a finding can be about. */
-export type SubjectSettingsField = 'owner' | 'policy';
+export type SubjectSettingsField = 'owner' | 'policy' | 'reviewers';
 
 /** One thing to tell the author about an edit. */
 export interface SubjectSettingsFinding {
@@ -108,6 +109,128 @@ export function checkOwnerEdit(current: string, typed: string): OwnerEdit {
   }
 
   return { send: owner, findings: [] };
+}
+
+/** The most reviewers a subject may name (`Subject.MaxReviewers`, ADR-043). */
+export const REVIEWERS_MAX = 20;
+
+/**
+ * What a reviewer-set edit comes to.
+ *
+ * <b>`send` is the whole set to send, or null when there is nothing to send.</b> An empty array is a
+ * request and a real one: it clears the set, so that any holder of the scope may decide again. Null
+ * is for a draft the registry would refuse, and for one that is the set the page already shows (the
+ * registry would accept it and write nothing, so a confirmation about it would describe a change
+ * that is not one).
+ */
+export interface ReviewersEdit {
+  readonly send: readonly string[] | null;
+  readonly findings: readonly SubjectSettingsFinding[];
+}
+
+/**
+ * Judges a reviewer list as typed, one actor per line, against the set the page last read.
+ *
+ * <b>One per line and not comma-separated</b>, because an actor id is any text up to 256 characters
+ * and an API key's label can hold a comma; a separator would turn one reviewer into two. Each line is
+ * trimmed as the registry trims (`registry-text.ts`), a blank line is no reviewer, and a repeat in
+ * any case is dropped with the first spelling kept, which is what the registry does and what the
+ * confirmation therefore shows.
+ *
+ * The refusals are the registry's own: an actor id over 256 characters, and more than
+ * {@link REVIEWERS_MAX} distinct reviewers (counted after the repeats are dropped, as it counts).
+ * The registry does not check that a reviewer exists, so neither does this: a reviewer can be a
+ * person's email address or an API key's label, and nothing here could tell the two apart.
+ *
+ * @param current the set the registry last reported, compared exactly and in order (case and order
+ *   are part of what was set).
+ * @param actor who is signed in, when known. A non-empty set that does not name them is not refused (a
+ *   team may well hand a subject to someone else), but it is the one way to lock yourself out of
+ *   deciding, so it is said.
+ */
+export function checkReviewersEdit(
+  current: readonly string[],
+  typed: string,
+  actor: string | null = null,
+): ReviewersEdit {
+  const entries = typed
+    .split(/\r\n|\r|\n/)
+    .map(trimRegistryText)
+    .filter((line) => line !== '');
+
+  const distinct: string[] = [];
+
+  for (const entry of entries) {
+    if (!distinct.some((d) => d.toLowerCase() === entry.toLowerCase())) {
+      distinct.push(entry);
+    }
+  }
+
+  const tooLong = distinct.find((d) => d.length > OWNER_MAX_LENGTH);
+
+  if (tooLong !== undefined) {
+    return {
+      send: null,
+      findings: [
+        {
+          field: 'reviewers',
+          severity: 'refusal',
+          code: 'actor_id_invalid',
+          message: `A reviewer may be at most ${OWNER_MAX_LENGTH} characters; one is ${tooLong.length}.`,
+        },
+      ],
+    };
+  }
+
+  if (distinct.length > REVIEWERS_MAX) {
+    return {
+      send: null,
+      findings: [
+        {
+          field: 'reviewers',
+          severity: 'refusal',
+          code: 'reviewers_invalid',
+          message: `A subject may name at most ${REVIEWERS_MAX} reviewers; this names ${distinct.length}.`,
+        },
+      ],
+    };
+  }
+
+  if (distinct.length === current.length && distinct.every((d, i) => d === current[i])) {
+    return {
+      send: null,
+      findings: [
+        {
+          field: 'reviewers',
+          severity: 'advice',
+          code: 'reviewers_unchanged',
+          message:
+            current.length === 0
+              ? 'No reviewers are named, as of the last time this page read the registry.'
+              : 'These are already the reviewers, as of the last time this page read the registry.',
+        },
+      ],
+    };
+  }
+
+  const lockedOut =
+    actor !== null &&
+    distinct.length > 0 &&
+    !distinct.some((d) => d.toLowerCase() === actor.toLowerCase());
+
+  return {
+    send: distinct,
+    findings: lockedOut
+      ? [
+          {
+            field: 'reviewers',
+            severity: 'advice',
+            code: 'reviewers_exclude_you',
+            message: `You (${actor}) are not in this list, so you could not approve or reject a version of this subject afterwards unless you are added again.`,
+          },
+        ]
+      : [],
+  };
 }
 
 /** What the policy form holds, as chosen. Nothing here has been judged yet. */

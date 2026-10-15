@@ -28,6 +28,17 @@ public enum AuditAction
     /// </remarks>
     SubjectPolicyChanged,
 
+    /// <summary>
+    /// The set of actors who may approve or reject a subject's held versions was set, changed or
+    /// cleared (ADR-043).
+    /// </summary>
+    /// <remarks>
+    /// Its own action, for the reason <see cref="SubjectPolicyChanged"/> is: who may decide a held
+    /// change is asked across an environment, by action, and the row for an owner change is already
+    /// <see cref="SubjectUpdated"/>.
+    /// </remarks>
+    SubjectReviewersChanged,
+
     /// <summary>A subject was retired.</summary>
     SubjectRetired,
 
@@ -273,6 +284,7 @@ public static class AuditTokens
         [AuditAction.SubjectCreated] = "SUBJECT_CREATED",
         [AuditAction.SubjectUpdated] = "SUBJECT_UPDATED",
         [AuditAction.SubjectPolicyChanged] = "SUBJECT_POLICY_CHANGED",
+        [AuditAction.SubjectReviewersChanged] = "SUBJECT_REVIEWERS_CHANGED",
         [AuditAction.SubjectRetired] = "SUBJECT_RETIRED",
         [AuditAction.VersionRegistered] = "VERSION_REGISTERED",
         [AuditAction.VersionSubmitted] = "VERSION_SUBMITTED",

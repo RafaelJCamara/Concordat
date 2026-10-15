@@ -166,6 +166,48 @@ the step. Six calls, each yours to confirm:
 > findings were advice before and are advice now ([ADR-028](adr/028-schema-editor.md)); a browser test holds them to agreeing
 > with the registry on the ordinary cases, and would need its expectations flipped.
 
+### 41. The approval queue is paged by offset, oldest first, and includes retired subjects
+
+**Implemented** ([ADR-042](adr/042-the-approval-queue-is-answered-by-the-registry.md)). Three small calls, each yours to confirm:
+
+- **`limit` and `offset`, clamped and never refused** (default 50, at most 200), not a cursor. A queue is read by a person, and a
+  decision removes a row and the screen reads again, so the one failure (a row removed by someone else between two pages
+  skips the row after it) is shown by `total` and corrected by the next read. A keyset cursor removes it and costs an opaque
+  token on the wire; revisit if anything but the screen starts paging this route.
+- **Oldest first**, so the longest wait leads. Newest first would put the proposal somebody just made at the top and the one
+  that has waited a month on page three.
+- **A retired subject's held version is still in the queue.** The dashboard's awaiting count includes it, and the queue the
+  browser used to build did; a queue that dropped it would disagree with the card that links to it. If you would rather hide
+  it, it is one predicate in `PendingApprovalReader`, and the dashboard's count should change with it.
+
+> **If you overturn the offset**, the route's `offset` parameter becomes a cursor and the store's `loadMore` sends it; nothing is
+> persisted.
+
+### 42. A subject can name who may decide its held versions, and that is a routing rule and not a boundary
+
+**Implemented** ([ADR-043](adr/043-a-subject-names-who-may-decide-its-held-versions.md)), and the one in this list that changes
+who may do something. Seven calls, each yours to confirm:
+
+- **A set of actors on the subject, not a role or a group.** Empty (the default, and every existing subject) means any holder
+  of `subject:admin`, as before; non-empty means only the named, an administrator included, refused `403 not_a_reviewer`.
+  There is no group in the model to name, and the set is the data one would be built from.
+- **It is not a boundary against an administrator**, and says so on the confirmation: the scope that edits the set is the
+  scope that decides when it is empty, so an administrator can name themselves first. The audit entry is the trail of it.
+  A stronger rule needs a second scope or a role above `subject:admin`.
+- **The proposer is not excluded.** DESIGN used to say admin-only approval "keeps the author of a breaking change from waving
+  it through themselves"; it never did for one administrator who is both, and a one-person team that names itself must not
+  lock itself out. *Never the actor who proposed it* is the obvious rule to add on top (per subject or per environment) and
+  is **yours to decide**: it deadlocks a single-administrator instance unless it is opt-in.
+- **Compared without regard to case**, stored as written, a repeat dropped, at most 20. An email typed in another case is the
+  same person; a rule that silently refused them would read as a bug in the page.
+- **Entries are not verified to exist**, like an owner. A typo is a reviewer nobody can be; the form warns when the set would
+  lock out the person making the change.
+- **Audited as `SUBJECT_REVIEWERS_CHANGED` and nobody is notified.** A notification event is a new vocabulary, and an empty
+  event filter means every event, so it would reach every existing subscription with no filter (the point ADR-034 made).
+- **`PUT …/reviewers` requires the `reviewers` member**: `{}` is `400`, so a misspelt field cannot clear the set.
+
+> **If you overturn it**, delete the two `RequireReviewer` calls in `Subject` and the route; the column can stay (rows are `[]`).
+> Rolling a registry back past it is a silent loosening, which ADR-043 says.
 ### 33. `ci` is a marker scope, and no role grants it
 
 **Implemented.** `RegistrationPolicy.CiOnly` has to tell a build pipeline apart from a running

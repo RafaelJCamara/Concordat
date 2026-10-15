@@ -115,6 +115,8 @@ const withBaseline: PendingApproval = {
   registeredAt: new Date('2026-08-13T09:00:00Z'),
   registeredBy: 'ci',
   baseline: 1,
+  reviewers: [],
+  mayDecide: true,
 };
 
 describe('PendingReview', () => {

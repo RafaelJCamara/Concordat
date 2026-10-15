@@ -60,6 +60,13 @@ public static class ApprovalQueueEndpoints
 /// <param name="Baseline">
 /// The ordinal consumers resolve as latest today, or <see langword="null"/> when none is approved.
 /// </param>
+/// <param name="Reviewers">
+/// Who the subject names to decide this, or empty for anyone holding "subject:admin" (ADR-043).
+/// </param>
+/// <param name="MayDecide">
+/// Whether the caller satisfies the subject's reviewer rule. It does not say the caller holds the
+/// scope to decide; a reader may be shown <see langword="true"/> here for a subject with no reviewers.
+/// </param>
 public sealed record PendingApprovalResponse(
     string Subject,
     int Ordinal,
@@ -67,7 +74,9 @@ public sealed record PendingApprovalResponse(
     string? Changelog,
     DateTimeOffset RegisteredAt,
     string RegisteredBy,
-    int? Baseline);
+    int? Baseline,
+    IReadOnlyList<string> Reviewers,
+    bool MayDecide);
 
 /// <summary>A page of the approval queue.</summary>
 /// <param name="Total">Every version awaiting approval, not only this page.</param>
@@ -91,6 +100,8 @@ public sealed record PendingApprovalsResponse(
                 i.Changelog,
                 i.RegisteredAt,
                 i.RegisteredBy,
-                i.Baseline))]);
+                i.Baseline,
+                i.Reviewers,
+                i.MayDecide))]);
     }
 }

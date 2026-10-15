@@ -88,6 +88,7 @@ public class WireTokenTests
                 "SUBJECT_CREATED",
                 "SUBJECT_POLICY_CHANGED",
                 "SUBJECT_RETIRED",
+                "SUBJECT_REVIEWERS_CHANGED",
                 "SUBJECT_UPDATED",
                 "VERSION_APPROVED",
                 "VERSION_DISMISSED",

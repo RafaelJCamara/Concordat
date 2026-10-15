@@ -26,6 +26,7 @@ function stored(name = 'orders.created'): Subject {
     name,
     format: 'json',
     owner: 'orders-team',
+    reviewers: [],
     lifecycle: 'ACTIVE',
     contentModel: 'OPEN',
     compatibilityPolicy: { mode: null, surface: null },

@@ -46,6 +46,10 @@ internal sealed class SubjectConfiguration : IEntityTypeConfiguration<Subject>
             .HasMaxLength(ActorId.MaxLength)
             .IsRequired();
 
+        // Who may decide this subject's held versions (ADR-043). A JSON array in one column, empty
+        // meaning "anyone holding the scope", which is also what every row had before it existed.
+        ActorListColumn.Configure(builder.Property(s => s.Reviewers), "reviewers");
+
         // Enums as text, never Enum.ToString(): a C# rename must not silently rewrite stored
         // data or the wire format (ADR-019).
         builder.Property(s => s.Lifecycle)

@@ -19,6 +19,7 @@ function subject(overrides: Partial<Subject> = {}): Subject {
     name: 'orders.created',
     format: 'json',
     owner: 'orders-team',
+    reviewers: [],
     lifecycle: 'ACTIVE',
     contentModel: 'OPEN',
     compatibilityPolicy: { mode: null, surface: null },
@@ -33,11 +34,13 @@ type Call<T> = { args: unknown[]; stream: ResponseStream<T> };
 function fakeApi() {
   const owners: Call<Subject>[] = [];
   const policies: Call<CompatibilityPolicy>[] = [];
+  const reviewers: Call<Subject>[] = [];
   const reads: Call<Subject>[] = [];
 
   return {
     owners,
     policies,
+    reviewers,
     reads,
     changeOwner(...args: unknown[]) {
       const stream = new ResponseStream<Subject>();
@@ -47,6 +50,11 @@ function fakeApi() {
     setPolicy(...args: unknown[]) {
       const stream = new ResponseStream<CompatibilityPolicy>();
       policies.push({ args, stream });
+      return stream.asObservable();
+    },
+    setReviewers(...args: unknown[]) {
+      const stream = new ResponseStream<Subject>();
+      reviewers.push({ args, stream });
       return stream.asObservable();
     },
     getSubject(...args: unknown[]) {
@@ -233,6 +241,87 @@ describe('SubjectSettingsStore', () => {
     });
   });
 
+  describe('naming the reviewers', () => {
+    it('asks the active environment, for that subject, with exactly the set it was given', () => {
+      store.setReviewers({ subject: 'orders.created', reviewers: ['a@x', 'b@x'] });
+
+      expect(api.reviewers[0]?.args).toEqual(['dev', 'orders.created', ['a@x', 'b@x']]);
+      expect(store.reviewersSaving()).toBe(true);
+    });
+
+    it('reports the set the registry answered with, not the one it was sent', () => {
+      // The registry drops a repeat and keeps the first spelling.
+      store.setReviewers({ subject: 'orders.created', reviewers: ['A@x', 'a@x'] });
+      answer(api.reviewers, subject({ reviewers: ['A@x'] }));
+
+      expect(store.reviewersSaving()).toBe(false);
+      expect(store.outcome()).toEqual({
+        kind: 'reviewers',
+        subject: 'orders.created',
+        reviewers: ['A@x'],
+      });
+    });
+
+    it('sends an empty list to clear, and reports it as cleared', () => {
+      store.setReviewers({ subject: 'orders.created', reviewers: [] });
+      expect(api.reviewers[0]?.args).toEqual(['dev', 'orders.created', []]);
+
+      answer(api.reviewers, subject({ reviewers: [] }));
+
+      expect(store.outcome()).toMatchObject({ kind: 'reviewers', reviewers: [] });
+    });
+
+    it('reads the subject again, so the page is not left showing the old set', () => {
+      store.setReviewers({ subject: 'orders.created', reviewers: ['a@x'] });
+      answer(api.reviewers, subject({ reviewers: ['a@x'] }));
+
+      expect(api.reads).toHaveLength(1);
+      expect(detail.subject()?.reviewers).toEqual([]);
+
+      answer(api.reads, subject({ reviewers: ['a@x', 'someone-added-it@x'] }));
+
+      expect(detail.subject()?.reviewers).toEqual(['a@x', 'someone-added-it@x']);
+    });
+
+    it('keeps a refusal as state, apart from the owner’s and the policy’s', () => {
+      store.setReviewers({ subject: 'orders.created', reviewers: ['a@x'] });
+      api.reviewers[0]!.stream.error(refusal('reviewers_invalid', 400));
+
+      expect(store.reviewersError()?.code).toBe('reviewers_invalid');
+      expect(store.reviewersSaving()).toBe(false);
+      expect(store.ownerError()).toBeNull();
+      expect(store.policyError()).toBeNull();
+      expect(store.outcome()).toBeNull();
+      expect(api.reads).toHaveLength(0);
+    });
+
+    it('can try again after a refusal', () => {
+      store.setReviewers({ subject: 'orders.created', reviewers: ['a@x'] });
+      api.reviewers[0]!.stream.error(refusal('insufficient_scope', 403));
+      store.setReviewers({ subject: 'orders.created', reviewers: ['b@x'] });
+
+      expect(api.reviewers).toHaveLength(2);
+      expect(store.reviewersError()).toBeNull();
+      expect(store.reviewersSaving()).toBe(true);
+    });
+
+    it('ignores a second confirmation while one is in flight, and does not cancel the first', () => {
+      store.setReviewers({ subject: 'orders.created', reviewers: ['a@x'] });
+      store.setReviewers({ subject: 'orders.created', reviewers: ['b@x'] });
+
+      expect(api.reviewers).toHaveLength(1);
+      expect(api.reviewers[0]?.stream.closed).toBe(false);
+    });
+
+    it('is forgotten by a reset, with the other refusals', () => {
+      store.setReviewers({ subject: 'orders.created', reviewers: ['a@x'] });
+      api.reviewers[0]!.stream.error(refusal('insufficient_scope', 403));
+
+      store.reset();
+
+      expect(store.reviewersError()).toBeNull();
+    });
+  });
   it('does not make one write wait for the other', () => {
     store.changeOwner({ subject: 'orders.created', owner: 'a' });
     store.setPolicy({ subject: 'orders.created', policy: { mode: 'FULL', surface: 'WIRE' } });

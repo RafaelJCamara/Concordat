@@ -154,6 +154,25 @@ public static class SubjectEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .RequireScope(Scope.SubjectAdmin);
 
+        group.MapPut("/{subject}/reviewers", SetReviewers)
+            .WithSummary("Name who may approve or reject this subject's held versions")
+            .WithDescription(
+                "An empty list clears the set, and then any holder of subject:admin may decide, as " +
+                "before. With reviewers named, only a named actor may approve or reject a held " +
+                "version of this subject, and anyone else (an administrator included) is refused " +
+                "with 403 not_a_reviewer. Reviewers are compared without regard to case; at most " +
+                "20 may be named, and a repeat is dropped. A change is recorded in the audit trail " +
+                "as SUBJECT_REVIEWERS_CHANGED, naming the caller and the old and new set; sending " +
+                "the set the subject already has records nothing. Nobody is notified. The set is " +
+                "a rule about who decides, not a boundary against an administrator: the same scope " +
+                "edits it. The 'reviewers' member is required (send [] to clear), so a body that " +
+                "forgot it is refused and does not loosen the rule.")
+            .Produces<SubjectResponse>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .RequireScope(Scope.SubjectAdmin);
+
         return app;
     }
 
@@ -446,6 +465,29 @@ public static class SubjectEndpoints
         return result.IsFailure
             ? ProblemDetailsMapping.From(result.Error!)
             : TypedResults.Ok(PolicyResponse.From(result.Value.CompatibilityPolicy));
+    }
+
+    private static async Task<IResult> SetReviewers(
+        string env,
+        string subject,
+        SetSubjectReviewersRequest request,
+        IDispatcher dispatcher,
+        IEnvironmentResolver environments,
+        CancellationToken cancellationToken)
+    {
+        if (request.Reviewers is null)
+        {
+            return Invalid(
+                "'reviewers' is required. Send an empty list to clear the set.");
+        }
+
+        var result = await dispatcher.SendAsync(
+            new SetSubjectReviewersCommand(environments.Resolve(env), subject, request.Reviewers),
+            cancellationToken).ConfigureAwait(false);
+
+        return result.IsFailure
+            ? ProblemDetailsMapping.From(result.Error!)
+            : TypedResults.Ok(SubjectResponse.From(result.Value));
     }
 
     // --------------------------------------------------------------- parsing

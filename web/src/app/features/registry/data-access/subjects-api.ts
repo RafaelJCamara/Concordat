@@ -20,6 +20,7 @@ import {
   type RegisterVersionDto,
   type RegistrationDto,
   type SetPolicyDto,
+  type SetReviewersDto,
   type SubjectDto,
 } from './subject-dtos';
 
@@ -112,6 +113,25 @@ export class SubjectsApi {
     return this.http
       .put<PolicyDto>(`${this.subjectUrl(environment, name)}/compatibility-policy`, body)
       .pipe(map(toPolicy));
+  }
+
+  /**
+   * Names who may approve or reject a subject's held versions, or clears the set (ADR-043).
+   *
+   * <b>Answers with the subject</b>, as the registry holds it afterwards: the reviewers as stored (a
+   * repeat dropped, the first spelling kept), which can differ from what was sent. An empty list
+   * clears the set, and the body always carries the member: the registry refuses one that omits it.
+   */
+  setReviewers(
+    environment: string,
+    name: string,
+    reviewers: readonly string[],
+  ): Observable<Subject> {
+    const body: SetReviewersDto = { reviewers };
+
+    return this.http
+      .put<SubjectDto>(`${this.subjectUrl(environment, name)}/reviewers`, body)
+      .pipe(map(toSubject));
   }
 
   /** One subject and all of its versions. */

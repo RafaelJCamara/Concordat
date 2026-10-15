@@ -147,6 +147,14 @@ import { PendingReview } from './pending-review';
                       · replaces <span class="font-mono">v{{ item.baseline }}</span>
                     }
                   </p>
+                  @if (item.reviewers.length > 0) {
+                    <p class="text-muted-foreground mt-1 text-sm" data-testid="queue-reviewers">
+                      Decided by
+                      <span class="text-foreground font-mono break-words">{{
+                        item.reviewers.join(', ')
+                      }}</span>
+                    </p>
+                  }
                   @if (item.changelog) {
                     <p class="text-foreground mt-2 text-sm whitespace-pre-wrap">
                       {{ item.changelog }}
@@ -174,7 +182,16 @@ import { PendingReview } from './pending-review';
                 </button>
 
                 <ng-container *cdIfScope="approvalScopes">
-                  @if (confirming() === id + ':approve' || confirming() === id + ':reject') {
+                  @if (!item.mayDecide) {
+                    <!--
+                      The subject names reviewers and the caller is not one (ADR-043). Absent, like every
+                      control the caller may not use (ADR-018), and said, because an administrator who sees
+                      neither button and no reason would look for the bug in the page.
+                    -->
+                    <p class="text-muted-foreground text-sm" data-testid="not-a-reviewer">
+                      Only {{ item.reviewers.join(', ') }} may decide this.
+                    </p>
+                  } @else if (confirming() === id + ':approve' || confirming() === id + ':reject') {
                     <span class="text-foreground text-sm">
                       {{
                         confirming() === id + ':approve'

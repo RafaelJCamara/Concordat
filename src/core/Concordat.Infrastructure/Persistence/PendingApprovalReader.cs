@@ -27,7 +27,7 @@ internal sealed class PendingApprovalReader(ConcordatDbContext context) : IPendi
             .Where(s => s.EnvironmentId == environmentId)
             .SelectMany(
                 s => s.Versions,
-                (s, v) => new { s.Name, s.Latest, Version = v })
+                (s, v) => new { s.Name, s.Latest, s.Reviewers, Version = v })
             .Where(x => x.Version.Status == VersionStatus.AwaitingApproval);
 
         var total = await awaiting.CountAsync(cancellationToken).ConfigureAwait(false);
@@ -50,6 +50,7 @@ internal sealed class PendingApprovalReader(ConcordatDbContext context) : IPendi
                 x.Version.RegisteredAt,
                 x.Version.RegisteredBy,
                 Baseline = x.Latest == null ? (int?)null : x.Latest.Ordinal,
+                x.Reviewers,
             })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -64,7 +65,8 @@ internal sealed class PendingApprovalReader(ConcordatDbContext context) : IPendi
                     r.Changelog,
                     r.RegisteredAt,
                     r.RegisteredBy.Value,
-                    r.Baseline)),
+                    r.Baseline,
+                    [.. r.Reviewers.Select(a => a.Value)])),
             ]);
     }
 }

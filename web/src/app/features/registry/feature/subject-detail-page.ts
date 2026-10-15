@@ -12,6 +12,7 @@ import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
 import { HlmSkeleton } from '@spartan-ng/helm/skeleton';
 import { IfScope } from '../../../core/auth/if-scope';
+import { SessionStore } from '../../../core/auth/session-store';
 import { ActiveEnvironmentStore } from '../../../core/config/active-environment-store';
 import { POLICY_WRITE_SCOPES, SCHEMA_WRITE_SCOPES } from '../../../domain/identity/scope';
 import type { CompatibilityPolicy } from '../../../domain/registry/compatibility';
@@ -24,6 +25,7 @@ import { SubjectDetailStore } from '../application/subject-detail-store';
 import { SubjectSettingsStore, type SettingsOutcome } from '../application/subject-settings-store';
 import { SubjectOwnerEditor } from '../ui/subject-owner-editor';
 import { SubjectPolicyEditor } from '../ui/subject-policy-editor';
+import { SubjectReviewersEditor } from '../ui/subject-reviewers-editor';
 import { VersionTable } from '../ui/version-table';
 
 /**
@@ -55,6 +57,7 @@ import { VersionTable } from '../ui/version-table';
     SubjectName,
     SubjectOwnerEditor,
     SubjectPolicyEditor,
+    SubjectReviewersEditor,
     VersionTable,
   ],
   template: `
@@ -114,6 +117,36 @@ import { VersionTable } from '../ui/version-table';
                 </button>
               }
               · <span class="font-mono">{{ environments.name() }}</span>
+            </p>
+            <!--
+              Who decides a held version (ADR-043). Always said, including when it is "any
+              administrator", because that is what a reader needs to know before proposing a breaking
+              change here: whom the review goes to. A named set is shown as the registry holds it.
+            -->
+            <p class="text-muted-foreground mt-1 text-sm" data-testid="subject-reviewers">
+              @if (subject.reviewers.length === 0) {
+                Held versions are decided by any administrator.
+              } @else {
+                Held versions are decided by
+                <span class="text-foreground font-mono break-words">{{
+                  subject.reviewers.join(', ')
+                }}</span>
+                only.
+              }
+              @if (subject.lifecycle !== 'RETIRED') {
+                <button
+                  *cdIfScope="policyScopes"
+                  hlmBtn
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  class="h-auto p-0 align-baseline text-sm"
+                  [attr.aria-expanded]="editing() === 'reviewers'"
+                  (click)="edit('reviewers')"
+                >
+                  Change reviewers
+                </button>
+              }
             </p>
           </div>
 
@@ -175,6 +208,17 @@ import { VersionTable } from '../ui/version-table';
               [error]="settings.ownerError()?.detail ?? null"
               [saving]="settings.ownerSaving()"
               (confirmed)="settings.changeOwner({ subject: subject.name, owner: $event })"
+              (cancelled)="closeEditor()"
+            />
+          }
+          @case ('reviewers') {
+            <cd-subject-reviewers-editor
+              [subject]="subject.name"
+              [current]="subject.reviewers"
+              [actor]="session.actor()"
+              [error]="settings.reviewersError()?.detail ?? null"
+              [saving]="settings.reviewersSaving()"
+              (confirmed)="settings.setReviewers({ subject: subject.name, reviewers: $event })"
               (cancelled)="closeEditor()"
             />
           }
@@ -283,6 +327,7 @@ export class SubjectDetailPage {
   protected readonly store = inject(SubjectDetailStore);
   protected readonly settings = inject(SubjectSettingsStore);
   protected readonly environments = inject(ActiveEnvironmentStore);
+  protected readonly session = inject(SessionStore);
 
   /**
    * The scopes that permit registering a version, and changing the owner: the registry asks
@@ -294,7 +339,7 @@ export class SubjectDetailPage {
   protected readonly policyScopes = POLICY_WRITE_SCOPES;
 
   /** Which editor is open. At most one: a person changing an owner is not also changing a policy. */
-  protected readonly editing = signal<'owner' | 'policy' | null>(null);
+  protected readonly editing = signal<'owner' | 'policy' | 'reviewers' | null>(null);
 
   constructor() {
     // Reloads on the name changing and on an environment switch alike. Reading both signals
@@ -320,7 +365,7 @@ export class SubjectDetailPage {
     });
   }
 
-  protected edit(which: 'owner' | 'policy'): void {
+  protected edit(which: 'owner' | 'policy' | 'reviewers'): void {
     this.settings.reset();
     this.editing.set(this.editing() === which ? null : which);
   }
@@ -332,9 +377,16 @@ export class SubjectDetailPage {
 
   /** What the registry said it did, as a sentence. */
   protected outcomeText(outcome: SettingsOutcome): string {
-    return outcome.kind === 'owner'
-      ? `The owner of ${outcome.subject} is now ${outcome.owner}, as the registry stored it.`
-      : this.policyText(outcome.subject, outcome.policy);
+    switch (outcome.kind) {
+      case 'owner':
+        return `The owner of ${outcome.subject} is now ${outcome.owner}, as the registry stored it.`;
+      case 'policy':
+        return this.policyText(outcome.subject, outcome.policy);
+      case 'reviewers':
+        return outcome.reviewers.length === 0
+          ? `The reviewers of ${outcome.subject} are cleared. Any administrator may decide its held versions.`
+          : `Only ${outcome.reviewers.join(', ')} may now decide the held versions of ${outcome.subject}, as the registry stored it.`;
+    }
   }
 
   private policyText(subject: string, policy: CompatibilityPolicy): string {

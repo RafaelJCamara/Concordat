@@ -414,8 +414,10 @@ mutating subject/version endpoint — create subject, register version, approve/
 patch, delete, promote — checks the scope server-side and returns `403` with
 `concordatCode: "insufficient_scope"`. This is the enforcement point; §9's UI gating is a
 presentation of it, not a substitute. Approve/reject (ADR-017) is admin-only for the same
-reason, which keeps the author of a breaking change from waving it through themselves
-once reviewers land in M7.
+reason. A subject may also name its **reviewers** (ADR-043): when it does, only a named actor may decide it,
+an administrator included (`403 not_a_reviewer`). That routes a decision and is not a lock, since the scope that edits the
+set is the scope that decides when it is empty, and it does not exclude the proposer, so it does not by itself keep the
+author of a breaking change from waving it through: independence is a rule to add on top.
 
 **Reads require a caller too, holding no particular scope (ADR-027).** Every read
 endpoint answers `401` to an anonymous request; an unclaimed instance is unaffected,

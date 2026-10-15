@@ -18,6 +18,7 @@ function subject(name: string): Subject {
     name,
     format: 'json',
     owner: 'orders-team',
+    reviewers: [],
     lifecycle: 'ACTIVE',
     contentModel: 'OPEN',
     compatibilityPolicy: { mode: 'BACKWARD', surface: 'WIRE_JSON' },

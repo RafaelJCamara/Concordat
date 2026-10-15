@@ -3882,6 +3882,90 @@
         ]
       }
     },
+    "/v1/environments/{env}/subjects/{subject}/reviewers": {
+      "put": {
+        "tags": [
+          "Subjects"
+        ],
+        "summary": "Name who may approve or reject this subject's held versions",
+        "description": "An empty list clears the set, and then any holder of subject:admin may decide, as before. With reviewers named, only a named actor may approve or reject a held version of this subject, and anyone else (an administrator included) is refused with 403 not_a_reviewer. Reviewers are compared without regard to case; at most 20 may be named, and a repeat is dropped. A change is recorded in the audit trail as SUBJECT_REVIEWERS_CHANGED, naming the caller and the old and new set; sending the set the subject already has records nothing. Nobody is notified. The set is a rule about who decides, not a boundary against an administrator: the same scope edits it. The 'reviewers' member is required (send [] to clear), so a body that forgot it is refused and does not loosen the rule.\n\nRequires scope: `subject:admin`.",
+        "parameters": [
+          {
+            "name": "env",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSubjectReviewersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Bearer": [ ]
+          }
+        ]
+      }
+    },
     "/v1/schemas/{id}": {
       "get": {
         "tags": [
@@ -5597,7 +5681,9 @@
           "changelog",
           "registeredAt",
           "registeredBy",
-          "baseline"
+          "baseline",
+          "reviewers",
+          "mayDecide"
         ],
         "type": "object",
         "properties": {
@@ -5646,6 +5732,17 @@
             ],
             "description": "The ordinal consumers resolve as latest today, or `null` when none is approved.",
             "format": "int32"
+          },
+          "reviewers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Who the subject names to decide this, or empty for anyone holding \"subject:admin\" (ADR-043)."
+          },
+          "mayDecide": {
+            "type": "boolean",
+            "description": "Whether the caller satisfies the subject's reviewer rule. It does not say the caller holds the\nscope to decide; a reader may be shown `true` here for a subject with no reviewers."
           }
         },
         "description": "One version waiting on a decision."
@@ -6453,6 +6550,25 @@
         },
         "description": "Request to change who may register schemas in an environment."
       },
+      "SetSubjectReviewersRequest": {
+        "required": [
+          "reviewers"
+        ],
+        "type": "object",
+        "properties": {
+          "reviewers": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The actors, as typed. An empty list clears the set so any holder of the scope may decide; the member\nis required, so that a body that forgot it is refused and does not quietly loosen the rule."
+          }
+        },
+        "description": "Request to name who may approve or reject a subject's held versions (ADR-043)."
+      },
       "SetSubscriptionEnabledRequest": {
         "required": [
           "enabled"
@@ -6636,6 +6752,7 @@
           "name",
           "format",
           "owner",
+          "reviewers",
           "lifecycle",
           "contentModel",
           "compatibilityPolicy",
@@ -6655,6 +6772,13 @@
           "owner": {
             "type": "string",
             "description": "Who owns the contract."
+          },
+          "reviewers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Who may approve or reject its held versions, or empty for anyone holding the scope (ADR-043)."
           },
           "lifecycle": {
             "type": "string",

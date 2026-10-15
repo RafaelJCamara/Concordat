@@ -151,6 +151,7 @@ public static class DependencyInjection
         services.AddScoped<
             IQueryHandler<GetEnvironmentSummaryQuery, EnvironmentSummary>,
             GetEnvironmentSummaryHandler>();
+        services.AddScoped<ICommandHandler<SetSubjectReviewersCommand, Subject>, SetSubjectReviewersHandler>();
         services.AddScoped<
             IQueryHandler<ListPendingApprovalsQuery, PendingApprovals>,
             ListPendingApprovalsHandler>();

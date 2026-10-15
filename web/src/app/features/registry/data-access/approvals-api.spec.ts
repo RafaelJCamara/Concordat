@@ -23,6 +23,8 @@ const dto: ApprovalQueueDto = {
       registeredAt: '2026-10-14T09:00:00+00:00',
       registeredBy: 'ci',
       baseline: 1,
+      reviewers: [],
+      mayDecide: true,
     },
   ],
 };

@@ -100,6 +100,15 @@ is final, so `approvals.spec.ts` creates a subject of its own per decision, name
 (`acme.e2e.approve.<timestamp>`), and decides that. That costs the registry two subjects per run;
 the shared pair above is never decided, which is what keeps every other spec repeatable.
 
+**Reviewers are named on subjects of their own, and a held version is never left waiting.**
+`subject-reviewers.spec.ts` ([ADR-043](../../docs/adr/043-a-subject-names-who-may-decide-its-held-versions.md)) makes **four subjects
+per run** in `dev` (`acme.e2e.reviewers.<stem>.<timestamp>`: `else`, `me`, `reader`, `refused`), each with a version held at the gate,
+and names reviewers on them. A held version whose reviewers are named, and do not include the signed-in account, is one nobody
+signed in can decide, and `approvals.spec.ts` reads the shared queue, so **an `afterAll` clears every subject's reviewers and rejects
+what is still held**, even when a test failed. It cannot run if the process is killed: then clear the set with `PUT
+/v1/environments/dev/subjects/<name>/reviewers` and `{"reviewers":[]}` using the owner credential, and reject the version. The
+signed-in account is the one named, so the spec uses `OWNER.email` and a second address, `someone-else@example.com`, that no account
+holds. It never touches the shared pair (`PaymentTaken`, `LedgerPosted`) or `approvals.spec.ts`'s own subjects.
 **Creating a subject is the other thing that cannot be undone, so it leaves things behind.** There
 is no delete and a retired subject keeps its name, so a test that creates one has made it for good.
 Three arrangements keep that from costing anything:

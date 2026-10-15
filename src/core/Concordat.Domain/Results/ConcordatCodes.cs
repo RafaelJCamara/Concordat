@@ -435,6 +435,20 @@ public static class ConcordatCodes
     public const string ChangelogTooLong = "changelog_too_long";
 
     /// <summary>
+    /// The caller holds the scope to decide a held version, and the subject names reviewers the
+    /// caller is not among (ADR-043).
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="InsufficientScope"/> on purpose: the credential is sufficient, and
+    /// what refuses is a rule about this subject. A client that retried with a stronger
+    /// credential, which is what <c>insufficient_scope</c> asks for, would be refused again.
+    /// </remarks>
+    public const string NotAReviewer = "not_a_reviewer";
+
+    /// <summary>A subject's reviewer set was not acceptable: too many, or an entry that is not an actor.</summary>
+    public const string ReviewersInvalid = "reviewers_invalid";
+
+    /// <summary>
     /// A client could not resolve a schema, so the operation could not be enforced.
     /// </summary>
     /// <remarks>

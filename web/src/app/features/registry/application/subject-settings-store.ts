@@ -11,13 +11,16 @@ import { SubjectDetailStore } from './subject-detail-store';
 /** What the registry said it did, in its own words and not the request's. */
 export type SettingsOutcome =
   | { readonly kind: 'owner'; readonly subject: string; readonly owner: string }
-  | { readonly kind: 'policy'; readonly subject: string; readonly policy: CompatibilityPolicy };
+  | { readonly kind: 'policy'; readonly subject: string; readonly policy: CompatibilityPolicy }
+  | { readonly kind: 'reviewers'; readonly subject: string; readonly reviewers: readonly string[] };
 
 interface SubjectSettingsState {
   readonly ownerSaving: boolean;
   readonly ownerError: ConcordatError | null;
   readonly policySaving: boolean;
   readonly policyError: ConcordatError | null;
+  readonly reviewersSaving: boolean;
+  readonly reviewersError: ConcordatError | null;
   /**
    * The registry's answer to the last write that landed, or null.
    *
@@ -34,22 +37,24 @@ const INITIAL: SubjectSettingsState = {
   ownerError: null,
   policySaving: false,
   policyError: null,
+  reviewersSaving: false,
+  reviewersError: null,
   outcome: null,
 };
 
 /**
- * Changing a subject's owner and its compatibility policy.
+ * Changing a subject's owner, its compatibility policy and who may decide its held versions.
  *
- * <b>Two writes, each followed by a read.</b> Neither answer is the subject the page shows: `PATCH`
- * answers with one but a `PUT` answers with a policy, and treating the two differently would mean
- * one control predicting state and the other reporting it. So after either lands, the detail store
- * reads the subject again and the screen shows that.
+ * <b>Three writes, each followed by a read.</b> Not every answer is the subject the page shows: `PATCH`
+ * answers with one but a `PUT` of the policy answers with a policy, and treating them differently
+ * would mean one control predicting state and the other reporting it. So after any lands, the detail
+ * store reads the subject again and the screen shows that.
  *
  * <b>`exhaustMap` for both, for the reason `NewSubjectStore` gives:</b> cancelling an in-flight
  * request abandons only the browser's half of a write the registry still processes, so a
  * double-clicked confirmation would otherwise show a second attempt racing the first. They are
  * independent of each other — an owner change does not wait on a policy change — so each has its
- * own flag.
+ * own flags.
  *
  * Provided by the page beside `SubjectDetailStore`, which it re-reads through; not
  * `providedIn: 'root'`, so leaving the page drops the last answer and coming back shows none.
@@ -109,9 +114,46 @@ export const SubjectSettingsStore = signalStore(
         ),
       ),
 
+      setReviewers: rxMethod<{ readonly subject: string; readonly reviewers: readonly string[] }>(
+        pipe(
+          tap(() =>
+            patchState(store, { reviewersSaving: true, reviewersError: null, outcome: null }),
+          ),
+          exhaustMap(({ subject, reviewers }) =>
+            api.setReviewers(environments.name(), subject, reviewers).pipe(
+              tap((changed) => {
+                // The set the registry stored (a repeat dropped), not the one that was sent.
+                patchState(store, {
+                  reviewersSaving: false,
+                  outcome: {
+                    kind: 'reviewers',
+                    subject: changed.name,
+                    reviewers: changed.reviewers,
+                  },
+                });
+                detail.refresh(changed.name);
+              }),
+              catchError((error: unknown) => {
+                patchState(store, {
+                  reviewersSaving: false,
+                  reviewersError: toConcordatError(error),
+                });
+
+                return of(null);
+              }),
+            ),
+          ),
+        ),
+      ),
+
       /** Clears the last answer and any refusal, as an editor opens. */
       reset(): void {
-        patchState(store, { ownerError: null, policyError: null, outcome: null });
+        patchState(store, {
+          ownerError: null,
+          policyError: null,
+          reviewersError: null,
+          outcome: null,
+        });
       },
     };
   }),

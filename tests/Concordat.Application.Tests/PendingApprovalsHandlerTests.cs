@@ -1,5 +1,6 @@
 using Concordat.Application.Abstractions;
 using Concordat.Application.Registry;
+using Concordat.Application.Tests.TestSupport;
 using Concordat.Domain.Registry;
 
 namespace Concordat.Application.Tests;
@@ -12,10 +13,11 @@ namespace Concordat.Application.Tests;
 public class PendingApprovalsHandlerTests
 {
     private readonly RecordingReader _reader = new();
+    private readonly SettableCaller _caller = new();
 
     private Task<Domain.Results.Result<PendingApprovals>> HandleAsync(
         int? limit = null, int? offset = null, EnvironmentId? environment = null) =>
-        new ListPendingApprovalsHandler(_reader).HandleAsync(
+        new ListPendingApprovalsHandler(_reader, _caller).HandleAsync(
             new ListPendingApprovalsQuery(environment ?? EnvironmentId.New(), limit, offset),
             CancellationToken.None);
 
@@ -88,14 +90,80 @@ public class PendingApprovalsHandlerTests
         var answer = new PendingApprovals(
             3,
             [
-                new PendingApproval(
-                    "acme.Order", 4, "2.0.0", "why", DateTimeOffset.UnixEpoch, "alice", 3),
+                Item("acme.Order", reviewers: []),
             ]);
         _reader.Answer = answer;
 
         var result = await HandleAsync();
 
-        Assert.Same(answer, result.Value);
+        Assert.Equal(answer.Total, result.Value.Total);
+        Assert.Equal("acme.Order", Assert.Single(result.Value.Items).Subject);
+    }
+
+    private static PendingApproval Item(string subject, string[] reviewers) =>
+        new(subject, 4, "2.0.0", "why", DateTimeOffset.UnixEpoch, "alice", 3, reviewers);
+
+    private void CallerIs(string actor) =>
+        _caller.Current = _caller.Current with { Actor = ActorId.Create(actor).Value };
+
+    [Fact]
+    public async Task ASubjectNamingNoReviewers_MayBeDecidedByAnyone()
+    {
+        CallerIs("anyone@example.com");
+        _reader.Answer = new PendingApprovals(1, [Item("acme.Open", reviewers: [])]);
+
+        var result = await HandleAsync();
+
+        Assert.True(Assert.Single(result.Value.Items).MayDecide);
+    }
+
+    [Fact]
+    public async Task ASubjectNamingTheCaller_MayBeDecidedByThem_WhateverTheCase()
+    {
+        CallerIs("Alice@Example.com");
+        _reader.Answer = new PendingApprovals(1, [Item("acme.Named", ["alice@example.com"])]);
+
+        var result = await HandleAsync();
+
+        Assert.True(Assert.Single(result.Value.Items).MayDecide);
+    }
+
+    [Fact]
+    public async Task ASubjectNamingSomeoneElse_IsNotForTheCallerToDecide()
+    {
+        CallerIs("mallory@example.com");
+        _reader.Answer = new PendingApprovals(1, [Item("acme.Named", ["alice@example.com"])]);
+
+        var result = await HandleAsync();
+
+        var item = Assert.Single(result.Value.Items);
+        Assert.False(item.MayDecide);
+        Assert.Equal(["alice@example.com"], item.Reviewers);
+    }
+
+    [Fact]
+    public async Task EachItemIsJudgedBySubject()
+    {
+        CallerIs("alice@example.com");
+        _reader.Answer = new PendingApprovals(
+            3,
+            [
+                Item("acme.Mine", ["alice@example.com"]),
+                Item("acme.Theirs", ["bob@example.com"]),
+                Item("acme.Open", []),
+            ]);
+
+        var result = await HandleAsync();
+
+        Assert.Equal([true, false, true], result.Value.Items.Select(i => i.MayDecide));
+    }
+
+    [Fact]
+    public async Task AnItemThatNeverMetTheHandlerDenies_NotAllows()
+    {
+        // The reader leaves the answer for the handler. A default that allowed would turn a refactor
+        // that skipped the handler into a queue that offers every decision to everyone.
+        Assert.False(Item("acme.Named", ["alice@example.com"]).MayDecide);
     }
 
     private sealed class RecordingReader : IPendingApprovalReader

@@ -24,6 +24,8 @@ function held(subject: string, ordinal: number, baseline: number | null = 1): Pe
     registeredAt: new Date('2026-08-13T09:00:00Z'),
     registeredBy: 'ci',
     baseline,
+    reviewers: [],
+    mayDecide: true,
   };
 }
 

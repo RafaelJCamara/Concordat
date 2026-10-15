@@ -92,6 +92,8 @@ export const DOMAIN_CONCORDAT_CODES = [
   'payload_invalid',
   'version_not_awaiting_approval',
   'changelog_too_long',
+  'not_a_reviewer',
+  'reviewers_invalid',
   'schema_unresolvable',
   'warm_up_failed',
   'service_registration_failed',

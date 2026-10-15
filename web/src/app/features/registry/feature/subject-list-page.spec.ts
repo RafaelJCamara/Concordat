@@ -24,6 +24,7 @@ function subject(overrides: Partial<Subject> & { name: string }): Subject {
   return {
     format: 'json',
     owner: 'orders-team',
+    reviewers: [],
     lifecycle: 'ACTIVE',
     contentModel: 'OPEN',
     compatibilityPolicy: { mode: 'BACKWARD', surface: 'WIRE_JSON' },

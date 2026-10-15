@@ -57,6 +57,10 @@ public static class ProblemDetailsMapping
         // pipeline author their payload was malformed, which is the one thing it was not.
         ConcordatCodes.RegistrationPolicyForbids => StatusCodes.Status403Forbidden,
 
+        // 403 and not 409: nothing about the version's state is wrong, and the caller's credential is
+        // fine. A rule about this subject says someone else decides it (ADR-043).
+        ConcordatCodes.NotAReviewer => StatusCodes.Status403Forbidden,
+
         // 402, not 403. The caller has the right to do this and their plan does not stretch to
         // it — a distinction a client can act on by upgrading rather than by asking an admin
         // for a scope they already have.

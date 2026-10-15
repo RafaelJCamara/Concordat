@@ -1,6 +1,7 @@
 # What is missing
 
-**As of 2026-08-15**, except [the approval queue, 2026-10-15](#the-approval-queue-is-answered-by-the-registry-2026-10-15),
+**As of 2026-08-15**, except [subject reviewers, 2026-10-15](#a-subject-can-name-who-may-decide-its-held-versions-2026-10-15),
+[the approval queue, 2026-10-15](#the-approval-queue-is-answered-by-the-registry-2026-10-15),
 [ADR-039's two test gaps, 2026-10-14](#adr-039s-two-test-gaps-closed-2026-10-14),
 [a pattern that is not a regular expression, 2026-10-14](#a-pattern-that-is-not-a-regular-expression-is-named-as-the-schemas-fault-and-warned-about-2026-10-14),
 [a change already awaiting approval is not proposed again, 2026-10-14](#a-change-that-is-already-awaiting-approval-is-not-proposed-again-2026-10-14),
@@ -33,6 +34,44 @@ container image and a real PostgreSQL. Everything else is claimed on the strengt
 
 ---
 
+## A subject can name who may decide its held versions, 2026-10-15
+
+The row recorded since M7 is closed ([ADR-043](adr/043-a-subject-names-who-may-decide-its-held-versions.md)): *"Approval reviewers do
+not exist. Anyone with `subject:admin` can approve anything."* A subject now carries an optional **set of reviewers** (actors, at
+most 20, compared without regard to case). **Empty is every existing subject and means what it always did**; named, only they may
+approve or reject its held versions, an administrator included (`403 not_a_reviewer`, its own code because the credential is
+sufficient). `PUT …/subjects/{s}/reviewers` (`subject:admin`) sets it, an empty list clears it, and **a body that omits the member
+is `400`** so a misspelt field cannot loosen the rule. The rule is in the aggregate, asked before anything about the version, so a
+caller who may not decide learns nothing about whether it exists. Audited as `SUBJECT_REVIEWERS_CHANGED` (as the caller, both sets;
+a repeat writes nothing); **nobody is notified** (decision 42).
+
+**On screen:** the subject page says who decides ("Held versions are decided by any administrator" or "…by a, b only") with a
+**Change reviewers** control for `subject:admin` only (a textarea, one per line, two clicks, advice when the set would lock out the
+signed-in person); the approval queue shows each item's reviewers and **omits Approve and Reject, with the reason, for an
+administrator who is not among them**. `mayDecide` is the subject's rule applied to the caller by the handler that knows the caller,
+with the aggregate's own implementation of the rule.
+
+**What it is not, and says so on the confirmation and in the ADR:** a routing rule and not a boundary against an administrator (the
+scope that edits the set is the scope that decides when it is empty, so an administrator can name themselves first, and the entry is
+the trail); it does **not exclude the proposer** (a one-person team that names itself must not lock itself out; *never the actor who
+proposed it* is the natural next rule and is yours to decide); reviewers are **not verified to exist**. **Rolling back past it is a
+silent loosening.**
+
+**Verified:** on this machine, Windows, against PostgreSQL 17 in Docker. The new .NET tests (23 domain, 24 application, 28
+integration); the whole .NET suite, which found one **test** that stopped being true because of this work: the outbox is shared by
+the collection and a pump pass claims 50, so `ABreakingRegistrationIsStagedAsAReviewEventAndDeliveryIsRetried` found its message
+behind more than a batch once enough tests registered breaking versions; it drains what is due first now (it passed alone and
+failed in the project, so it was not a defect in the code under test). The web suite, lint, prettier, `codes:check`
+(90 codes) and `ng build`; `protocol docs` regenerated (two codes). `e2e/subject-reviewers.spec.ts` (12 tests) and
+`approvals.spec.ts` against a private registry run as Development (:5101), its own PostgreSQL (:55402) and `ng serve` (:4311),
+**after migrating a database that already held subjects** (the column defaults to `[]`). **Mutation-checked:** the aggregate (the
+rule in `Approve` and in `Reject`, case, prefix match, an empty set, the dedupe, the revision bump, the no-op detection, both limits,
+the retired check), the handler (the audit entry, its actor, the no-op), the persistence (the comparer, which a first mutant showed
+was only pinned once "a loaded subject is not dirty" was asserted; comma-joined storage), the status mapping, the
+required member, the queue's `mayDecide`, and on the web the dedupe, both limits, the split, the unchanged rule, the lockout advice,
+the `mayDecide` gate, the empty member, the scope on the control, the confirmation binding and the re-read, each caught.
+**Not verified:** the production web image and `smoke-web-image.sh`; CI; a registry upgraded in place with held versions in flight;
+light mode (not looked at); a screen reader on the textarea and its live region; the CLI and SDKs (none reads `reviewers`).
 ## The approval queue is answered by the registry, 2026-10-15
 
 The row recorded on 2026-10-14 is closed ([ADR-042](adr/042-the-approval-queue-is-answered-by-the-registry.md)). The Approvals page
@@ -1371,7 +1410,7 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~Registration never checked the reference graph~~ | **Closed 2026-09-24.** `ReferenceGraph` could detect a cycle and find referrers since M1.4 and nothing called it, so an edge naming a subject or ordinal that does not exist was stored without complaint and failed later, on whoever's `GET …/bundled` asked next. Registration now resolves every edge first, sharing one resolver with the bundler. The transitive re-check DESIGN §4 asked for is moot under pinned references — see §4 — and the cycle check is kept for the assumption it guards. |
 | ~~Nine routes answered anonymously on a claimed instance~~ | **Closed 2026-09-24**, thirteen months of exposure after [ADR-027](adr/027-read-requires-authentication.md) said they did not: three governance `GET`s, five read-shaped `POST`s, and `POST …/environments/{env}/bootstrap`, which returns every subject and schema in an environment. `EveryRouteUnderV1DeclaresAScope` now covers reads, not only mutations. |
 | ~~Signup named its reason for refusing~~ | **Narrowed 2026-09-24.** The neutral `detail` was the only neutral part; the code, title and type URI all said `user_already_exists`. Now `signup_refused`. Not closed: synchronous provisioning still distinguishes refusal from creation — [M9.2](plan/M9-cloud.md) says what closing it would take. |
-| **Approval reviewers do not exist** | Anyone with `subject:admin` can approve anything. A reviewer *set* was deferred to M8 and M8 did not build it. |
+| ~~Approval reviewers do not exist~~ | **Closed 2026-10-15** ([ADR-043](adr/043-a-subject-names-who-may-decide-its-held-versions.md)): a subject may name who decides its held versions; empty is every existing subject and means any administrator, as before. A routing rule and not a boundary, and it does not exclude the proposer. What it was: anyone with `subject:admin` could approve anything, and the reviewer *set* M7 deferred to M8 was not built by M8. |
 | ~~A contract's bindings cannot be edited or removed~~ | **Closed 2026-10-14** ([ADR-035](adr/035-contract-bindings-have-an-identity.md)): every binding has an id, and `PUT`/`DELETE` on `…/publishes/{id}` and `…/consumes/{id}` change its subjects and precedence or remove it, with the overlap rule run again for an edit. A binding added without a precedence can now be given one, and the overlapping binding that was refused is then accepted. What it was: there was an `add` endpoint for each kind and nothing else, so a binding added without a precedence could never be separated from a later overlapping one, and the registry's own refusal says to "give the two bindings different precedence values". Found by the web app's first real overlap test (2026-10-13). |
 | ~~Dependency advisories are live, and an audit finding is an error~~ | **Closed 2026-10-14 for detection, not for repair.** Found the same day: NuGet audit runs at restore and `TreatWarningsAsErrors` makes a finding fatal, so an advisory published against any package, transitive ones included, breaks the next fresh restore with no change to the repository, as five against `System.Security.Cryptography.Pkcs`/`.Xml` did (pinned forward, `82656ca`). [`dependency-audit.yml`](../.github/workflows/dependency-audit.yml) now restores the solution every day at 05:41 UTC, with nothing cached, and opens a GitHub issue (or comments on the open one) naming the NU19xx codes and the packages. **It detects; it does not fix.** A human still has to pin the package forward, and an advisory published at 05:42 still waits up to a day for the report, so a push can still be the first thing to find it. **Not verified: the workflow itself has never run on GitHub** (nothing is pushed); the script that does the work was run here against a real restore, the issue sequence only against a fake `gh`. Scheduled workflows are switched off by GitHub after 60 days without repository activity. A lock file is still not an option (`RestorePackagesWithLockFile` breaks solution restore on SDK 10.0.301). |
 | ~~The audit read throws on an action its build does not know~~ | **Closed 2026-10-14** by [ADR-036](adr/036-the-audit-read-tolerates-an-action-its-build-does-not-know.md): `AuditEntry` holds the stored token, `Action` is a nullable view of it, and `GET /v1/audit` returns a row it cannot name as stored (measured: 500 before, 200 after, on the real registry with `A_FUTURE_ACTION` inserted by SQL). Pinned by `ARowWhoseActionThisBuildWasNeverTaughtIsReadAsReceivedAndTheRestUnchanged` (real PostgreSQL). **It protects a rollback to a build that contains it**; rolling back to `612f7c8` or earlier keeps the old behaviour (ADR-033 and ADR-035 carry dated amendments). Filtering by an unknown action is still refused, by decision. |

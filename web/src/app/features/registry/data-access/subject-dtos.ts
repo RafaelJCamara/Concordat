@@ -59,6 +59,8 @@ export interface SubjectDto {
   readonly name: string;
   readonly format: string;
   readonly owner: string;
+  /** Absent from a registry that predates ADR-043, which has none: read as empty. */
+  readonly reviewers?: readonly string[];
   readonly lifecycle: string;
   readonly contentModel: string;
   readonly compatibilityPolicy: PolicyDto;
@@ -136,6 +138,16 @@ export interface SetPolicyDto {
   readonly surface: string | null;
 }
 
+/**
+ * `SetSubjectReviewersRequest`: the whole set, or an empty list to clear it.
+ *
+ * The member is always sent, including when empty, because the registry refuses a body that omits it:
+ * a missing member must not read as "clear", and "clear" is a request somebody made.
+ */
+export interface SetReviewersDto {
+  readonly reviewers: readonly string[];
+}
+
 /** `RegisterVersionRequest`. */
 export interface RegisterVersionDto {
   readonly schema: string;
@@ -183,6 +195,7 @@ export function toSubject(dto: SubjectDto): Subject {
     name: dto.name,
     format: wireToken('format', dto.format, SCHEMA_FORMATS) as SchemaFormat,
     owner: dto.owner,
+    reviewers: dto.reviewers ?? [],
     lifecycle: wireToken('lifecycle', dto.lifecycle, SUBJECT_LIFECYCLES) as SubjectLifecycle,
     contentModel: wireToken('contentModel', dto.contentModel, CONTENT_MODELS) as ContentModel,
     compatibilityPolicy: toPolicy(dto.compatibilityPolicy),

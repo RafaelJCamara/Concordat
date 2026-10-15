@@ -14,6 +14,14 @@ namespace Concordat.Application.Registry;
 /// <param name="Baseline">
 /// The ordinal consumers resolve as <c>latest</c> today, or null when nothing has been approved.
 /// </param>
+/// <param name="Reviewers">
+/// Who the subject names to decide this, or empty for anyone holding the scope (ADR-043).
+/// </param>
+/// <param name="MayDecide">
+/// Whether the caller satisfies the subject's reviewer rule. Set by the handler, which knows the
+/// caller; a reader leaves it <see langword="false"/>, so an item that skipped the handler would deny
+/// rather than allow. It does not say the caller holds the scope: that is the screen's own gate.
+/// </param>
 public sealed record PendingApproval(
     string Subject,
     int Ordinal,
@@ -21,7 +29,9 @@ public sealed record PendingApproval(
     string? Changelog,
     DateTimeOffset RegisteredAt,
     string RegisteredBy,
-    int? Baseline);
+    int? Baseline,
+    IReadOnlyList<string> Reviewers,
+    bool MayDecide = false);
 
 /// <summary>A page of the approval queue, and how long the whole queue is.</summary>
 /// <param name="Total">Every version awaiting approval in the environment, not only this page.</param>
@@ -43,7 +53,7 @@ public sealed record ListPendingApprovalsQuery(
 }
 
 /// <summary>Handles <see cref="ListPendingApprovalsQuery"/>.</summary>
-public sealed class ListPendingApprovalsHandler(IPendingApprovalReader reader)
+public sealed class ListPendingApprovalsHandler(IPendingApprovalReader reader, ICallerContext caller)
     : IQueryHandler<ListPendingApprovalsQuery, PendingApprovals>
 {
     /// <inheritdoc />
@@ -65,6 +75,13 @@ public sealed class ListPendingApprovalsHandler(IPendingApprovalReader reader)
         var page = await reader.ReadAsync(query.EnvironmentId, limit, offset, cancellationToken)
             .ConfigureAwait(false);
 
-        return Result<PendingApprovals>.Success(page);
+        // Whether this caller may decide each item is the subject's rule applied to the caller, in the
+        // one place that knows the caller, with the one implementation of the rule the aggregate uses.
+        var actor = caller.Current.Actor;
+
+        return Result<PendingApprovals>.Success(page with
+        {
+            Items = [.. page.Items.Select(i => i with { MayDecide = Subject.Allows(i.Reviewers.ToArray(), actor) })],
+        });
     }
 }

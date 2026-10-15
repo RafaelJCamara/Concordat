@@ -35,6 +35,7 @@ function subjectNamed(name: string): Subject {
     name,
     format: 'json',
     owner: 'someone',
+    reviewers: [],
     lifecycle: 'ACTIVE',
     contentModel: 'OPEN',
     compatibilityPolicy: { mode: null, surface: null },

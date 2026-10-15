@@ -253,6 +253,49 @@ describe('SubjectsApi', () => {
     });
   });
 
+  describe('setReviewers', () => {
+    it('puts the whole set to the reviewers resource, and nothing else', () => {
+      const { api, backend } = setUp();
+      api.setReviewers('dev', 'orders.created', ['a@x', 'b@x']).subscribe();
+
+      const call = backend.expectOne('/v1/environments/dev/subjects/orders.created/reviewers');
+
+      expect(call.request.method).toBe('PUT');
+      expect(call.request.body).toEqual({ reviewers: ['a@x', 'b@x'] });
+    });
+
+    it('sends the member even when it is empty, because the registry refuses a body without it', () => {
+      // An empty list is "clear it", and a request somebody made. A body that omitted the member
+      // would be refused, so that a typo cannot loosen the rule.
+      const { api, backend } = setUp();
+      api.setReviewers('dev', 'orders.created', []).subscribe();
+
+      const call = backend.expectOne('/v1/environments/dev/subjects/orders.created/reviewers');
+
+      expect(call.request.body).toEqual({ reviewers: [] });
+      expect(Object.keys(call.request.body as object)).toEqual(['reviewers']);
+    });
+
+    it('percent-encodes the subject name', () => {
+      const { api, backend } = setUp();
+      api.setReviewers('dev', 'a/b', []).subscribe();
+
+      backend.expectOne('/v1/environments/dev/subjects/a%2Fb/reviewers');
+    });
+
+    it('hands back the subject the registry answered with, as a domain type', () => {
+      let changed: Subject | null = null;
+      const { api, backend } = setUp();
+      api.setReviewers('dev', 'orders.created', ['A@x', 'a@x']).subscribe((v) => (changed = v));
+
+      backend
+        .expectOne('/v1/environments/dev/subjects/orders.created/reviewers')
+        .flush({ ...dto, reviewers: ['A@x'] });
+
+      expect((changed as Subject | null)?.reviewers).toEqual(['A@x']);
+      expect((changed as Subject | null)?.versions[0]?.registeredAt).toBeInstanceOf(Date);
+    });
+  });
   describe('setPolicy', () => {
     it('puts both members to the policy resource', () => {
       const { api, backend } = setUp();

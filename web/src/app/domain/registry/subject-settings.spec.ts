@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { COMPATIBILITY_MODES, COMPATIBILITY_SURFACES } from './compatibility';
 import { OWNER_MAX_LENGTH } from './new-subject';
-import { checkOwnerEdit, checkPolicyEdit, describePolicy } from './subject-settings';
+import {
+  checkOwnerEdit,
+  checkPolicyEdit,
+  checkReviewersEdit,
+  describePolicy,
+  REVIEWERS_MAX,
+} from './subject-settings';
 
 const codes = (findings: readonly { severity: string; code: string }[]) =>
   findings.map((f) => `${f.severity}:${f.code}`);
@@ -131,6 +137,126 @@ describe('checkPolicyEdit', () => {
   });
 });
 
+describe('checkReviewersEdit', () => {
+  it('sends one reviewer per line, trimmed, with blank lines dropped', () => {
+    const edit = checkReviewersEdit([], '  alice@example.com \n\n\tbob@example.com\r\n   \n');
+
+    expect(edit.send).toEqual(['alice@example.com', 'bob@example.com']);
+    expect(edit.findings).toEqual([]);
+  });
+
+  it('does not split on a comma, because an actor id may hold one', () => {
+    expect(checkReviewersEdit([], 'ci, prod').send).toEqual(['ci, prod']);
+  });
+
+  it('drops a repeat in any case and keeps the first spelling, as the registry does', () => {
+    const edit = checkReviewersEdit([], 'Alice@Example.com\nbob@example.com\nALICE@example.com');
+
+    expect(edit.send).toEqual(['Alice@Example.com', 'bob@example.com']);
+  });
+
+  it('keeps the order typed, because the order is what the page shows', () => {
+    expect(checkReviewersEdit([], 'b@x\na@x').send).toEqual(['b@x', 'a@x']);
+  });
+
+  it('trims what the registry trims and not what JavaScript does', () => {
+    // U+0085 and U+200B differ between the two (see registry-text.ts); the registry's rule wins.
+    expect(checkReviewersEdit([], '\u00a0alice@example.com\u00a0').send).toEqual([
+      'alice@example.com',
+    ]);
+  });
+
+  describe('a draft that is not a change', () => {
+    it('is advice and sends nothing, for the set already held', () => {
+      const edit = checkReviewersEdit(['a@x', 'b@x'], 'a@x\nb@x');
+
+      expect(edit.send).toBeNull();
+      expect(edit.findings).toEqual([
+        expect.objectContaining({
+          field: 'reviewers',
+          severity: 'advice',
+          code: 'reviewers_unchanged',
+        }),
+      ]);
+    });
+
+    it('says nobody is named, for an empty draft over an empty set', () => {
+      const edit = checkReviewersEdit([], '  \n ');
+
+      expect(edit.send).toBeNull();
+      expect(edit.findings[0]?.message).toContain('No reviewers are named');
+    });
+
+    it('treats the same names in another order as a change', () => {
+      expect(checkReviewersEdit(['a@x', 'b@x'], 'b@x\na@x').send).toEqual(['b@x', 'a@x']);
+    });
+
+    it('treats the same names in another case as a change, because the case is what is stored', () => {
+      expect(checkReviewersEdit(['alice@example.com'], 'Alice@example.com').send).toEqual([
+        'Alice@example.com',
+      ]);
+    });
+  });
+
+  it('sends an empty list to clear a set that is named', () => {
+    const edit = checkReviewersEdit(['a@x'], '');
+
+    expect(edit.send).toEqual([]);
+    expect(edit.findings).toEqual([]);
+  });
+
+  describe('what the registry refuses', () => {
+    it('refuses a reviewer over 256 characters, counted after the trim', () => {
+      expect(checkReviewersEdit([], 'r'.repeat(257)).send).toBeNull();
+      expect(checkReviewersEdit([], `  ${'r'.repeat(256)}  `).send).toEqual(['r'.repeat(256)]);
+    });
+
+    it('names the registry’s own code for it', () => {
+      expect(checkReviewersEdit([], 'r'.repeat(257)).findings[0]).toEqual(
+        expect.objectContaining({ severity: 'refusal', code: 'actor_id_invalid' }),
+      );
+    });
+
+    it('accepts twenty and refuses twenty-one distinct', () => {
+      const names = (n: number) => Array.from({ length: n }, (_, i) => `r${i}@x`).join('\n');
+
+      expect(checkReviewersEdit([], names(REVIEWERS_MAX)).send).toHaveLength(REVIEWERS_MAX);
+      expect(checkReviewersEdit([], names(REVIEWERS_MAX + 1)).send).toBeNull();
+      expect(checkReviewersEdit([], names(REVIEWERS_MAX + 1)).findings[0]).toEqual(
+        expect.objectContaining({ severity: 'refusal', code: 'reviewers_invalid' }),
+      );
+    });
+
+    it('counts distinct reviewers, so a long run of repeats is not too many', () => {
+      const repeated = Array.from({ length: 50 }, () => 'alice@example.com').join('\n');
+
+      expect(checkReviewersEdit([], repeated).send).toEqual(['alice@example.com']);
+    });
+  });
+
+  describe('locking yourself out', () => {
+    it('is said, as advice, when the set leaves out the signed-in person', () => {
+      const edit = checkReviewersEdit([], 'alice@example.com', 'carol@example.com');
+
+      expect(edit.send).toEqual(['alice@example.com']);
+      expect(edit.findings).toEqual([
+        expect.objectContaining({ severity: 'advice', code: 'reviewers_exclude_you' }),
+      ]);
+    });
+
+    it('is not said when they are named, whatever the case', () => {
+      expect(checkReviewersEdit([], 'Carol@Example.com', 'carol@example.com').findings).toEqual([]);
+    });
+
+    it('is not said for clearing, which lets everyone decide', () => {
+      expect(checkReviewersEdit(['a@x'], '', 'carol@example.com').findings).toEqual([]);
+    });
+
+    it('is not said when nobody is known to be signed in', () => {
+      expect(checkReviewersEdit([], 'alice@example.com', null).findings).toEqual([]);
+    });
+  });
+});
 describe('describePolicy', () => {
   it('reads a policy as mode and surface, and an absent one as inherited', () => {
     expect(describePolicy({ mode: 'FULL_TRANSITIVE', surface: 'WIRE_JSON' })).toBe(

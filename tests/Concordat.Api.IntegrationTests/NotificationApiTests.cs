@@ -73,6 +73,23 @@ public class NotificationApiTests(ApiFactory factory)
         return name;
     }
 
+    /// <summary>
+    /// Pumps until a pass finds nothing due. Terminates because a delivery that fails is rescheduled
+    /// for later, not left due, and a bounded loop says so if it ever stops being true.
+    /// </summary>
+    private async Task DrainDueAsync()
+    {
+        for (var pass = 0; pass < 100; pass++)
+        {
+            if ((await PumpAsync()).Claimed == 0)
+            {
+                return;
+            }
+        }
+
+        Assert.Fail("The outbox still had messages due after 100 passes.");
+    }
+
     /// <summary>Runs one pump pass against the real dispatcher and the real database.</summary>
     private async Task<DispatchResult> PumpAsync()
     {
@@ -300,6 +317,14 @@ public class NotificationApiTests(ApiFactory factory)
     public async Task ABreakingRegistrationIsStagedAsAReviewEventAndDeliveryIsRetried()
     {
         var (client, environment) = await NewEnvironmentAsync();
+
+        // Whatever sibling tests left due is delivered first. A pass claims the oldest 50 due messages
+        // (NotificationDispatcher.BatchSize) and the outbox is shared by the whole collection, so a
+        // test that registers late in a long run would otherwise find its own message behind more than a
+        // pass can take, and read "nothing failed" as a defect. It passed for as long as the suite staged
+        // fewer than a batch ahead of it, and stopped being true the day a few dozen tests registered
+        // breaking versions of their own.
+        await DrainDueAsync();
 
         // An endpoint that cannot resolve: the delivery fails, and the message has to survive
         // that rather than being dropped.

@@ -466,6 +466,7 @@ export interface SubjectView {
   readonly name: string;
   readonly format: string;
   readonly owner: string;
+  readonly reviewers: readonly string[];
   readonly lifecycle: string;
   readonly contentModel: string;
   readonly compatibilityPolicy: { readonly mode: string | null; readonly surface: string | null };
@@ -522,6 +523,58 @@ export async function readApprovalQueue(
   }
 
   return (await response.json()) as { total: number; items: QueuedVersion[] };
+}
+
+/** What the registry answered to a write, as a spec needs it: the status, and its code if it refused. */
+export interface RawAnswer {
+  readonly status: number;
+  readonly code: string | null;
+}
+
+async function answerOf(response: Response): Promise<RawAnswer> {
+  if (response.ok) {
+    return { status: response.status, code: null };
+  }
+
+  const problem = (await response.json().catch(() => ({}))) as { concordatCode?: string };
+
+  return { status: response.status, code: problem.concordatCode ?? null };
+}
+
+/**
+ * Names the reviewers of a subject straight through the API (ADR-043), for arranging a screen's
+ * starting state or putting a fixture back. An empty list clears the set.
+ */
+export async function putReviewersRaw(
+  credential: string,
+  environment: string,
+  subject: string,
+  reviewers: readonly string[],
+): Promise<RawAnswer> {
+  return answerOf(
+    await call(`/v1/environments/${environment}/subjects/${subject}/reviewers`, {
+      method: 'PUT',
+      headers: { authorization: `Bearer ${credential}` },
+      body: JSON.stringify({ reviewers }),
+    }),
+  );
+}
+
+/** Approves or rejects a held version straight through the API, and reports how it was answered. */
+export async function decideRaw(
+  credential: string,
+  environment: string,
+  subject: string,
+  ordinal: number,
+  verb: 'approve' | 'reject',
+): Promise<RawAnswer> {
+  return answerOf(
+    await call(`/v1/environments/${environment}/subjects/${subject}/versions/${ordinal}/${verb}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${credential}` },
+      body: JSON.stringify({ decidedBy: 'e2e' }),
+    }),
+  );
 }
 
 /** The registered text of a schema, by id, exactly as the registry serves it. */
