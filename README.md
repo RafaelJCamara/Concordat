@@ -3,10 +3,12 @@
 A schema registry and contract-enforcement platform for RabbitMQ — what Confluent Schema
 Registry is to Kafka, but built for AMQP 0-9-1 and usable from any language.
 
-> **Status: building.** The registry, the compatibility engine, the .NET SDK, the CLI and the
-> Azure deployment all run — see **[docs/STATUS.md](docs/STATUS.md)** for what works, what is
-> missing, and what was last verified running rather than merely tested. The architecture and
-> the reasoning behind it live in **[docs/DESIGN.md](docs/DESIGN.md)**.
+> **Status: v1 release candidate, self-hosted.** The registry, the web app, the compatibility engine, the
+> .NET SDK and the CLI run and are tested against a real PostgreSQL and a real RabbitMQ; the hosted
+> Cloud edition is not open yet, and SDKs for other languages follow v1
+> ([ADR-024](docs/adr/024-v1-ships-dotnet-only.md)). **[docs/STATUS.md](docs/STATUS.md)** says exactly
+> what works, what is missing, and what was last verified running rather than merely tested. The
+> architecture and the reasoning behind it live in **[docs/DESIGN.md](docs/DESIGN.md)**.
 
 ## The problem
 
@@ -49,6 +51,14 @@ TypeScript/JavaScript, Python, Go and Java, all verified against one language-ne
 conformance corpus. The `concordat` CLI ships as a native binary, a Docker image and a
 GitHub Action, so a non-.NET team needs no .NET installed at any point.
 
+## Install
+
+| What | How |
+|---|---|
+| **The registry and web app** | `docker compose -f deploy/compose/docker-compose.yml --profile registry up` ([docs/RUNNING.md](docs/RUNNING.md) §7). Images: `ghcr.io/rafaeljcamara/concordat-api`, `concordat-web` and `concordat-cli`. **A new registry answers nobody until you create its first owner** in the web app (or with one request) — see [step 4](docs/RUNNING.md#4-claim-the-instance--read-this-before-anything-else); on any host other than your own machine, set `CONCORDAT_BOOTSTRAP_TOKEN` first. |
+| **The .NET SDK** | `dotnet add package Concordat.RabbitMq` (brings `Concordat.Client`), plus `Concordat.Formats.Json`, `.Avro` or `.Protobuf` for the formats you use. `Concordat.Contracts` marks a C# type as a contract, and `Concordat.Contracts.Testing` asserts it against a live registry in a test. |
+| **The CLI** | A native binary per platform on each [GitHub release](../../releases), or `ghcr.io/rafaeljcamara/concordat-cli`; and the GitHub Action in this repository gates a pull request with no .NET installed. |
+
 ## Deployment
 
 - **Self-hosted** — one container plus PostgreSQL; `docker compose up`.
@@ -62,6 +72,8 @@ Everything is Apache-2.0, including the Cloud code.
 |---|---|
 | [**docs/BROKER-PERMISSIONS.md**](docs/BROKER-PERMISSIONS.md) | **Read before deploying.** The one RabbitMQ permission the middleware needs, why it is a requirement rather than a preference, and what to do if your estate withholds it |
 | [docs/RUNNING.md](docs/RUNNING.md) | **Start here to run it.** Every process and every test suite, in order, for PowerShell and bash, with the traps named where you would hit them |
+| [docs/OPERATING.md](docs/OPERATING.md) | **Running it for other people.** Configuration, TLS, upgrades, backups and the checklist before it is reachable |
+| [docs/RELEASE.md](docs/RELEASE.md) | Cutting a release: what a tag publishes, the one-time setup, and how to rehearse it with a release candidate |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | Run the stack locally and publish through it, ending with a message refused for breaking its contract |
 | [**docs/protocol/**](docs/protocol/README.md) | **The protocol.** The five normative artifacts, and everything needed to write a client in any language |
 | [docs/DESIGN.md](docs/DESIGN.md) | Full architecture: domain model, envelope spec, API surface, SDK bindings, decisions |
@@ -69,7 +81,7 @@ Everything is Apache-2.0, including the Cloud code.
 | [docs/DECISIONS-PENDING.md](docs/DECISIONS-PENDING.md) | Open decisions, decisions taken on the owner's behalf, and a log of what is settled |
 | [web/e2e/README.md](web/e2e/README.md) | Browser end-to-end tests: what they assume, how to run them, and what they found on their first run |
 | [docs/STATUS.md](docs/STATUS.md) | **What is missing.** What runs today and was verified running, what is not built, what is half-built, and what is waiting on an account somebody has to open |
-| [docs/adr/](docs/adr/README.md) | The 27 architecture decision records. Canonical — the table in DESIGN.md is a digest of them |
+| [docs/adr/](docs/adr/README.md) | The 47 architecture decision records. Canonical — the table in DESIGN.md is a digest of them |
 
 > **Writing a client?** Start at [docs/protocol/](docs/protocol/README.md), not DESIGN.md.
 > ADR-019's acceptance test is that you never need to read a line of this repository's C#; if

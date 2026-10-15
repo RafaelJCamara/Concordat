@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <Description>Apache Avro support for Concordat: canonicalisation, compatibility checking and payload validation.</Description>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Concordat.Formats.Abstractions\Concordat.Formats.Abstractions.csproj" />
   </ItemGroup>

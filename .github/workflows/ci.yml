@@ -66,6 +66,13 @@ jobs:
             exit 1
           fi
 
+      # The packages a user installs, packed on every change so a project that quietly stops being
+      # packable is found here and not when somebody tags a release. Nothing is pushed.
+      - name: The SDK packages can be packed
+        run: |
+          dotnet pack Concordat.slnx --configuration Release --no-build -p:Version=0.0.0-ci -o "$RUNNER_TEMP/packages"
+          [ "$(ls "$RUNNER_TEMP"/packages/*.nupkg | wc -l)" -eq 9 ] || { echo "::error::expected 9 packages"; ls "$RUNNER_TEMP/packages"; exit 1; }
+
       - name: Test
         run: >
           dotnet test Concordat.slnx

@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <Description>The Concordat registry client: resolves contracts and schemas from a registry, caches them by content-addressed id, and fails open or closed as configured.</Description>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\core\Concordat.Domain\Concordat.Domain.csproj" />
     <ProjectReference Include="..\..\formats\Concordat.Formats.Abstractions\Concordat.Formats.Abstractions.csproj" />

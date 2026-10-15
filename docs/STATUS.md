@@ -1,6 +1,7 @@
 # What is missing
 
-**As of 2026-08-15**, except [a new instance is closed until it is claimed, 2026-10-15](#a-new-instance-is-closed-until-it-is-claimed-2026-10-15),
+**As of 2026-08-15**, except [release engineering, 2026-10-15](#release-engineering-the-sdk-has-packages-and-a-tag-has-a-release-2026-10-15),
+[a new instance is closed until it is claimed, 2026-10-15](#a-new-instance-is-closed-until-it-is-claimed-2026-10-15),
 [hard delete, 2026-10-15](#a-retired-subject-can-be-deleted-for-good-by-an-administrator-through-the-api-2026-10-15),
 [the subject list is paged, 2026-10-15](#the-subject-list-is-paged-by-the-registry-and-says-how-much-it-is-not-showing-2026-10-15),
 [patterns no engine accepts, 2026-10-15](#a-pattern-no-engine-accepts-is-refused-and-the-re2-list-is-complete-2026-10-15),
@@ -26,7 +27,7 @@
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
 throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-15 (after the lifecycle controls): 2,486 .NET,
-1,897 Angular, 299 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
+1,904 Angular, 299 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
 aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
@@ -40,6 +41,26 @@ container image and a real PostgreSQL. Everything else is claimed on the strengt
 
 ---
 
+## Release engineering: the SDK has packages, and a tag has a release, 2026-10-15
+
+Found while looking at what a customer would actually receive: **the .NET SDK could not be installed.** `IsPackable` was `false` everywhere
+("nothing publishes until M2"), so `dotnet add package Concordat.RabbitMq` had no package behind it, and the CLI's release workflow uploaded
+binaries to a 14-day artifact and nowhere a user could find them.
+
+- **Nine packages are packable now:** `Concordat.RabbitMq`, `.Client`, `.Contracts`, `.Contracts.Testing`, `.Formats.Json`, `.Avro`, `.Protobuf`, and
+  the two they depend on (`.Formats.Abstractions`, `.Domain`). **Verified in a clean consumer outside the repository**, restoring from the packed feed
+  and compiling against `ConcordatClient` and `ConcordatRabbitMqOptions`. CI packs them on every change and counts nine, so a project that stops being
+  packable is found in a pull request and not on tag day.
+- **`release-nuget.yml`** packs and pushes on a tag (or a manual run, which pushes only if asked), needing one secret, `NUGET_API_KEY`.
+- **`release-cli.yml`** now attaches the four binaries and `SHA256SUMS` to the GitHub release the tag creates.
+- **A pre-release tag (`v1.0.0-rc.1`) no longer takes `latest`** on the images.
+- **`docs/RELEASE.md`** is the runbook: what a tag publishes, the one-time setup, and a release-candidate rehearsal. `SECURITY.md` and `CHANGELOG.md`
+  are new and the README's status and install sections are rewritten; every claim in them was checked against the code.
+
+**Rehearsed here, as far as it can be without the accounts:** both images built from the Dockerfiles, brought up with the compose `registry` profile on a
+fresh volume with a bootstrap token set; the registry answered `401` to an anonymous read, `/v1/auth/status` said unclaimed, and a browser on the web
+container's port got the setup screen, was refused without the token (now in words a person can act on, not "send it in the request body"), and was
+let in with it. **Not run:** the three workflows (they need a tag, and two of them an account), the Azure template, and a push to nuget.org or GHCR.
 ## A new instance is closed until it is claimed, 2026-10-15
 
 Decided for the v1 release ([ADR-047](adr/047-a-new-instance-is-closed-until-it-is-claimed.md), decision 46). **`AllowAnonymousUntilClaimed` is off by default.** A fresh
@@ -1603,6 +1624,7 @@ Nothing here can be done from inside the repository.
 |---|---|
 | **Rename the GitHub repo `Signet` → `Concordat`** | Repo-side is done and pushed; only the two clicks remain. Package metadata is already corrected. |
 | **Buy `concordat.dev`** | Problem Details `type` URIs already point at it — as seen in the 403 above. Blocks OAuth redirect URIs. |
+| **Add the `NUGET_API_KEY` secret, and reserve the `Concordat` prefix on nuget.org** | Without it a tag packs the nine SDK packages and stops at the push, with a message saying so. |
 | **Publish the GHCR images** | The workflow has never run. The package will be private by default, and Container Apps needs it public or a `registries` block plus a pull secret in the Bicep. |
 | **Stripe account** | Columns and an index exist so a webhook has somewhere to land. Nothing charges anyone. |
 | **Google / GitHub OAuth clients** | SSO cannot be built without registrations. |
@@ -1626,7 +1648,7 @@ survive being wrong.
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
 | Browser end-to-end | `web/e2e` | 299 | A real Chromium against the real stack, design system included — and against the production image |
 
-Plus 1,897 Angular unit tests. *(Counts above re-measured 2026-10-15; the unit rows are approximate because
+Plus 1,904 Angular unit tests. *(Counts above re-measured 2026-10-15; the unit rows are approximate because
 the assemblies that do not fit a row — the client, the CLI and the contract testing — are not in them.)*
 
 **No mocking framework, deliberately.** No Moq, NSubstitute, FluentAssertions or AutoFixture —

@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <IsPackable>true</IsPackable>
     <Description>Schema enforcement for RabbitMQ.Client: envelope stamping on publish, payload validation on consume, and quarantine for what does not conform.</Description>
     <PackageTags>rabbitmq;amqp;schema-registry;concordat;contract-testing</PackageTags>
   </PropertyGroup>

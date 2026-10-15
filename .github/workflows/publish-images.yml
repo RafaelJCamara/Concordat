@@ -78,7 +78,10 @@ jobs:
           fi
 
           # A tag push names the release, and that is the tag people will actually pin.
+          # A pre-release (v1.0.0-rc.1) is pinned by its version and never becomes `latest`, which is
+          # what somebody running `docker pull ...:latest` gets without asking for a candidate.
           case "${GITHUB_REF}" in
+            refs/tags/v*-*) PROMOTE="${GITHUB_REF#refs/tags/v}" ;;
             refs/tags/v*) PROMOTE="${PROMOTE},${GITHUB_REF#refs/tags/v}" ;;
           esac
 

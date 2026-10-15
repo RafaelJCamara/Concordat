@@ -1,3 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <Description>The Concordat domain model: subjects, versions, schema identity, compatibility verdicts and the rules that govern them. A dependency of the Concordat client packages.</Description>
+    <PackageTags>concordat;schema-registry</PackageTags>
+  </PropertyGroup>
+
 </Project>

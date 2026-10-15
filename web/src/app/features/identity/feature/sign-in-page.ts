@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import { Router } from '@angular/router';
 import { HlmAlertImports } from '@spartan-ng/helm/alert';
 import { HlmButton } from '@spartan-ng/helm/button';
@@ -56,7 +64,7 @@ import { SignInStore } from '../application/sign-in-store';
           </p>
         </header>
 
-        @if (store.message(); as message) {
+        @if (message(); as message) {
           <div hlmAlert variant="destructive" class="mt-4">
             <h2 hlmAlertTitle>{{ claiming() ? 'Could not set up' : 'Could not sign in' }}</h2>
             <p hlmAlertDescription>{{ message }}</p>
@@ -136,6 +144,20 @@ export class SignInPage {
   protected readonly email = signal('');
   protected readonly password = signal('');
   protected readonly token = signal('');
+
+  /**
+   * What to put in front of the user.
+   *
+   * A claim the registry answers `401` is one that lacks, or has the wrong, setup token (the only
+   * thing that can refuse a claim with no account behind it), and the registry's own sentence says
+   * "send it as 'token' in the request body", which is true of a request and no use to a person
+   * looking at a form. Everything else is the registry's own words, unchanged.
+   */
+  protected readonly message = computed(() =>
+    this.claiming() && this.store.error()?.status === 401
+      ? 'This registry asks for a setup token. Enter the one whoever deployed it set (CONCORDAT_BOOTSTRAP_TOKEN), in the box below.'
+      : this.store.message(),
+  );
 
   /** Whether this is first-run setup rather than a sign-in. */
   protected readonly claiming = () => this.session.claimed() === false;

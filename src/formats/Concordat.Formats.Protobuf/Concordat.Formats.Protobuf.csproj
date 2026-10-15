@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <Description>Protocol Buffers support for Concordat: canonicalisation and compatibility checking.</Description>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Concordat.Formats.Abstractions\Concordat.Formats.Abstractions.csproj" />
   </ItemGroup>

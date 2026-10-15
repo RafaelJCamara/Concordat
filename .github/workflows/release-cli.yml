@@ -116,3 +116,39 @@ jobs:
           docker run --rm -v "$PWD/ws:/workspace" concordat/cli:${{ github.sha }} \
             check --registry http://127.0.0.1:9 >/dev/null 2>&1
           [ $? -eq 3 ] || { echo "::error::an unreachable registry must exit 3, never 1"; exit 1; }
+
+  # Puts the binaries on the GitHub release a tag creates, which is where a person who is not a .NET shop
+  # looks for them. Only on a tag, and only after every target built and ran (`needs`), so a release never
+  # has a platform missing. The one job here with write access, and it runs nothing from the repository.
+  release:
+    name: GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [binaries, container]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+
+    steps:
+      - name: Collect the binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "${{ github.run_id }}" --repo "${{ github.repository }}" --dir dl
+          mkdir -p assets
+          for D in dl/concordat-*; do
+            RID="${D#dl/concordat-}"
+            if [ -f "$D/concordat.exe" ]; then cp "$D/concordat.exe" "assets/concordat-$RID.exe"; else cp "$D/concordat" "assets/concordat-$RID"; fi
+          done
+          [ "$(ls assets | wc -l)" -eq 4 ] || { echo "::error::expected four binaries"; ls assets; exit 1; }
+          (cd assets && sha256sum * > SHA256SUMS)
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" assets/* \
+            --repo "${{ github.repository }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes

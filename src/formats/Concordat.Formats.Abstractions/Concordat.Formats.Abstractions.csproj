@@ -1,4 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <Description>The contracts every Concordat schema format implements: canonicalisation, reference extraction, compatibility and payload validation.</Description>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\core\Concordat.Domain\Concordat.Domain.csproj" />
   </ItemGroup>

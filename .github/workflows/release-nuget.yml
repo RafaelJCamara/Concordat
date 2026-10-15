@@ -1,0 +1,91 @@
+name: Release NuGet packages
+
+# Separate from CI for the same reason `Release CLI` and `Publish images` are: pushing needs a secret,
+# and CI must never hold one. A tag `v1.2.3` packs and pushes version 1.2.3; a manual run packs a version
+# you name and pushes it only if you say so, which is how a release candidate is looked at first.
+#
+# One-time setup: add a repository secret NUGET_API_KEY (nuget.org, scoped to push, glob `Concordat.*`).
+# Without it a tag run fails at the push step with a message saying so, after the packages were built
+# and uploaded as an artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to stamp, for example 1.0.0 or 1.0.0-rc.1'
+        required: true
+      push:
+        description: 'Push to nuget.org as well as packing'
+        type: boolean
+        default: false
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  packages:
+    name: pack and push
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          global-json-file: global.json
+
+      - name: Work out the version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$VERSION' is not a semantic version (1.2.3 or 1.2.3-rc.1)"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Pack
+        run: dotnet pack Concordat.slnx -c Release -p:Version=${{ steps.version.outputs.version }} -o packages
+
+      # The set a user installs from. A project that quietly stopped being packable would otherwise
+      # publish a client whose dependencies are not on the feed.
+      - name: Check the package set
+        shell: bash
+        run: |
+          EXPECTED="Concordat.Client Concordat.Contracts Concordat.Contracts.Testing Concordat.Domain Concordat.Formats.Abstractions Concordat.Formats.Avro Concordat.Formats.Json Concordat.Formats.Protobuf Concordat.RabbitMq"
+          for NAME in $EXPECTED; do
+            [ -f "packages/$NAME.${{ steps.version.outputs.version }}.nupkg" ] || { echo "::error::$NAME was not packed"; exit 1; }
+          done
+          [ "$(ls packages/*.nupkg | wc -l)" -eq 9 ] || { echo "::error::expected 9 packages"; ls packages; exit 1; }
+
+      - name: Upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nuget-packages
+          path: packages/*.nupkg
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Push to nuget.org
+        if: github.event_name == 'push' || inputs.push
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        shell: bash
+        run: |
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "::error::the NUGET_API_KEY repository secret is not set, so nothing was pushed (the packages are in the artifact)"
+            exit 1
+          fi
+          dotnet nuget push "packages/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
