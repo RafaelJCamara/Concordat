@@ -133,7 +133,7 @@ Three arrangements keep that from costing anything:
 changed back, but the subject cannot be deleted and the audit trail an owner change writes into is
 append-only. So the two specs about it follow the rule creating one does, and add one fixture:
 
-- `subject-settings.spec.ts` makes **five subjects of its own per run** in `dev`, named
+- `subject-settings.spec.ts` makes **six subjects of its own per run** in `dev`, named
   `acme.e2e.settings.<stem>.<timestamp>`, and one in `e2e-inherit`. A test that changes an owner or a
   policy changes one of these and nothing else: **never `acme.e2e.PaymentTaken`, `acme.e2e.LedgerPosted`,
   `acme.e2e.OrderCreated`, or the defaults of `dev`** — other specs read them, and they are what makes the

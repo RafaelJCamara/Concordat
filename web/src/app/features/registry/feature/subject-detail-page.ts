@@ -249,14 +249,19 @@ import { VersionTable } from '../ui/version-table';
               {{ subject.versions.length }}
             </dd>
           </div>
-          <div>
+          <!--
+            min-w-0 and a break anywhere: this is half of a 390px screen, and a mode such as
+            FULL_TRANSITIVE is one unbroken 16px monospace word, 154px wide in a 110px cell. Without
+            both it ran into the Content model cell beside it.
+          -->
+          <div class="min-w-0">
             <dt class="text-muted-foreground text-xs">Compatibility</dt>
             <!--
               Nulls together mean the subject inherits the environment default, which is not
               the same as having no policy. Saying "Inherited" rather than "—" is the
               difference between "nothing is checked" and "checked, by somebody else's rule".
             -->
-            <dd class="text-foreground mt-1 font-mono font-medium">
+            <dd class="text-foreground mt-1 font-mono font-medium [overflow-wrap:anywhere]">
               @if (subject.compatibilityPolicy.mode === null) {
                 <span>Inherited</span>
               } @else {

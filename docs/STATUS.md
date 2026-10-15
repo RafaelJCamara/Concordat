@@ -411,8 +411,10 @@ rendered, a changed sentence. Screenshots at 1280 and 390px in both themes were 
 **Not covered:** a screen reader (the pattern is a native `button` with `aria-expanded` and `aria-describedby`, and was not
 listened to), right-to-left, and the production image (`docker/web*` untouched, `smoke-web-image.sh` not re-run).
 
-**Found, not fixed.** On the subject page at 390px a long mode (`FULL_TRANSITIVE`) in the Compatibility cell runs into the
-Content model cell beside it: the cell is half the screen and the token is 16px bold monospace. It predates this change.
+**Found, and fixed 2026-10-15.** On the subject page at 390px a long mode (`FULL_TRANSITIVE`) in the Compatibility cell ran into the
+Content model cell beside it: the cell is half the screen and the token is 16px bold monospace (154px of content in a 110px cell, measured). The
+cell is `min-w-0` and breaks anywhere now, so the token wraps instead of overflowing; `e2e/subject-settings.spec.ts` measures every cell at 390px and goes red
+without the class. It wraps mid-word (`FULL_TRANSI` / `TIVE`), which is plain and not wrong.
 
 ---
 

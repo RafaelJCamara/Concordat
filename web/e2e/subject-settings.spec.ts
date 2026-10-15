@@ -82,6 +82,51 @@ function writes(page: Page): { patches: Request[]; puts: Request[] } {
   return seen;
 }
 
+test.describe('on a phone', () => {
+  // A mode such as FULL_TRANSITIVE is one unbroken monospace word, 154px wide in a cell that is
+  // half of a 390px screen. It used to run into the Content model cell beside it, which no test
+  // saw because every layout assertion here was about the page, not about the cells inside it.
+  test.use({ viewport: { width: 390, height: 900 } });
+  const name = named('narrow');
+
+  test.beforeAll(async () => {
+    await arrange(name, {
+      compatibilityMode: 'FULL_TRANSITIVE',
+      compatibilitySurface: 'WIRE_JSON',
+    });
+  });
+
+  test('keeps every cell’s content inside the cell, a long compatibility mode included', async ({
+    page,
+  }) => {
+    await open(page, name);
+    await expect(page.getByText('FULL_TRANSITIVE')).toBeVisible();
+
+    const cells = await page.evaluate(() =>
+      [...document.querySelectorAll('dl > div')].map((cell) => {
+        const value = cell.querySelector('dd')!;
+        return {
+          label: cell.querySelector('dt')!.textContent!.trim(),
+          scroll: value.scrollWidth,
+          client: value.clientWidth,
+        };
+      }),
+    );
+
+    expect(cells.map((c) => c.label)).toContain('Compatibility');
+
+    for (const cell of cells) {
+      expect(cell.scroll, `${cell.label} overflows its cell`).toBeLessThanOrEqual(cell.client);
+    }
+
+    // And the page itself does not scroll sideways.
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+  });
+});
 const changeOwner = (page: Page) => page.getByRole('button', { name: 'Change owner' });
 const changePolicy = (page: Page) => page.getByRole('button', { name: 'Change policy' });
 
