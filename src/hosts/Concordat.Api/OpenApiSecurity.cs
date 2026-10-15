@@ -32,10 +32,10 @@ public sealed class BearerSecuritySchemeTransformer : IOpenApiDocumentTransforme
             Description =
                 "An API key or session secret, issued by POST /v1/auth/bootstrap, " +
                 "/v1/auth/signup or /v1/auth/signin, or minted at /v1/api-keys. Send it as " +
-                "'Authorization: Bearer cdt_...'. An unclaimed instance (ADR-008) answers every " +
-                "request as an owner regardless of this header; once claimed, every route that " +
-                "declares a required scope below answers 401 'unauthenticated' without it " +
-                "(ADR-027).",
+                "'Authorization: Bearer cdt_...'. Every route that declares a required scope " +
+                "below answers 401 'unauthenticated' without it (ADR-027), including on an instance " +
+                "nobody has claimed yet (ADR-047). Only an instance started with " +
+                "AllowAnonymousUntilClaimed answers an unclaimed registry as an owner.",
         };
 
         return Task.CompletedTask;

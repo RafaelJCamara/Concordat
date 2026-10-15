@@ -71,16 +71,15 @@ database: a registry that cannot reach Postgres is not ready, but restarting it 
 
 ## 4. Run the sample
 
-> **This needs an unclaimed registry.** An instance with no accounts answers every request as an
-> owner, which is what makes step 4 work with no credentials anywhere in it (ADR-008). Once
-> somebody has claimed it — including the end-to-end suite, which bootstraps its own owner —
-> every read and every write needs a credential ([ADR-027](adr/027-read-requires-authentication.md))
-> and the sample stops on its first request with `401 (Unauthorized)`.
->
-> Check with `curl http://localhost:5062/v1/auth/status`. If it says `"claimed": true`, either
-> point this at a fresh database or reset with
-> `docker compose -f deploy/compose/docker-compose.yml down -v` and re-run step 2. See
-> [RUNNING.md](RUNNING.md#4-claim-the-instance--read-this-before-anything-writes).
+> **A new registry answers nobody until it is claimed** ([ADR-047](adr/047-a-new-instance-is-closed-until-it-is-claimed.md)),
+> so the sample needs a credential. Claim it once (the web app opens on a setup screen, or
+> `curl -X POST http://localhost:5062/v1/auth/bootstrap -H "Content-Type: application/json" -d '{"email":"you@example.com","password":"at least twelve characters"}'`),
+> sign in, create an **API key** under Settings → API keys, and run the sample with it:
+> `CONCORDAT_API_KEY=<key> dotnet run --project samples/Quickstart` (PowerShell:
+> `$env:CONCORDAT_API_KEY = "<key>"` first). To try it with no accounts on a machine only you can reach,
+> start the registry with `Concordat__Authentication__AllowAnonymousUntilClaimed=true` and leave the key unset.
+> Check where you are with `curl http://localhost:5062/v1/auth/status`; step 4 of
+> [RUNNING.md](RUNNING.md#4-claim-the-instance--read-this-before-anything-else) has the whole story.
 
 ```bash
 dotnet run --project samples/Quickstart

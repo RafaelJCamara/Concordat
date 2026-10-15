@@ -26,14 +26,28 @@ describe('SessionStore', () => {
     expect(session.needsSignIn()).toBe(false);
   });
 
-  it('offers schema writes on an unclaimed instance with no session', () => {
-    // The API grants owner scopes to an unauthenticated caller until an account exists, so
-    // hiding every button on a registry that would accept the write is a worse first run
-    // than the buttons being there.
-    session.observeInstance({ claimed: false, actor: null, scopes: [] });
+  it('offers schema writes on an unclaimed instance that answers its caller as an owner', () => {
+    // The opt-in (ADR-047): the API grants the unclaimed caller owner scopes, so hiding every
+    // button on a registry that would accept the write is a worse first run than showing them.
+    session.observeInstance({
+      claimed: false,
+      actor: 'unclaimed-instance',
+      scopes: ['subject:write'],
+    });
 
+    expect(session.openInstance()).toBe(true);
     expect(session.canWriteSchemas()).toBe(true);
     expect(session.needsSignIn()).toBe(false);
+  });
+
+  it('asks for the setup screen on an unclaimed instance that is closed, which is how a fresh one starts', () => {
+    // ADR-047: no accounts and no scopes granted. Nothing renders, so the visitor is sent to
+    // sign-in, which is the setup screen while nobody has an account.
+    session.observeInstance({ claimed: false, actor: null, scopes: [] });
+
+    expect(session.openInstance()).toBe(false);
+    expect(session.canWriteSchemas()).toBe(false);
+    expect(session.needsSignIn()).toBe(true);
   });
 
   it('asks for a sign-in on a claimed instance with no session', () => {

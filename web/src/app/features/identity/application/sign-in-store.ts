@@ -73,11 +73,16 @@ export const SignInStore = signalStore(
        * creates an account, and creating an account is not the same act as authenticating as
        * one. Chaining them here spares the user typing the password twice.
        */
-      bootstrap: rxMethod<{ email: string; password: string; displayName?: string }>(
+      bootstrap: rxMethod<{
+        email: string;
+        password: string;
+        displayName?: string;
+        token?: string;
+      }>(
         pipe(
           tap(() => patchState(store, { submitting: true, error: null })),
-          switchMap(({ email, password, displayName }) =>
-            api.bootstrap(email, password, displayName).pipe(
+          switchMap(({ email, password, displayName, token }) =>
+            api.bootstrap(email, password, displayName, token).pipe(
               switchMap(() => api.signIn(email, password)),
               tap((result) => {
                 session.signIn({

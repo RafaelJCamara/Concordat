@@ -1,6 +1,7 @@
 # What is missing
 
-**As of 2026-08-15**, except [hard delete, 2026-10-15](#a-retired-subject-can-be-deleted-for-good-by-an-administrator-through-the-api-2026-10-15),
+**As of 2026-08-15**, except [a new instance is closed until it is claimed, 2026-10-15](#a-new-instance-is-closed-until-it-is-claimed-2026-10-15),
+[hard delete, 2026-10-15](#a-retired-subject-can-be-deleted-for-good-by-an-administrator-through-the-api-2026-10-15),
 [the subject list is paged, 2026-10-15](#the-subject-list-is-paged-by-the-registry-and-says-how-much-it-is-not-showing-2026-10-15),
 [patterns no engine accepts, 2026-10-15](#a-pattern-no-engine-accepts-is-refused-and-the-re2-list-is-complete-2026-10-15),
 [the two other stored-token converters, 2026-10-15](#the-two-other-stored-token-converters-no-longer-throw-2026-10-15),
@@ -24,8 +25,8 @@
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-15 (after hard delete, ADR-046): 2,481 .NET,
-1,849 Angular, 292 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-15 (after closing the default, ADR-047): 2,486 .NET,
+1,855 Angular, 292 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
 aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
@@ -39,6 +40,26 @@ container image and a real PostgreSQL. Everything else is claimed on the strengt
 
 ---
 
+## A new instance is closed until it is claimed, 2026-10-15
+
+Decided for the v1 release ([ADR-047](adr/047-a-new-instance-is-closed-until-it-is-claimed.md), decision 46). **`AllowAnonymousUntilClaimed` is off by default.** A fresh
+registry answers `401` to everything but the claim (`/v1/auth/status`, `/v1/auth/bootstrap`, sign-in, the health probes), and the web app opens on
+its **Set up Concordat** screen, which gained a **Setup token** box for a deployment that set `CONCORDAT_BOOTSTRAP_TOKEN`. The no-account evaluation is an
+opt-in (`Concordat__Authentication__AllowAnonymousUntilClaimed=true`, or `CONCORDAT_ALLOW_ANONYMOUS_UNTIL_CLAIMED=true` in compose). The quickstart sample
+reads `CONCORDAT_API_KEY`; RUNNING.md step 4, QUICKSTART, the compose file and the OpenAPI text were rewritten for it.
+
+**What the browser found that the tests did not.** The first fresh-database run showed the app **rendering its shell and a "Could not load this environment"
+error** instead of the setup screen: the route guards, the write-affordance directive and the session store all read `claimed === false` as "this instance
+answers me as an owner", which was true until today. They now follow **the scopes `/v1/auth/status` grants**, which is the same fact stated by the server;
+a new `openInstance` is the one state that still warns. The same pass found **the unclaimed banner rendered twice** in `app.ts`, since M8.2. Both are fixed
+and specced (the closed-instance cases are new in the session store, guard, directive and shell specs).
+
+**Verified:** 5 new HTTP tests on a host with the setting absent (everything but the claim is 401, the status says unclaimed, the claim works once and then
+closes it, health needs no credential, the option's default), the whole existing suite on hosts that now opt in explicitly, and the full browser suite (292)
+against a registry running the new default. **A real first run, by hand, in a browser**, on an empty database: `/` redirects to the setup screen, creating
+the owner lands on the dashboard, a reload stays signed in, no console errors. **Not verified:** a first run with a bootstrap token set, in a browser (the
+API and the request body are tested; the field is not driven); the published container images (CI builds them, the compose file was not run);
+the Azure template.
 ## A retired subject can be deleted for good, by an administrator, through the API, 2026-10-15
 
 The oldest obligation in the decisions register is built ([ADR-046](adr/046-a-retired-subject-can-be-deleted-for-good.md), decision 15).
@@ -1560,7 +1581,7 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~Subject prefix search is not implemented~~ | **Closed 2026-10-14** ([ADR-038](adr/038-subject-prefix-search.md)): `GET …/subjects?prefix=`, ordinal and case-sensitive, a literal and not a pattern, through a mapped `starts_with` and with neither the `ComplexProperty` mapping nor the shadow column the note proposed (so no migration). No index, on measurement (65,000 rows: 1.2 ms against 4.7 ms for the whole list; the DDL for the day an environment holds tens of thousands is in the ADR). The web box is the filter. **It no longer matches the owner or the middle of a name, which it did** (the maintainer's call). The list is paged since 2026-10-15 ([ADR-045](adr/045-the-subject-list-is-paged-by-the-registry.md)). **The CLI has `concordat export --prefix` since 2026-10-15** (the registry filters; encoded, empty means all). |
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | ~~A page reload signs you out~~ | **Closed 2026-08-14** by decision 26 — an httpOnly `SameSite=Strict` cookie and a `/auth/resume` route that is the only thing accepting it. The credential still never touches `localStorage`. |
-| ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Still on, and now audible** (decision 27). The API logs a warning naming both ways to close it and repeats hourly until claimed; the web app shows a banner. Verified against a real container. |
+| ~~`AllowAnonymousUntilClaimed` is on by default~~ | **Closed 2026-10-15** ([ADR-047](adr/047-a-new-instance-is-closed-until-it-is-claimed.md)): off by default. A fresh instance answers `401` to everything but the claim, the web app opens on its setup screen (which gained a **Setup token** box), and the old behaviour is an opt-in (`CONCORDAT_ALLOW_ANONYMOUS_UNTIL_CLAIMED=true`). **What remains:** without a bootstrap token, whoever reaches `/v1/auth/bootstrap` first owns the instance; the docs say to set one off your own machine. |
 | ~~No browser E2E over sign-in + guards~~ | **Closed 2026-08-15.** Playwright, in `web/e2e/` — 292 tests today across twenty-four specs, up from the 11 it launched with, and run against the production image as well as the dev server. It found the subject list broken on its first run — see below. Both of M4.5's named tests are in: "direct URL to a write route redirects" landed the same day as M4.3's write route. |
 | ~~`Tenant` is not an aggregate~~ | **Closed by M9.1**, recorded here 2026-09-24 — `Tenant.Create` carries the name and slug invariants, signup writes a row per organisation, bootstrap writes the self-hosted one, and `CloudTenancyTests` drives two organisations through the real host. Self-hosted still holds exactly one row, `TenantId.SelfHosted`: the profiles differ in how many rows there are, not in whether the table means anything. |
 | ~~The derived-environment-id decision is unmade~~ | **Closed 2026-08-14.** Adopted, by creating rows that carry the derived id. No migration, and no orphaned subjects. |
@@ -1585,20 +1606,20 @@ Nothing here can be done from inside the repository.
 
 ## What the tests actually cover
 
-Six kinds, not one. Worth knowing which, because "2,481 tests" says nothing about what would
+Six kinds, not one. Worth knowing which, because "2,486 tests" says nothing about what would
 survive being wrong.
 
 | Kind | Where | Tests | What it proves |
 |---|---|---|---|
 | Domain unit | `Domain.Tests`, three `Formats.*` | ~1,299 | Invariants in isolation. No I/O |
 | Application handler | `Application.Tests` | 356 | Handler refusals and **ordering**, with hand-written fakes |
-| HTTP integration | `Api.IntegrationTests` | 522 | Real HTTP against real PostgreSQL, via Testcontainers |
+| HTTP integration | `Api.IntegrationTests` | 527 | Real HTTP against real PostgreSQL, via Testcontainers |
 | Conformance corpus | `Conformance` | 104, over 103 fixtures | The protocol as an executable spec |
 | Broker end-to-end | `EndToEnd`, `RabbitMq.Tests` | 64 | Publish and consume through real RabbitMQ |
 | Empirical measurement | `HeaderSurvival` | 14 | What brokers actually do to headers |
 | Browser end-to-end | `web/e2e` | 292 | A real Chromium against the real stack, design system included — and against the production image |
 
-Plus 1,849 Angular unit tests. *(Counts above re-measured 2026-10-15; the unit rows are approximate because
+Plus 1,855 Angular unit tests. *(Counts above re-measured 2026-10-15; the unit rows are approximate because
 the assemblies that do not fit a row — the client, the CLI and the contract testing — are not in them.)*
 
 **No mocking framework, deliberately.** No Moq, NSubstitute, FluentAssertions or AutoFixture —

@@ -61,3 +61,4 @@ it; write a new one and mark the old **Superseded by**.
 | [044](044-a-pattern-no-engine-accepts-is-refused.md) | A pattern no engine accepts is refused; the rest is a warning | Accepted |
 | [045](045-the-subject-list-is-paged-by-the-registry.md) | The subject list is paged by the registry, and says how much it is not showing | Accepted |
 | [046](046-a-retired-subject-can-be-deleted-for-good.md) | A retired subject can be deleted for good, by an administrator, through the API | Accepted |
+| [047](047-a-new-instance-is-closed-until-it-is-claimed.md) | A new instance is closed until it is claimed | Accepted |

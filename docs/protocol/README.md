@@ -90,8 +90,9 @@ Credentials travel as `Authorization: Bearer cdt_...`, issued by `/v1/auth/boots
 `/v1/auth/signup`, `/v1/auth/signin` or `/v1/api-keys`. The OpenAPI document declares the
 `Bearer` scheme in `components.securitySchemes` and attaches it, per operation, to every route
 that requires one — generated from the same `RequiredScopes` metadata the API's own test suite
-enumerates, so it cannot say less than the code enforces. An unclaimed instance (ADR-008)
-answers every request as an owner regardless of the header.
+enumerates, so it cannot say less than the code enforces. An instance
+nobody has claimed answers `401` to all of them as well (ADR-047), unless it was started with the
+opt-in `AllowAnonymousUntilClaimed`, in which case it answers every request as an owner regardless of the header.
 
 ## Running the registry locally
 

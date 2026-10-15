@@ -19,6 +19,10 @@ Concordat ships its own identity: local accounts, memberships, roles, and API ke
 at rest with explicit scopes (`subject:read|write|admin`, `contract:*`, `env:*`,
 `broker:*`, `org:admin`). OIDC is supported but optional.
 
+> **Amended 2026-10-15 ([ADR-047](047-a-new-instance-is-closed-until-it-is-claimed.md)).** "Compose up and try it" still holds,
+> with one more step: a new instance answers nobody until its first owner is created, on the web app's setup screen or with one
+> request. The no-account evaluation is an opt-in.
+
 ## Alternatives considered
 
 - **Require OIDC.** Rejected: blocks first-run evaluation and forces infrastructure on

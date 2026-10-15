@@ -98,13 +98,26 @@ export class AuthApi {
       );
   }
 
-  /** Claims an instance that has no accounts yet. Works exactly once. */
-  bootstrap(email: string, password: string, displayName?: string): Observable<void> {
+  /**
+   * Claims an instance that has no accounts yet. Works exactly once.
+   *
+   * `token` is the deployment's setup token, when its operator set one (`CONCORDAT_BOOTSTRAP_TOKEN`):
+   * possession of the deployment, and not just reaching it, is what authorises the claim. It is left
+   * out of the body when there is none, so an instance that does not ask for one is sent what it
+   * always was.
+   */
+  bootstrap(
+    email: string,
+    password: string,
+    displayName?: string,
+    token?: string,
+  ): Observable<void> {
     return this.http
       .post<unknown>(`${apiRoot(this.config)}/auth/bootstrap`, {
         email,
         password,
         displayName: displayName ?? null,
+        ...(token === undefined || token === '' ? {} : { token }),
       })
       .pipe(map(() => undefined));
   }

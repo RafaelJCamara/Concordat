@@ -51,10 +51,22 @@ describe('App', () => {
     session = TestBed.inject(SessionStore);
   });
 
-  it('warns when the instance is unclaimed', () => {
-    session.observeInstance({ claimed: false, actor: null, scopes: [] });
+  it('warns when the instance is unclaimed and answers an unauthenticated caller as an owner', () => {
+    // The opt-in (ADR-047): the API says so by granting the unclaimed caller scopes.
+    session.observeInstance({
+      claimed: false,
+      actor: 'unclaimed-instance',
+      scopes: ['subject:write', 'org:admin'],
+    });
 
     expect(banner(render())).not.toBeNull();
+  });
+
+  it('says nothing on an unclaimed instance that is closed, which sends the visitor to setup instead', () => {
+    // A fresh install (ADR-047) answers nobody, so "anyone can change anything" would be false.
+    session.observeInstance({ claimed: false, actor: null, scopes: [] });
+
+    expect(banner(render())).toBeNull();
   });
 
   it('says nothing once the instance is claimed', () => {

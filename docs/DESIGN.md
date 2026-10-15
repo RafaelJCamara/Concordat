@@ -423,8 +423,9 @@ set is the scope that decides when it is empty, and it does not exclude the prop
 author of a breaking change from waving it through: independence is a rule to add on top.
 
 **Reads require a caller too, holding no particular scope (ADR-027).** Every read
-endpoint answers `401` to an anonymous request; an unclaimed instance is unaffected,
-since it already answers every request — read or write — as owner (M8.2). The web app's
+endpoint answers `401` to an anonymous request. *(Until v1 an unclaimed instance was unaffected, since it
+answered every request as owner (M8.2); since ADR-047 it answers nobody, unless started with the
+`AllowAnonymousUntilClaimed` opt-in.)* The web app's
 `signedInGuard` is the read-side counterpart to §9's write-scope gating: it sends a
 signed-out visitor to `/sign-in` before a read route renders, rather than letting the
 route render and then fail every request it makes with 401.

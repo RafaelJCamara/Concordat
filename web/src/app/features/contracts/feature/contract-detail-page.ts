@@ -375,8 +375,8 @@ export class ContractDetailPage {
   private readonly session = inject(SessionStore);
 
   /** Whether the caller may change a contract (the same rule as the `cdIfScope` guards). */
-  protected readonly canWrite = computed(
-    () => this.session.claimed() === false || grants(this.session.scopes(), CONTRACT_WRITE_SCOPES),
+  protected readonly canWrite = computed(() =>
+    grants(this.session.scopes(), CONTRACT_WRITE_SCOPES),
   );
 
   /** The binding being changed or removed, by kind and id, or null. */

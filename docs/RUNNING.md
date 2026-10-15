@@ -100,11 +100,11 @@ curl http://localhost:5062/health/ready
 `/health/live` and `/health/ready` are separate, and liveness deliberately ignores the database:
 a registry that cannot reach Postgres is not ready, but restarting it will not help.
 
-## 4. Claim the instance — read this before anything writes
+## 4. Claim the instance — read this before anything else
 
-A registry with no accounts is **unclaimed**, and an unclaimed instance answers every request as
-an owner. That is what makes `docker compose up` produce something you can immediately try
-(ADR-008), and it is why the first run of anything that writes just works.
+A new registry has no accounts, and **it answers nobody until someone claims it** (ADR-047): every request
+except the ones that claim it gets **401**, so an instance that is reachable by anyone else does not start
+as an open, owner-level registry.
 
 Ask which state you are in:
 
@@ -113,18 +113,12 @@ curl http://localhost:5062/v1/auth/status
 ```
 
 ```json
-{ "claimed": false, "authenticated": true, "actor": "unclaimed-instance", "scopes": ["..."] }
+{ "claimed": false, "authenticated": false, "actor": null, "scopes": [] }
 ```
 
-- **`"claimed": false`** — every request succeeds unauthenticated, reads and writes alike. The
-  quickstart sample runs as written. The registry logs a warning on a loop telling you this,
-  which is the point.
-- **`"claimed": true`** — every request needs a credential, and anything unauthenticated gets
-  **401** ([ADR-027](adr/027-read-requires-authentication.md)) — a plain `curl` against
-  `GET /v1/environments/dev/subjects` on a claimed instance now needs the same `Authorization`
-  header a write does.
-
-Claiming happens exactly once and cannot be repeated:
+Claiming happens exactly once and cannot be repeated. Either open the web app (step 5, or
+<http://localhost:5063> from containers), which shows a **Set up Concordat** screen while nobody has an
+account, or do it from the terminal:
 
 ```bash
 curl -X POST http://localhost:5062/v1/auth/bootstrap \
@@ -132,13 +126,26 @@ curl -X POST http://localhost:5062/v1/auth/bootstrap \
   -d '{"email":"you@example.com","password":"a password you will remember"}'
 ```
 
-Then sign in at <http://localhost:4200> with those details.
+The password needs at least 12 characters and there are no other rules. If you set
+`CONCORDAT_BOOTSTRAP_TOKEN` when you deployed, the claim must also carry it (`"token": "..."`, or the
+**Setup token** box on the screen): possession of the deployment, not just reaching it, is what authorises
+the claim. **On any host other than your own machine, set one.**
+
+Then sign in at <http://localhost:4200> with those details. Everything after the claim needs a
+credential, reads included ([ADR-027](adr/027-read-requires-authentication.md)): a signed-in browser has
+one, and a script or a pipeline uses an **API key** (Settings → API keys, or `POST /v1/api-keys`) as
+`Authorization: Bearer <key>`.
+
+**Evaluating on a machine only you can reach, and want no accounts?** Start the registry with
+`Concordat__Authentication__AllowAnonymousUntilClaimed=true` (compose: add it under the registry's
+`environment`). An unclaimed instance then answers every request as an owner, as it did before v1, logs a
+warning on a loop saying so, and stops doing it the moment an account exists. Do not leave it on a
+reachable host.
 
 > **If you have ever run the end-to-end suite against this database, it is already claimed** —
 > `global-setup.ts` bootstraps `e2e-owner@concordat.test` with the password
 > `correct horse battery staple`. Sign in as that, or reset the database (see
 > [Starting over](#starting-over)).
-
 ## 5. Start the web app
 
 ```bash
@@ -160,9 +167,15 @@ dotnet run --project samples/Quickstart
 It registers a contract, publishes a valid order, then publishes an invalid one and shows it
 refused before it reaches the broker — with the exact JSON-Pointer path that failed.
 
-**This needs an unclaimed instance.** On a claimed one it stops at
-`401 (Unauthorized)` on its first write, because it authenticates nowhere — registration
-belongs to CI and the CLI under ADR-005, and the sample is deliberately a plain REST client.
+**It needs a credential** unless you started the registry with the anonymous opt-in from step 4: create an
+API key (Settings → API keys), then
+
+```bash
+CONCORDAT_API_KEY=<the key> dotnet run --project samples/Quickstart     # PowerShell: $env:CONCORDAT_API_KEY = "<the key>"
+```
+
+Without one it stops at `401 (Unauthorized)` on its first request. Registration belongs to CI and the
+CLI under ADR-005, and the sample is deliberately a plain REST client that does it itself.
 
 `samples/Quickstart/Program.cs` is meant to be edited; [QUICKSTART.md
 §5](QUICKSTART.md#5-now-change-something) lists the changes worth making and what each teaches.
@@ -216,8 +229,8 @@ concordat-web        concordat/web:local       "/docker-entrypoint.…"   web   
 
 `migrate` exiting 0 is the point: it ran, and the registry waited for it. Then open
 **<http://localhost:5063>**. The registry is still on <http://localhost:5062>, and everything in
-[step 4](#4-claim-the-instance--read-this-before-anything-writes) about claiming applies
-unchanged — a fresh database is an unclaimed registry, and the page says so in a banner.
+[step 4](#4-claim-the-instance--read-this-before-anything-else) about claiming applies
+unchanged — a fresh database is an unclaimed registry, and the page opens on **Set up Concordat**.
 
 nginx forwards `/v1` and `/health` to the registry, so the browser only ever talks to port 5063, and
 you can see both halves answer through it:
@@ -229,7 +242,7 @@ curl http://localhost:5063/v1/auth/status
 
 ```json
 {"apiBaseUrl":"","profile":"self-hosted","tenant":null,"defaultEnvironment":"dev"}
-{"claimed":false,"authenticated":true,"actor":"unclaimed-instance","scopes":["broker:read", "..."]}
+{"claimed":false,"authenticated":false,"actor":null,"scopes":[]}
 ```
 
 The first is **the web container's own answer, written from its environment when it started**; the
@@ -336,8 +349,9 @@ node --test scripts/dependency-audit.test.mjs
 
 ## Troubleshooting
 
-**`401 (Unauthorized)` from the sample, or from any read or write.** The instance is claimed. See
-[step 4](#4-claim-the-instance--read-this-before-anything-writes).
+**`401 (Unauthorized)` from the sample, or from any read or write.** Nothing is open until the instance is
+claimed, and after that everything needs a credential. See
+[step 4](#4-claim-the-instance--read-this-before-anything-else).
 
 **The web app loads to a sign-in prompt where you expected the subject list.** Correct, not
 broken, on a claimed instance: [ADR-027](adr/027-read-requires-authentication.md) gates reads too,
@@ -399,6 +413,6 @@ only stops the services whose profile is on, so the database goes and the regist
 container are left running with nothing behind them.
 
 `down -v` drops the volume, so the next `up` gives you an empty database and therefore an
-**unclaimed** registry again — which is what you want before running the quickstart sample, and
+**unclaimed** registry again — which is what you want to try the claim from the start, and
 what you must not do casually if you have data you care about. Re-run [step 2](#2-create-the-database-schema)
 afterwards.

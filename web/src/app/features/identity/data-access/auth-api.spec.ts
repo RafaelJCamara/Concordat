@@ -88,4 +88,22 @@ describe('AuthApi', () => {
 
     request.flush({});
   });
+
+  it('sends the setup token when there is one, and leaves it out when there is not', () => {
+    api.bootstrap('owner@example.com', 'a long password', undefined, 's3cret').subscribe();
+    const withToken = http.expectOne('/v1/auth/bootstrap');
+    expect(withToken.request.body).toEqual({
+      email: 'owner@example.com',
+      password: 'a long password',
+      displayName: null,
+      token: 's3cret',
+    });
+    withToken.flush({});
+
+    // An empty box is no token: the registry would hash an empty string and refuse it.
+    api.bootstrap('owner@example.com', 'a long password', undefined, '').subscribe();
+    const without = http.expectOne('/v1/auth/bootstrap');
+    expect(without.request.body).not.toHaveProperty('token');
+    without.flush({});
+  });
 });

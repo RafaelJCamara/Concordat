@@ -15,11 +15,13 @@ public sealed class AuthenticationOptions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For a single-user self-hosted instance that has not been claimed yet, and nothing
-    /// else.</b> It exists because ADR-008 promises <c>docker compose up</c> produces something
-    /// you can immediately use, and because the M4 web app was built against a stub that
-    /// returned admin. Without it, upgrading into M8 locks every existing installation out of
-    /// its own registry.
+    /// <b>Off by default, as of v1 (ADR-047).</b> It was on, so that <c>docker compose up</c> produced
+    /// something usable with no account (ADR-008), and it is still available for exactly that: a
+    /// single-user instance on a machine only its operator can reach, which opts in with
+    /// <c>Concordat:Authentication:AllowAnonymousUntilClaimed=true</c>. An instance that is reachable by
+    /// anybody else must not start as an open owner-level registry, so a fresh one now answers every
+    /// request <c>401</c> except the ones that claim it (<c>/v1/auth/bootstrap</c>, <c>/v1/auth/status</c>,
+    /// sign-in), and the web app shows its first-run setup screen.
     /// </para>
     /// <para>
     /// <b>It turns itself off.</b> The moment the instance has an account, this is ignored —
@@ -28,7 +30,7 @@ public sealed class AuthenticationOptions
     /// registry that looks locked down.
     /// </para>
     /// </remarks>
-    public bool AllowAnonymousUntilClaimed { get; set; } = true;
+    public bool AllowAnonymousUntilClaimed { get; set; }
 
     /// <summary>How long a sign-in credential lasts.</summary>
     public TimeSpan SessionLifetime { get; set; } = TimeSpan.FromHours(12);
@@ -47,9 +49,9 @@ public sealed class AuthenticationOptions
     /// — not mere reachability — is what authorises the claim.
     /// </para>
     /// <para>
-    /// <b>Null by default</b> so <c>docker compose up</c> still produces something immediately
-    /// usable on a machine only its operator can reach (ADR-008). Left unset, bootstrap works as
-    /// before. Cloud and any internet-reachable deployment should set it.
+    /// <b>Null by default.</b> Left unset, whoever reaches <c>/v1/auth/bootstrap</c> first claims the
+    /// instance, which is fine on a machine only its operator can reach and not on a public host:
+    /// any internet-reachable deployment should set it.
     /// </para>
     /// </remarks>
     public string? BootstrapToken { get; set; }

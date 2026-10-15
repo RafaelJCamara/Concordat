@@ -72,12 +72,23 @@ describe('scopeGuard', () => {
     expect(TestBed.inject(Router).serializeUrl(result)).toBe('/subjects');
   });
 
-  it('lets everyone through on an unclaimed instance', () => {
-    // The API answers an unauthenticated caller as an owner until somebody creates an
-    // account, so gating the UI harder than the server would hide a screen that works.
-    session.observeInstance({ claimed: false, actor: null, scopes: [] });
+  it('lets a caller through on an unclaimed instance that answers them as an owner', () => {
+    // The opt-in (ADR-047): the scopes it granted are the whole question, as on any instance.
+    session.observeInstance({
+      claimed: false,
+      actor: 'unclaimed-instance',
+      scopes: ['subject:write', 'org:admin'],
+    });
 
     expect(run('org:admin')).toBe(true);
+  });
+
+  it('sends a visitor to the setup screen on an unclaimed instance that is closed', () => {
+    session.observeInstance({ claimed: false, actor: null, scopes: [] });
+
+    const result = run('subject:write') as UrlTree;
+
+    expect(TestBed.inject(Router).serializeUrl(result)).toBe('/sign-in?returnTo=%2Fsubjects%2Fnew');
   });
 
   it('refuses before the API has answered', () => {
@@ -108,10 +119,23 @@ describe('signedInGuard', () => {
     expect(run()).toBe(true);
   });
 
-  it('lets everyone through on an unclaimed instance', () => {
-    session.observeInstance({ claimed: false, actor: null, scopes: [] });
+  it('lets everyone through on an unclaimed instance that answers its caller as an owner', () => {
+    session.observeInstance({
+      claimed: false,
+      actor: 'unclaimed-instance',
+      scopes: ['subject:write'],
+    });
 
     expect(run()).toBe(true);
+  });
+
+  it('sends a visitor to the setup screen on an unclaimed instance that is closed', () => {
+    // A fresh install (ADR-047): there is nothing to read until somebody sets it up.
+    session.observeInstance({ claimed: false, actor: null, scopes: [] });
+
+    const result = run() as UrlTree;
+
+    expect(TestBed.inject(Router).serializeUrl(result)).toBe('/sign-in?returnTo=%2Fsubjects');
   });
 
   it('sends a signed-out caller to sign in, with somewhere to come back to', () => {

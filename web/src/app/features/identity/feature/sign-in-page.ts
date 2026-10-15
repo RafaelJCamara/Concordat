@@ -97,6 +97,25 @@ import { SignInStore } from '../application/sign-in-store';
             }
           </div>
 
+          @if (claiming()) {
+            <div class="space-y-1.5">
+              <label class="text-sm font-medium" for="setup-token">Setup token</label>
+              <input
+                id="setup-token"
+                name="setup-token"
+                type="password"
+                autocomplete="off"
+                [value]="token()"
+                (input)="token.set(value($event))"
+                class="border-input bg-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm focus-visible:ring-1 focus-visible:outline-none"
+              />
+              <p class="text-muted-foreground text-xs">
+                Only if whoever deployed this set one (<code>CONCORDAT_BOOTSTRAP_TOKEN</code>).
+                Leave it empty otherwise.
+              </p>
+            </div>
+          }
+
           <button hlmBtn type="submit" class="w-full" [disabled]="store.submitting()">
             {{ submitLabel() }}
           </button>
@@ -116,6 +135,7 @@ export class SignInPage {
 
   protected readonly email = signal('');
   protected readonly password = signal('');
+  protected readonly token = signal('');
 
   /** Whether this is first-run setup rather than a sign-in. */
   protected readonly claiming = () => this.session.claimed() === false;
@@ -163,7 +183,7 @@ export class SignInPage {
     }
 
     if (this.claiming()) {
-      this.store.bootstrap({ email, password });
+      this.store.bootstrap({ email, password, token: this.token().trim() });
     } else {
       this.store.signIn({ email, password });
     }

@@ -47,9 +47,9 @@ param databaseAppPassword string
 
 @description('''
 The shared secret POST /v1/auth/bootstrap must present to create the first owner. Required
-because this deployment is internet-reachable the moment it comes up: without a token, an
-unclaimed instance answers every request as owner, and whoever calls /bootstrap first keeps the
-instance and locks you out. Generate one with `openssl rand -hex 32` and use it as the `token`
+because this deployment is internet-reachable the moment it comes up: without a token, whoever
+calls /bootstrap first keeps the instance and locks you out (an unclaimed instance answers nothing
+else, ADR-047, but the claim itself is open). Generate one with `openssl rand -hex 32` and use it as the `token`
 field in your first bootstrap request; nothing else needs it again.
 ''')
 @secure()

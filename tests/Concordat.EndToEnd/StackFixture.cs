@@ -68,6 +68,15 @@ public sealed class StackFixture : WebApplicationFactory<Program>, IAsyncLifetim
     }
 
     /// <inheritdoc />
+    /// <summary>The stack is driven with no credentials, so it opts in to the unclaimed-instance owner (ADR-047).</summary>
+    /// <param name="builder">The web host builder.</param>
+    protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.UseSetting("Concordat:Authentication:AllowAnonymousUntilClaimed", "true");
+    }
+
     protected override IHost CreateHost(IHostBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);

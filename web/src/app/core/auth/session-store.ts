@@ -25,9 +25,10 @@ interface SessionState {
   /**
    * Whether the instance has any accounts at all, or `null` before the API has been asked.
    *
-   * An unclaimed instance answers as an owner without a credential (M8.2), which is what
-   * makes `docker compose up` usable immediately. The distinction matters here because the
-   * app must not send someone to a sign-in page when there is nobody to sign in as.
+   * A new instance answers nobody until it is claimed (ADR-047), and the app then offers its setup
+   * screen. One started with the `AllowAnonymousUntilClaimed` opt-in answers an unauthenticated caller
+   * as an owner instead, which `/v1/auth/status` says by granting that caller scopes: see
+   * {@link SessionStore.openInstance}.
    */
   readonly claimed: boolean | null;
 }
@@ -60,23 +61,33 @@ export const SessionStore = signalStore(
     /**
      * Whether to render schema write affordances (ADR-018).
      *
-     * True on an unclaimed instance with no session: the API grants owner scopes to an
-     * unauthenticated caller until somebody creates an account, and hiding every button on
-     * a registry that would in fact accept the write is a worse first run than the buttons
-     * being there.
+     * Derived from the scopes the API granted, and nothing else. On an instance that answers an
+     * unclaimed caller as an owner, `/v1/auth/status` grants that caller the owner scopes, so the
+     * buttons appear on a registry that would in fact accept the write; on a closed one it grants
+     * none, and they do not.
      */
-    canWriteSchemas: computed(
-      () => store.claimed() === false || grants(store.scopes(), SCHEMA_WRITE_SCOPES),
-    ),
+    canWriteSchemas: computed(() => grants(store.scopes(), SCHEMA_WRITE_SCOPES)),
+
+    /**
+     * Whether this instance answers a caller with no credential as an owner: unclaimed, and the API
+     * says the unclaimed caller holds scopes. Only an instance started with the opt-in does
+     * (ADR-047), and it is the one state that deserves a warning on every page.
+     */
+    openInstance: computed(() => store.claimed() === false && store.scopes().length > 0),
 
     /**
      * Whether the app should be showing a sign-in prompt.
      *
-     * Not simply "signed out": an unclaimed instance has nobody to sign in as, and asking
-     * for credentials that do not exist yet is the sort of dead end that gets a product
-     * closed.
+     * Not simply "signed out": until `/v1/auth/status` has answered nothing is known, and an
+     * instance that answers an unclaimed caller as an owner has no sign-in to ask for. A closed
+     * unclaimed instance does need one: it is where the setup screen lives.
      */
-    needsSignIn: computed(() => store.claimed() === true && store.credential() === null),
+    needsSignIn: computed(
+      () =>
+        store.claimed() !== null &&
+        store.credential() === null &&
+        !(store.claimed() === false && store.scopes().length > 0),
+    ),
   })),
 
   withMethods((store) => ({

@@ -40,10 +40,9 @@ export class IfScope implements OnDestroy {
 
   constructor() {
     effect(() => {
-      // An unclaimed instance is answered as an owner by the API, so hiding affordances that
-      // would in fact work makes a first run look broken.
-      const allowed =
-        this.session.claimed() === false || grants(this.session.scopes(), this.cdIfScope());
+      // The scopes the API granted, which on an instance that answers an unclaimed caller as an
+      // owner (the opt-in, ADR-047) are the owner scopes: affordances that would in fact work show.
+      const allowed = grants(this.session.scopes(), this.cdIfScope());
 
       if (allowed === this.rendered) {
         return;

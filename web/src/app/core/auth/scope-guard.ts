@@ -25,11 +25,10 @@ export function scopeGuard(...required: readonly Scope[]): CanActivateFn {
     const session = inject(SessionStore);
     const router = inject(Router);
 
-    // An unclaimed instance grants owner scopes to an unauthenticated caller server-side
-    // (M8.2), so gating the UI harder than the API would hide a screen that works. Checked
-    // against `claimed` rather than `canWriteSchemas`, which answers a different question and
-    // would let a schema writer through a route that wanted org:admin.
-    if (session.claimed() === false || grants(session.scopes(), required)) {
+    // An instance that answers an unclaimed caller as an owner (the opt-in, ADR-047) grants those
+    // scopes in `/v1/auth/status`, so this needs no special case for it: holding the scopes is
+    // the whole question. A closed unclaimed instance grants none and falls to the sign-in below.
+    if (grants(session.scopes(), required)) {
       return true;
     }
 
@@ -63,9 +62,10 @@ export const signedInGuard: CanActivateFn = (_route, state) => {
   const session = inject(SessionStore);
   const router = inject(Router);
 
-  // An unclaimed instance answers every request as owner server-side (M8.2), so there is
-  // nothing to gate here either.
-  if (session.claimed() === false || session.isSignedIn()) {
+  // Nothing to gate on an instance that answers an unclaimed caller as an owner (the opt-in,
+  // ADR-047). A closed one, claimed or not, sends a visitor to sign-in, which is the setup screen
+  // while nobody has an account.
+  if (session.openInstance() || session.isSignedIn()) {
     return true;
   }
 

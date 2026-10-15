@@ -51,12 +51,22 @@ describe('IfScope', () => {
     expect(button(render())).not.toBeNull();
   });
 
-  it('renders on an unclaimed instance', () => {
-    // The API answers an unauthenticated caller as an owner until an account exists, so
-    // hiding the affordance would make a first run look broken.
-    session.observeInstance({ claimed: false, actor: null, scopes: [] });
+  it('renders on an unclaimed instance that answers its caller as an owner', () => {
+    // The opt-in (ADR-047): the API grants that caller the owner scopes, so the affordance works.
+    session.observeInstance({
+      claimed: false,
+      actor: 'unclaimed-instance',
+      scopes: ['subject:admin'],
+    });
 
     expect(button(render())).not.toBeNull();
+  });
+
+  it('renders nothing on an unclaimed instance that is closed', () => {
+    // A fresh install answers nobody: no scopes were granted, so nothing would work.
+    session.observeInstance({ claimed: false, actor: null, scopes: [] });
+
+    expect(button(render())).toBeNull();
   });
 
   it('renders nothing before the API has answered', () => {

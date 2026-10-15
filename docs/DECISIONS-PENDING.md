@@ -166,6 +166,20 @@ the step. Six calls, each yours to confirm:
 > findings were advice before and are advice now ([ADR-028](adr/028-schema-editor.md)); a browser test holds them to agreeing
 > with the registry on the ordinary cases, and would need its expectations flipped.
 
+### 46. A new instance is closed until it is claimed
+
+**Implemented** ([ADR-047](adr/047-a-new-instance-is-closed-until-it-is-claimed.md)), at your request before the v1 release. Reverses #27's default. Three calls, each
+yours to confirm:
+
+- **The default is off**, and the no-account evaluation is an opt-in (`CONCORDAT_ALLOW_ANONYMOUS_UNTIL_CLAIMED=true` in compose). The first run
+  is one step longer: set up an owner on the page, make an API key for the sample. *If you would rather keep the five-minute evaluation as the
+  default*, it is one initial value and the docs and compose variable stay correct.
+- **The claim is still open until it happens.** Closing the default does not make `POST /v1/auth/bootstrap` safe on a public host; the
+  bootstrap token does, and it is optional outside the Azure template. *If you want the claim itself closed by default* (a token generated and
+  printed at first start, say), that is a feature, and it is not built.
+- **The setup screen gained a "Setup token" box**, shown while nobody has an account, empty meaning none.
+
+> **If you overturn it**, see the ADR's last section; nothing stored changes either way.
 ### 45. A retired subject can be deleted for good, and only a retired one
 
 **Implemented** ([ADR-046](adr/046-a-retired-subject-can-be-deleted-for-good.md)). Resolves decision 15. Six calls, each yours to confirm,
@@ -771,7 +785,10 @@ it. 1,489 .NET and 187 Angular tests were green throughout. See [STATUS.md](STAT
 > `authorization.spec.ts` asserts the guard rather than the wildcard: it renders for a writer,
 > redirects a reader to `/subjects`, and sends a signed-out visitor to `/sign-in?returnTo=…`.
 
-### 27. ~~`AllowAnonymousUntilClaimed` is on by default~~ — done
+### 27. ~~`AllowAnonymousUntilClaimed` is on by default~~ — done, then reversed: see #46
+
+> **Superseded 2026-10-15 by #46 / [ADR-047](adr/047-a-new-instance-is-closed-until-it-is-claimed.md): the default is now off.** What follows is
+> the August decision as it was made.
 
 **Resolved 2026-08-14 with option (a) plus the banner.** The default stands: an unclaimed
 instance answers an unauthenticated request as an owner, so `docker compose up` gives you
@@ -1037,7 +1054,7 @@ Reversible, recorded where they were made, listed here so none of them is a surp
 | Authentication failures are indistinguishable, and a failed sign-in still runs a key derivation | M8.1 | Low, and both are the point: the distinction is worth nothing to a legitimate caller and enumerates accounts for everyone else |
 | A key may not grant more than its issuer holds | M8.1 | Low, and load-bearing: without it, reaching the issue endpoint is a privilege escalation |
 | A browser session is a short-lived API key, not a second token format | [M8.2](plan/M8-identity.md) | Low. One thing to verify, one thing to revoke; session keys are excluded from the key listing so they cannot bury the standing ones |
-| `AllowAnonymousUntilClaimed` defaults to **on**, and disables itself once an account exists | M8.2 | **See #27.** Never applies to a request that presented a credential and failed to verify |
+| `AllowAnonymousUntilClaimed` defaults to **on** *(off since 2026-10-15, #46)*, and disables itself once an account exists | M8.2 | **See #27.** Never applies to a request that presented a credential and failed to verify |
 | Scope enforcement is an endpoint filter with a structural test, not a check in each handler | M8.2 | Low, and it is what makes the convention real: a forgotten check is silent and works for everyone |
 | `StampTenant` now stamps **shadow** properties only | M8.1, `ConcordatDbContext` | Low, and a fix: M8's `Membership` and `ApiKey` carry a real strongly-typed `TenantId` with the same name, and matching on the name alone threw on the first sign-in |
 | A key stores the actor it attributes requests to, rather than deriving one | [M8.2](plan/M8-identity.md) | Low, needs a migration. Deriving would mean a user lookup on every authenticated request — the SDK's hot path — or string-munging a label, which breaks the first time somebody names a key `session for the demo` |

@@ -10,13 +10,15 @@
 # The `registry` profile is the other audience: somebody evaluating Concordat who has no .NET
 # SDK and wants the promise ADR-008 makes — compose up, and try it. It runs the published
 # images, so it needs no toolchain at all: the registry on :5062 and the web app on :5063.
+# A new registry is closed until somebody claims it (ADR-047): open :5063 and the first screen is
+# the setup, or see docs/RUNNING.md step 4.
 #
 # Every published port below binds 127.0.0.1 ONLY, not 0.0.0.0: this file is a local dev loop
 # and an evaluation shortcut, not a hardened deployment. Postgres and RabbitMQ's default
 # credentials (postgres/postgres, guest/guest) are only ever safe because nothing off this
-# machine can reach them -- and the registry itself needs the same binding for a sharper reason:
-# an unclaimed instance answers every request as an owner (ADR-008), so a routable port on it is
-# not a weak credential, it is no credential at all. If you run this compose file on a shared
+# machine can reach them -- and the registry deserves the same binding for a sharper reason: until
+# someone claims it, whoever reaches /v1/auth/bootstrap first owns it (ADR-047). Set
+# CONCORDAT_BOOTSTRAP_TOKEN before exposing it, and see the opt-in below for the old open behaviour. If you run this compose file on a shared
 # host or anything with a routable IP, override POSTGRES_PASSWORD, RABBITMQ_DEFAULT_USER and
 # RABBITMQ_DEFAULT_PASS and reconsider whether loopback-only is still enough for your network.
 services:
@@ -96,11 +98,14 @@ services:
       ConnectionStrings__Concordat: 'Host=postgres;Database=concordat;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}'
       Concordat__Profile: 'SelfHosted'
       Concordat__Authentication__BootstrapToken: '${CONCORDAT_BOOTSTRAP_TOKEN:-}'
+      # Off, which is the default and is written here so it can be found: an unclaimed registry answers
+      # nobody (ADR-047). Set to 'true' to evaluate with no accounts, on a machine only you can reach;
+      # it applies until the first account exists and logs a warning on a loop while it does.
+      Concordat__Authentication__AllowAnonymousUntilClaimed: '${CONCORDAT_ALLOW_ANONYMOUS_UNTIL_CLAIMED:-false}'
     ports:
-      # 127.0.0.1, not 0.0.0.0 -- see the top of this file. An unclaimed instance (ADR-008)
-      # answers every request as an owner, which is what makes the quickstart work with no
-      # credentials anywhere in it -- and exactly why a routable port here would hand out full
-      # admin to the first thing on the network that finds it.
+      # 127.0.0.1, not 0.0.0.0 -- see the top of this file. Until it is claimed, the first thing on the
+      # network to POST /v1/auth/bootstrap owns the registry, so a routable port here needs a bootstrap
+      # token first.
       - "127.0.0.1:5062:8080"
     depends_on:
       migrate:

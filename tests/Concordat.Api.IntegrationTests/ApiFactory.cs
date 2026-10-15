@@ -39,6 +39,12 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     /// </remarks>
     protected virtual ConcordatProfile Profile => ConcordatProfile.SelfHosted;
 
+    /// <summary>
+    /// Whether this host opts in to answering an unclaimed instance as its owner (ADR-047). True for the
+    /// suite; <see cref="ClosedApiFactory"/> leaves the setting absent, which is how a fresh install runs.
+    /// </summary>
+    protected virtual bool OpenUnclaimedInstance => true;
+
     async Task IAsyncLifetime.InitializeAsync()
     {
         await _container.StartAsync().ConfigureAwait(false);
@@ -69,6 +75,14 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.UseSetting("Concordat:Profile", Profile.ToString());
+
+        // The suite is written against an unclaimed instance that answers as its owner. That is an
+        // opt-in now (ADR-047), and the one test class that asserts the default (FreshInstanceTests)
+        // builds its own host without this.
+        if (OpenUnclaimedInstance)
+        {
+            builder.UseSetting("Concordat:Authentication:AllowAnonymousUntilClaimed", "true");
+        }
 
         // The in-memory TestServer never populates Connection.RemoteIpAddress, which would
         // otherwise collapse every request across the whole run into one shared rate-limit

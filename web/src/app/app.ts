@@ -139,21 +139,21 @@ const NARROW = '(max-width: 767px)';
     }
 
     <main id="main" class="min-w-0 flex-1 overflow-x-hidden">
-      @if (session.claimed() === false) {
+      @if (session.openInstance()) {
         <!--
-          Said out loud rather than left to be discovered. An unclaimed registry answers every
-          request as an owner, so it is open to anyone who can reach it — and nothing else in
-          the product would ever mention that.
+          Said out loud rather than left to be discovered. This registry was started to answer an
+          unclaimed caller as an owner (ADR-047), so it is open to anyone who can reach it, and
+          nothing else in the product would ever mention that. A closed one shows nothing here:
+          it sends the visitor to the setup screen instead.
         -->
         <div hlmAlert variant="destructive" class="mx-6 mt-6">
-          <h2 hlmAlertTitle>This registry is unclaimed</h2>
+          <h2 hlmAlertTitle>This registry is unclaimed and open</h2>
           <p hlmAlertDescription>
             Anyone who can reach it can change anything. Create the first account to close it.
           </p>
           <a hlmBtn hlmAlertAction variant="outline" size="sm" routerLink="/sign-in">Set up</a>
         </div>
       }
-
       <router-outlet />
     </main>
   `,

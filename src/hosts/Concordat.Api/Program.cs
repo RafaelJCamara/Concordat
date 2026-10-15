@@ -75,8 +75,8 @@ builder.Services.AddHostedService<OutboxPump>();
 builder.Services.Configure<AuthenticationOptions>(
     builder.Configuration.GetSection("Concordat:Authentication"));
 
-// Says out loud, repeatedly, that an unclaimed instance answers everyone as an owner
-// (decision 27). A line at boot is as invisible as no line by the time it matters.
+// Says out loud, repeatedly, that an unclaimed instance answers everyone as an owner, when it has
+// been told to (ADR-047; decision 27). A line at boot is as invisible as no line by the time it matters.
 builder.Services.AddHostedService<UnclaimedInstanceWarning>();
 builder.Services.AddScoped<CallerContext>();
 builder.Services.AddScoped<ICallerContext>(p => p.GetRequiredService<CallerContext>());

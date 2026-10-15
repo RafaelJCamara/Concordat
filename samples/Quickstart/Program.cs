@@ -35,7 +35,17 @@ const string Schema = """
 }
 """;
 
+// A fresh registry answers nobody until it is claimed (ADR-047), so the sample needs a credential: an API
+// key from Settings > API keys, passed in the environment. An instance started with
+// Concordat__Authentication__AllowAnonymousUntilClaimed=true needs none, and this is left unset.
+var apiKey = System.Environment.GetEnvironmentVariable("CONCORDAT_API_KEY");
+
 using var http = new HttpClient { BaseAddress = new Uri(Registry) };
+
+if (!string.IsNullOrWhiteSpace(apiKey))
+{
+    http.DefaultRequestHeaders.Authorization = new("Bearer", apiKey);
+}
 
 // ---------------------------------------------------------------- 1. register the contract
 //
@@ -82,6 +92,7 @@ var client = new ConcordatClient(
     {
         BaseAddress = new Uri(Registry),
         Environment = Environment,
+        ApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
 
         // FailOpen is the default: if the registry is unreachable, keep delivering and record
         // it. Switch to FailClosed where an unvalidated message is worse than a delayed one.
