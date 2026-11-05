@@ -5,7 +5,7 @@
 // into an error, so an advisory published against any package -- including a transitive one
 // nobody chose -- fails the next restore with no change to the repository. That is how
 // System.Security.Cryptography.Pkcs and .Xml broke a fresh docker build a day after the same
-// sources had built (82656ca). CI would have caught it only on the next push; a quiet week
+// sources had built (b02863a). CI would have caught it only on the next push; a quiet week
 // would have left it to the first person who touched the repo to find out, mid-change, that
 // their change was not what broke the build.
 //
@@ -225,7 +225,7 @@ export function issueBody(findings, context) {
     '',
     'An audit finding is a build error in this repository (`TreatWarningsAsErrors`), and audit reads the vulnerability data live, so the next fresh restore -- a push, a pull request, a docker build -- fails with no change to the repository.',
     '',
-    '**What to do.** Pin the package forward in the transitive-pins group of `Directory.Packages.props` to the patched release (see 82656ca for the shape of it). Do not suppress the advisory. `dotnet list package --vulnerable --include-transitive` shows which project resolves it and which version fixes it.',
+    '**What to do.** Pin the package forward in the transitive-pins group of `Directory.Packages.props` to the patched release (see b02863a for the shape of it). Do not suppress the advisory. `dotnet list package --vulnerable --include-transitive` shows which project resolves it and which version fixes it.',
     '',
     '**What this report is.** The scheduled `dependency-audit` workflow detects; it does not fix, and it does not close this issue. It comments here while the same packages are still flagged, and closing the issue is yours once the restore is clean.',
     '',

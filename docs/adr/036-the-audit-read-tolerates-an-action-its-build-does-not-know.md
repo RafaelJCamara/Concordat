@@ -16,7 +16,7 @@ the row cannot be removed through the application because the trail is append-on
 
 [ADR-033](033-inherit-means-the-environments-default.md) (`SUBJECT_POLICY_CHANGED`) and
 [ADR-035](035-contract-bindings-have-an-identity.md) (`CONTRACT_BINDING_CHANGED`, `CONTRACT_BINDING_REMOVED`) each
-recorded it as a rollback cost, and commit `144aea4` fixed the same shape for the notification outbox and
+recorded it as a rollback cost, and commit `602958f` fixed the same shape for the notification outbox and
 subscriptions and said in its "Not covered" that the audit page was unchanged. Measured with the previous build
 against the real database, on the registry on `:5101` with one row inserted by SQL
 (`action = 'A_FUTURE_ACTION'`):
@@ -32,7 +32,7 @@ The web app was already half-ready: `audit.ts` says a row's `action` is a bare `
 new kind of event renders as itself instead of failing the whole page"*, and the table renders an action it has
 no tone for neutral. The registry was the part that refused.
 
-The precedent from `144aea4` is to **filter or isolate what the build cannot read, never silently drop or rewrite
+The precedent from `602958f` is to **filter or isolate what the build cannot read, never silently drop or rewrite
 it.** It cannot be applied unchanged, and why it cannot is most of this decision.
 
 ## Decision
@@ -93,7 +93,7 @@ registry action is spelt that way; the point of "as received" is that it must no
   which enumerate the enum and compare it with the web's list, would have to special-case the one member that must
   not be in either, without saying so. Keeping the vocabulary exactly the actions a build can *record* leaves those
   tests meaning what they say.
-- **Apply `144aea4`'s filter: `action IN (known tokens)` in SQL.** It is right there, because the outbox is a
+- **Apply `602958f`'s filter: `action IN (known tokens)` in SQL.** It is right there, because the outbox is a
   queue and a row it cannot read **stays pending for a build that can deliver it**, so nothing is lost. The audit
   read has no such second reader and no such deferral: it exists to show what happened, and a rollback is the moment
   somebody most needs to see a change a newer build made. A filtered read would hide the row from the only people
@@ -122,7 +122,7 @@ registry action is spelt that way; the point of "as received" is that it must no
   name it gave it.
 - **Positive:** no migration, no new wire field, no change to any known action's bytes, and no hand-written
   exception in the vocabulary tests.
-- **Negative: it protects a rollback to a build that contains it.** Rolling back to `612f7c8` or earlier keeps the
+- **Negative: it protects a rollback to a build that contains it.** Rolling back to `ace55ff` or earlier keeps the
   old behaviour, and a row written by a newer build still fails the read there. The cleanup is the one ADR-033 and
   ADR-035 described, and it is a decision to delete audit rows, which the application will not do for you.
 - **Negative: an unknown action is not filterable.** Decision 2. An operator can read it and cannot ask for "only
@@ -148,7 +148,7 @@ registry action is spelt that way; the point of "as received" is that it must no
 
 - [ADR-033](033-inherit-means-the-environments-default.md) and [ADR-035](035-contract-bindings-have-an-identity.md)
   — the two rollback costs this closes (each carries a dated amendment).
-- [ADR-034](034-a-policy-change-notifies-subscribers.md) and commit `144aea4` — the precedent: the outbox claim
+- [ADR-034](034-a-policy-change-notifies-subscribers.md) and commit `602958f` — the precedent: the outbox claim
   filters on the tokens the build knows, and why that is the wrong tool here.
 - `src/core/Concordat.Domain/Governance/AuditEntry.cs`,
   `src/core/Concordat.Infrastructure/Persistence/GovernanceConfiguration.cs`,

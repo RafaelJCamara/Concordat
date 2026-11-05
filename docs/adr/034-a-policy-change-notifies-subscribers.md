@@ -125,7 +125,7 @@ The probe that measured the above is in [STATUS.md](../STATUS.md).
 > separate change: the pump's claim no longer reads a row whose event token the build does not know (it filters on the
 > tokens it does, in SQL, so the row stays pending, still counted, for a build that can read it), and the dispatcher fails
 > only the messages of an environment whose subscriptions it cannot read, instead of aborting the pass. So a **future**
-> new event does not carry this rollback cost, **but rolling back to `01bce23` or earlier, which lack the fix, still
+> new event does not carry this rollback cost, **but rolling back to `2885df0` or earlier, which lack the fix, still
 > does**, and the cleanup above still applies to them. `GET …/notifications` still answers 500 for an environment holding
 > a subscription naming an unknown event, and the audit page's behaviour is unchanged. STATUS has the measurement.
 

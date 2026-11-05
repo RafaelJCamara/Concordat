@@ -3,7 +3,7 @@ name: Dependency audit
 # NuGet audit runs at restore and reads the vulnerability data live, and Directory.Build.props
 # turns every warning into an error. So an advisory published against ANY package, including a
 # transitive one nobody chose, fails the next restore with no change to the repository: that is
-# what broke a docker build of unchanged sources on 2026-10-13 (see 82656ca).
+# what broke a docker build of unchanged sources on 2026-10-13 (see b02863a).
 #
 # CI only restores on a push or a pull request, so in a quiet week the first person to learn of
 # an advisory is whoever next opens the repository, who then has to work out that their change
