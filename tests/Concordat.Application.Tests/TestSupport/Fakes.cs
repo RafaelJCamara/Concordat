@@ -70,16 +70,21 @@ internal sealed class FakeSubjects : ISubjectRepository
     /// <summary>The pages asked for, in order.</summary>
     public List<SubjectPaging> PagesAsked { get; } = [];
 
+    /// <summary>The orders the pages were asked for in, in order (ADR-049).</summary>
+    public List<SubjectSort> SortsAsked { get; } = [];
+
     /// <summary>How many times a handler counted.</summary>
     public int Counts { get; private set; }
 
     public Task<IReadOnlyList<Subject>> ListPageAsync(
         EnvironmentId environmentId,
         SubjectNamePrefix? prefix,
+        SubjectSort sort,
         SubjectPaging paging,
         CancellationToken cancellationToken)
     {
         PagesAsked.Add(paging);
+        SortsAsked.Add(sort);
 
         if (prefix is not null)
         {
@@ -87,7 +92,7 @@ internal sealed class FakeSubjects : ISubjectRepository
         }
 
         return Task.FromResult<IReadOnlyList<Subject>>(
-            [.. Matching(environmentId, prefix).Skip(paging.Offset).Take(paging.Limit)]);
+            [.. Ordered(Matching(environmentId, prefix), sort).Skip(paging.Offset).Take(paging.Limit)]);
     }
 
     public Task<int> CountAsync(
@@ -101,8 +106,14 @@ internal sealed class FakeSubjects : ISubjectRepository
     private IEnumerable<Subject> Matching(EnvironmentId environmentId, SubjectNamePrefix? prefix) =>
         _subjects
             .Where(s => s.EnvironmentId == environmentId
-                && (prefix is null || s.Name.Value.StartsWith(prefix.Value, StringComparison.Ordinal)))
-            .OrderBy(s => s.Name.Value, StringComparer.Ordinal);
+                && (prefix is null || s.Name.Value.StartsWith(prefix.Value, StringComparison.Ordinal)));
+
+    // The order the real store promises (ADR-049): by name, or newest created first and then by name. A fake
+    // can only say what the handler asked for; the database's own ordering is proved in SubjectPageRepositoryTests.
+    private static IOrderedEnumerable<Subject> Ordered(IEnumerable<Subject> subjects, SubjectSort sort) =>
+        sort is SubjectSort.Newest
+            ? subjects.OrderByDescending(s => s.CreatedAt).ThenBy(s => s.Name.Value, StringComparer.Ordinal)
+            : subjects.OrderBy(s => s.Name.Value, StringComparer.Ordinal);
 
     public void Add(Subject subject)
     {

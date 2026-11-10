@@ -90,12 +90,16 @@ public class PendingApprovalReaderTests(PostgresFixture fixture)
     }
 
     private async Task<PendingApprovals> ReadAsync(
-        TenantId tenant, EnvironmentId environment, int limit = 50, int offset = 0)
+        TenantId tenant, EnvironmentId environment, int limit = 50, int offset = 0, string? subject = null)
     {
         await using var context = fixture.NewContext(tenant);
 
         return await new PendingApprovalReader(context).ReadAsync(
-            environment, limit, offset, CancellationToken.None);
+            environment,
+            subject is null ? null : SubjectName.Create(subject).Value,
+            limit,
+            offset,
+            CancellationToken.None);
     }
 
     [Fact]
@@ -394,5 +398,213 @@ public class PendingApprovalReaderTests(PostgresFixture fixture)
         var page = await ReadAsync(tenant, environment);
 
         Assert.Equal(1, page.Total);
+    }
+
+    // ------------------------------------------------------------- one subject's queue (ADR-049)
+
+    /// <summary>
+    /// An environment whose queue holds, oldest first: alpha's v2, bravo's v2, alpha's v3. Alpha has two
+    /// held versions and bravo one, so a filter has something to include twice and something to leave out.
+    /// </summary>
+    private async Task<(TenantId Tenant, EnvironmentId Environment, string Alpha, string Bravo)> ArrangeTwoHeldAsync()
+    {
+        var tenant = TenantId.New();
+        var environment = EnvironmentId.New();
+        var schemas = new List<Schema>();
+
+        var suffix = Unique();
+        var alpha = NewSubject(environment, $"acme.alpha.{suffix}");
+        var bravo = NewSubject(environment, $"acme.bravo.{suffix}");
+
+        foreach (var subject in new[] { alpha, bravo })
+        {
+            Register(subject, schemas, T0.AddHours(1));
+        }
+
+        Register(alpha, schemas, T0.AddHours(2), breaking: true);
+        Register(bravo, schemas, T0.AddHours(3), breaking: true);
+        Register(alpha, schemas, T0.AddHours(4), breaking: true);
+
+        await SaveAsync(tenant, schemas, alpha, bravo);
+
+        return (tenant, environment, alpha.Name.Value, bravo.Name.Value);
+    }
+
+    [Fact]
+    public async Task ASubjectFilter_IsThatSubjectsHeldVersionsAndNoOthers_OldestFirst()
+    {
+        var (tenant, environment, alpha, bravo) = await ArrangeTwoHeldAsync();
+
+        var page = await ReadAsync(tenant, environment, subject: alpha);
+
+        Assert.Equal([(alpha, 2), (alpha, 3)], page.Items.Select(i => (i.Subject, i.Ordinal)));
+        Assert.DoesNotContain(page.Items, i => i.Subject == bravo);
+    }
+
+    [Fact]
+    public async Task ASubjectFilter_TotalCountsOnlyThatSubjectsVersions()
+    {
+        var (tenant, environment, alpha, bravo) = await ArrangeTwoHeldAsync();
+
+        // The whole queue is three; each subject's own is the number it holds, on every page of it.
+        Assert.Equal(3, (await ReadAsync(tenant, environment)).Total);
+        Assert.Equal(2, (await ReadAsync(tenant, environment, subject: alpha)).Total);
+        Assert.Equal(1, (await ReadAsync(tenant, environment, subject: bravo)).Total);
+        Assert.Equal(2, (await ReadAsync(tenant, environment, limit: 1, subject: alpha)).Total);
+        Assert.Equal(2, (await ReadAsync(tenant, environment, limit: 1, offset: 1, subject: alpha)).Total);
+    }
+
+    [Fact]
+    public async Task ASubjectFilter_ComposesWithLimitAndOffset_OverTheFilteredQueue()
+    {
+        var tenant = TenantId.New();
+        var environment = EnvironmentId.New();
+        var schemas = new List<Schema>();
+
+        // One subject holding five proposals, and another holding one in between them: if the page were taken
+        // before the filter, the second subject would take a slot and the pages would be short.
+        var held = NewSubject(environment, $"acme.many.S{Unique()}");
+        var other = NewSubject(environment, $"acme.other.S{Unique()}");
+        Register(held, schemas, T0.AddHours(1));
+        Register(other, schemas, T0.AddHours(1));
+
+        for (var i = 0; i < 5; i++)
+        {
+            Register(held, schemas, T0.AddHours(10 + (2 * i)), breaking: true);
+            Register(other, schemas, T0.AddHours(11 + (2 * i)), breaking: true);
+        }
+
+        await SaveAsync(tenant, schemas, held, other);
+
+        var first = await ReadAsync(tenant, environment, limit: 2, offset: 0, subject: held.Name.Value);
+        var second = await ReadAsync(tenant, environment, limit: 2, offset: 2, subject: held.Name.Value);
+        var last = await ReadAsync(tenant, environment, limit: 2, offset: 4, subject: held.Name.Value);
+        var past = await ReadAsync(tenant, environment, limit: 2, offset: 5, subject: held.Name.Value);
+
+        Assert.All(new[] { first, second, last, past }, p => Assert.Equal(5, p.Total));
+        Assert.Equal([2, 3], first.Items.Select(i => i.Ordinal));
+        Assert.Equal([4, 5], second.Items.Select(i => i.Ordinal));
+        Assert.Equal([6], last.Items.Select(i => i.Ordinal));
+        Assert.Empty(past.Items);
+        Assert.All(first.Items.Concat(second.Items).Concat(last.Items), i => Assert.Equal(held.Name.Value, i.Subject));
+    }
+
+    [Fact]
+    public async Task ASubjectFilter_IsTheWholeName_NotAPrefixOfIt()
+    {
+        var tenant = TenantId.New();
+        var environment = EnvironmentId.New();
+        var schemas = new List<Schema>();
+
+        // 'acme.order' is a prefix of both of the others, and a name of its own.
+        var suffix = Unique();
+        var exact = NewSubject(environment, $"acme.order{suffix}");
+        var longer = NewSubject(environment, $"acme.order{suffix}s");
+        var child = NewSubject(environment, $"acme.order{suffix}.Created");
+
+        foreach (var subject in new[] { exact, longer, child })
+        {
+            Register(subject, schemas, T0.AddHours(1));
+            Register(subject, schemas, T0.AddHours(2), breaking: true);
+        }
+
+        await SaveAsync(tenant, schemas, exact, longer, child);
+
+        var page = await ReadAsync(tenant, environment, subject: exact.Name.Value);
+
+        Assert.Equal(1, page.Total);
+        Assert.Equal(exact.Name.Value, Assert.Single(page.Items).Subject);
+    }
+
+    [Fact]
+    public async Task ASubjectFilter_IsCaseSensitive_AsNamesAre()
+    {
+        var tenant = TenantId.New();
+        var environment = EnvironmentId.New();
+        var schemas = new List<Schema>();
+
+        var suffix = Unique();
+        var upper = NewSubject(environment, $"acme.Case{suffix}");
+        var lower = NewSubject(environment, $"acme.case{suffix}");
+
+        foreach (var subject in new[] { upper, lower })
+        {
+            Register(subject, schemas, T0.AddHours(1));
+            Register(subject, schemas, T0.AddHours(2), breaking: true);
+        }
+
+        await SaveAsync(tenant, schemas, upper, lower);
+
+        var page = await ReadAsync(tenant, environment, subject: upper.Name.Value);
+
+        Assert.Equal(upper.Name.Value, Assert.Single(page.Items).Subject);
+        Assert.Equal(1, page.Total);
+    }
+
+    [Fact]
+    public async Task ASubjectFilter_ForANameNoSubjectHas_IsAnEmptyQueue()
+    {
+        var (tenant, environment, _, _) = await ArrangeTwoHeldAsync();
+
+        var page = await ReadAsync(tenant, environment, subject: "acme.nobody.Home");
+
+        Assert.Equal(0, page.Total);
+        Assert.Empty(page.Items);
+    }
+
+    [Fact]
+    public async Task ASubjectFilter_ForASubjectWithNothingHeld_IsAnEmptyQueue_WhileOthersAreFull()
+    {
+        var tenant = TenantId.New();
+        var environment = EnvironmentId.New();
+        var schemas = new List<Schema>();
+
+        var calm = NewSubject(environment, $"acme.calm.S{Unique()}");
+        var busy = NewSubject(environment, $"acme.busy.S{Unique()}");
+        Register(calm, schemas, T0.AddHours(1));
+        Register(busy, schemas, T0.AddHours(1));
+        Register(busy, schemas, T0.AddHours(2), breaking: true);
+
+        await SaveAsync(tenant, schemas, calm, busy);
+
+        var page = await ReadAsync(tenant, environment, subject: calm.Name.Value);
+
+        Assert.Equal(0, page.Total);
+        Assert.Empty(page.Items);
+        Assert.Equal(1, (await ReadAsync(tenant, environment)).Total);
+    }
+
+    [Fact]
+    public async Task ASubjectFilter_DoesNotReachAnotherEnvironmentsOrTenantsSubjectOfTheSameName()
+    {
+        var tenant = TenantId.New();
+        var mine = EnvironmentId.New();
+        var theirs = EnvironmentId.New();
+        var schemas = new List<Schema>();
+
+        var name = $"acme.same.S{Unique()}";
+        var ours = NewSubject(mine, name);
+        var elsewhere = NewSubject(theirs, name);
+
+        foreach (var subject in new[] { ours, elsewhere })
+        {
+            Register(subject, schemas, T0.AddHours(1));
+            Register(subject, schemas, T0.AddHours(2), breaking: true);
+        }
+
+        await SaveAsync(tenant, schemas, ours, elsewhere);
+
+        // The same name in the other tenant, in the same environment id (the sharpest way to ask).
+        var otherTenant = TenantId.New();
+        var otherSchemas = new List<Schema>();
+        var foreign = NewSubject(mine, name);
+        Register(foreign, otherSchemas, T0.AddHours(1));
+        Register(foreign, otherSchemas, T0.AddHours(2), breaking: true);
+        await SaveAsync(otherTenant, otherSchemas, foreign);
+
+        var page = await ReadAsync(tenant, mine, subject: name);
+
+        Assert.Equal(1, page.Total);
+        Assert.Single(page.Items);
     }
 }

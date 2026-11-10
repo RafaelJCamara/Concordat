@@ -29,6 +29,11 @@ export interface SubjectListOptions {
   readonly prefix?: string;
   readonly limit?: number;
   readonly offset?: number;
+  /**
+   * The order of the list (ADR-049). `newest` is the subject's creation date, latest first, ties broken by
+   * name; left out, the registry answers in name order, as it always did.
+   */
+  readonly sort?: 'newest' | 'name';
 }
 
 /**
@@ -57,10 +62,14 @@ export class SubjectsApi {
    * be answering a different question than the registry (the box used to match anywhere in a name,
    * ignoring case).
    *
-   * With a `limit` and/or an `offset`, one page of the list in name order (ADR-045); without either, every
-   * subject, as before. The registry sends how many match in `X-Total-Count`, which is what `total` is: a
-   * registry that predates the header answers every subject and no count, and `total` is then the length
-   * of the list it sent.
+   * With a `limit` and/or an `offset`, one page of the list (ADR-045); without either, every subject, as
+   * before. The registry sends how many match in `X-Total-Count`, which is what `total` is. Without the
+   * header, `total` is the length of the list for a request that asked for no page (the registry then sent
+   * every subject) and **null for one that did** (ADR-052): the length of a page is not the length of the
+   * list, and the screen then says only that there may be more.
+   *
+   * `sort: 'newest'` orders by when each subject was created, latest first, with the name as the tiebreaker
+   * so that no subject is on two pages or on none (ADR-049); without it the order is the name's, as before.
    *
    * The prefix is sent as given. The registry trims it and answers an empty list for text no name could
    * start with, so nothing is validated here; an empty or absent prefix sends no parameter at all, which
@@ -81,6 +90,12 @@ export class SubjectsApi {
       params['offset'] = options.offset;
     }
 
+    if (options.sort !== undefined) {
+      params['sort'] = options.sort;
+    }
+
+    const paged = options.limit !== undefined || options.offset !== undefined;
+
     return this.http
       .get<readonly SubjectDto[]>(`${this.root(environment)}/subjects`, {
         params,
@@ -91,7 +106,7 @@ export class SubjectsApi {
           const items = (response.body ?? []).map(toSubject);
           const header = Number.parseInt(response.headers.get('X-Total-Count') ?? '', 10);
 
-          return { items, total: Number.isFinite(header) ? header : items.length };
+          return { items, total: Number.isFinite(header) ? header : paged ? null : items.length };
         }),
       );
   }

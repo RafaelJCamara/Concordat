@@ -11,6 +11,7 @@
 export const DOMAIN_CONCORDAT_CODES = [
   'schema_id_malformed',
   'subject_name_invalid',
+  'subject_sort_invalid',
   'environment_name_invalid',
   'environment_not_found',
   'environment_already_exists',

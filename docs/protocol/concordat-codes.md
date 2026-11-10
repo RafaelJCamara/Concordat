@@ -25,6 +25,7 @@ token and an operator can alert across a fleet.
 | --- | --- |
 | `schema_id_malformed` | A schema id was not 32 lowercase hexadecimal characters. |
 | `subject_name_invalid` | A subject name did not match the canonical grammar. |
+| `subject_sort_invalid` | A subject list was asked for in an order the registry does not offer (ADR-049). |
 | `environment_name_invalid` | An environment name did not match the canonical grammar. |
 | `environment_not_found` | No environment with the given name exists. |
 | `environment_already_exists` | An environment with that name already exists. |
@@ -122,7 +123,7 @@ token and an operator can alert across a fleet.
 | `middleware_faulted` | Concordat's own middleware threw while handling a delivery, which is reported as an unenforced outcome rather than allowed to reach the application. |
 | `concurrent_write_conflict` | Two requests raced on the same row: a unique constraint or an optimistic-concurrency check caught it at the database rather than in application logic. |
 
-**98 codes.**
+**99 codes.**
 
 ## Rules for implementers
 

@@ -45,6 +45,15 @@ _advice_ (which never does). `e2e/schema-parity.spec.ts` holds the first kind ag
 registry's dry-run endpoint. See [ADR-028](../docs/adr/028-schema-editor.md) for the reasoning and
 for what keeps Monaco and `ajv` out of the initial bundle.
 
+## The guided tour
+
+The first time someone is signed in, and again after the browser's site data is cleared, the app walks them through the
+dashboard, subjects, approvals, contracts, settings and API keys. It is built here and not taken from a library
+([ADR-051](../docs/adr/051-a-first-time-visitor-is-shown-a-guided-tour.md)): it is non-modal, never traps focus, and works under the
+Content-Security-Policy unchanged. "Take the tour" in the sidebar footer replays it. The steps are `TOUR_STEPS` in
+`src/app/core/config/tour.ts`, each anchored to a `data-tour="…"` attribute (add one to a new element, not a class); a step whose
+target is not on the page is skipped and not counted. The "seen" flag is `concordat.tour.seen` in `localStorage`.
+
 ## Layout
 
 ```

@@ -32,6 +32,23 @@ const APPEARANCES: readonly Appearance[] = ['light', 'dark', 'system'];
 const DEFAULT_APPEARANCE: Appearance = 'dark';
 
 /**
+ * The browser's `localStorage`, or null when even reaching for it is refused.
+ *
+ * The property getter itself throws a `SecurityError` when site data is blocked, so
+ * `window.localStorage ?? null` is not a guard: the exception is raised before `??` sees a
+ * value. Every caller that hands storage to {@link readStoredAppearance} (or to the tour's seen
+ * flag) goes through here, because `main.ts` calls it before bootstrap and an exception there is
+ * a blank page.
+ */
+export function reachStorage(view: Window | null | undefined): Storage | null {
+  try {
+    return view?.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The stored choice, defaulting to {@link DEFAULT_APPEARANCE}.
  *
  * Storage access is wrapped because it throws, not returns null, when the browser has
@@ -83,7 +100,7 @@ export function applyAppearance(root: Element, resolved: ResolvedAppearance): vo
  */
 export function applyStoredAppearance(document: Document): void {
   const view = document.defaultView;
-  const appearance = readStoredAppearance(view?.localStorage ?? null);
+  const appearance = readStoredAppearance(reachStorage(view));
 
   applyAppearance(document.documentElement, resolveAppearance(appearance, systemPrefersDark(view)));
 }

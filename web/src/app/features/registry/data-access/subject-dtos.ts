@@ -66,6 +66,8 @@ export interface SubjectDto {
   readonly compatibilityPolicy: PolicyDto;
   readonly latest: number | null;
   readonly versions: readonly VersionDto[];
+  /** ISO 8601, UTC (ADR-049). Absent from a registry that predates it: read as unknown, not as now. */
+  readonly createdAt?: string;
 }
 
 /** `BreakingChangeResponse`. */
@@ -201,6 +203,9 @@ export function toSubject(dto: SubjectDto): Subject {
     compatibilityPolicy: toPolicy(dto.compatibilityPolicy),
     latest: dto.latest,
     versions: dto.versions.map(toVersion),
+    ...(dto.createdAt === undefined || dto.createdAt === null
+      ? {}
+      : { createdAt: wireTimestamp(dto.createdAt) }),
   };
 }
 

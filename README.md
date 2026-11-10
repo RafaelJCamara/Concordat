@@ -59,6 +59,15 @@ GitHub Action, so a non-.NET team needs no .NET installed at any point.
 | **The .NET SDK** | `dotnet add package Concordat.RabbitMq` (brings `Concordat.Client`), plus `Concordat.Formats.Json`, `.Avro` or `.Protobuf` for the formats you use. `Concordat.Contracts` marks a C# type as a contract, and `Concordat.Contracts.Testing` asserts it against a live registry in a test. |
 | **The CLI** | A native binary per platform on each [GitHub release](../../releases), or `ghcr.io/rafaeljcamara/concordat-cli`; and the GitHub Action in this repository gates a pull request with no .NET installed. |
 
+## See it running
+
+**[docs/DEMO.md](docs/DEMO.md)** runs four small services that send orders and payments over RabbitMQ under two
+contracts, one enforcing and one monitoring, with a few messages wrong on purpose. Start the stack, run
+`dotnet run --project samples/Demo`, and the web app fills up: the contracts and what they bind, the violations the
+services reported, and a breaking change held for approval. Approve it and watch a running service start being refused;
+switch a contract from `MONITOR` to `ENFORCE` and watch it change with no deploy. For the smallest possible use of the
+SDK, [docs/QUICKSTART.md](docs/QUICKSTART.md) publishes two messages and stops.
+
 ## Deployment
 
 - **Self-hosted** — one container plus PostgreSQL; `docker compose up`.
@@ -74,6 +83,7 @@ Everything is Apache-2.0, including the Cloud code.
 | [docs/RUNNING.md](docs/RUNNING.md) | **Start here to run it.** Every process and every test suite, in order, for PowerShell and bash, with the traps named where you would hit them |
 | [docs/OPERATING.md](docs/OPERATING.md) | **Running it for other people.** Configuration, TLS, upgrades, backups and the checklist before it is reachable |
 | [docs/RELEASE.md](docs/RELEASE.md) | Cutting a release: what a tag publishes, the one-time setup, and how to rehearse it with a release candidate |
+| [**docs/DEMO.md**](docs/DEMO.md) | **See it running.** Four services sending messages under two contracts, with the contracts, the reported violations and a held breaking change on the web app's dashboard, and things to change and watch |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | Run the stack locally and publish through it, ending with a message refused for breaking its contract |
 | [**docs/protocol/**](docs/protocol/README.md) | **The protocol.** The five normative artifacts, and everything needed to write a client in any language |
 | [docs/DESIGN.md](docs/DESIGN.md) | Full architecture: domain model, envelope spec, API surface, SDK bindings, decisions |

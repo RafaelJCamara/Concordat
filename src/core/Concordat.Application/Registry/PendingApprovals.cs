@@ -42,8 +42,13 @@ public sealed record PendingApprovals(int Total, IReadOnlyList<PendingApproval> 
 /// <param name="EnvironmentId">The environment.</param>
 /// <param name="Limit">The most items to return; clamped to <see cref="MaxLimit"/>.</param>
 /// <param name="Offset">How many of the oldest to skip.</param>
+/// <param name="Subject">
+/// Only this subject's held versions: the name as the caller wrote it, or <see langword="null"/> or blank for
+/// the whole queue. An <b>exact</b> name (ordinal, case-sensitive, trimmed as a name is), never a prefix
+/// (ADR-049). A name no subject can have lists nothing.
+/// </param>
 public sealed record ListPendingApprovalsQuery(
-    EnvironmentId EnvironmentId, int? Limit, int? Offset) : IQuery<PendingApprovals>
+    EnvironmentId EnvironmentId, int? Limit, int? Offset, string? Subject = null) : IQuery<PendingApprovals>
 {
     /// <summary>The largest page a caller may ask for.</summary>
     public const int MaxLimit = 200;
@@ -72,7 +77,24 @@ public sealed class ListPendingApprovalsHandler(IPendingApprovalReader reader, I
             ListPendingApprovalsQuery.MaxLimit);
         var offset = Math.Max(query.Offset ?? 0, 0);
 
-        var page = await reader.ReadAsync(query.EnvironmentId, limit, offset, cancellationToken)
+        // One subject's queue, when one was named. The same answer a prefix no name could begin with gets
+        // (ADR-038): a name no subject can have has no held versions, which is an empty queue and not an
+        // error, and the store is not asked. Blank is no filter, as a blank prefix is.
+        SubjectName? subject = null;
+
+        if (!string.IsNullOrWhiteSpace(query.Subject))
+        {
+            var parsed = SubjectName.Create(query.Subject);
+
+            if (parsed.IsFailure)
+            {
+                return Result<PendingApprovals>.Success(new PendingApprovals(0, []));
+            }
+
+            subject = parsed.Value;
+        }
+
+        var page = await reader.ReadAsync(query.EnvironmentId, subject, limit, offset, cancellationToken)
             .ConfigureAwait(false);
 
         // Whether this caller may decide each item is the subject's rule applied to the caller, in the

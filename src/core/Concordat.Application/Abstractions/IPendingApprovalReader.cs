@@ -14,10 +14,18 @@ public interface IPendingApprovalReader
 {
     /// <summary>Reads one page of the queue, oldest proposal first.</summary>
     /// <param name="environmentId">The environment.</param>
+    /// <param name="subject">
+    /// Only this subject's held versions, matched on the whole name, or <see langword="null"/> for the whole
+    /// queue. The page and the total are both of what remains (ADR-049).
+    /// </param>
     /// <param name="limit">The most items to return.</param>
     /// <param name="offset">How many of the oldest to skip.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>The page and the length of the whole queue.</returns>
     Task<PendingApprovals> ReadAsync(
-        EnvironmentId environmentId, int limit, int offset, CancellationToken cancellationToken);
+        EnvironmentId environmentId,
+        SubjectName? subject,
+        int limit,
+        int offset,
+        CancellationToken cancellationToken);
 }

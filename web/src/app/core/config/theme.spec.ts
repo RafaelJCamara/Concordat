@@ -194,4 +194,21 @@ describe('applyStoredAppearance', () => {
 
     expect(root.classList.contains('dark')).toBe(true);
   });
+
+  it('still applies a theme when merely reaching for localStorage throws', () => {
+    // Site data blocked outright: the `localStorage` property getter raises a SecurityError, so
+    // `view.localStorage ?? null` never reaches the `??`. Before the tour (ADR-051) the app failed to
+    // boot here, on `main.ts`'s first line of theme code.
+    const root = document.createElement('html');
+    const view = {
+      get localStorage(): Storage {
+        throw new DOMException('blocked', 'SecurityError');
+      },
+      matchMedia: () => ({ matches: false }),
+    };
+    const fake = { documentElement: root, defaultView: view } as unknown as Document;
+
+    expect(() => applyStoredAppearance(fake)).not.toThrow();
+    expect(root.classList.contains('dark')).toBe(true);
+  });
 });

@@ -20,14 +20,28 @@ export class ApprovalsApi {
   private readonly config = inject(CONCORDAT_CONFIG);
 
   /**
-   * One page of the queue. Both parameters are optional; the registry clamps an out-of-range page
+   * One page of the queue. Every parameter is optional; the registry clamps an out-of-range page
    * rather than refusing it, so nothing is validated here.
+   *
+   * With a `subject`, only that subject's held versions, and the registry's own `total` counts only
+   * those (ADR-049): the filter is an exact name, not a prefix, and it is the registry's, so the page
+   * that says "3 waiting" for one subject is not counting the rest of the queue. The name is sent as
+   * given and encoded by the HTTP client, so a dot or any other character in it reaches the registry
+   * as itself.
    */
   getQueue(
     environment: string,
-    page: { readonly limit?: number; readonly offset?: number } = {},
+    page: {
+      readonly limit?: number;
+      readonly offset?: number;
+      readonly subject?: string | null;
+    } = {},
   ): Observable<ApprovalQueue> {
-    const params: Record<string, number> = {};
+    const params: Record<string, string | number> = {};
+
+    if (page.subject) {
+      params['subject'] = page.subject;
+    }
 
     if (page.limit !== undefined) {
       params['limit'] = page.limit;

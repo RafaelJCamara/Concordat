@@ -79,6 +79,32 @@ describe('ApprovalsApi', () => {
     expect(request.params.get('offset')).toBe('0');
   });
 
+  it('narrows the queue to one subject when asked to (ADR-049), and sends nothing when not', () => {
+    const { api, backend } = setUp();
+
+    api.getQueue('dev', { subject: 'orders.created' }).subscribe();
+    const narrowed = backend.expectOne((r) => r.url === '/v1/environments/dev/approvals');
+    expect(narrowed.request.params.get('subject')).toBe('orders.created');
+    narrowed.flush(dto);
+
+    // Null is how the screen says "no filter", and an empty one is the same: no parameter at all.
+    api.getQueue('dev', { subject: null }).subscribe();
+    api.getQueue('dev', { subject: '' }).subscribe();
+    for (const open of backend.match('/v1/environments/dev/approvals')) {
+      expect(open.request.params.has('subject')).toBe(false);
+    }
+  });
+
+  it('puts a subject name with characters that mean something in a query on the wire as itself', () => {
+    const { api, backend } = setUp();
+
+    api.getQueue('dev', { subject: 'a b&c=d#e' }).subscribe();
+
+    backend.expectOne(
+      (r) => r.urlWithParams === '/v1/environments/dev/approvals?subject=a%20b%26c=d%23e',
+    );
+  });
+
   it('percent-encodes the environment name', () => {
     // An environment name is typed by a person. One with a slash in it must not address a
     // different route.

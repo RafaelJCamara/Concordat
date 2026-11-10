@@ -78,7 +78,11 @@ test.describe('searching subjects by the start of their name', () => {
 
     // The registry was asked, with the prefix as typed: nothing was filtered in the browser.
     expect(asked).toEqual([PREFIX]);
-    await expect(page.getByText(`${ALL.length} subjects starting with`)).toBeVisible();
+    await expect(page.getByTestId('list-extent')).toContainText(
+      `subjects 1–${ALL.length} of ${ALL.length} starting with ${PREFIX}`,
+    );
+    // The prefix is in the address, so a reload or a pasted link searches the same thing (ADR-052).
+    expect(new URL(page.url()).searchParams.get('q')).toBe(PREFIX);
   });
 
   test('narrows as the prefix grows, one request per pause in typing', async ({ page }) => {
@@ -229,7 +233,7 @@ test.describe('searching subjects by the start of their name', () => {
     await box.fill(fast);
 
     await expect(rowNames(page)).toHaveCount(2);
-    await expect(page.getByText(`2 subjects starting with`)).toBeVisible();
+    await expect(page.getByTestId('list-extent')).toContainText('of 2 starting with');
 
     release();
     // Give a late answer the chance to land if it were going to.
@@ -240,50 +244,34 @@ test.describe('searching subjects by the start of their name', () => {
     await expect(box).toHaveValue(fast);
   });
 
-  test('says how many more there are, and reads them on request, in name order (ADR-045)', async ({
+  test('lists a search newest first, as one page with no pager, and no "Show more" (ADR-049, ADR-052)', async ({
     page,
   }) => {
-    // The screen asks for fifty, and this run has five. Cutting the page to two on the way out makes
-    // the registry's real total and real offset do the work, which a stubbed answer would not test.
-    const limits: string[] = [];
+    // What the paging looks like over many pages is `subject-paging.spec.ts`'s, in an environment of its own;
+    // this run has five subjects. What is checked here is the search's own half: it is the first page of the
+    // registry's order, newest first, and the page is asked for from the start.
     const offsets: string[] = [];
 
-    await page.route(
-      (url) => url.searchParams.get('prefix') === PREFIX && /\/subjects$/.test(url.pathname),
-      async (route) => {
-        const url = new URL(route.request().url());
-        limits.push(url.searchParams.get('limit') ?? '');
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+
+      if (url.searchParams.get('prefix') === PREFIX && /\/subjects$/.test(url.pathname)) {
         offsets.push(url.searchParams.get('offset') ?? '');
-        url.searchParams.set('limit', '2');
-        await route.continue({ url: url.toString() });
-      },
-    );
+      }
+    });
 
     await searchBox(page).fill(PREFIX);
 
-    await expect(rowNames(page)).toHaveCount(2);
-    const extent = page.getByTestId('list-extent');
-    await expect(extent).toContainText(`Showing the first 2 of ${ALL.length}`);
-    await expect(extent).toContainText(`${ALL.length - 2} more are not shown yet`);
-
-    await page.getByRole('button', { name: 'Show more' }).click();
-    await expect(rowNames(page)).toHaveCount(4);
-    await expect(extent).toContainText(`Showing the first 4 of ${ALL.length}`);
-    await expect(extent).toContainText('1 more is not shown yet');
-
-    await page.getByRole('button', { name: 'Show more' }).click();
     await expect(rowNames(page)).toHaveCount(ALL.length);
-    // Everything is on screen, so the screen stops saying it is not.
-    await expect(extent).toHaveCount(0);
+    await expect(page.getByTestId('list-extent')).toContainText('Page 1 of 1 · subjects 1–5 of 5');
+    // Five subjects fit one page of fifty: no pager to turn, and ADR-045's button is gone.
+    await expect(page.getByRole('navigation', { name: 'Subject pages' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Show more' })).toHaveCount(0);
 
-    // The names are the registry's order, each once, with no row repeated across the pages.
-    const names = await rowNames(page).allInnerTexts();
-    expect(names.map((n) => n.trim())).toEqual([...ALL].sort((a, b) => (a < b ? -1 : 1)));
-
-    // The page asked for fifty and continued from what it held.
-    expect(new Set(limits)).toEqual(new Set(['50']));
-    expect(offsets).toEqual(['', '2', '4']);
+    // Created in the order of ALL, one after the other in `beforeAll`, so newest first is the reverse.
+    const names = (await rowNames(page).allInnerTexts()).map((n) => n.trim());
+    expect(names).toEqual([...ALL].reverse());
+    expect(offsets).toEqual(['0']);
   });
 
   test('does not scroll sideways on a phone', async ({ page }) => {

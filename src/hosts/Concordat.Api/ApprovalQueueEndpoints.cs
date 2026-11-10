@@ -23,7 +23,10 @@ public static class ApprovalQueueEndpoints
                 "`items` is one page of it: `limit` (default 50, at most 200; out-of-range values " +
                 "are clamped) and `offset` (default 0) choose the page. Each item names the " +
                 "ordinal consumers resolve as latest today (`baseline`, null when nothing has " +
-                "been approved), which is what approving the item would replace. Reading the " +
+                "been approved), which is what approving the item would replace. With `subject`, only " +
+                "the held versions of the subject with exactly that name (the whole name, case-sensitive, " +
+                "never a prefix): `total` counts only them, the order is unchanged, and a name no " +
+                "subject has is an empty queue rather than an error. Reading the " +
                 "queue needs only `subject:read`; deciding is `subject:admin`. An environment " +
                 "nothing has been written to answers an empty queue rather than 404.")
             .Produces<PendingApprovalsResponse>()
@@ -36,12 +39,13 @@ public static class ApprovalQueueEndpoints
         string env,
         int? limit,
         int? offset,
+        string? subject,
         IDispatcher dispatcher,
         IEnvironmentResolver environments,
         CancellationToken cancellationToken)
     {
         var result = await dispatcher.QueryAsync(
-            new ListPendingApprovalsQuery(environments.Resolve(env), limit, offset),
+            new ListPendingApprovalsQuery(environments.Resolve(env), limit, offset, subject),
             cancellationToken).ConfigureAwait(false);
 
         return result.IsFailure

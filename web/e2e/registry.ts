@@ -28,7 +28,7 @@ export const READER = {
 } as const;
 
 /** Where global setup leaves the owner's API credential, so specs need not sign in to arrange data. */
-export const OWNER_CREDENTIAL_FILE = 'e2e/.auth/owner-credential.txt';
+export const OWNER_CREDENTIAL_FILE = `${process.env.CONCORDAT_E2E_AUTH_DIR ?? 'e2e/.auth'}/owner-credential.txt`;
 
 /** Saves the credential global setup obtained, for {@link ownerCredential}. */
 export function rememberOwnerCredential(credential: string): void {

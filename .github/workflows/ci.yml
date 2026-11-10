@@ -73,6 +73,13 @@ jobs:
           dotnet pack Concordat.slnx --configuration Release --no-build -p:Version=0.0.0-ci -o "$RUNNER_TEMP/packages"
           [ "$(ls "$RUNNER_TEMP"/packages/*.nupkg | wc -l)" -eq 9 ] || { echo "::error::expected 9 packages"; ls "$RUNNER_TEMP/packages"; exit 1; }
 
+      # Outside the solution on purpose (the product must not depend on a sample), which is also why nothing
+      # else would notice one stop compiling. The demo is the first thing a newcomer runs.
+      - name: The samples still build
+        run: |
+          dotnet build samples/Quickstart --configuration Release --nologo
+          dotnet build samples/Demo --configuration Release --nologo
+
       - name: Test
         run: >
           dotnet test Concordat.slnx

@@ -4,7 +4,7 @@ Everything needed to get the registry, the web app and the test suites running o
 machine, in the order you need it, with the traps named where you would hit them.
 
 [QUICKSTART.md](QUICKSTART.md) is the ten-minute tour that ends with a message refused for
-breaking its contract. This document is the wider one: every process, every test suite, both
+breaking its contract, and [DEMO.md](DEMO.md) is the long-running version with the web app filling up. This document is the wider one: every process, every test suite, both
 shells, and what to do when a step does not do what it says.
 
 > Commands are given for **PowerShell** and for **bash** where the two differ. The difference is
@@ -179,6 +179,11 @@ CLI under ADR-005, and the sample is deliberately a plain REST client that does 
 
 `samples/Quickstart/Program.cs` is meant to be edited; [QUICKSTART.md
 §5](QUICKSTART.md#5-now-change-something) lists the changes worth making and what each teaches.
+
+**To see something running rather than run something once**, use the demo: `dotnet run --project samples/Demo` (with the same
+`CONCORDAT_API_KEY`) keeps four services sending messages under two contracts, with a few wrong on purpose, and fills the web
+app's dashboard, contracts and approvals pages. [DEMO.md](DEMO.md) is the walkthrough, including what to change and what you
+will see.
 
 ## 7. Or run all of it from containers
 

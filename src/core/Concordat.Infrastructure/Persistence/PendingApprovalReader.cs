@@ -17,14 +17,29 @@ internal sealed class PendingApprovalReader(ConcordatDbContext context) : IPendi
 {
     /// <inheritdoc />
     public async Task<PendingApprovals> ReadAsync(
-        EnvironmentId environmentId, int limit, int offset, CancellationToken cancellationToken)
+        EnvironmentId environmentId,
+        SubjectName? subject,
+        int limit,
+        int offset,
+        CancellationToken cancellationToken)
     {
         // Retired subjects are included, as they were when the browser filtered the subject list:
         // a proposal nobody has decided is waiting whatever became of its subject, and hiding it
         // would make the dashboard's awaiting count (which includes it) disagree with this queue.
-        var awaiting = context.Subjects
+        var subjects = context.Subjects
             .AsNoTracking()
-            .Where(s => s.EnvironmentId == environmentId)
+            .Where(s => s.EnvironmentId == environmentId);
+
+        // One subject's queue (ADR-049): the whole name, by equality, which is bytewise on the column's
+        // deterministic collation and so exact and case-sensitive as names are. Applied before the versions
+        // are joined in, so it is the filter the count and the page share, and the total is the filtered
+        // queue's length and not the environment's.
+        if (subject is not null)
+        {
+            subjects = subjects.Where(s => s.Name == subject);
+        }
+
+        var awaiting = subjects
             .SelectMany(
                 s => s.Versions,
                 (s, v) => new { s.Name, s.Latest, s.Reviewers, Version = v })

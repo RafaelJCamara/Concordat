@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { TOUR_SEEN_KEY } from '../src/app/core/config/tour';
 
 /**
  * The design system, asserted rather than eyeballed.
@@ -47,16 +48,19 @@ async function token(page: Page, name: string): Promise<string> {
  * to mean something. It also drops a whole page load per test.
  */
 async function visitFresh(page: Page, path: string): Promise<void> {
-  await page.addInitScript(() => {
+  await page.addInitScript((tourKey) => {
     try {
       if (!sessionStorage.getItem('e2e.storage-cleared')) {
         localStorage.clear();
         sessionStorage.setItem('e2e.storage-cleared', '1');
+        // Cleared is the point, but not of the tour: a first-time visitor's card would sit over
+        // the shell these tests click (ADR-051), and tour.spec.ts is where that visitor is tested.
+        localStorage.setItem(tourKey, '1');
       }
     } catch {
       /* A context that refuses storage has nothing stored to clear. */
     }
-  });
+  }, TOUR_SEEN_KEY);
 
   await page.goto(path);
 }

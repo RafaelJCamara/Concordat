@@ -1,6 +1,6 @@
 # ADR-045: The subject list is paged by the registry, and says how much it is not showing
 
-- **Status:** Accepted
+- **Status:** Accepted; the screen section ("The screen.") is superseded by [ADR-052](052-the-subject-list-is-paged-with-page-controls-and-the-url.md), the API (`limit`, `offset`, `X-Total-Count`) stands
 - **Date:** 2026-10-15
 - **Deciders:** Rafael Camara
 
@@ -62,4 +62,6 @@ old defect with a bigger constant: the registry knows how many there are and the
   measured 100-125 ms at 200,000). It was listed beside this and is a different question: a counter maintained when a status
   changes. ADR-037 said to build it when it is measured to hurt, and it has not been.
 - **Sorting by anything but name**, and filtering by owner. Both are separate parameters on the same route and neither needs this
-  one changed.
+  one changed. *Amended 2026-11-09: `sort=name|newest` exists now
+  ([ADR-049](049-subjects-can-be-listed-newest-first.md)): newest is by creation time, then name, and an unknown sort is
+  refused with `400 subject_sort_invalid`, unlike `limit` and `offset`, which are clamped.*

@@ -1,9 +1,15 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
+  Injector,
+  afterNextRender,
+  computed,
   effect,
   inject,
+  input,
   signal,
+  untracked,
   type WritableSignal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
@@ -39,6 +45,14 @@ import { PendingReview } from './pending-review';
  * <b>The outcome is announced, not just shown.</b> A decided version leaves the queue, and a
  * row that vanishes without a word reads as the page having lost it. The `role="status"` line
  * says what happened to it, and is what a screen reader hears.
+ *
+ * <b>The address can narrow the queue to one subject, and point at one of its versions</b>
+ * (`?subject=orders.created&version=2`, ADR-052). That is where the subjects list sends the pill that
+ * says a version is awaiting approval. The registry does the narrowing (ADR-049), so the count beside the
+ * list is the subject's own; the page says it is filtered and how to undo it (`Show all`), says so
+ * plainly when the subject has nothing held, and opens the review of the version named and brings it
+ * into view. Neither parameter is an identity (DESIGN section 9 keeps those in the path): they are a
+ * filter and a place to land, and the unfiltered queue works as it always did.
  */
 @Component({
   selector: 'cd-approvals-page',
@@ -64,6 +78,24 @@ import { PendingReview } from './pending-review';
           <span class="font-mono">{{ environments.name() }}</span>
         </p>
       </header>
+
+      @if (filter(); as name) {
+        <!--
+          Said, and undoable in one step. A list that is quietly narrowed to one subject would look like
+          the whole queue being short, and the person who followed a link here would not know there is
+          more. The name is shown whole and can break anywhere: it is a dotted identifier with no spaces.
+        -->
+        <div
+          role="status"
+          class="border-border bg-card flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border px-4 py-3"
+          data-testid="approvals-filter"
+        >
+          <p class="text-sm">
+            Showing changes waiting on <span class="font-mono break-all">{{ name }}</span>
+          </p>
+          <a hlmBtn variant="outline" size="sm" routerLink="/approvals">Show all</a>
+        </div>
+      }
 
       <div role="status" aria-live="polite">
         @if (store.lastDecided(); as decided) {
@@ -101,9 +133,26 @@ import { PendingReview } from './pending-review';
         <div hlmAlert variant="destructive">
           <h2 hlmAlertTitle>Could not load the queue</h2>
           <p hlmAlertDescription>{{ error.detail }}</p>
-          <button hlmBtn hlmAlertAction variant="outline" size="sm" (click)="store.load()">
+          <button hlmBtn hlmAlertAction variant="outline" size="sm" (click)="store.load(filter())">
             Try again
           </button>
+        </div>
+      } @else if (store.isEmpty() && filter() !== null) {
+        <!--
+          Not the same sentence as the empty queue, because the cause is not the same and neither is the next
+          step: the link that brought the reader here was true when it was made, and a held version can be
+          decided by somebody else in the meantime. Honest about that, and a way to the rest.
+        -->
+        <div
+          class="border-border bg-card rounded-xl border p-10 text-center"
+          data-testid="approvals-filter-empty"
+        >
+          <p class="font-medium">
+            Nothing is waiting on a decision for
+            <span class="font-mono break-all">{{ filter() }}</span> — it may already have been
+            decided
+          </p>
+          <a hlmBtn variant="outline" size="sm" class="mt-4" routerLink="/approvals">Show all</a>
         </div>
       } @else if (store.isEmpty()) {
         <div class="border-border bg-card rounded-xl border p-10 text-center">
@@ -114,6 +163,21 @@ import { PendingReview } from './pending-review';
           </p>
         </div>
       } @else {
+        @if (absent(); as gone) {
+          <!--
+            The link named a version that is not in this list: decided since the page it came from was
+            read, or never held. Said, and not silent, because a link that lands and does nothing reads as
+            broken. The versions that are held are right below.
+          -->
+          <p
+            class="text-muted-foreground text-sm"
+            role="status"
+            data-testid="approvals-target-gone"
+          >
+            <span class="font-mono">{{ gone.subject }} v{{ gone.ordinal }}</span> is not waiting on
+            a decision any more; it may already have been decided.
+          </p>
+        }
         <ul class="space-y-4">
           @for (item of store.pending(); track key(item.subject, item.ordinal)) {
             @let id = key(item.subject, item.ordinal);
@@ -121,7 +185,16 @@ import { PendingReview } from './pending-review';
             <li class="border-border bg-card rounded-xl border p-5">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div class="min-w-0">
-                  <h2 class="text-foreground font-mono text-lg font-semibold">
+                  <!--
+                    Focusable by script and not by Tab: the heading of the version a link pointed at is where
+                    the focus goes, so the reader is at the start of what they came to review, and Tab goes on
+                    from there to its controls. No trap: nothing here holds the focus.
+                  -->
+                  <h2
+                    class="text-foreground focus-visible:ring-ring rounded-sm font-mono text-lg font-semibold break-all outline-none focus-visible:ring-2"
+                    tabindex="-1"
+                    [attr.data-pending-key]="id"
+                  >
                     <a
                       class="hover:text-primary transition-colors"
                       [routerLink]="['/subjects', item.subject]"
@@ -294,6 +367,37 @@ export class ApprovalsPage {
 
   protected readonly key = keyOf;
 
+  /** The subject the address narrows the queue to, or null (ADR-052). Bound by the router from the query. */
+  readonly subject = input<string | readonly string[] | undefined>();
+
+  /** The version the address points at, as text; read as a number below. Bound by the router from the query. */
+  readonly version = input<string | readonly string[] | undefined>();
+
+  /** The subject filter, trimmed as the registry trims it; null when there is none. */
+  protected readonly filter = computed(() => {
+    const value = first(this.subject())?.trim();
+
+    return value ? value : null;
+  });
+
+  /** The ordinal the address points at: only within a filter, and only a positive whole number. */
+  private readonly targetOrdinal = computed(() => {
+    const value = first(this.version())?.trim() ?? '';
+
+    return this.filter() !== null && /^\d{1,9}$/.test(value) && Number(value) > 0
+      ? Number(value)
+      : null;
+  });
+
+  /** The version the address named when it is not in the list (decided since, or never held). */
+  protected readonly absent = signal<{ subject: string; ordinal: number } | null>(null);
+
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
+
+  /** The target already handled, so that a refresh after a decision does not open and scroll it again. */
+  private handled: string | null = null;
+
   /** Rows whose changes and impact are open. */
   private readonly open: WritableSignal<ReadonlySet<string>> = signal(new Set());
 
@@ -301,10 +405,64 @@ export class ApprovalsPage {
   protected readonly confirming = signal<string | null>(null);
 
   constructor() {
+    // Reloads on an environment switch and when the address narrows the queue to another subject (or stops
+    // narrowing it). The filter is read here and handed over: the store never reads the address.
     effect(() => {
       this.environments.name();
-      this.store.load();
+      const subject = this.filter();
+
+      untracked(() => this.store.load(subject));
     });
+
+    // Once the queue for the address has been read, opens the review of the version it points at and takes
+    // the reader there. Once per target: a refresh after a decision changes the list and must not reopen
+    // what the reader closed or pull the page back to a row they have moved on from.
+    effect(() => {
+      const subject = this.filter();
+      const ordinal = this.targetOrdinal();
+      const items = this.store.pending();
+      const settled = this.store.loaded() && !this.store.loading() && this.store.error() === null;
+
+      untracked(() => {
+        if (subject === null || ordinal === null) {
+          this.handled = null;
+          this.absent.set(null);
+          return;
+        }
+
+        const target = keyOf(subject, ordinal);
+
+        if (!settled || this.handled === target) {
+          return;
+        }
+
+        this.handled = target;
+
+        if (!items.some((i) => i.subject === subject && i.ordinal === ordinal)) {
+          this.absent.set({ subject, ordinal });
+          return;
+        }
+
+        this.absent.set(null);
+        const next = new Set(this.open());
+        next.add(target);
+        this.open.set(next);
+
+        // After the row (and its review) is in the document, not before: there is nothing to scroll to until
+        // the render that draws it.
+        afterNextRender(() => this.reveal(target), { injector: this.injector });
+      });
+    });
+  }
+
+  /** Scrolls the version's heading into view and puts the focus on it. */
+  private reveal(id: string): void {
+    const heading = [
+      ...this.host.nativeElement.querySelectorAll<HTMLElement>('[data-pending-key]'),
+    ].find((el) => el.dataset['pendingKey'] === id);
+
+    heading?.scrollIntoView?.({ block: 'start' });
+    heading?.focus({ preventScroll: true });
   }
 
   protected isOpen(id: string): boolean {
@@ -345,4 +503,9 @@ export class ApprovalsPage {
     const state = this.store.decisions()[id];
     return state?.state === 'failed' ? state.error.detail : '';
   }
+}
+
+/** A routed parameter that the address repeated is a list; the first is the one that is read. */
+function first(value: string | readonly string[] | undefined): string | undefined {
+  return typeof value === 'string' ? value : value?.[0];
 }

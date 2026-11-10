@@ -63,3 +63,7 @@ it; write a new one and mark the old **Superseded by**.
 | [046](046-a-retired-subject-can-be-deleted-for-good.md) | A retired subject can be deleted for good, by an administrator, through the API | Accepted |
 | [047](047-a-new-instance-is-closed-until-it-is-claimed.md) | A new instance is closed until it is claimed | Accepted |
 | [048](048-an-account-can-change-its-password-be-reset-and-be-disabled.md) | An account can change its password, be reset, and be disabled, and each says what it does to the credentials | Accepted |
+| [049](049-subjects-can-be-listed-newest-first.md) | Subjects can be listed newest first, and one subject's held versions can be asked for by name | Accepted |
+| [050](050-a-held-change-can-be-read-as-a-line-diff.md) | A held change can be read as a line diff, with the registry's findings on the lines they are about | Accepted |
+| [051](051-a-first-time-visitor-is-shown-a-guided-tour.md) | A first-time visitor is shown a guided tour, and it is built here | Accepted |
+| [052](052-the-subject-list-is-paged-with-page-controls-and-the-url.md) | The subject list is paged with page controls, and the page and the search are in the address | Accepted |

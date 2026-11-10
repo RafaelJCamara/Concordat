@@ -34,7 +34,7 @@ function queue(total: number, ...items: PendingApproval[]): ApprovalQueue {
 }
 
 interface QueueRequest {
-  readonly args: [string, { limit?: number; offset?: number }];
+  readonly args: [string, { limit?: number; offset?: number; subject?: string }];
   readonly stream: ResponseStream<ApprovalQueue>;
 }
 
@@ -43,7 +43,10 @@ function fakeApprovals() {
 
   return {
     requests,
-    getQueue(environment: string, page: { limit?: number; offset?: number } = {}) {
+    getQueue(
+      environment: string,
+      page: { limit?: number; offset?: number; subject?: string } = {},
+    ) {
       const stream = new ResponseStream<ApprovalQueue>();
       requests.push({ args: [environment, page], stream });
       return stream.asObservable();
@@ -171,6 +174,95 @@ describe('PendingApprovalsStore', () => {
 
       approvals.requests[1]!.stream.next(queue(1, orders));
       expect(store.pending()).toHaveLength(1);
+    });
+  });
+
+  // The address can narrow the queue to one subject (ADR-049, ADR-052). The registry does the narrowing and
+  // its `total` counts only that subject's, so that is the number the screen is held to.
+  describe('narrowed to a subject', () => {
+    it('asks for that subject only, and for nothing extra when it is not narrowed', () => {
+      store.load('orders.created');
+      expect(approvals.requests[0]!.args).toEqual([
+        'dev',
+        { limit: PAGE_SIZE, subject: 'orders.created' },
+      ]);
+
+      store.load(null);
+      expect(approvals.requests[1]!.args).toEqual(['dev', { limit: PAGE_SIZE }]);
+
+      store.load();
+      expect(approvals.requests[2]!.args).toEqual(['dev', { limit: PAGE_SIZE }]);
+    });
+
+    it('counts only that subject: the total is the registry’s, for the narrowed queue', () => {
+      store.load('orders.created');
+      approvals.requests[0]!.stream.next(queue(1, orders));
+
+      expect(store.total()).toBe(1);
+      expect(store.unread()).toBe(0);
+    });
+
+    it('is empty when that subject has nothing held, whatever else is', () => {
+      store.load('payments.taken');
+      approvals.requests[0]!.stream.next(queue(0));
+
+      expect(store.isEmpty()).toBe(true);
+    });
+
+    it('asks for the next page of the same subject, and not of the whole queue', () => {
+      store.load('orders.created');
+      approvals.requests[0]!.stream.next(
+        queue(60, held('orders.created', 2), held('orders.created', 3)),
+      );
+
+      store.loadMore();
+
+      expect(approvals.requests[1]!.args).toEqual([
+        'dev',
+        { limit: PAGE_SIZE, offset: 2, subject: 'orders.created' },
+      ]);
+    });
+
+    it('reads the same subject again after a decision', () => {
+      store.load('orders.created');
+      approvals.requests[0]!.stream.next(
+        queue(2, held('orders.created', 2), held('orders.created', 3)),
+      );
+
+      store.decide({ subject: 'orders.created', ordinal: 2, action: 'approve' });
+      subjects.decisions[0]!.stream.next(decidedSubject);
+
+      expect(approvals.requests[1]!.args[1]).toMatchObject({ subject: 'orders.created' });
+    });
+
+    it('does not leave another subject’s rows on screen while the narrowed queue is read', () => {
+      loaded(queue(2, payments, orders));
+
+      store.load('orders.created');
+
+      expect(store.pending()).toEqual([]);
+      expect(store.loaded()).toBe(false);
+      expect(store.loading()).toBe(true);
+    });
+
+    it('keeps the rows when asked again for the same queue', () => {
+      store.load('orders.created');
+      approvals.requests[0]!.stream.next(queue(1, orders));
+
+      store.load('orders.created');
+
+      expect(store.pending()).toEqual([orders]);
+    });
+
+    it('drops a late answer for the subject asked about before', () => {
+      store.load('orders.created');
+      store.load('payments.taken');
+
+      approvals.requests[1]!.stream.next(queue(1, payments));
+      approvals.requests[0]!.stream.next(queue(1, orders));
+
+      expect(store.pending()).toEqual([payments]);
+      expect(store.subject()).toBe('payments.taken');
     });
   });
 

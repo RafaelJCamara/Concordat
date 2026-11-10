@@ -13,6 +13,8 @@
 # A new registry is closed until somebody claims it (ADR-047): open :5063 and the first screen is
 # the setup, or see docs/RUNNING.md step 4.
 #
+# To watch it with traffic on it, run samples/Demo against this stack: docs/DEMO.md.
+#
 # Every published port below binds 127.0.0.1 ONLY, not 0.0.0.0: this file is a local dev loop
 # and an evaluation shortcut, not a hardened deployment. Postgres and RabbitMQ's default
 # credentials (postgres/postgres, guest/guest) are only ever safe because nothing off this

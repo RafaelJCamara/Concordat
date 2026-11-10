@@ -56,6 +56,10 @@ are things the dev server provides by a different route.
 
 Override either endpoint with `CONCORDAT_REGISTRY` and `CONCORDAT_WEB_URL`.
 
+**Running two copies at once.** The saved browser states and the owner's credential live in `e2e/.auth`, and a second run
+against a second registry would overwrite them and start every test from the other's session. `CONCORDAT_E2E_AUTH_DIR` moves that
+directory (and `--output` moves Playwright's `test-results`), so two runs in one tree do not share a file.
+
 ## What they assume
 
 **A registry they may claim and write to.** `global-setup.ts` bootstraps an owner if nobody has,
@@ -70,6 +74,17 @@ also signs in as OWNER through the real form once and saves the resulting `stora
 itself with `page.context().clearCookies()` rather than this file carrying an exception; a test
 that is about being signed in as someone specific (`READER`) still calls `signIn(page, READER)`
 as before, which simply overwrites the default session.
+
+**A browser that has already seen the guided tour.** The app starts a tour by itself the first time someone is signed in
+([ADR-051](../../docs/adr/051-a-first-time-visitor-is-shown-a-guided-tour.md)), and its card would sit over the first page of every
+spec. So `global-setup.ts` writes the tour's "seen" flag (`concordat.tour.seen`, in `localStorage`) into the saved OWNER and
+READER states, and `signIn()` writes it before it signs in. A spec that signs in some other way in a fresh context must do the
+same (`markTourSeen(page)` in `sign-in.ts`), or the tour starts and its card is in the way. `tour.spec.ts` is the one spec that wants
+the opposite, and it takes the saved state with only that flag removed, so it is a first-time visitor who is still signed in and
+spends no sign-in; one test signs in through the form with `signIn(page, who, { tour: 'fresh' })`, to prove the tour waits for it. It
+reads the page's real buttons and keys, asserts a keyboard can reach, drive and leave it without a trap, that the page underneath
+still takes clicks, that it holds on a phone and in both themes, and that it raises no console error or `securitypolicyviolation`.
+A new spec that is about being signed _out_ and then _in_ needs no change; one about first-run experience may want `'fresh'`.
 
 **One worker, serially.** Every test signs in against one shared registry; parallel workers would
 race over a single global state.
@@ -109,6 +124,16 @@ what is still held**, even when a test failed. It cannot run if the process is k
 /v1/environments/dev/subjects/<name>/reviewers` and `{"reviewers":[]}` using the owner credential, and reject the version. The
 signed-in account is the one named, so the spec uses `OWNER.email` and a second address, `someone-else@example.com`, that no account
 holds. It never touches the shared pair (`PaymentTaken`, `LedgerPosted`) or `approvals.spec.ts`'s own subjects.
+
+**The approval review's detailed view (the line diff, [ADR-050](../../docs/adr/050-a-held-change-can-be-read-as-a-line-diff.md)) reads five fixed subjects
+and decides none.** `approval-diff.spec.ts` needs a held change in every schema format, one long enough to fold, one with more changed lines than the view
+will show, and one near the registry's size ceiling, so its `beforeAll` creates `acme.e2e.diff.avro`, `.proto`, `.long`, `.huge` and `.dense` — **fixed
+names, created once and looked for on every later run** (it reads the subject first, as `ensureHeldVersion` does, because re-posting the base while a
+proposal is pending is a revert) — and the specs only open their reviews. The `dense` one is about 450 KiB (17 000 properties, some 51 000 lines laid out), so
+the first run takes a few seconds longer; it is what the spec uses to check that the diff runs in a worker (the page's `worker` event) and that no
+main-thread block is long. The preference the view remembers is `localStorage['concordat.approvals.review-view']`; every test is a fresh context, so none
+sees another's. The shared `PaymentTaken` is read, never decided. The suite adds those five held versions to the queue for good, which `approvals.spec.ts`
+tolerates by paging in to the row it wants (ADR-042).
 **Creating a subject is the other thing that cannot be undone, so it leaves things behind.** Nothing
 in the app deletes a subject, and a retired subject keeps its name until an administrator deletes it through
 the API (ADR-046), which these tests do not do, so a test that creates one has made it for good.
@@ -214,6 +239,28 @@ It reads nothing another spec makes and no other spec reads these. Like every sp
 red part-way leaves what it made. It signs in nowhere (the default browser is the owner); it holds two registry answers back with
 `page.route` to look at the in-between states, which are the only requests it touches.
 
+**The subject list's pages are asserted in an environment of their own, `e2e-paging`, which holds 130 subjects and nothing else writes to.**
+`subject-paging.spec.ts` ([ADR-052](../../docs/adr/052-the-subject-list-is-paged-with-page-controls-and-the-url.md), [ADR-049](../../docs/adr/049-subjects-can-be-listed-newest-first.md))
+creates `e2e-paging` once and fills it with **130 subjects named `e2e.paging.s001` to `s130`**, in order and one at a time (the registry stamps each with
+its own clock, and the order the screen shows is that), and a re-run finds them and creates nothing: it is a fixed fixture, like `e2e-names`, and **no
+spec may create a subject in it**. 130 is three pages at the default size of 50 and six at 25, with a last page that is not full (30 and 5), which the
+page arithmetic needs; and an environment of its own so that the count is a fact and not whatever `dev` has grown to. It points the app at it by answering
+`config.json`, as `new-subject.spec.ts` does for `e2e-empty`; everything else is the real registry. What the screen is held to is **the registry's own
+order**, read back with `sort=newest` before each test and compared row for row, so no assertion depends on which subject was made when: the pages, Next
+and Back and Forward, a reload and a link opened in a second browser context, a page past the end (it must land on the last page with the sentence, and
+Back must not return to the bad address), an address that is junk (`page=abc&size=7`), a change of size, a prefix across two pages, a slow page that must not
+land over the one clicked after it, the keyboard, a phone, and the console. If it ever fails on a count of 130 an earlier interrupted run left the
+fixture short; run it again.
+
+**The pill that links a held version to the approvals screen is clicked, in a browser, on subjects of its own, four per run, and the held versions are
+rejected at the end.** `subject-approval-link.spec.ts` ([ADR-052](../../docs/adr/052-the-subject-list-is-paged-with-page-controls-and-the-url.md))
+makes `acme.e2e.pill.<timestamp>.one` (one held version), `.many` (two), `.plain` (none) and `.old` (deprecated, none) in `dev`, and `.stale` and `.both`
+inside two of its tests (a version decided between the list being read and the click, and a deprecated subject that is also held), and an `afterAll`
+rejects whatever this run still holds, even when a test failed, so the shared queue (`approvals.spec.ts` reads it) is not left holding proposals. It checks
+the link, its accessible name, that a hover shows a ring, that Tab reaches it, that it lands on the approvals screen narrowed to the subject with the one
+held version's review open and its heading focused, that several held versions open none, that **Show all** brings the rest of the queue back, the empty
+sentence, and that a state with no destination is inert. It never touches the shared pair (`PaymentTaken`, `LedgerPosted`).
+
 **The deletion test leaves no subject behind, which is the one exception to the rule above.**
 `subject-purge.spec.ts` ([ADR-046](../../docs/adr/046-a-retired-subject-can-be-deleted-for-good.md)) makes **two subjects per run** in
 `dev` (`acme.e2e.purge.<timestamp>.Gone` and `.StillActive`), deletes both again (one in a test, both in `afterAll`, so a red run does
@@ -267,7 +314,8 @@ through the API uses `ownerCredential()`, which reads what global setup saved. W
 went over ninety tests it overran the budget by one and failed an unrelated sign-in near the end
 — a red run that said nothing about the screen under test, and would have been red in CI too. **The figure of thirteen is stale:** with six more, the run failed, and with four it passed, so
 the rest of the suite spends 15 or 16. `account-lifecycle.spec.ts` adds two (see above), which leaves **two or three**, so the next
-spec that signs in must find a way not to.
+spec that signs in must find a way not to. `tour.spec.ts` spends one of them (the first-time visitor who signs in through the form),
+which leaves **one or two**.
 
 Two runs inside five minutes will still exceed it. Restarting the registry resets the limiter
 (it is in-memory); CI runs once.

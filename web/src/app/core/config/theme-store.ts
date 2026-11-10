@@ -10,6 +10,7 @@ import {
 } from '@ngrx/signals';
 import {
   applyAppearance,
+  reachStorage,
   readStoredAppearance,
   resolveAppearance,
   storeAppearance,
@@ -27,7 +28,7 @@ import {
 export const ThemeStore = signalStore(
   { providedIn: 'root' },
   withState(() => ({
-    appearance: readStoredAppearance(inject(DOCUMENT).defaultView?.localStorage ?? null),
+    appearance: readStoredAppearance(reachStorage(inject(DOCUMENT).defaultView)),
   })),
   withProps(() => ({ prefersDark: watchPrefersDark() })),
   withComputed(({ appearance, prefersDark }) => ({
@@ -40,7 +41,7 @@ export const ThemeStore = signalStore(
       /** Records a choice and persists it. */
       choose(appearance: Appearance): void {
         patchState(store, { appearance });
-        storeAppearance(document.defaultView?.localStorage ?? null, appearance);
+        storeAppearance(reachStorage(document.defaultView), appearance);
       },
     };
   }),

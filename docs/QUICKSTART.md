@@ -13,6 +13,10 @@ Concordat's internals, which is the point: [ADR-019](adr/019-language-neutral-pr
 says every SDK is an ordinary client of a documented protocol, and a quickstart that cheated
 would hide the places that is not yet true.
 
+> **Want to watch it run rather than run it once?** [DEMO.md](DEMO.md) keeps four services sending messages under two
+> contracts and fills the web app's dashboard, with a breaking change to approve and a contract to switch from monitoring
+> to enforcing. This page is the smallest possible use of the SDK; that one is the thing to look at.
+
 > **No .NET SDK, or just want to see it first?** Steps 1–3 are one command, and it brings the web
 > UI up too: build the two images and start the `registry` profile — see
 > [RUNNING.md §7](RUNNING.md#7-or-run-all-of-it-from-containers). Open <http://localhost:5063>, and
@@ -129,6 +133,13 @@ Four things in that output are worth more than they look:
 | Add `"pattern": "^(?=.*[A-Z]).+$"` to `orderId` | A `portability` warning appears: Go's RE2 cannot compile lookahead **at all**, so that payload check would be lost entirely on the Go SDK |
 | Stop the registry, then re-run | Step 1 throws before anything publishes — it is plain REST, and registration belongs to CI (ADR-005), where a dead registry should fail the build loudly. To see the *SDK's* behaviour, comment step 1 out: `WarmUpAsync` no longer throws either, under any `OnResolutionFailure` setting — it returns a cold, `DEGRADED` status naming the failure. What differs is the publish that follows: under `FailOpen` it keeps flowing, arriving with no envelope; under `FailClosed` it throws a `ConcordatException` naming the subject it could not resolve |
 | Publish with `properties.Type` unset | No subject can be resolved. The subject is the message type ([ADR-011](adr/011-subject-is-message-type.md)), because a publisher knows `(exchange, routing key)` and a consumer knows `(queue)` — only the type is known to both |
+
+## Next: watch it run
+
+[DEMO.md](DEMO.md) runs `samples/Demo`, which is this sample grown into four services that never stop. It adds what the
+quickstart leaves out: contracts that bind an exchange and a queue to a subject, a mode (`ENFORCE` or `MONITOR`) that lives
+in the registry instead of the code, services that name themselves, violations reported to the registry so they appear on
+the dashboard, and a breaking change held at the approval gate.
 
 ## Where the registry's own contract lives
 

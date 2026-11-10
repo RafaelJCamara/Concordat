@@ -219,4 +219,151 @@ public class PendingApprovalApiTests(ApiFactory factory)
         Assert.Equal(0, root.GetProperty("total").GetInt32());
         Assert.Equal(1, (await GetQueueAsync(client, busy)).GetProperty("total").GetInt32());
     }
+
+    // ------------------------------------------------------------- one subject's queue (ADR-049)
+
+    private static List<(string? Subject, int Ordinal)> Pairs(JsonElement queue) =>
+        [.. queue.GetProperty("items").EnumerateArray()
+            .Select(i => (i.GetProperty("subject").GetString(), i.GetProperty("ordinal").GetInt32()))];
+
+    /// <summary>Proposes another breaking change on a subject that already holds one (each is held).</summary>
+    private static async Task ProposeAgainAsync(HttpClient client, string environment, string subject, int field)
+    {
+        var schema = $$$"""{"type":"object","properties":{"id":{"type":"string"}},"required":["id","f{{{field}}}"]}""";
+
+        var proposal = await RegisterAsync(client, environment, subject, schema);
+        Assert.Equal("AWAITING_APPROVAL", proposal.Status);
+    }
+
+    [Fact]
+    public async Task TheSubjectFilter_IsThatSubjectsHeldVersionsOnly_AndTotalCountsOnlyThem()
+    {
+        var client = factory.CreateClient();
+        var (environment, subjects) = await HoldAsync(client, 3);
+        await ProposeAgainAsync(client, environment, subjects[1], 1);
+
+        var queue = await GetQueueAsync(client, environment, $"?subject={subjects[1]}");
+
+        Assert.Equal(2, queue.GetProperty("total").GetInt32());
+        Assert.Equal([(subjects[1], 2), (subjects[1], 3)], Pairs(queue));
+
+        // The unfiltered queue is the whole of it, so the filter is what narrowed the answer.
+        Assert.Equal(4, (await GetQueueAsync(client, environment)).GetProperty("total").GetInt32());
+    }
+
+    [Fact]
+    public async Task TheSubjectFilter_ReachesAHeldVersionBeyondTheFirstPageOfTheWholeQueue()
+    {
+        // The reason it exists: the web links a subject's pill to its held version, and a client-side filter
+        // of a queue paged at the oldest N cannot reach one that sits past the first page.
+        var client = factory.CreateClient();
+        var (environment, subjects) = await HoldAsync(client, 4);
+
+        var firstPageOfTheWholeQueue = await GetQueueAsync(client, environment, "?limit=1");
+        Assert.DoesNotContain(subjects[3], firstPageOfTheWholeQueue.GetProperty("items").EnumerateArray()
+            .Select(i => i.GetProperty("subject").GetString()));
+
+        var queue = await GetQueueAsync(client, environment, $"?subject={subjects[3]}&limit=1");
+
+        Assert.Equal([(subjects[3], 2)], Pairs(queue));
+        Assert.Equal(1, queue.GetProperty("total").GetInt32());
+    }
+
+    [Fact]
+    public async Task TheSubjectFilter_ComposesWithLimitAndOffset_OverTheFilteredQueue()
+    {
+        var client = factory.CreateClient();
+        var (environment, subjects) = await HoldAsync(client, 2);
+        await ProposeAgainAsync(client, environment, subjects[0], 1);
+        await ProposeAgainAsync(client, environment, subjects[0], 2);
+
+        var first = await GetQueueAsync(client, environment, $"?subject={subjects[0]}&limit=2&offset=0");
+        var second = await GetQueueAsync(client, environment, $"?subject={subjects[0]}&limit=2&offset=2");
+
+        Assert.Equal([(subjects[0], 2), (subjects[0], 3)], Pairs(first));
+        Assert.Equal([(subjects[0], 4)], Pairs(second));
+        Assert.Equal(3, first.GetProperty("total").GetInt32());
+        Assert.Equal(3, second.GetProperty("total").GetInt32());
+    }
+
+    [Fact]
+    public async Task TheSubjectFilter_IsTheWholeName_NotAPrefix()
+    {
+        var client = factory.CreateClient();
+        var (environment, subjects) = await HoldAsync(client, 1);
+
+        // A prefix of a name that exists, and the name with one character gone from its end.
+        var prefix = subjects[0][..^1];
+
+        var queue = await GetQueueAsync(client, environment, $"?subject={prefix}");
+
+        Assert.Equal(0, queue.GetProperty("total").GetInt32());
+        Assert.Equal(0, queue.GetProperty("items").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task TheSubjectFilter_ForANameNoSubjectHas_IsAnEmptyQueueAnd200()
+    {
+        var client = factory.CreateClient();
+        var (environment, _) = await HoldAsync(client, 1);
+
+        var queue = await GetQueueAsync(client, environment, "?subject=acme.nobody.Home");
+
+        Assert.Equal(0, queue.GetProperty("total").GetInt32());
+        Assert.Equal(0, queue.GetProperty("items").GetArrayLength());
+    }
+
+    [Theory]
+    [InlineData("acme-bad")]
+    [InlineData("a..b")]
+    [InlineData("100%25")]
+    [InlineData("a%2Cb")]
+    public async Task TheSubjectFilter_ForTextThatCouldNeverBeAName_IsAnEmptyQueueAnd200(string text)
+    {
+        var client = factory.CreateClient();
+        var (environment, _) = await HoldAsync(client, 1);
+
+        var queue = await GetQueueAsync(client, environment, $"?subject={text}");
+
+        Assert.Equal(0, queue.GetProperty("total").GetInt32());
+        Assert.Equal(0, queue.GetProperty("items").GetArrayLength());
+    }
+
+    [Theory]
+    [InlineData("?subject=")]
+    [InlineData("?subject=%20%20")]
+    public async Task ABlankSubject_IsNoFilter(string query)
+    {
+        var client = factory.CreateClient();
+        var (environment, _) = await HoldAsync(client, 2);
+
+        var queue = await GetQueueAsync(client, environment, query);
+
+        Assert.Equal(2, queue.GetProperty("total").GetInt32());
+    }
+
+    [Fact]
+    public async Task TheSubjectIsTrimmed_AsASubjectNameIs()
+    {
+        var client = factory.CreateClient();
+        var (environment, subjects) = await HoldAsync(client, 2);
+
+        var queue = await GetQueueAsync(client, environment, $"?subject=%20{subjects[1]}%20");
+
+        Assert.Equal([(subjects[1], 2)], Pairs(queue));
+    }
+
+    [Fact]
+    public async Task TheSubjectFilter_NamesTheSameItemsAndMayDecideAsTheUnfilteredQueue()
+    {
+        var client = factory.CreateClient();
+        var (environment, subjects) = await HoldAsync(client, 2);
+
+        var whole = await GetQueueAsync(client, environment);
+        var filtered = await GetQueueAsync(client, environment, $"?subject={subjects[1]}");
+
+        Assert.Equal(
+            whole.GetProperty("items").EnumerateArray().Single(i => i.GetProperty("subject").GetString() == subjects[1]).GetRawText(),
+            filtered.GetProperty("items").EnumerateArray().Single().GetRawText());
+    }
 }

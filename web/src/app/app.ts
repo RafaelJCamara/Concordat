@@ -3,7 +3,10 @@ import {
   Component,
   DestroyRef,
   DOCUMENT,
+  Injector,
+  afterNextRender,
   computed,
+  effect,
   inject,
   linkedSignal,
   signal,
@@ -17,9 +20,12 @@ import { SessionStore } from './core/auth/session-store';
 import { SessionApi } from './core/auth/session-api';
 import { ActiveEnvironmentStore } from './core/config/active-environment-store';
 import { ThemeStore } from './core/config/theme-store';
+import { inTheApp } from './core/config/tour';
+import { TourStore } from './core/config/tour-store';
 import { AppSidebar, type NavItem } from './shared/ui/app-sidebar/app-sidebar';
 import { Icon } from './shared/ui/icon/icon';
 import { ThemeToggle } from './shared/ui/theme-toggle/theme-toggle';
+import { TourPopover } from './shared/ui/tour/tour-popover';
 
 /**
  * The navigation, in the order the sidebar draws it.
@@ -32,12 +38,12 @@ import { ThemeToggle } from './shared/ui/theme-toggle/theme-toggle';
  * sidebar wearing a shared component's name.
  */
 const NAV_ITEMS: readonly NavItem[] = [
-  { label: 'Dashboard', icon: 'layout-dashboard', route: '/' },
-  { label: 'Subjects', icon: 'file-json', route: '/subjects' },
-  { label: 'Contracts', icon: 'link-2', route: '/contracts' },
-  { label: 'Approvals', icon: 'file-check', route: '/approvals' },
+  { label: 'Dashboard', icon: 'layout-dashboard', route: '/', tour: 'nav-dashboard' },
+  { label: 'Subjects', icon: 'file-json', route: '/subjects', tour: 'nav-subjects' },
+  { label: 'Contracts', icon: 'link-2', route: '/contracts', tour: 'nav-contracts' },
+  { label: 'Approvals', icon: 'file-check', route: '/approvals', tour: 'nav-approvals' },
   { label: 'Audit log', icon: 'clock', route: '/audit' },
-  { label: 'Settings', icon: 'settings', route: '/settings' },
+  { label: 'Settings', icon: 'settings', route: '/settings', tour: 'nav-settings' },
 ];
 
 /**
@@ -66,7 +72,16 @@ const NARROW = '(max-width: 767px)';
 @Component({
   selector: 'cd-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterOutlet, RouterLink, HlmAlertImports, HlmButton, AppSidebar, Icon, ThemeToggle],
+  imports: [
+    RouterOutlet,
+    RouterLink,
+    HlmAlertImports,
+    HlmButton,
+    AppSidebar,
+    Icon,
+    ThemeToggle,
+    TourPopover,
+  ],
   host: { class: 'bg-background text-foreground flex min-h-dvh w-full' },
   template: `
     <a
@@ -100,6 +115,30 @@ const NARROW = '(max-width: 767px)';
               <span class="text-foreground truncate font-mono">{{ environments.name() }}</span>
             }
           </div>
+
+          @if (inApp()) {
+            <!--
+              The way back to the guided tour (ADR-051), always in view once someone is in the
+              app, so the tour that starts by itself once can be asked for again. A button with
+              a name of its own: collapsed to the rail's icons it keeps the name in
+              aria-label and title, and it is reachable at phone width, where the rail
+              is collapsed from the start.
+            -->
+            <button
+              type="button"
+              data-tour="help"
+              class="text-muted-foreground hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-ring flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors focus-visible:ring-2 focus-visible:outline-none"
+              [class.justify-center]="collapsed()"
+              [attr.aria-label]="collapsed() ? 'Take the tour' : null"
+              [attr.title]="collapsed() ? 'Take the tour' : null"
+              (click)="tour.start()"
+            >
+              <cd-icon name="circle-help" size="0.875rem" />
+              @if (!collapsed()) {
+                <span>Take the tour</span>
+              }
+            </button>
+          }
 
           @if (session.isSignedIn()) {
             <button
@@ -156,6 +195,24 @@ const NARROW = '(max-width: 767px)';
       }
       <router-outlet />
     </main>
+
+    @if (tour.current(); as step) {
+      <!--
+        The guided tour, drawn over the page and not in it: a card and a ring, neither of which
+        takes clicks away from the page or keeps focus from leaving (ADR-051).
+      -->
+      <cd-tour-popover
+        [title]="step.title"
+        [body]="step.body"
+        [step]="tour.position()"
+        [total]="tour.total()"
+        [target]="tour.target()"
+        [sheet]="narrow()"
+        (advanced)="tour.next()"
+        (previous)="tour.back()"
+        (skipped)="tour.finish()"
+      />
+    }
   `,
 })
 export class App {
@@ -165,10 +222,11 @@ export class App {
   protected readonly theme = inject(ThemeStore);
   protected readonly environments = inject(ActiveEnvironmentStore);
   protected readonly session = inject(SessionStore);
+  protected readonly tour = inject(TourStore);
 
   protected readonly navItems = NAV_ITEMS;
 
-  private readonly narrow = watchNarrow();
+  protected readonly narrow = watchNarrow();
 
   /**
    * Whether the rail is showing icons only. View state, and nowhere else's business — see the
@@ -207,6 +265,36 @@ export class App {
    * links to nowhere framing the single thing the user is actually able to do.
    */
   protected readonly chromeless = computed(() => this.url().startsWith('/sign-in'));
+
+  /**
+   * Whether the person is in the app, which is when the guided tour may start by itself
+   * (ADR-051): signed in, on a claimed instance, past the forced password change, and not on
+   * the sign-in and setup screen. Computed from the same facts the rest of the shell reads, so
+   * the tour cannot disagree with the shell about where the app begins.
+   */
+  protected readonly inApp = computed(() =>
+    inTheApp({
+      signedIn: this.session.isSignedIn(),
+      claimed: this.session.claimed(),
+      mustChangePassword: this.session.mustChangePassword(),
+      chromeless: this.chromeless(),
+    }),
+  );
+
+  private readonly injector = inject(Injector);
+
+  constructor() {
+    effect(() => {
+      if (!this.inApp()) {
+        return;
+      }
+
+      // After the render that drew the rail, not during the one that decided to: the tour
+      // looks for its targets in the DOM, and an effect runs before the view it belongs to is
+      // updated.
+      afterNextRender(() => this.tour.autoStart(), { injector: this.injector });
+    });
+  }
 
   /**
    * Drops the credential locally and clears the session cookie.

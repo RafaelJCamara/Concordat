@@ -1,6 +1,8 @@
 # What is missing
 
-**As of 2026-08-15**, except [the account lifecycle, 2026-10-15](#an-account-can-change-its-password-be-reset-and-be-disabled-2026-10-15),
+**As of 2026-08-15**, except [the web app's five improvements, 2026-11-09](#the-web-apps-five-improvements-2026-11-09),
+[the demo, 2026-11-09](#a-demo-that-keeps-running-2026-11-09),
+[the account lifecycle, 2026-10-15](#an-account-can-change-its-password-be-reset-and-be-disabled-2026-10-15),
 [release engineering, 2026-10-15](#release-engineering-the-sdk-has-packages-and-a-tag-has-a-release-2026-10-15),
 [a new instance is closed until it is claimed, 2026-10-15](#a-new-instance-is-closed-until-it-is-claimed-2026-10-15),
 [hard delete, 2026-10-15](#a-retired-subject-can-be-deleted-for-good-by-an-administrator-through-the-api-2026-10-15),
@@ -27,8 +29,8 @@
 [the web app's pages, 2026-10-13](#the-web-apps-pages-2026-10-13) and
 [Security hardening, 2026-08-16](#security-hardening-2026-08-16)
 below, added later and not re-verified against the rest of this file. Test counts
-throughout were re-run and corrected 2026-08-30, and **re-measured 2026-10-15 (after the account lifecycle): 2,602 .NET,
-2,011 Angular, 312 browser** (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
+throughout were re-run and corrected 2026-08-30, and **re-measured 2026-11-09 (after the web app's five improvements): 2,714 .NET,
+2,430 Angular, 381 browser** (the browser figure is 377 passed on the first full run and 4 failed, which were then dealt with; see that section) (the sections below that name an older figure are that day's snapshot). A consistency audit on **2026-09-24** corrected
 the prose that had gone stale against shipped code — four places where this file claimed
 something was missing that is not: M4.3's pages, M4.5's write-route test, the `Tenant`
 aggregate, and CI's job count — and found three product gaps, recorded below. A companion to
@@ -41,6 +43,100 @@ Everything under "verified locally" below was run on this machine today, against
 container image and a real PostgreSQL. Everything else is claimed on the strength of tests.
 
 ---
+
+## The web app's five improvements, 2026-11-09
+
+Five changes to the web app, built as four parallel pieces of work and integrated and re-run together here: **the subjects page lists
+the newest first** ([ADR-049](adr/049-subjects-can-be-listed-newest-first.md)), **is paged with page controls and keeps the page and the
+search in the address** ([ADR-052](adr/052-the-subject-list-is-paged-with-page-controls-and-the-url.md), which supersedes the screen section of
+ADR-045; its API stands), **its "awaiting approval" pill links to the held version**, **an approval can be read as a line diff**
+([ADR-050](adr/050-a-held-change-can-be-read-as-a-line-diff.md)) and **a first-time visitor is shown a guided tour**
+([ADR-051](adr/051-a-first-time-visitor-is-shown-a-guided-tour.md)).
+
+**Decisions.** *Newest means created, not last changed*: a subject has no updated-at, and an order by last change would move a subject
+to the top the moment someone registered a version, under the reader, which breaks page stability. It is opt-in on the API
+(`sort=newest`; `name` stays the default, so `concordat export` and every client is unchanged) and total (creation time, then name). An unknown
+`sort` is `400 subject_sort_invalid` where `limit` and `offset` are clamped, because a clamped page is the nearest page and a fallback sort would be a
+wrong first page with a `200`. Each subject carries `createdAt`; the table's old "Registered" column was the latest *version's* date and is replaced
+by "Created". `GET …/approvals` takes an exact `subject` so a held version beyond the first 50 of the queue is reachable from the pill. The page model is
+Previous, numbered pages with ellipses, Next, a page size of 25, 50 or 100 (default 50), and `?q=&page=&size=` in the address. The diff is an in-house
+Myers line diff (unified, in a worker, guarded) and not a library or Monaco's diff editor; the tour is in-house too (intro.js and Shepherd are AGPL;
+driver.js has a Tab handler that traps focus and an overlay that takes clicks).
+
+**What the first full browser run found, and what was done.** 377 passed and 4 failed. Two were **the tour's card sitting over a click in a browser
+the specs had cleared of its "seen" flag** (`design-system.spec.ts` clears storage on purpose; `approval-diff.spec.ts` blocks it, in which case the tour
+correctly starts): the first spec now sets the flag after clearing, the second skips the tour as a person would. One was a spec that hard-coded
+`e2e/.auth/owner.json` and so was signed out when the auth directory was moved (`CONCORDAT_E2E_AUTH_DIR`, added so two runs in one tree stop
+overwriting each other's session). **The fourth was a `500` from the registry, not a test defect**: registering a breaking version into a subject
+whose policy had just been tightened (`subject-settings.spec.ts`) failed once with *"The instance of entity type 'SchemaVersion' cannot be tracked
+because another instance with the same key value for {'subject_id', 'Ordinal'} is already being tracked"* (raised from `StampTenant`, called by
+`RegisterVersionHandler`). **It passed 3 of 3 re-runs and the register path is not in this change's diff, so it is intermittent and not caused by it, but
+it is not explained and it is not fixed.** It is a real registry bug waiting for a cause.
+Also found, **and fixed here**: `ThemeStore` read `window.localStorage` unguarded, so in a browser whose property getter throws (site data blocked
+outright) the whole app failed to boot; `reachStorage` guards it now, with a test, and the tour shares it.
+
+**Measured** (one Windows machine, PostgreSQL 17 in Docker, warm; the workers' numbers, not re-measured here). A registry with **5,000 subjects**: the first
+page is 23.5 KB and about 8 ms from the registry over loopback (7.7 ms newest, 7.2 ms by name); the database reads 57 index entries for 50 rows (0.26 ms
+warm) on the existing `ix_subject_tenant_environment_created`, so **no index and no migration**; `X-Total-Count` costs 0.5-1.8 ms at 5,000 and 5.3 ms at
+45,000; the whole unpaged list, which `export` still reads, is 2.3 MB and 185-212 ms. In a browser the first rows are in the DOM about 100 ms after the
+response (75 ms on a production build) and a page turn paints in about 80 ms. A narrow prefix in a 45,000-subject environment is a sequential scan (21 ms;
+37 ms over HTTP), ADR-038's measurement, not made worse. The diff worker takes 63-111 ms for a 423 KB schema (13.8k lines) and 129-309 ms for 51k lines
+with no main-thread block over 50 ms; at 6x CPU slowdown the longest block is 155 ms. The tour adds about 3.3 KB to the initial transfer.
+
+**Verified, by me, on this machine:** `dotnet format` clean; **.NET 2,714** (13 projects, 0 failures; from 2,602); `node scripts/generate-protocol-docs.mjs --check`
+(99 codes); **Angular 2,430** (125 files), `npm run lint`, `format:check`, `codes:check`, `monaco:check` and a production `ng build`; the **full browser suite
+against a private registry (:5101, its own PostgreSQL :55402, `ng serve` :4311), built from the final source: 377 of 381 on the first run, and the three
+specs that were fixed re-run green (59 tests)**, with the fourth re-run 3 times. Screenshots of the subjects page, the pill landing on the approvals page,
+the diff and the tour's first step, in light and dark at 1280 px and at 390 px, against the demo's data, looked at.
+**The workers' own checks, not repeated here:** mutation checks (12 on the .NET rules, 30 on the subject list, about 62 on the diff, 52 + 8 on the tour; each
+survivor became a test or was shown equivalent), a stand-in for nginx's Content-Security-Policy with 0 violations from the tour and the diff worker (also
+with `'unsafe-inline'` removed from `style-src` for the tour), and the contrast and keyboard assertions in `tour.spec.ts`.
+
+**Not verified.** CI. The nginx image and `smoke-web-image.sh` (the Content-Security-Policy was checked against a Node stand-in with the template's rules).
+**A screen reader on any of it** (structure and focus were asserted, not listened to). Firefox and WebKit. A real touch device. **At 390 px the subjects
+table scrolls horizontally inside its own panel, so the State column, and the pill in it, is off-screen to the right until scrolled to**; it is reachable,
+and whether that panel can be scrolled from the keyboard was not asserted. The browser suite was **not re-run as a whole after the three spec fixes**; only
+those specs were. Not done: a side-by-side diff, word-level highlighting inside a changed line, and a paged Summary for thousands of findings (it blocks
+the main thread for 0.9 s at 4,600 findings, which is also what the diff's guard falls back to). `$defs` and bundled JSON Schema paths have no line to land on
+and are listed as untied. Name order follows the database collation, which on `postgres:17-alpine` coincides with ordinal order (ADR-049 says so). The e2e
+suite now leaves permanent fixtures behind: an `e2e-paging` environment with 130 subjects, five held versions on `acme.e2e.diff.*`, and four subjects per run
+from `subject-approval-link.spec.ts`.
+
+## A demo that keeps running, 2026-11-09
+
+There was no example a newcomer could *watch*: `samples/Quickstart` publishes two messages and exits, so the dashboard, the
+contracts page and the approvals page stayed empty. **`samples/Demo`** ([DEMO.md](DEMO.md)) is four services (`checkout`,
+`billing`, `gateway`, `ledger`) in one process, each with its own named client and enforcing channel, sending orders and payments
+under two contracts (`demo-orders` `ENFORCE`, `demo-payments` `MONITOR`) with a few messages wrong on a schedule. It seeds
+the registry first (two subjects, one breaking version **held at the approval gate**, two contracts with publish and consume
+bindings), reports violations on a timer, and says what it did in the terminal. Every seed step looks before it writes, because
+registering a schema that is not the tip of its subject is a new version and not a no-op. Documented in the README, QUICKSTART,
+RUNNING, the compose file's header, the changelog and `samples/Demo/README.md`; CI builds it (it sits outside the solution, like
+the other samples).
+
+**Verified, on this machine against PostgreSQL 17 and RabbitMQ 4.1 in Docker, the registry run from source and the web app on
+`ng serve`:** the seed (and that a second run changes nothing, and that a new `CONCORDAT_ENVIRONMENT` seeds a clean copy);
+the registry's answers afterwards (the summary: 2 subjects, 4 versions, 1 awaiting, 3 distinct violations, one `ENFORCE` and one
+`MONITOR` contract; the four services with what they produce and consume; the three violations with their reporter); the
+Dashboard and Contracts pages in a browser; and **each of the five changes DEMO.md suggests, with a service running**: approving
+version 3 makes every order from `checkout` refuse on `#/currency` within seconds and `--currency` recovers; setting
+`demo-payments` to `ENFORCE` makes `gateway` refuse its bad payments with no restart; `OFF` makes it publish unchecked; rejecting
+version 3 leaves `latest` at 2 and the Dashboard says rejected. The refusals when no key is set, when the registry is down and
+when the broker is down each print a sentence and exit 1. `dotnet build` of the sample in Debug and in Release with
+`GITHUB_ACTIONS=true`, 0 warnings.
+
+**Found on the way, not fixed:** *`ConcordatClient` adds its `Authorization` header to the `HttpClient` it is given, so an
+`HttpClient` that already carries one sends two and is answered `401`* (the demo's first run failed at warm-up on exactly this;
+the quickstart passes a plain client, and the demo says why). Worth either replacing the header or saying so in the option's
+documentation. *The web app has no list of violations*, only the Dashboard's count; the rows (service, route, occurrences, latest
+detail) are `GET /v1/environments/{env}/violations`, which DEMO.md says. And the registry keys a violation on side, route, subject and
+code, so two different faults on one route are one row with the latest detail; the demo's comments first said otherwise.
+
+**Not verified:** CI (the new `The samples still build` step has not run on GitHub); the demo against the compose `registry`
+profile and the images it builds (this used the registry from source and `ng serve`, on private ports, because another RabbitMQ
+already held 5672); the Ctrl+C path (the run ended on `--count`, which takes the same exit); the PowerShell form of the
+commands; light mode; macOS and Linux; a consumer under `ENFORCE` quarantining a message (nothing in the demo exercises quarantine,
+because the only publisher that reaches a consumer under `ENFORCE` is the enforcing one).
 
 ## An account can change its password, be reset, and be disabled, 2026-10-15
 
@@ -1663,7 +1759,7 @@ These matter more than the two lists above, because the surface exists and looks
 | ~~A subscription's events cannot be edited~~ | **Closed 2026-10-15**: `PUT …/notifications/{id}/events` and **Change events** on each row, keeping the subscription's identity and its signing secret; see the section at the top. What it was: | There is `POST`, `PUT …/enabled` and `DELETE`, and nothing else, so keeping an existing "all events" subscription out of a newly added event (as `SUBJECT_POLICY_CHANGED`, ADR-034) means muting it or deleting it and creating it again, which issues **a new webhook signing secret** the receiver must be given. Found 2026-10-14. |
 | ~~A failing `notifications.spec.ts` leaves its subscriptions behind~~ | **Closed 2026-10-14**: a `test.afterAll` deletes the block's subscriptions by endpoint (`deleteSubscriptionsAt`, `web/e2e/registry.ts`). Verified by failing a test mid-block on purpose: `dev` held no subscription afterwards, and with the `afterAll` removed the same failure left the unfiltered email and both webhooks live. It cannot run if the process is killed. What it was: | The block is serial and its deletes are its last tests, so a red test skips them: the email subscription (no event filter) and the webhook stay live in `dev`, and the registry delivers to them for the rest of the run, and after it. Found 2026-10-14 when the new spec was run red on purpose (they were deleted by hand). A `test.afterAll` that deletes by endpoint would close it; not done here. |
 | ~~Hard delete does not exist~~ | **Closed 2026-10-15** ([ADR-046](adr/046-a-retired-subject-can-be-deleted-for-good.md)): `POST …/subjects/{subject}/purge?force=true` deletes a *retired* subject and its versions, refuses while a contract, a registered service or another schema refers to it (`409 subject_in_use` / `subject_referenced`), and writes `SUBJECT_PURGED`. Schemas are never deleted; one only this subject reached is no longer reachable by id. **The subject's page has the controls** (*Retire subject…*, then *Delete for good…*, each two clicks, the second asking for the name), for `subject:admin` only; no CLI command, on purpose. |
-| ~~The subject list is unpaginated~~ | **Closed 2026-10-15** ([ADR-045](adr/045-the-subject-list-is-paged-by-the-registry.md)): `GET …/subjects?limit=&offset=` pages it, ordered by name, with `X-Total-Count` on the answer; without either the route is every subject as before, because `concordat export` wants them all. The screen reads 50, says *"Showing the first 50 of N"*, and has **Show more**. What it was: one response of every subject and its whole history, parsed and rendered in full, and a search box that was correct only because nothing was paged. Not measured: a count over a very large environment (no index on the name prefix, on ADR-038's measurement). |
+| ~~The subject list is unpaginated~~ | **Closed 2026-10-15** ([ADR-045](adr/045-the-subject-list-is-paged-by-the-registry.md)): `GET …/subjects?limit=&offset=` pages it, ordered by name, with `X-Total-Count` on the answer; without either the route is every subject as before, because `concordat export` wants them all. The screen reads 50, says *"Showing the first 50 of N"*, and had **Show more** (since 2026-11-09 it has page controls, [ADR-052](adr/052-the-subject-list-is-paged-with-page-controls-and-the-url.md)). What it was: one response of every subject and its whole history, parsed and rendered in full, and a search box that was correct only because nothing was paged. Not measured: a count over a very large environment (no index on the name prefix, on ADR-038's measurement). |
 | ~~Subject prefix search is not implemented~~ | **Closed 2026-10-14** ([ADR-038](adr/038-subject-prefix-search.md)): `GET …/subjects?prefix=`, ordinal and case-sensitive, a literal and not a pattern, through a mapped `starts_with` and with neither the `ComplexProperty` mapping nor the shadow column the note proposed (so no migration). No index, on measurement (65,000 rows: 1.2 ms against 4.7 ms for the whole list; the DDL for the day an environment holds tens of thousands is in the ADR). The web box is the filter. **It no longer matches the owner or the middle of a name, which it did** (the maintainer's call). The list is paged since 2026-10-15 ([ADR-045](adr/045-the-subject-list-is-paged-by-the-registry.md)). **The CLI has `concordat export --prefix` since 2026-10-15** (the registry filters; encoded, empty means all). |
 | ~~Two contracts can govern one route, first-by-name wins~~ | **Closed 2026-08-14** by decision 21 — resolve returns all of them, strictest mode and union of subjects, counted on the client's status. M7.4's impact analysis still attributes a route to one contract. |
 | ~~A page reload signs you out~~ | **Closed 2026-08-14** by decision 26 — an httpOnly `SameSite=Strict` cookie and a `/auth/resume` route that is the only thing accepting it. The credential still never touches `localStorage`. |

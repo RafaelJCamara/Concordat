@@ -172,20 +172,115 @@ public class PendingApprovalsHandlerTests
 
         public EnvironmentId? Environment { get; private set; }
 
+        public SubjectName? Subject { get; private set; }
+
+        public int Asked { get; private set; }
+
         public int Limit { get; private set; }
 
         public int Offset { get; private set; }
 
         public Task<PendingApprovals> ReadAsync(
             EnvironmentId environmentId,
+            SubjectName? subject,
             int limit,
             int offset,
             CancellationToken cancellationToken)
         {
             Environment = environmentId;
+            Subject = subject;
+            Asked++;
             Limit = limit;
             Offset = offset;
             return Task.FromResult(Answer);
         }
+    }
+
+    // ------------------------------------------------------------- one subject's queue (ADR-049)
+
+    private Task<Domain.Results.Result<PendingApprovals>> HandleForAsync(
+        string? subject, int? limit = null, int? offset = null) =>
+        new ListPendingApprovalsHandler(_reader, _caller).HandleAsync(
+            new ListPendingApprovalsQuery(EnvironmentId.New(), limit, offset, subject),
+            CancellationToken.None);
+
+    [Fact]
+    public async Task WithNoSubject_TheReaderIsAskedForTheWholeQueue()
+    {
+        await HandleAsync();
+
+        Assert.Null(_reader.Subject);
+        Assert.Equal(1, _reader.Asked);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ABlankSubject_IsNoFilter_AsABlankPrefixIs(string blank)
+    {
+        await HandleForAsync(blank);
+
+        Assert.Null(_reader.Subject);
+        Assert.Equal(1, _reader.Asked);
+    }
+
+    [Fact]
+    public async Task ASubject_IsPassedToTheReaderAsTheWholeName_Trimmed()
+    {
+        await HandleForAsync("  acme.orders.OrderCreated  ");
+
+        Assert.Equal("acme.orders.OrderCreated", _reader.Subject!.Value);
+    }
+
+    [Fact]
+    public async Task ASubject_IsNotCaseFolded()
+    {
+        await HandleForAsync("acme.Orders.OrderCreated");
+
+        Assert.Equal("acme.Orders.OrderCreated", _reader.Subject!.Value);
+    }
+
+    [Theory]
+    [InlineData("acme-orders")]
+    [InlineData("acme..orders")]
+    [InlineData("acme.")]
+    [InlineData("100%")]
+    [InlineData("acme.orders,acme.billing")]
+    [InlineData("a\0b")]
+    public async Task ANameNoSubjectCanHave_IsAnEmptyQueueAndNotAnError_AndTheReaderIsNeverAsked(string text)
+    {
+        var result = await HandleForAsync(text);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Equal(0, result.Value.Total);
+        Assert.Empty(result.Value.Items);
+        Assert.Equal(0, _reader.Asked);
+    }
+
+    [Fact]
+    public async Task ASubject_StillGetsTheClampedPage()
+    {
+        await HandleForAsync("acme.orders.OrderCreated", limit: 100000, offset: -3);
+
+        Assert.Equal(200, _reader.Limit);
+        Assert.Equal(0, _reader.Offset);
+
+        await HandleForAsync("acme.orders.OrderCreated", limit: 5, offset: 10);
+
+        Assert.Equal(5, _reader.Limit);
+        Assert.Equal(10, _reader.Offset);
+    }
+
+    [Fact]
+    public async Task ASubjectsQueue_StillSaysWhetherTheCallerMayDecideEachItem()
+    {
+        CallerIs("mallory@example.com");
+        _reader.Answer = new PendingApprovals(
+            2, [Item("acme.Named", ["alice@example.com"]), Item("acme.Named", ["alice@example.com"])]);
+
+        var result = await HandleForAsync("acme.Named");
+
+        Assert.Equal(2, result.Value.Total);
+        Assert.All(result.Value.Items, i => Assert.False(i.MayDecide));
     }
 }

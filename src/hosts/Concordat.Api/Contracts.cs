@@ -132,6 +132,10 @@ public sealed record VersionResponse(
 /// <param name="ContentModel"><c>OPEN</c> or <c>CLOSED</c>.</param>
 /// <param name="CompatibilityPolicy">The explicit policy, or nulls when inheriting.</param>
 /// <param name="Latest">The gated latest pointer, or <see langword="null"/> when none is active.</param>
+/// <param name="CreatedAt">
+/// When the subject was created, UTC. It never changes, which is why it is what "newest first" orders by
+/// (ADR-049).
+/// </param>
 /// <param name="Versions">Every version, in ordinal order.</param>
 public sealed record SubjectResponse(
     string Name,
@@ -142,6 +146,7 @@ public sealed record SubjectResponse(
     string ContentModel,
     PolicyResponse CompatibilityPolicy,
     int? Latest,
+    DateTimeOffset CreatedAt,
     IReadOnlyList<VersionResponse> Versions)
 {
     /// <summary>Projects a subject.</summary>
@@ -160,6 +165,7 @@ public sealed record SubjectResponse(
             WireTokens.For(subject.ContentModel),
             PolicyResponse.From(subject.CompatibilityPolicy),
             subject.Latest?.Ordinal,
+            subject.CreatedAt,
             [.. subject.Versions.Select(VersionResponse.From)]);
     }
 }

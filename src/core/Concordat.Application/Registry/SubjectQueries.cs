@@ -174,8 +174,17 @@ public sealed class GetSubjectHandler(ISubjectRepository subjects)
 /// Clamped to <see cref="MaxLimit"/>; asking for an offset alone pages with <see cref="DefaultLimit"/>.
 /// </param>
 /// <param name="Offset">How many of the first subjects to skip. Negative is read as none.</param>
+/// <param name="Sort">
+/// The order, as the caller wrote it: <c>name</c> or <c>newest</c>, or <see langword="null"/> or blank for
+/// <c>name</c>. Judged by <see cref="SubjectSorts"/>, and unlike the page it is refused when it is not one of
+/// them (ADR-049).
+/// </param>
 public sealed record ListSubjectsQuery(
-    EnvironmentId EnvironmentId, string? Prefix = null, int? Limit = null, int? Offset = null)
+    EnvironmentId EnvironmentId,
+    string? Prefix = null,
+    int? Limit = null,
+    int? Offset = null,
+    string? Sort = null)
     : IQuery<IReadOnlyList<Subject>>
 {
     /// <summary>The largest page a caller may ask for.</summary>
@@ -186,6 +195,33 @@ public sealed record ListSubjectsQuery(
 
     /// <summary>Whether the caller asked for a page and not for the whole list.</summary>
     public bool IsPaged => Limit is not null || Offset is not null;
+}
+
+/// <summary>The orders a subject list can be asked for, as the wire spells them (ADR-049).</summary>
+public static class SubjectSorts
+{
+    /// <summary>By name. The default, and what the list was before there was a choice.</summary>
+    public const string Name = "name";
+
+    /// <summary>Newest created first, then by name.</summary>
+    public const string Newest = "newest";
+
+    /// <summary>Reads what the caller wrote.</summary>
+    /// <param name="text">The text, or <see langword="null"/>.</param>
+    /// <returns>
+    /// The order; <see cref="SubjectSort.Name"/> for none or a blank; a failure for anything else.
+    /// Whitespace is trimmed and case is not significant, as for the other tokens a request carries
+    /// (<c>json</c>, <c>open</c>).
+    /// </returns>
+    public static Result<SubjectSort> Parse(string? text) =>
+        text?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or Name => Result<SubjectSort>.Success(SubjectSort.Name),
+            Newest => Result<SubjectSort>.Success(SubjectSort.Newest),
+            _ => Result<SubjectSort>.Failure(
+                ConcordatCodes.SubjectSortInvalid,
+                $"Unknown sort '{text}'. Expected {Name} or {Newest}."),
+        };
 }
 
 /// <summary>Counts the subjects in an environment, optionally only those whose name begins with a prefix.</summary>
@@ -234,9 +270,22 @@ public sealed class ListSubjectsHandler(ISubjectRepository subjects)
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        if (query.IsPaged)
+        // Judged first, whatever else was asked. Unlike a page size (a preference, clamped) or a prefix (a
+        // question whose true answer may be "none"), a sort is an instruction the registry either understands or
+        // does not: answering a misspelt one in name order would hand back the wrong first page, silently, to
+        // the caller least likely to notice (ADR-049).
+        var sort = SubjectSorts.Parse(query.Sort);
+
+        if (sort.IsFailure)
         {
-            return await HandlePageAsync(query, cancellationToken).ConfigureAwait(false);
+            return Result<IReadOnlyList<Subject>>.Failure(sort.Error!);
+        }
+
+        // Only the page query can order by anything but name, so "newest" without a page is the whole list
+        // as one unbounded page. The name order without one is the listing every client already reads.
+        if (query.IsPaged || sort.Value is not SubjectSort.Name)
+        {
+            return await HandlePageAsync(query, sort.Value, cancellationToken).ConfigureAwait(false);
         }
 
         if (string.IsNullOrWhiteSpace(query.Prefix))
@@ -265,7 +314,7 @@ public sealed class ListSubjectsHandler(ISubjectRepository subjects)
     }
 
     private async Task<Result<IReadOnlyList<Subject>>> HandlePageAsync(
-        ListSubjectsQuery query, CancellationToken cancellationToken)
+        ListSubjectsQuery query, SubjectSort sort, CancellationToken cancellationToken)
     {
         SubjectNamePrefix? prefix = null;
 
@@ -284,11 +333,13 @@ public sealed class ListSubjectsHandler(ISubjectRepository subjects)
 
         // Clamped and never refused, as the audit read and the approval queue clamp theirs: a page size is a
         // preference and a bound on cost, and the nearest page is a better answer than an error.
-        var paging = new SubjectPaging(
-            Math.Clamp(query.Limit ?? ListSubjectsQuery.DefaultLimit, 1, ListSubjectsQuery.MaxLimit),
-            Math.Max(query.Offset ?? 0, 0));
+        var paging = query.IsPaged
+            ? new SubjectPaging(
+                Math.Clamp(query.Limit ?? ListSubjectsQuery.DefaultLimit, 1, ListSubjectsQuery.MaxLimit),
+                Math.Max(query.Offset ?? 0, 0))
+            : SubjectPaging.Everything;
 
-        var page = await subjects.ListPageAsync(query.EnvironmentId, prefix, paging, cancellationToken)
+        var page = await subjects.ListPageAsync(query.EnvironmentId, prefix, sort, paging, cancellationToken)
             .ConfigureAwait(false);
 
         return Result<IReadOnlyList<Subject>>.Success(page);

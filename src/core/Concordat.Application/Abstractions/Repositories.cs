@@ -38,16 +38,18 @@ public interface ISubjectRepository
 
     /// <summary>
     /// Lists one page of an environment's subjects, optionally only those whose name begins with a prefix,
-    /// ordered by name (ordinally, as every other listing is).
+    /// in the order asked for: by name, as every other listing is, or newest first (ADR-049).
     /// </summary>
     /// <param name="environmentId">The environment.</param>
     /// <param name="prefix">A prefix, or null for every subject. Same rules as <see cref="ListByPrefixAsync"/>.</param>
+    /// <param name="sort">The order. Either is a <b>total</b> order, so a subject is on exactly one page.</param>
     /// <param name="paging">Which rows.</param>
     /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>The page, which may be shorter than asked for at the end of the list.</returns>
     Task<IReadOnlyList<Subject>> ListPageAsync(
         EnvironmentId environmentId,
         SubjectNamePrefix? prefix,
+        SubjectSort sort,
         SubjectPaging paging,
         CancellationToken cancellationToken);
 
@@ -99,7 +101,24 @@ public sealed record SubjectReferrer(
 /// <summary>Which rows of an ordered listing to read.</summary>
 /// <param name="Limit">The most rows.</param>
 /// <param name="Offset">How many of the first rows to skip.</param>
-public readonly record struct SubjectPaging(int Limit, int Offset);
+public readonly record struct SubjectPaging(int Limit, int Offset)
+{
+    /// <summary>Every row: the whole list in an order the unpaged listings do not offer (ADR-049).</summary>
+    public static SubjectPaging Everything => new(int.MaxValue, 0);
+}
+
+/// <summary>The order a list of subjects comes in (ADR-049).</summary>
+public enum SubjectSort
+{
+    /// <summary>By name, in the database's order for names. What the list has always been, and the default.</summary>
+    Name,
+
+    /// <summary>
+    /// By when the subject was <b>created</b>, newest first, and then by name. Creation time and not the time of
+    /// the last change: it never changes, so a page does not reshuffle under the reader while they read it.
+    /// </summary>
+    Newest,
+}
 
 /// <summary>Reads and writes the global schema store.</summary>
 /// <remarks>

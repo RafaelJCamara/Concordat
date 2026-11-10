@@ -47,14 +47,28 @@ internal sealed class SubjectRepository(ConcordatDbContext context) : ISubjectRe
     public async Task<IReadOnlyList<Subject>> ListPageAsync(
         EnvironmentId environmentId,
         SubjectNamePrefix? prefix,
+        SubjectSort sort,
         SubjectPaging paging,
-        CancellationToken cancellationToken) =>
-        await Matching(environmentId, prefix)
-            .OrderBy(s => s.Name)
+        CancellationToken cancellationToken)
+    {
+        var matching = Matching(environmentId, prefix);
+
+        // Both orders are TOTAL: the name is unique within the environment, so no two rows tie on it, and a
+        // page boundary falls between two rows whichever the order. That is what stops a subject being on two
+        // pages or on none. "Newest" is by creation time and not by when anything last changed: the subject has
+        // no updated-at, and an order by last change would move a subject to the top of the list the moment
+        // someone registered a version, under the reader (ADR-049). The tiebreaker is the very ordering the
+        // name list uses, so the two agree about names.
+        var ordered = sort is SubjectSort.Newest
+            ? matching.OrderByDescending(s => s.CreatedAt).ThenBy(s => s.Name)
+            : matching.OrderBy(s => s.Name);
+
+        return await ordered
             .Skip(paging.Offset)
             .Take(paging.Limit)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
     public async Task<int> CountAsync(

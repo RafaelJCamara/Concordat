@@ -16,6 +16,9 @@ public static class ConcordatCodes
     /// <summary>A subject name did not match the canonical grammar.</summary>
     public const string SubjectNameInvalid = "subject_name_invalid";
 
+    /// <summary>A subject list was asked for in an order the registry does not offer (ADR-049).</summary>
+    public const string SubjectSortInvalid = "subject_sort_invalid";
+
     // ------------------------------------------------------------- environments (M7)
 
     /// <summary>An environment name did not match the canonical grammar.</summary>

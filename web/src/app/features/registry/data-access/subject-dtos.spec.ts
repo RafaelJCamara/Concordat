@@ -81,6 +81,24 @@ describe('toSubject', () => {
   });
 });
 
+describe('toSubject: when it was created (ADR-049)', () => {
+  it('reads createdAt as a date', () => {
+    const made = toSubject({ ...subject, createdAt: '2026-11-09T10:15:30.1234567+00:00' });
+
+    expect(made.createdAt).toBeInstanceOf(Date);
+    expect(made.createdAt?.toISOString()).toBe('2026-11-09T10:15:30.123Z');
+  });
+
+  it('leaves it unknown when a registry that predates it sent none, and does not make one up', () => {
+    expect(toSubject(subject).createdAt).toBeUndefined();
+    expect('createdAt' in toSubject(subject)).toBe(false);
+  });
+
+  it('refuses a timestamp that is not a date, as every other one is', () => {
+    expect(() => toSubject({ ...subject, createdAt: 'last tuesday' })).toThrowError(/not a date/);
+  });
+});
+
 describe('toPolicy', () => {
   it('preserves inheriting as a state of its own', () => {
     expect(toPolicy({ mode: null, surface: null })).toEqual({ mode: null, surface: null });

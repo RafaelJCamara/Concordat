@@ -26,6 +26,12 @@ export type DecisionState =
     };
 
 interface PendingApprovalsState {
+  /**
+   * The one subject the queue is narrowed to, or null for all of it (ADR-049). The registry does the
+   * narrowing, and `total` is then the length of that subject's queue and not of the whole one, so
+   * "N waiting" beside a filtered list is never counting rows the list leaves out.
+   */
+  readonly subject: string | null;
   /** The oldest proposals first: the queue as far as it has been read. */
   readonly items: readonly PendingApproval[];
   /** How many versions the registry says are waiting, which can exceed `items`. */
@@ -44,6 +50,7 @@ interface PendingApprovalsState {
 }
 
 const INITIAL: PendingApprovalsState = {
+  subject: null,
   items: [],
   total: 0,
   loading: false,
@@ -61,6 +68,11 @@ export const PAGE_SIZE = 50;
 
 /** The most the registry will give in one request (`ListPendingApprovalsQuery.MaxLimit`). */
 const MAX_PAGE = 200;
+
+/** The request's `subject` member: present for a subject and absent for the whole queue, so that wire stays what it was. */
+function narrowed(subject: string | null): { readonly subject?: string } {
+  return subject === null ? {} : { subject };
+}
 
 /** The key a version is tracked under. */
 export function keyOf(subject: string, ordinal: number): string {
@@ -115,6 +127,7 @@ export const PendingApprovalsStore = signalStore(
           approvals
             .getQueue(environments.name(), {
               limit: Math.min(Math.max(store.items().length, PAGE_SIZE), MAX_PAGE),
+              ...narrowed(store.subject()),
             })
             .pipe(
               tap((queue) =>
@@ -136,42 +149,61 @@ export const PendingApprovalsStore = signalStore(
       ),
     );
 
-    return {
-      load: rxMethod<void>(
-        pipe(
-          tap(() => {
-            epoch += 1;
-            patchState(store, {
-              loading: true,
-              error: null,
-              moreError: null,
-              refreshFailed: false,
-            });
-          }),
-          switchMap(() =>
-            approvals.getQueue(environments.name(), { limit: PAGE_SIZE }).pipe(
-              tap((queue) =>
-                patchState(store, {
-                  items: queue.items,
-                  total: queue.total,
-                  loading: false,
-                  loaded: true,
-                }),
-              ),
-              catchError((error: unknown) => {
-                patchState(store, {
-                  items: [],
-                  total: 0,
-                  loading: false,
-                  loaded: true,
-                  error: toConcordatError(error),
-                });
-                return of(null);
+    // Asked for a subject (or null for the whole queue). The subject is kept in state before the request is
+    // made, so that a refresh after a decision and the next page both ask about the same queue the first
+    // page did.
+    const load = rxMethod<string | null>(
+      pipe(
+        tap((subject) => {
+          epoch += 1;
+          // Rows that belong to another queue are not left on screen under this one's heading while its answer
+          // is awaited: a list "waiting on orders.created" that is still holding another subject's versions
+          // for a moment is a wrong answer shown confidently.
+          if (subject !== store.subject()) {
+            patchState(store, { items: [], total: 0, loaded: false });
+          }
+
+          patchState(store, {
+            subject,
+            loading: true,
+            error: null,
+            moreError: null,
+            refreshFailed: false,
+          });
+        }),
+        switchMap((subject) =>
+          approvals.getQueue(environments.name(), { limit: PAGE_SIZE, ...narrowed(subject) }).pipe(
+            tap((queue) =>
+              patchState(store, {
+                items: queue.items,
+                total: queue.total,
+                loading: false,
+                loaded: true,
               }),
             ),
+            catchError((error: unknown) => {
+              patchState(store, {
+                items: [],
+                total: 0,
+                loading: false,
+                loaded: true,
+                error: toConcordatError(error),
+              });
+              return of(null);
+            }),
           ),
         ),
       ),
+    );
+
+    return {
+      /**
+       * Reads the queue from the start: all of it, or only `subject`'s. Asking again with another subject
+       * (or none) replaces the list and drops an answer still on its way for the previous one.
+       */
+      load: (subject: string | null = null): void => {
+        load(subject);
+      },
 
       /** Reads the next page, after what is already on screen. Ignored while one is in flight. */
       loadMore: rxMethod<void>(
@@ -185,7 +217,11 @@ export const PendingApprovalsStore = signalStore(
             patchState(store, { loadingMore: true, moreError: null });
 
             return approvals
-              .getQueue(environments.name(), { limit: PAGE_SIZE, offset: store.items().length })
+              .getQueue(environments.name(), {
+                limit: PAGE_SIZE,
+                offset: store.items().length,
+                ...narrowed(store.subject()),
+              })
               .pipe(
                 tap((queue) => {
                   if (asked !== epoch) {

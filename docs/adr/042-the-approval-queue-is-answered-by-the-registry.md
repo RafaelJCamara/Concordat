@@ -56,6 +56,10 @@ replaces; the old code replaced the whole subject with the one the decision retu
 queue now takes the registry's word for it instead. If the re-read fails, the screen keeps what it has and says
 it may be out of date.
 
+## Amended 2026-11-09
+
+`?subject=<exact name>` narrows the queue to one subject's held versions; `total` counts only them ([ADR-049](049-subjects-can-be-listed-newest-first.md)). The Approvals page uses it for the link from the subjects page.
+
 ## Consequences
 
 - The Approvals page no longer requests the subject list, and `e2e/approvals.spec.ts` asserts it makes one

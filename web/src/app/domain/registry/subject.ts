@@ -38,6 +38,14 @@ export interface Subject {
    */
   readonly latest: number | null;
   readonly versions: readonly SchemaVersion[];
+  /**
+   * When the subject was created (ADR-049): the date the list is ordered by, newest first. Not the
+   * latest version's `registeredAt`, which is when the subject last changed and not how old it is.
+   *
+   * Absent only from a registry that predates ADR-049; a screen that shows it says so with a dash
+   * rather than inventing a date from the versions.
+   */
+  readonly createdAt?: Date;
 }
 
 /** One page of an environment's subjects, and how many there are in all (ADR-045). */
@@ -45,10 +53,12 @@ export interface SubjectPage {
   readonly items: readonly Subject[];
   /**
    * How many subjects match, whatever page this is: the registry's own count (a prefix included), so a
-   * screen can say how much of the list it is not showing. Equal to `items.length` when the registry
-   * sent no count, which is what an older registry that cannot page answers.
+   * screen can say how much of the list it is not showing. Equal to `items.length` for a request that
+   * asked for no page (the registry then answered every subject), and **null when a page was asked for
+   * and the registry sent no count**: the length of the page is not the length of the list, and a
+   * screen that took it for one would say there is nothing after the last row it was given (ADR-052).
    */
-  readonly total: number;
+  readonly total: number | null;
 }
 
 /** What deleting a retired subject for good removed (ADR-046), as the registry counted it. */

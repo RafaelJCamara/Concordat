@@ -199,7 +199,7 @@
           "Approvals"
         ],
         "summary": "The versions waiting on an approval decision",
-        "description": "Every version held at the approval gate in one environment, oldest proposal first, so the longest wait leads. `total` is the length of the whole queue and `items` is one page of it: `limit` (default 50, at most 200; out-of-range values are clamped) and `offset` (default 0) choose the page. Each item names the ordinal consumers resolve as latest today (`baseline`, null when nothing has been approved), which is what approving the item would replace. Reading the queue needs only `subject:read`; deciding is `subject:admin`. An environment nothing has been written to answers an empty queue rather than 404.\n\nRequires scope: `subject:read`.",
+        "description": "Every version held at the approval gate in one environment, oldest proposal first, so the longest wait leads. `total` is the length of the whole queue and `items` is one page of it: `limit` (default 50, at most 200; out-of-range values are clamped) and `offset` (default 0) choose the page. Each item names the ordinal consumers resolve as latest today (`baseline`, null when nothing has been approved), which is what approving the item would replace. With `subject`, only the held versions of the subject with exactly that name (the whole name, case-sensitive, never a prefix): `total` counts only them, the order is unchanged, and a name no subject has is an empty queue rather than an error. Reading the queue needs only `subject:read`; deciding is `subject:admin`. An environment nothing has been written to answers an empty queue rather than 404.\n\nRequires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -231,6 +231,13 @@
                 "string"
               ],
               "format": "int32"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -3326,7 +3333,7 @@
           "Subjects"
         ],
         "summary": "List subjects in an environment",
-        "description": "With `prefix`, only the subjects whose name begins with it: ordinal and case-sensitive, because subject names are (`OrderCreated` and `ordercreated` are different subjects), and a literal rather than a pattern, so `_` matches only an underscore. Surrounding whitespace is trimmed, as it is in a subject name. A prefix with nothing after it, or none, lists every subject. A prefix no subject name could begin with (a hyphen, two dots in a row, a wildcard, text that is not well-formed) is not an error: it lists nothing. A prefix does not have to end at a dot, so `acme.ord` finds `acme.orders.OrderCreated`. With `limit` and/or `offset`, one page of the list, ordered by name (ordinally): `limit` is clamped to 1-500 and defaults to 50 when only an offset is given, and a negative offset is read as none. Without either the whole list is returned, as before. Either way the `X-Total-Count` response header carries how many subjects match (the prefix included), so a client can say how much of the list it is not showing.\n\nRequires scope: `subject:read`.",
+        "description": "With `prefix`, only the subjects whose name begins with it: ordinal and case-sensitive, because subject names are (`OrderCreated` and `ordercreated` are different subjects), and a literal rather than a pattern, so `_` matches only an underscore. Surrounding whitespace is trimmed, as it is in a subject name. A prefix with nothing after it, or none, lists every subject. A prefix no subject name could begin with (a hyphen, two dots in a row, a wildcard, text that is not well-formed) is not an error: it lists nothing. A prefix does not have to end at a dot, so `acme.ord` finds `acme.orders.OrderCreated`. With `limit` and/or `offset`, one page of the list, ordered by name (ordinally): `limit` is clamped to 1-500 and defaults to 50 when only an offset is given, and a negative offset is read as none. Without either the whole list is returned, as before. Either way the `X-Total-Count` response header carries how many subjects match (the prefix included), so a client can say how much of the list it is not showing. `sort` chooses the order: `name` (the default, and the order of every list before there was a choice) or `newest`, the subjects most recently created first. `newest` orders by when the subject was created (`createdAt`), which never changes, and not by when it last changed, so registering a version does not move a subject up the list and a page does not shift under the reader; subjects created in the same instant follow in name order, so the order is total and a subject is on exactly one page. It composes with `prefix`, `limit` and `offset` as the name order does, and `X-Total-Count` does not depend on it. `newest` without `limit` or `offset` is the whole list, newest first. Unlike a page size, which is clamped, a sort the registry does not offer is refused with `400 subject_sort_invalid`: answering a misspelt one in name order would hand the caller the wrong first page without a word. Blank means `name`; the value is trimmed and its case does not matter.\n\nRequires scope: `subject:read`.",
         "parameters": [
           {
             "name": "env",
@@ -3366,6 +3373,13 @@
               ],
               "format": "int32"
             }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3378,6 +3392,16 @@
                   "items": {
                     "$ref": "#/components/schemas/SubjectResponse"
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -7357,6 +7381,7 @@
           "contentModel",
           "compatibilityPolicy",
           "latest",
+          "createdAt",
           "versions"
         ],
         "type": "object",
@@ -7401,6 +7426,11 @@
             ],
             "description": "The gated latest pointer, or `null` when none is active.",
             "format": "int32"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When the subject was created, UTC. It never changes, which is why it is what \"newest first\" orders by\n(ADR-049).",
+            "format": "date-time"
           },
           "versions": {
             "type": "array",

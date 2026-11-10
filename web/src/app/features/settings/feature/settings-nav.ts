@@ -52,6 +52,7 @@ import { ORG_ADMIN_SCOPES } from '../../../domain/identity/scope';
       <a
         *cdIfScope="orgAdmin"
         routerLink="/settings/api-keys"
+        data-tour="settings-api-keys"
         routerLinkActive="!border-primary !text-foreground"
         ariaCurrentWhenActive="page"
         class="text-muted-foreground hover:text-foreground -mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium transition-colors"

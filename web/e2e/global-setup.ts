@@ -1,4 +1,5 @@
 import { chromium } from '@playwright/test';
+import { markTourSeen } from './sign-in';
 import {
   ensureConsumers,
   ensureEnvironment,
@@ -15,11 +16,19 @@ import {
 const REGISTRY = process.env.CONCORDAT_REGISTRY ?? 'http://localhost:5062';
 const WEB = process.env.CONCORDAT_WEB_URL ?? 'http://localhost:4300';
 
+/**
+ * Where the browser states, and the owner's credential, are kept: `e2e/.auth` unless
+ * `CONCORDAT_E2E_AUTH_DIR` says otherwise. Two runs of this suite against two registries at once
+ * (two checkouts' worth of work in one tree, say) would otherwise write the same files, and each
+ * would then start its tests from the other's session cookie and the other's web origin.
+ */
+export const AUTH_DIR = process.env.CONCORDAT_E2E_AUTH_DIR ?? 'e2e/.auth';
+
 /** Where the signed-in-as-OWNER browser state lands, for playwright.config.ts to load by default. */
-export const OWNER_STORAGE_STATE = 'e2e/.auth/owner.json';
+export const OWNER_STORAGE_STATE = `${AUTH_DIR}/owner.json`;
 
 /** The same for a READER, for the specs whose subject is what a reader is offered. */
-export const READER_STORAGE_STATE = 'e2e/.auth/reader.json';
+export const READER_STORAGE_STATE = `${AUTH_DIR}/reader.json`;
 
 /**
  * Checks both halves are up, then arranges the accounts every test needs.
@@ -95,6 +104,10 @@ async function captureSession(
 
   try {
     await page.goto(`${WEB}/sign-in`);
+    // Saved with the session, so every test that starts from this state starts as a browser that
+    // has already been shown the guided tour (ADR-051). Without it the tour would start over
+    // the first page of every spec and its card would be in the way of their clicks.
+    await markTourSeen(page);
     await page.getByRole('textbox', { name: 'Email' }).fill(who.email);
     await page.getByRole('textbox', { name: 'Password' }).fill(who.password);
     await page.getByRole('button', { name: /sign in|create owner account/i }).click();

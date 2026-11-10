@@ -26,6 +26,11 @@ export interface NavItem {
   readonly label: string;
   readonly icon: IconName;
   readonly route: string;
+  /**
+   * The value of the row's `data-tour` attribute, for the guided tour to find it by (ADR-051).
+   * An attribute that exists only for that, so restyling the row cannot move the tour.
+   */
+  readonly tour?: string;
 }
 
 /**
@@ -95,6 +100,7 @@ export interface NavItem {
           [routerLinkActiveOptions]="{ exact: item.route === '/' }"
           ariaCurrentWhenActive="page"
           [attr.title]="collapsed() ? item.label : null"
+          [attr.data-tour]="item.tour ?? null"
           class="text-sidebar-foreground hover:bg-sidebar-accent focus-visible:ring-ring group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-200 focus-visible:ring-2 focus-visible:outline-none"
           [class.justify-center]="collapsed()"
         >

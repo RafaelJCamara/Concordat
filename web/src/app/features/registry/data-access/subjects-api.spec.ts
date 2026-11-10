@@ -143,7 +143,7 @@ describe('SubjectsApi', () => {
       });
 
       it('reads the registry’s total from X-Total-Count', () => {
-        let total = -1;
+        let total: number | null = -1;
         context.api.listSubjects('dev', { limit: 1 }).subscribe((page) => (total = page.total));
 
         context.backend
@@ -153,9 +153,9 @@ describe('SubjectsApi', () => {
         expect(total).toBe(120);
       });
 
-      it('takes the length of the list as the total when the registry sent none', () => {
+      it('takes the length of the list as the total when no page was asked for and the registry sent none', () => {
         // A registry that predates the header answers every subject and no count.
-        let total = -1;
+        let total: number | null = -1;
         context.api.listSubjects('dev').subscribe((page) => (total = page.total));
 
         context.backend.expectOne('/v1/environments/dev/subjects').flush([dto, dto]);
@@ -164,7 +164,7 @@ describe('SubjectsApi', () => {
       });
 
       it('takes the length of the list as the total when the header is not a number', () => {
-        let total = -1;
+        let total: number | null = -1;
         context.api.listSubjects('dev').subscribe((page) => (total = page.total));
 
         context.backend
@@ -172,6 +172,47 @@ describe('SubjectsApi', () => {
           .flush([dto], { headers: { 'X-Total-Count': 'many' } });
 
         expect(total).toBe(1);
+      });
+
+      it('says the total is not known when a page was asked for and the registry sent none (ADR-052)', () => {
+        // The length of a page is not the length of the list: taking it for one would tell the screen that
+        // there is nothing after the last row it was given.
+        let total: number | null = -1;
+        context.api
+          .listSubjects('dev', { limit: 2, offset: 0 })
+          .subscribe((page) => (total = page.total));
+
+        context.backend
+          .expectOne(withQuery('/v1/environments/dev/subjects?limit=2&offset=0'))
+          .flush([dto, dto]);
+
+        expect(total).toBeNull();
+      });
+
+      it('sends the order when one is asked for, and nothing when it is not (ADR-049)', () => {
+        context.api.listSubjects('dev', { limit: 50, offset: 0, sort: 'newest' }).subscribe();
+        context.backend.expectOne(
+          withQuery('/v1/environments/dev/subjects?limit=50&offset=0&sort=newest'),
+        );
+
+        context.api.listSubjects('dev', { limit: 50 }).subscribe();
+        context.backend.expectOne(withQuery('/v1/environments/dev/subjects?limit=50'));
+      });
+
+      it('reads when each subject was created, as a date', () => {
+        let items: readonly Subject[] = [];
+        context.api.listSubjects('dev', { limit: 2 }).subscribe((page) => (items = page.items));
+
+        context.backend
+          .expectOne(withQuery('/v1/environments/dev/subjects?limit=2'))
+          .flush([{ ...dto, createdAt: '2026-11-09T10:15:30.1234567+00:00' }, dto], {
+            headers: { 'X-Total-Count': '2' },
+          });
+
+        expect(items[0]?.createdAt).toBeInstanceOf(Date);
+        expect(items[0]?.createdAt?.toISOString()).toBe('2026-11-09T10:15:30.123Z');
+        // A registry that predates ADR-049 sends none, and the subject says it does not know.
+        expect(items[1]?.createdAt).toBeUndefined();
       });
 
       it('hands back domain types, as an unpaged list does', () => {

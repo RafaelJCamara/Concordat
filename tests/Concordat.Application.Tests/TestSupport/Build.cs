@@ -24,9 +24,10 @@ internal static class Build
         string name = "acme.orders.OrderCreated",
         SchemaFormat format = SchemaFormat.Json,
         CompatibilityPolicy? policy = null,
-        ContentModel contentModel = ContentModel.Open) =>
+        ContentModel contentModel = ContentModel.Open,
+        DateTimeOffset? createdAt = null) =>
         DomainSubject.Create(
-            environment, Name(name), format, Actor(), policy, At, contentModel).Value;
+            environment, Name(name), format, Actor(), policy, createdAt ?? At, contentModel).Value;
 
     /// <summary>
     /// Canonicalises, extracts references and derives the id exactly as the evaluator does.

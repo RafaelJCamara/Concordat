@@ -45,8 +45,20 @@ public static class SubjectEndpoints
                 "defaults to 50 when only an offset is given, and a negative offset is read as none. " +
                 "Without either the whole list is returned, as before. Either way the `X-Total-Count` " +
                 "response header carries how many subjects match (the prefix included), so a client can " +
-                "say how much of the list it is not showing.")
+                "say how much of the list it is not showing. `sort` chooses the order: `name` (the " +
+                "default, and the order of every list before there was a choice) or `newest`, the " +
+                "subjects most recently created first. `newest` orders by when the subject was created " +
+                "(`createdAt`), which never changes, and not by when it last changed, so registering a " +
+                "version does not move a subject up the list and a page does not shift under the reader; " +
+                "subjects created in the same instant follow in name order, so the order is total and a " +
+                "subject is on exactly one page. It composes with `prefix`, `limit` and `offset` as the " +
+                "name order does, and `X-Total-Count` does not depend on it. `newest` without `limit` " +
+                "or `offset` is the whole list, newest first. Unlike a page size, which is clamped, a " +
+                "sort the registry does not offer is refused with `400 subject_sort_invalid`: answering " +
+                "a misspelt one in name order would hand the caller the wrong first page without a word. " +
+                "Blank means `name`; the value is trimmed and its case does not matter.")
             .Produces<IReadOnlyList<SubjectResponse>>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
             .RequireScope(Scope.SubjectRead);
 
         group.MapGet("/{subject}", GetSubject)
@@ -241,6 +253,7 @@ public static class SubjectEndpoints
         string? prefix,
         int? limit,
         int? offset,
+        string? sort,
         IDispatcher dispatcher,
         IEnvironmentResolver environments,
         HttpResponse response,
@@ -249,7 +262,7 @@ public static class SubjectEndpoints
         var environment = environments.Resolve(env);
 
         var result = await dispatcher.QueryAsync(
-            new ListSubjectsQuery(environment, prefix, limit, offset), cancellationToken)
+            new ListSubjectsQuery(environment, prefix, limit, offset, sort), cancellationToken)
             .ConfigureAwait(false);
 
         if (result.IsFailure)
