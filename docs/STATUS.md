@@ -72,6 +72,13 @@ whose policy had just been tightened (`subject-settings.spec.ts`) failed once wi
 because another instance with the same key value for {'subject_id', 'Ordinal'} is already being tracked"* (raised from `StampTenant`, called by
 `RegisterVersionHandler`). **It passed 3 of 3 re-runs and the register path is not in this change's diff, so it is intermittent and not caused by it, but
 it is not explained and it is not fixed.** It is a real registry bug waiting for a cause.
+**Explained and fixed 2026-11-10**, after it failed CI twice (the attempt and its retry) with the same exception in the registry's log. The query that loads a
+subject sorts its versions by the foreign key alone (`ORDER BY s1.subject_id, s0.subject_id`), so within one subject they arrive in whatever order
+PostgreSQL produced, and `Subject.NextOrdinal()` took `_versions[^1].Ordinal + 1`: when the last row loaded was not the newest, the new version was
+given an ordinal that already existed. `NextOrdinal` now takes the highest, and `Versions`, which documented "in ordinal order" and was not, sorts.
+Pinned by `ANewVersion_TakesTheNextOrdinal_WhateverOrderTheVersionsWereLoadedIn` and `Versions_AreInOrdinalOrder_WhateverOrderTheyWereLoadedIn`, red first.
+**Not reproduced end to end:** whether a load is in order depends on the plan PostgreSQL picks, so the tests put the versions out of order in the aggregate
+(as a load would) and do not make a real database do it, and why the order flipped in this particular spec is not established.
 Also found, **and fixed here**: `ThemeStore` read `window.localStorage` unguarded, so in a browser whose property getter throws (site data blocked
 outright) the whole app failed to boot; `reachStorage` guards it now, with a test, and the tour shares it.
 

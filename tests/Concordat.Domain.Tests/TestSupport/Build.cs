@@ -42,4 +42,22 @@ internal static class Build
         Assert.True(outcome.IsSuccess, outcome.Error?.Message);
         return subject;
     }
+
+    /// <summary>
+    /// Puts the subject's versions in the order given, as a load does when the rows arrive in that
+    /// order. The query sorts them by the foreign key alone, so within one subject the order is
+    /// whatever PostgreSQL produced, and EF fills the collection in the order it receives.
+    /// </summary>
+    public static Subject LoadedInOrder(this Subject subject, params int[] ordinals)
+    {
+        var field = typeof(Subject).GetField(
+            "_versions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var versions = (List<SchemaVersion>)field.GetValue(subject)!;
+        var arrived = ordinals.Select(ordinal => versions.Single(v => v.Ordinal == ordinal)).ToList();
+
+        Assert.Equal(versions.Count, arrived.Count);
+        versions.Clear();
+        versions.AddRange(arrived);
+        return subject;
+    }
 }

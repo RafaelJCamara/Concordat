@@ -45,6 +45,31 @@ public class RegisterVersionTests
     }
 
     [Fact]
+    public void ANewVersion_TakesTheNextOrdinal_WhateverOrderTheVersionsWereLoadedIn()
+    {
+        // The versions are loaded with no order of their own, so the last one in the list is not
+        // necessarily the highest. Taking "last + 1" allocated an ordinal that already existed, and
+        // EF refused to track the second version with that key: a 500 on registration.
+        var subject = Build.Subject().WithVersion(1).WithVersion(2).LoadedInOrder(2, 1);
+
+        var outcome = subject.RegisterVersion(
+            Build.Schema(3), Build.Ok(), null, null, Build.Actor(), Build.At);
+
+        Assert.True(outcome.IsSuccess);
+        Assert.Equal(3, outcome.Value.Version.Ordinal);
+        Assert.Equal(4, subject.NextVersionOrdinal);
+    }
+
+    [Fact]
+    public void Versions_AreInOrdinalOrder_WhateverOrderTheyWereLoadedIn()
+    {
+        var subject = Build.Subject().WithVersion(1).WithVersion(2).WithVersion(3)
+            .LoadedInOrder(3, 1, 2);
+
+        Assert.Equal([1, 2, 3], subject.Versions.Select(v => v.Ordinal));
+    }
+
+    [Fact]
     public void DifferentFormat_IsRejected()
     {
         var subject = Build.Subject(format: SchemaFormat.Json).WithVersion(1);

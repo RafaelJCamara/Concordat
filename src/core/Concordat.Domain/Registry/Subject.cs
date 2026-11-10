@@ -177,9 +177,11 @@ public sealed class Subject
     /// <remarks>
     /// Wrapped rather than returned directly: an <see cref="IReadOnlyList{T}"/> backed by a
     /// <see cref="List{T}"/> can be cast back to <see cref="ICollection{T}"/> and mutated,
-    /// which would bypass every ordinal invariant on this aggregate.
+    /// which would bypass every ordinal invariant on this aggregate. Sorted on the way out for the
+    /// same reason <see cref="NextVersionOrdinal"/> takes the highest: the backing list is in load
+    /// order, and the database does not give a subject's versions an order of their own.
     /// </remarks>
-    public IReadOnlyList<SchemaVersion> Versions => _versions.AsReadOnly();
+    public IReadOnlyList<SchemaVersion> Versions => [.. _versions.OrderBy(v => v.Ordinal)];
 
     /// <summary>
     /// The gated <c>latest</c> pointer, or <see langword="null"/> when no version is active yet.
@@ -671,7 +673,9 @@ public sealed class Subject
     /// </remarks>
     public int NextVersionOrdinal => NextOrdinal();
 
-    private int NextOrdinal() => _versions.Count == 0 ? 1 : _versions[^1].Ordinal + 1;
+    // The highest, not the last: the list is filled in the order the rows arrive, which the query
+    // does not fix within a subject, so the last one loaded is not necessarily the newest.
+    private int NextOrdinal() => _versions.Count == 0 ? 1 : _versions.Max(v => v.Ordinal) + 1;
 
     // Every mutator calls this. See Revision for why: it is what puts the root row in the
     // UPDATE statement, and the UPDATE is what carries the concurrency token.
